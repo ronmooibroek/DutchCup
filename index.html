@@ -8,6 +8,11 @@
     <meta name="theme-color" content="#f97316">
     <title>Golf League Tracker</title>
     <link rel="manifest" href="data:application/json;base64,eyJuYW1lIjoiR29sZiBMZWFndWUiLCJzaG9ydF9uYW1lIjoiR29sZiIsInN0YXJ0X3VybCI6Ii4iLCJkaXNwbGF5Ijoic3RhbmRhbG9uZSIsImJhY2tncm91bmRfY29sb3IiOiIjZmZmZmZmIiwidGhlbWVfY29sb3IiOiIjZjk3MzE2In0=">
+    
+    <!-- Firebase SDK - Latest version -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    
     <style>
         * {
             margin: 0;
@@ -164,41 +169,180 @@
     <div id="toast"></div>
     
     <script>
+        // =====================================================================
+        // FIREBASE CONFIGURATION
+        // =====================================================================
+        // TO SET UP FIREBASE:
+        // 1. Go to https://console.firebase.google.com/
+        // 2. Create a new project (or use existing)
+        // 3. Click "Add app" → Choose "Web" (</> icon)
+        // 4. Register your app and copy the config object below
+        // 5. Enable Firestore Database in Firebase Console
+        // 6. Set Firestore rules to allow read/write (see instructions below)
+        //
+        // FIRESTORE SECURITY RULES (for testing - update for production):
+        // Go to Firestore → Rules → Replace with:
+        /*
+        rules_version = '2';
+        service cloud.firestore {
+          match /databases/{database}/documents {
+            match /leagues/{leagueId}/{document=**} {
+              allow read, write: if true;  // For testing only!
+            }
+          }
+        }
+        */
+        // For production, add authentication and restrict access
+        // =====================================================================
+        
+        const firebaseConfig = {
+            apiKey: "AIzaSyBNc104mTZIwHbg4tYUhYNv3n2GS6Z1Ijo",
+            authDomain: "dutchcup.firebaseapp.com",
+            projectId: "dutchcup",
+            storageBucket: "dutchcup.firebasestorage.app",
+            messagingSenderId: "643789311462",
+            appId: "1:643789311462:web:cfd7fc01ccf4a0171b9a27",
+            measurementId: "G-YMP33N5C55"
+        };
+        
+        // League ID - all users in the same league use the same ID
+        // Change this to create different leagues
+        // Example: "spring-2024", "summer-league", "mooibroek-golf", etc.
+        const LEAGUE_ID = "dutch-cup-2024";
+        
+        // Initialize Firebase (if config is valid)
+        let firebaseApp = null;
+        let firestoreDb = null;
+        let useFirebase = false;
+        
+        try {
+            // Check if Firebase SDK is loaded
+            if (typeof firebase === 'undefined') {
+                console.log('⚠️ Firebase SDK not loaded - using localStorage');
+                console.log('📝 Make sure you have internet connection or check the Firebase CDN URLs');
+                useFirebase = false;
+            } else if (firebaseConfig.apiKey !== "YOUR_API_KEY") {
+                firebaseApp = firebase.initializeApp(firebaseConfig);
+                firestoreDb = firebase.firestore();
+                useFirebase = true;
+                console.log('✅ Firebase initialized successfully');
+                console.log('📊 League ID:', LEAGUE_ID);
+            } else {
+                console.log('⚠️ Firebase not configured - using localStorage');
+                console.log('📝 See comments in code for setup instructions');
+            }
+        } catch (error) {
+            console.error('❌ Firebase initialization error:', error);
+            console.log('⚠️ Falling back to localStorage');
+            useFirebase = false;
+        }
+        
         // Database helpers
         const db = {
-            get: (key) => {
+            // Get data from Firebase or localStorage
+            get: async (key) => {
+                if (useFirebase && firestoreDb) {
+                    try {
+                        const doc = await firestoreDb
+                            .collection('leagues')
+                            .doc(LEAGUE_ID)
+                            .collection('data')
+                            .doc(key)
+                            .get();
+                        
+                        if (doc.exists) {
+                            return doc.data().value;
+                        }
+                        return null;
+                    } catch (error) {
+                        console.error('Firebase get error:', error);
+                        // Fallback to localStorage
+                        return db.getLocal(key);
+                    }
+                } else {
+                    return db.getLocal(key);
+                }
+            },
+            
+            // Set data to Firebase or localStorage
+            set: async (key, value) => {
+                // Always save to localStorage as backup
+                db.setLocal(key, value);
+                
+                if (useFirebase && firestoreDb) {
+                    try {
+                        await firestoreDb
+                            .collection('leagues')
+                            .doc(LEAGUE_ID)
+                            .collection('data')
+                            .doc(key)
+                            .set({
+                                value: value,
+                                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                            });
+                        return true;
+                    } catch (error) {
+                        console.error('Firebase set error:', error);
+                        return false;
+                    }
+                }
+                return true;
+            },
+            
+            // LocalStorage fallback methods
+            getLocal: (key) => {
                 try {
                     const data = localStorage.getItem(key);
                     return data ? JSON.parse(data) : null;
                 } catch (e) {
-                    console.error('DB get error:', e);
+                    console.error('LocalStorage get error:', e);
                     return null;
                 }
             },
-            set: (key, value) => {
+            
+            setLocal: (key, value) => {
                 try {
                     localStorage.setItem(key, JSON.stringify(value));
                     return true;
                 } catch (e) {
-                    console.error('DB set error:', e);
+                    console.error('LocalStorage set error:', e);
                     return false;
                 }
+            },
+            
+            // Listen to real-time updates from Firebase
+            listen: (key, callback) => {
+                if (useFirebase && firestoreDb) {
+                    return firestoreDb
+                        .collection('leagues')
+                        .doc(LEAGUE_ID)
+                        .collection('data')
+                        .doc(key)
+                        .onSnapshot((doc) => {
+                            if (doc.exists) {
+                                callback(doc.data().value);
+                            }
+                        }, (error) => {
+                            console.error('Firebase listen error:', error);
+                        });
+                }
+                return null;
             }
         };
-
-        // Global state
+        
+        // Initialize state - will be loaded async
         const state = {
             view: 'home',
-            courses: db.get('courses') || [],
-            teams: db.get('teams') || [],
-            players: db.get('players') || [],
-            rounds: db.get('rounds') || [],
-            events: db.get('events') || [],
-            currentEventId: db.get('currentEventId') || null,
+            courses: [],
+            teams: [],
+            players: [],
+            rounds: [],
+            events: [],
+            currentEventId: null,
             activeRound: null,
             selectedCourseId: null,
             selectedTeamIds: [],
-            settings: db.get('settings') || {
+            settings: {
                 albatrossPoints: 10,
                 eaglePoints: 7,
                 birdiePoints: 5,
@@ -209,25 +353,112 @@
                 ballPoints: 1,
                 extra9Points: 5,
                 ctpPoints: 2
-            }
+            },
+            dataLoaded: false
         };
-
-        // Validate and clean data on startup
-        console.log('Validating data...');
         
-        // Ensure all arrays exist
-        if (!Array.isArray(state.courses)) state.courses = [];
-        if (!Array.isArray(state.teams)) state.teams = [];
-        if (!Array.isArray(state.players)) state.players = [];
-        if (!Array.isArray(state.rounds)) state.rounds = [];
-        if (!Array.isArray(state.events)) state.events = [];
+        // Load data from database (async)
+        async function loadData() {
+            console.log('Loading data...');
+            
+            try {
+                state.courses = await db.get('courses') || [];
+                state.teams = await db.get('teams') || [];
+                state.players = await db.get('players') || [];
+                state.rounds = await db.get('rounds') || [];
+                state.events = await db.get('events') || [];
+                state.currentEventId = await db.get('currentEventId') || null;
+                state.settings = await db.get('settings') || state.settings;
+                
+                state.dataLoaded = true;
+                console.log('✅ Data loaded successfully');
+                
+                // Validate and migrate data
+                validateAndMigrateData();
+                
+                // Initial render
+                render();
+                
+                // Setup real-time listeners if using Firebase
+                if (useFirebase) {
+                    setupRealtimeListeners();
+                }
+            } catch (error) {
+                console.error('Error loading data:', error);
+                state.dataLoaded = true;
+                render();
+            }
+        }
         
-        // Migrate old rounds without eventId to default event
-        if (state.rounds.length > 0 && state.events.length === 0) {
-            console.log('Migrating rounds to default event...');
-            const defaultEvent = {
-                id: Date.now(),
-                name: 'Season 1',
+        // Setup real-time data sync
+        function setupRealtimeListeners() {
+            console.log('Setting up real-time sync...');
+            
+            db.listen('courses', (value) => {
+                if (value) {
+                    state.courses = value;
+                    render();
+                }
+            });
+            
+            db.listen('teams', (value) => {
+                if (value) {
+                    state.teams = value;
+                    render();
+                }
+            });
+            
+            db.listen('players', (value) => {
+                if (value) {
+                    state.players = value;
+                    render();
+                }
+            });
+            
+            db.listen('rounds', (value) => {
+                if (value) {
+                    state.rounds = value;
+                    render();
+                }
+            });
+            
+            db.listen('events', (value) => {
+                if (value) {
+                    state.events = value;
+                    render();
+                }
+            });
+            
+            db.listen('currentEventId', (value) => {
+                state.currentEventId = value;
+                render();
+            });
+            
+            db.listen('settings', (value) => {
+                if (value) {
+                    state.settings = value;
+                    render();
+                }
+            });
+        }
+        
+        // Validate and migrate data
+        function validateAndMigrateData() {
+            console.log('Validating data...');
+            
+            // Ensure all arrays exist
+            if (!Array.isArray(state.courses)) state.courses = [];
+            if (!Array.isArray(state.teams)) state.teams = [];
+            if (!Array.isArray(state.players)) state.players = [];
+            if (!Array.isArray(state.rounds)) state.rounds = [];
+            if (!Array.isArray(state.events)) state.events = [];
+            
+            // Migrate old rounds without eventId to default event
+            if (state.rounds.length > 0 && state.events.length === 0) {
+                console.log('Migrating rounds to default event...');
+                const defaultEvent = {
+                    id: Date.now(),
+                    name: 'Season 1',
                 description: 'Default event for existing rounds',
                 startDate: new Date().toISOString().split('T')[0],
                 isActive: true
@@ -294,6 +525,7 @@
             state.settings.ctpPoints = 2;
             db.set('settings', state.settings);
         }
+    }
 
         // Save helper
         const save = (key, value) => {
@@ -2307,14 +2539,7 @@
                 app.innerHTML = `
                     <button class="back-btn" onclick="navigate('home')">← Back</button>
                     <div class="card" style="padding:12px;">
-                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                            <h2 style="margin:0;">🏆 Leaderboard</h2>
-                            ${eventRounds.length > 0 ? `
-                                <button onclick="sendLeagueSummary()" class="btn-primary" style="padding:8px 12px;font-size:13px;background:#8b5cf6;">
-                                    📧 Email Summary
-                                </button>
-                            ` : ''}
-                        </div>
+                        <h2 style="margin:0 0 8px;">🏆 Leaderboard</h2>
                         ${currentEvent ? `
                             <div style="background:#dbeafe;padding:8px;border-radius:6px;margin-bottom:12px;">
                                 <strong style="color:#1e40af;font-size:14px;">📊 ${currentEvent.name}</strong>
@@ -3922,427 +4147,8 @@
             };
         };
 
-        window.sendLeagueSummary = () => {
-            try {
-                const currentEvent = state.events.find(e => e.id === state.currentEventId);
-                if (!currentEvent) {
-                    showError('No event selected!');
-                    return;
-                }
-                
-                const eventRounds = state.rounds.filter(r => r.eventId === state.currentEventId && r.active !== false);
-                if (eventRounds.length === 0) {
-                    showError('No rounds played yet!');
-                    return;
-                }
-                
-                notify('⏳ Generating PDF summary...');
-                
-                // Generate PDF using Python
-                generateLeagueSummaryPDF();
-                
-            } catch (err) {
-                console.error('Send league summary error:', err);
-                showError('Failed to generate summary: ' + err.message);
-            }
-        };
-
-        window.generateLeagueSummaryPDF = async () => {
-            try {
-                const currentEvent = state.events.find(e => e.id === state.currentEventId);
-                const eventRounds = state.rounds.filter(r => r.eventId === state.currentEventId && r.active !== false);
-                const latestRound = eventRounds[eventRounds.length - 1];
-                
-                // Calculate team stats
-                const stats = {};
-                eventRounds.forEach((r, rIdx) => {
-                    r.teams.forEach(t => {
-                        if (!stats[t.teamId]) {
-                            const stateTeam = state.teams.find(team => team.id === t.teamId);
-                            stats[t.teamId] = { 
-                                id: t.teamId, 
-                                name: t.teamName,
-                                color: stateTeam && stateTeam.color ? stateTeam.color : '#3b82f6',
-                                points: 0, 
-                                rounds: 0,
-                                strokePoints: 0,
-                                bbbPoints: 0,
-                                ballPoints: 0,
-                                extra9Points: 0,
-                                ctpPoints: 0,
-                                players: {}
-                            };
-                        }
-                        stats[t.teamId].rounds += 1;
-                        
-                        t.players.forEach((p, pIdx) => {
-                            const teamIdx = r.teams.findIndex(team => team.teamId === t.teamId);
-                            const strokePoints = calcPlayerTotal(p.scores, r.pars, r.handicaps, p.handicap);
-                            const bbbPoints = (p.bbbTotal || 0) * state.settings.bbbPoints;
-                            const ballPoints = (p.ballsRemaining || 0) * state.settings.ballPoints;
-                            
-                            let extra9Points = 0;
-                            if (r.extra9Winners && r.extra9Winners.length > 0) {
-                                const playerPosition = teamIdx + '-' + pIdx;
-                                extra9Points = r.extra9Winners.filter(w => w === playerPosition).length * state.settings.extra9Points;
-                            }
-                            
-                            let ctpPoints = 0;
-                            if (r.ctpWinners && r.ctpWinners.length > 0) {
-                                const playerPosition = teamIdx + '-' + pIdx;
-                                ctpPoints = r.ctpWinners.filter(w => w === playerPosition).length * state.settings.ctpPoints;
-                            }
-                            
-                            stats[t.teamId].strokePoints += strokePoints;
-                            stats[t.teamId].bbbPoints += bbbPoints;
-                            stats[t.teamId].ballPoints += ballPoints;
-                            stats[t.teamId].extra9Points += extra9Points;
-                            stats[t.teamId].ctpPoints += ctpPoints;
-                            
-                            // Track player info for latest round
-                            if (!stats[t.teamId].players[p.id]) {
-                                stats[t.teamId].players[p.id] = {
-                                    id: p.id,
-                                    name: p.name,
-                                    latestGross: 0,
-                                    latestNet: 0,
-                                    latestHandicap: p.handicap
-                                };
-                            }
-                            
-                            // Store latest round data
-                            if (r === latestRound) {
-                                const grossScore = p.scores.reduce((sum, s) => sum + (parseInt(s) || 0), 0);
-                                const coursePar = r.pars.reduce((sum, par) => sum + par, 0);
-                                
-                                let netScore = 0;
-                                p.scores.forEach((score, holeIdx) => {
-                                    if (score && score !== '') {
-                                        const getsStroke = p.handicap >= r.handicaps[holeIdx];
-                                        const gets2Strokes = p.handicap >= (r.handicaps[holeIdx] + 18);
-                                        const strokes = gets2Strokes ? 2 : getsStroke ? 1 : 0;
-                                        netScore += (parseInt(score) - strokes);
-                                    }
-                                });
-                                
-                                stats[t.teamId].players[p.id].latestGross = grossScore;
-                                stats[t.teamId].players[p.id].latestNet = netScore;
-                            }
-                        });
-                    });
-                });
-                
-                // Calculate total points
-                Object.values(stats).forEach(team => {
-                    team.points = team.strokePoints + team.bbbPoints + team.ballPoints + team.extra9Points + team.ctpPoints;
-                    team.avg = team.points / team.rounds;
-                });
-                
-                const leaderboard = Object.values(stats).sort((a, b) => b.points - a.points);
-                
-                // Calculate win probabilities for current standings
-                const scheduledRounds = state.rounds.filter(r => r.eventId === state.currentEventId && r.active === false);
-                const remainingRounds = scheduledRounds.length;
-                
-                let currentProbabilities = [];
-                if (remainingRounds > 0) {
-                    const normalRandom = (mean, stdDev) => {
-                        const u1 = Math.random();
-                        const u2 = Math.random();
-                        return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2) * stdDev + mean;
-                    };
-                    
-                    const winCounts = {};
-                    for (let sim = 0; sim < 5000; sim++) {
-                        const finalTotals = {};
-                        leaderboard.forEach(team => {
-                            let projectedTotal = team.points;
-                            const stdDev = Math.max(15, 15 + (team.avg * 0.3));
-                            for (let r = 0; r < remainingRounds; r++) {
-                                projectedTotal += Math.max(0, normalRandom(team.avg, stdDev));
-                            }
-                            finalTotals[team.id] = projectedTotal;
-                        });
-                        const winnerTeamId = Object.keys(finalTotals).reduce((a, b) => finalTotals[a] > finalTotals[b] ? a : b);
-                        winCounts[winnerTeamId] = (winCounts[winnerTeamId] || 0) + 1;
-                    }
-                    currentProbabilities = leaderboard.map(team => ({
-                        teamId: team.id,
-                        name: team.name,
-                        color: team.color,
-                        probability: ((winCounts[team.id] || 0) / 5000) * 100
-                    }));
-                }
-                
-                // Calculate handicap changes
-                const handicapChanges = [];
-                Object.values(stats).forEach(team => {
-                    Object.values(team.players).forEach(player => {
-                        const statePlayer = state.players.find(p => p.id === player.id);
-                        if (statePlayer) {
-                            // Get handicap before this round
-                            const historicScores = (statePlayer.historicScores || []).filter(hs => 
-                                hs.date !== latestRound.timestamp && hs.date !== latestRound.id
-                            );
-                            
-                            let oldHandicap = 0;
-                            if (historicScores.length >= 5) {
-                                const sortedScores = historicScores
-                                    .map(hs => ({ ...hs, differential: hs.overPar }))
-                                    .sort((a, b) => a.differential - b.differential);
-                                
-                                const count = Math.min(20, sortedScores.length);
-                                const useBest = count <= 5 ? 1 : count <= 10 ? Math.floor(count * 0.5) : 10;
-                                const bestScores = sortedScores.slice(0, useBest);
-                                const avgDifferential = bestScores.reduce((sum, s) => sum + s.differential, 0) / bestScores.length;
-                                oldHandicap = Math.round(avgDifferential * 0.96);
-                            }
-                            
-                            const change = player.latestHandicap - oldHandicap;
-                            if (change !== 0) {
-                                handicapChanges.push({
-                                    playerName: player.name,
-                                    teamName: team.name,
-                                    oldHandicap: oldHandicap,
-                                    newHandicap: player.latestHandicap,
-                                    change: change
-                                });
-                            }
-                        }
-                    });
-                });
-                
-                // Prepare data for Python
-                const pdfData = {
-                    eventName: currentEvent.name,
-                    roundsPlayed: eventRounds.length,
-                    latestRoundName: latestRound.courseName,
-                    latestRoundDate: latestRound.date,
-                    leaderboard: leaderboard.map(team => ({
-                        rank: leaderboard.indexOf(team) + 1,
-                        name: team.name,
-                        points: team.points.toFixed(1),
-                        avg: team.avg.toFixed(1),
-                        strokePoints: team.strokePoints.toFixed(1),
-                        bbbPoints: team.bbbPoints.toFixed(1),
-                        ballPoints: team.ballPoints.toString(),
-                        ctpPoints: team.ctpPoints.toString(),
-                        extra9Points: team.extra9Points.toString(),
-                        players: Object.values(team.players).map(p => ({
-                            name: p.name,
-                            latestGross: p.latestGross,
-                            latestNet: p.latestNet,
-                            handicap: p.latestHandicap
-                        }))
-                    })),
-                    winProbabilities: currentProbabilities,
-                    remainingRounds: remainingRounds,
-                    handicapChanges: handicapChanges
-                };
-                
-                // Save data and call Python script
-                const dataJson = JSON.stringify(pdfData, null, 2);
-                
-                // Create Python script to generate PDF
-                const pythonScript = `
-import json
-from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib import colors
-from reportlab.lib.units import inch
-from reportlab.pdfgen import canvas
-import sys
-
-# Read data
-data = json.loads('''${dataJson}''')
-
-# Create PDF
-doc = SimpleDocTemplate("/mnt/user-data/outputs/league-summary.pdf", pagesize=letter)
-width, height = letter
-elements = []
-styles = getSampleStyleSheet()
-
-# Custom styles
-title_style = ParagraphStyle(
-    'CustomTitle',
-    parent=styles['Heading1'],
-    fontSize=24,
-    textColor=colors.HexColor('#f97316'),
-    spaceAfter=30,
-    alignment=1  # Center
-)
-
-heading_style = ParagraphStyle(
-    'CustomHeading',
-    parent=styles['Heading2'],
-    fontSize=16,
-    textColor=colors.HexColor('#1f2937'),
-    spaceBefore=20,
-    spaceAfter=12
-)
-
-# Title
-title = Paragraph(f"{data['eventName']}<br/>League Summary", title_style)
-elements.append(title)
-
-subtitle = Paragraph(f"After {data['roundsPlayed']} rounds • Latest: {data['latestRoundName']} ({data['latestRoundDate']})", styles['Normal'])
-elements.append(subtitle)
-elements.append(Spacer(1, 20))
-
-# Team Leaderboard
-elements.append(Paragraph("Team Standings", heading_style))
-leaderboard_data = [['Rank', 'Team', 'Points', 'Avg', 'Strokes', 'BBB', 'Balls', 'CTP', 'E9']]
-for team in data['leaderboard']:
-    leaderboard_data.append([
-        str(team['rank']),
-        team['name'],
-        team['points'],
-        team['avg'],
-        team['strokePoints'],
-        team['bbbPoints'],
-        team['ballPoints'],
-        team['ctpPoints'],
-        team['extra9Points']
-    ])
-
-leaderboard_table = Table(leaderboard_data, colWidths=[0.5*inch, 1.8*inch, 0.8*inch, 0.7*inch, 0.8*inch, 0.6*inch, 0.6*inch, 0.6*inch, 0.6*inch])
-leaderboard_table.setStyle(TableStyle([
-    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f97316')),
-    ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-    ('FONTSIZE', (0, 0), (-1, 0), 10),
-    ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-    ('TOPPADDING', (0, 1), (-1, -1), 8),
-    ('BOTTOMPADDING', (0, 1), (-1, -1), 8),
-    ('GRID', (0, 0), (-1, -1), 1, colors.grey),
-    ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f9fafb')])
-]))
-elements.append(leaderboard_table)
-elements.append(Spacer(1, 20))
-
-# Latest Round Performances
-elements.append(Paragraph(f"Latest Round: {data['latestRoundName']}", heading_style))
-performance_data = [['Player', 'Team', 'Gross', 'Net', 'HC']]
-for team in data['leaderboard']:
-    for player in team['players']:
-        performance_data.append([
-            player['name'],
-            team['name'],
-            str(player['latestGross']),
-            str(player['latestNet']),
-            str(player['handicap'])
-        ])
-
-performance_table = Table(performance_data, colWidths=[1.8*inch, 1.5*inch, 0.8*inch, 0.8*inch, 0.6*inch])
-performance_table.setStyle(TableStyle([
-    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3b82f6')),
-    ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-    ('FONTSIZE', (0, 0), (-1, 0), 10),
-    ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-    ('TOPPADDING', (0, 1), (-1, -1), 8),
-    ('BOTTOMPADDING', (0, 1), (-1, -1), 8),
-    ('GRID', (0, 0), (-1, -1), 1, colors.grey),
-    ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#eff6ff')])
-]))
-elements.append(performance_table)
-elements.append(Spacer(1, 20))
-
-# Handicap Changes
-if data['handicapChanges']:
-    elements.append(Paragraph("Handicap Changes", heading_style))
-    hc_data = [['Player', 'Team', 'Old HC', 'New HC', 'Change']]
-    for change in data['handicapChanges']:
-        change_str = f"{change['change']:+d}"
-        hc_data.append([
-            change['playerName'],
-            change['teamName'],
-            str(change['oldHandicap']),
-            str(change['newHandicap']),
-            change_str
-        ])
-    
-    hc_table = Table(hc_data, colWidths=[1.5*inch, 1.5*inch, 0.8*inch, 0.8*inch, 0.8*inch])
-    hc_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#10b981')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 10),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-        ('TOPPADDING', (0, 1), (-1, -1), 8),
-        ('BOTTOMPADDING', (0, 1), (-1, -1), 8),
-        ('GRID', (0, 0), (-1, -1), 1, colors.grey),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f0fdf4')])
-    ]))
-    elements.append(hc_table)
-    elements.append(Spacer(1, 20))
-
-# Win Probabilities
-if data['winProbabilities']:
-    elements.append(Paragraph(f"Win Probabilities ({data['remainingRounds']} rounds remaining)", heading_style))
-    
-    # Create probability bars
-    prob_data = [['Team', 'Probability']]
-    for prob in data['winProbabilities']:
-        prob_data.append([prob['name'], f"{prob['probability']:.1f}%"])
-    
-    prob_table = Table(prob_data, colWidths=[2.5*inch, 1.5*inch])
-    prob_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#8b5cf6')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
-        ('ALIGN', (1, 0), (1, -1), 'CENTER'),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 10),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-        ('TOPPADDING', (0, 1), (-1, -1), 8),
-        ('BOTTOMPADDING', (0, 1), (-1, -1), 8),
-        ('GRID', (0, 0), (-1, -1), 1, colors.grey),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#faf5ff')])
-    ]))
-    elements.append(prob_table)
-
-# Build PDF
-doc.build(elements)
-print("PDF generated successfully!")
-`;
-                
-                // Execute Python script
-                const response = await fetch('/api/execute', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        language: 'python',
-                        code: pythonScript
-                    })
-                });
-                
-                if (!response.ok) {
-                    // Fallback: use bash to run Python
-                    const result = await bash_tool({
-                        command: `python3 -c '${pythonScript.replace(/'/g, "'\\''")}'`,
-                        description: 'Generate PDF summary'
-                    });
-                    
-                    if (result.returncode !== 0) {
-                        throw new Error('PDF generation failed: ' + result.stderr);
-                    }
-                }
-                
-                // Present the PDF
-                await present_files({ filepaths: ['/mnt/user-data/outputs/league-summary.pdf'] });
-                notify('✅ PDF summary generated!');
-                
-            } catch (err) {
-                console.error('Generate PDF error:', err);
-                showError('Failed to generate PDF: ' + err.message);
-            }
-        };
-
+        // League summary feature temporarily disabled
+        // Use Settings → Export Data to export league data
         window.emailData = () => {
             try {
                 const timestamp = new Date().toISOString().split('T')[0];
@@ -8296,24 +8102,26 @@ print("PDF generated successfully!")
 
         // Initialize
         console.log('========================================');
-        console.log('Golf League Tracker v7.7');
-        console.log('✅ Simplified BBB entry (single total 0-54)');
-        console.log('✅ Plain white golf ball icons');
-        console.log('✅ Simple group assignment (number input)');
-        console.log('✅ Form-based add UI (no more prompts!)');
-        console.log('✅ Clean, fast, mobile-optimized');
+        console.log('Golf League Tracker v7.83 - Firebase Edition');
+        console.log('✅ Firebase Firestore database integration');
+        console.log('✅ Real-time data sync across devices');
+        console.log('✅ Multi-league support via LEAGUE_ID');
+        console.log('✅ LocalStorage fallback');
         console.log('========================================');
         
-        render();
-        
-        // Show helpful message if no data
-        if (state.players.length === 0 && state.courses.length === 0) {
-            setTimeout(() => {
-                alert('👋 Welcome to Golf League v6.1!\\n\\nTo get started:\\n1. Add Players (Admin → Players)\\n2. Add a Course (Admin → Courses)\\n3. Create Teams (Admin → Teams)\\n4. Start a Round!');
-            }, 500);
-        } else {
-            notify('✅ v6.1 Ready!');
-        }
+        // Load data from database (async)
+        loadData().then(() => {
+            // Show helpful message if no data
+            if (state.players.length === 0 && state.courses.length === 0) {
+                setTimeout(() => {
+                    const dbType = useFirebase ? 'Firebase (cloud sync enabled! 🌐)' : 'LocalStorage (local only)';
+                    alert(`👋 Welcome to Golf League v7.83!\\n\\nDatabase: ${dbType}\\nLeague ID: ${LEAGUE_ID}\\n\\nTo get started:\\n1. Add Players (Admin → Players)\\n2. Add a Course (Admin → Courses)\\n3. Create Teams (Admin → Teams)\\n4. Start a Round!`);
+                }, 500);
+            } else {
+                const dbType = useFirebase ? '☁️ Firebase' : '💾 LocalStorage';
+                notify(`✅ v7.83 Ready! (${dbType})`);
+            }
+        });
     </script>
 </body>
 </html>
