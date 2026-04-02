@@ -943,11 +943,18 @@
                                                 ${hasGroups ? '<span style="color:#10b981;font-weight:600;"> • ✓ Groups set</span>' : '<span style="color:#f59e0b;"> • Groups not set</span>'}
                                             </div>
                                         </div>
-                                        <button onclick="activateRound(${state.rounds.indexOf(round)})" 
-                                                class="btn-primary" 
-                                                style="padding:8px 16px;background:#10b981;">
-                                            ▶️ Start
-                                        </button>
+                                        <div style="display:flex;gap:8px;">
+                                            <button onclick="editScheduledRound(${state.rounds.indexOf(round)})" 
+                                                    class="btn-secondary" 
+                                                    style="padding:8px 12px;font-size:13px;">
+                                                ✏️ Edit
+                                            </button>
+                                            <button onclick="activateRound(${state.rounds.indexOf(round)})" 
+                                                    class="btn-primary" 
+                                                    style="padding:8px 16px;background:#10b981;">
+                                                ▶️ Start
+                                            </button>
+                                        </div>
                                     </div>
                                 `;
                             }).join('')}
@@ -3757,16 +3764,24 @@
                 html += `<p style="color:#6b7280;padding:20px;background:#f9fafb;border-radius:8px;">No scheduled rounds</p>`;
             } else {
                 scheduledRounds.forEach((r, idx) => {
+                    const roundIndex = state.rounds.indexOf(r);
                     html += `
                         <div style="background:#f0fdf4;border:2px solid #10b981;border-radius:8px;padding:16px;margin-bottom:12px;">
-                            <strong>${r.courseName}</strong> - ${r.date}<br>
-                            <div style="font-family:monospace;font-size:11px;margin-top:8px;color:#065f46;">
-                                <div><strong>id:</strong> ${r.id}</div>
-                                <div><strong>active:</strong> ${JSON.stringify(r.active)}</div>
-                                <div><strong>timestamp:</strong> ${r.timestamp || '(not set)'}</div>
-                                <div><strong>ctpWinners:</strong> ${JSON.stringify(r.ctpWinners || '(not set)')}</div>
-                                <div><strong>extra9Winners:</strong> ${JSON.stringify(r.extra9Winners || '(not set)')}</div>
-                                <div><strong>teams:</strong> ${r.teams ? r.teams.length + ' teams' : '(not set)'}</div>
+                            <div style="display:flex;justify-content:space-between;align-items:start;">
+                                <div style="flex:1;">
+                                    <strong>${r.courseName}</strong> - ${r.date}<br>
+                                    <div style="font-family:monospace;font-size:11px;margin-top:8px;color:#065f46;">
+                                        <div><strong>id:</strong> ${r.id}</div>
+                                        <div><strong>active:</strong> ${JSON.stringify(r.active)}</div>
+                                        <div><strong>timestamp:</strong> ${r.timestamp || '(not set)'}</div>
+                                        <div><strong>ctpWinners:</strong> ${JSON.stringify(r.ctpWinners || '(not set)')}</div>
+                                        <div><strong>extra9Winners:</strong> ${JSON.stringify(r.extra9Winners || '(not set)')}</div>
+                                        <div><strong>teams:</strong> ${r.teams ? r.teams.length + ' teams' : '(not set)'}</div>
+                                    </div>
+                                </div>
+                                <button onclick="editScheduledRound(${roundIndex})" class="btn-secondary" style="padding:6px 12px;font-size:12px;">
+                                    ✏️ Edit Date/Time
+                                </button>
                             </div>
                         </div>
                     `;
@@ -4922,6 +4937,108 @@
             } catch (err) {
                 console.error('Save scheduled round error:', err);
                 showError('Failed to save scheduled round: ' + err.message);
+            }
+        };
+
+        window.editScheduledRound = (roundIndex) => {
+            try {
+                const round = state.rounds[roundIndex];
+                if (!round) {
+                    showError('Round not found!');
+                    return;
+                }
+                
+                if (round.active !== false) {
+                    showError('Can only edit scheduled rounds!');
+                    return;
+                }
+                
+                // Get current date and time
+                const currentDate = new Date(round.timestamp || round.id);
+                const dateStr = currentDate.toISOString().split('T')[0]; // YYYY-MM-DD
+                const timeStr = currentDate.toTimeString().slice(0, 5); // HH:MM
+                
+                // Create edit dialog
+                const app = document.getElementById('app');
+                app.innerHTML = `
+                    <button class="back-btn" onclick="navigate('home')">← Back</button>
+                    <div class="card">
+                        <h2>✏️ Edit Scheduled Round</h2>
+                        <div style="background:#f0fdf4;padding:12px;border-radius:8px;margin-bottom:20px;">
+                            <strong style="color:#065f46;">${round.courseName}</strong>
+                            <div style="color:#6b7280;font-size:14px;margin-top:4px;">
+                                ${round.teams.length} team${round.teams.length === 1 ? '' : 's'} • 
+                                ${round.teams.reduce((sum, t) => sum + t.players.length, 0)} players
+                            </div>
+                        </div>
+                        
+                        <div style="margin-bottom:16px;">
+                            <label style="display:block;margin-bottom:8px;font-weight:600;">📅 Date:</label>
+                            <input type="date" id="roundDate" value="${dateStr}"
+                                   style="width:100%;padding:12px;border:2px solid #d1d5db;border-radius:8px;font-size:16px;">
+                        </div>
+                        
+                        <div style="margin-bottom:20px;">
+                            <label style="display:block;margin-bottom:8px;font-weight:600;">⏰ Time:</label>
+                            <input type="time" id="roundTime" value="${timeStr}"
+                                   style="width:100%;padding:12px;border:2px solid #d1d5db;border-radius:8px;font-size:16px;">
+                        </div>
+                        
+                        <button onclick="saveScheduledRoundEdit(${roundIndex})" class="btn-primary" style="width:100%;">
+                            ✅ Save Changes
+                        </button>
+                        
+                        <button onclick="navigate('home')" class="btn-secondary" style="width:100%;margin-top:12px;">
+                            Cancel
+                        </button>
+                    </div>
+                `;
+            } catch (err) {
+                console.error('Edit scheduled round error:', err);
+                showError('Failed to edit round: ' + err.message);
+            }
+        };
+
+        window.saveScheduledRoundEdit = (roundIndex) => {
+            try {
+                const round = state.rounds[roundIndex];
+                if (!round) {
+                    showError('Round not found!');
+                    return;
+                }
+                
+                const dateInput = document.getElementById('roundDate').value;
+                const timeInput = document.getElementById('roundTime').value;
+                
+                if (!dateInput || !timeInput) {
+                    showError('Please enter both date and time!');
+                    return;
+                }
+                
+                // Combine date and time into timestamp
+                const dateTime = new Date(`${dateInput}T${timeInput}`);
+                const timestamp = dateTime.getTime();
+                
+                // Update round
+                round.timestamp = timestamp;
+                round.date = dateTime.toLocaleDateString('en-US', {
+                    weekday: 'short',
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric'
+                }) + ' • ' + dateTime.toLocaleTimeString('en-US', {
+                    hour: 'numeric',
+                    minute: '2-digit'
+                });
+                
+                // Save to database
+                save('rounds', state.rounds);
+                
+                notify('✅ Round date/time updated!');
+                navigate('home');
+            } catch (err) {
+                console.error('Save round edit error:', err);
+                showError('Failed to save changes: ' + err.message);
             }
         };
 
@@ -8102,7 +8219,7 @@
 
         // Initialize
         console.log('========================================');
-        console.log('Golf League Tracker v7.83 - Firebase Edition');
+        console.log('Golf League Tracker v7.84 - Firebase Edition');
         console.log('✅ Firebase Firestore database integration');
         console.log('✅ Real-time data sync across devices');
         console.log('✅ Multi-league support via LEAGUE_ID');
@@ -8115,11 +8232,11 @@
             if (state.players.length === 0 && state.courses.length === 0) {
                 setTimeout(() => {
                     const dbType = useFirebase ? 'Firebase (cloud sync enabled! 🌐)' : 'LocalStorage (local only)';
-                    alert(`👋 Welcome to Golf League v7.83!\\n\\nDatabase: ${dbType}\\nLeague ID: ${LEAGUE_ID}\\n\\nTo get started:\\n1. Add Players (Admin → Players)\\n2. Add a Course (Admin → Courses)\\n3. Create Teams (Admin → Teams)\\n4. Start a Round!`);
+                    alert(`👋 Welcome to Golf League v7.84!\\n\\nDatabase: ${dbType}\\nLeague ID: ${LEAGUE_ID}\\n\\nTo get started:\\n1. Add Players (Admin → Players)\\n2. Add a Course (Admin → Courses)\\n3. Create Teams (Admin → Teams)\\n4. Start a Round!`);
                 }, 500);
             } else {
                 const dbType = useFirebase ? '☁️ Firebase' : '💾 LocalStorage';
-                notify(`✅ v7.83 Ready! (${dbType})`);
+                notify(`✅ v7.84 Ready! (${dbType})`);
             }
         });
     </script>
