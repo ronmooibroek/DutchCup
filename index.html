@@ -942,8 +942,15 @@
                                                 ${hasGroups ? '<span style="color:#10b981;font-weight:600;"> • ✓ Groups set</span>' : '<span style="color:#f59e0b;"> • Groups not set</span>'}
                                             </div>
                                         </div>
-                                        ${!state.readOnly ? `
-                                            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                                        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                                            ${hasGroups && state.readOnly ? `
+                                                <button onclick="viewScheduledGroups(${state.rounds.indexOf(round)})" 
+                                                        class="btn-secondary" 
+                                                        style="padding:6px 10px;font-size:12px;">
+                                                    👁️ View Groups
+                                                </button>
+                                            ` : ''}
+                                            ${!state.readOnly ? `
                                                 <button onclick="editScheduledRound(${state.rounds.indexOf(round)})" 
                                                         class="btn-secondary" 
                                                         style="padding:6px 10px;font-size:12px;">
@@ -952,7 +959,7 @@
                                                 <button onclick="editScheduledGroups(${state.rounds.indexOf(round)})" 
                                                         class="btn-secondary" 
                                                         style="padding:6px 10px;font-size:12px;">
-                                                    👥 Groups
+                                                    👥 ${hasGroups ? 'Edit' : 'Set'} Groups
                                                 </button>
                                                 <button onclick="deleteScheduledRound(${state.rounds.indexOf(round)})" 
                                                         class="btn-secondary" 
@@ -964,8 +971,8 @@
                                                         style="padding:8px 16px;background:#10b981;">
                                                     ▶️ Start
                                                 </button>
-                                            </div>
-                                        ` : ''}
+                                            ` : ''}
+                                        </div>
                                     </div>
                                 `;
                             }).join('')}
@@ -2613,6 +2620,14 @@
                                 <small style="font-size:11px;">Please create or select an event to view leaderboard.</small>
                             </div>
                         `}
+                        
+                        ${eventRounds.length > 0 ? `
+                            <button onclick="openPresentationMode()" 
+                                    class="btn-primary" 
+                                    style="width:100%;margin-bottom:16px;background:linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);padding:12px;font-size:15px;font-weight:600;box-shadow:0 4px 12px rgba(99,102,241,0.3);">
+                                📊 Presentation Mode
+                            </button>
+                        ` : ''}
                         
                         ${eventRounds.length === 0 ? `
                             <p style="color:#6b7280;text-align:center;padding:40px 20px;">
@@ -5269,6 +5284,376 @@
                 console.error('Edit scheduled groups error:', err);
                 showError('Failed to edit groups: ' + err.message);
             }
+        };
+
+        window.viewScheduledGroups = (roundIndex) => {
+            try {
+                const round = state.rounds[roundIndex];
+                if (!round) {
+                    showError('Round not found!');
+                    return;
+                }
+                
+                // Organize players by group
+                const groupsMap = {};
+                round.teams.forEach(team => {
+                    team.players.forEach(player => {
+                        if (player.groupNumber) {
+                            if (!groupsMap[player.groupNumber]) {
+                                groupsMap[player.groupNumber] = [];
+                            }
+                            groupsMap[player.groupNumber].push({
+                                ...player,
+                                teamName: team.name,
+                                teamColor: team.color || '#3b82f6'
+                            });
+                        }
+                    });
+                });
+                
+                // Sort groups by number
+                const sortedGroups = Object.keys(groupsMap).sort((a, b) => parseInt(a) - parseInt(b));
+                
+                if (sortedGroups.length === 0) {
+                    showError('No groups set for this round');
+                    return;
+                }
+                
+                // Build HTML for groups display
+                let groupsHTML = `
+                    <div style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;" onclick="this.remove()">
+                        <div class="card" style="max-width:600px;width:100%;max-height:80vh;overflow-y:auto;" onclick="event.stopPropagation()">
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+                                <h2 style="margin:0;">👥 Groups - ${round.courseName}</h2>
+                                <button onclick="this.closest('div[style*=fixed]').remove()" style="background:#ef4444;color:white;border:none;padding:8px 12px;border-radius:8px;cursor:pointer;font-weight:600;">
+                                    ✕ Close
+                                </button>
+                            </div>
+                            <p style="color:#6b7280;margin-bottom:20px;">
+                                ${new Date(round.timestamp || round.id).toLocaleDateString('en-US', {weekday: 'long', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit'})}
+                            </p>
+                `;
+                
+                sortedGroups.forEach(groupNum => {
+                    const players = groupsMap[groupNum];
+                    groupsHTML += `
+                        <div style="background:#f9fafb;border:2px solid #e5e7eb;border-radius:8px;padding:16px;margin-bottom:16px;">
+                            <h3 style="margin:0 0 12px;color:#1f2937;">Group ${groupNum} (${players.length} player${players.length === 1 ? '' : 's'})</h3>
+                            ${players.map(player => `
+                                <div style="display:flex;align-items:center;gap:8px;padding:8px;background:white;border-radius:6px;margin-bottom:8px;">
+                                    <div style="width:8px;height:8px;border-radius:50%;background:${player.teamColor};"></div>
+                                    <div style="flex:1;">
+                                        <strong>${player.name}</strong>
+                                        <div style="font-size:12px;color:#6b7280;">${player.teamName}</div>
+                                    </div>
+                                    <div style="font-size:12px;color:#6b7280;">HCP: ${player.handicap || 0}</div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                });
+                
+                groupsHTML += `
+                        </div>
+                    </div>
+                `;
+                
+                // Add to page
+                document.body.insertAdjacentHTML('beforeend', groupsHTML);
+                
+            } catch (err) {
+                console.error('View scheduled groups error:', err);
+                showError('Failed to view groups: ' + err.message);
+            }
+        };
+
+        // Presentation Mode
+        let presentationState = {
+            active: false,
+            currentSlide: 0,
+            teamStandings: [],
+            eventName: ''
+        };
+
+        window.openPresentationMode = () => {
+            try {
+                // Get current event rounds
+                const currentEvent = state.events.find(e => e.id === state.currentEventId);
+                if (!currentEvent) {
+                    showError('No event selected!');
+                    return;
+                }
+                
+                const eventRounds = state.rounds.filter(r => r.eventId === state.currentEventId && r.active === true);
+                if (eventRounds.length === 0) {
+                    showError('No completed rounds to present!');
+                    return;
+                }
+                
+                // Calculate team standings (same logic as leaderboard)
+                const stats = {};
+                
+                // Initialize stats for all teams
+                state.teams.forEach(team => {
+                    stats[team.id] = {
+                        id: team.id,
+                        name: team.name,
+                        color: team.color || '#3b82f6',
+                        points: 0,
+                        strokePoints: 0,
+                        bbbPoints: 0,
+                        ballPoints: 0,
+                        ctpPoints: 0,
+                        extra9Points: 0,
+                        wins: 0,
+                        players: {}
+                    };
+                });
+                
+                // Calculate points from all rounds
+                eventRounds.forEach(r => {
+                    r.teams.forEach(t => {
+                        if (!stats[t.teamId]) return;
+                        
+                        t.players.forEach(p => {
+                            if (!stats[t.teamId].players[p.id]) {
+                                stats[t.teamId].players[p.id] = {
+                                    id: p.id,
+                                    name: p.name,
+                                    points: 0
+                                };
+                            }
+                            
+                            const strokePoints = p.strokePoints || 0;
+                            const bbbPoints = p.bbbPoints || 0;
+                            const ballPoints = p.ballPoints || 0;
+                            const extra9Points = p.extra9Points || 0;
+                            
+                            let ctpPoints = 0;
+                            if (r.ctpWinners && r.ctpWinners.length > 0) {
+                                const playerPosition = `${r.teams.findIndex(team => team.teamId === t.teamId)}-${t.players.findIndex(player => player.id === p.id)}`;
+                                ctpPoints = r.ctpWinners.filter(w => w === playerPosition).length * state.settings.ctpPoints;
+                            }
+                            
+                            stats[t.teamId].strokePoints += strokePoints;
+                            stats[t.teamId].bbbPoints += bbbPoints;
+                            stats[t.teamId].ballPoints += ballPoints;
+                            stats[t.teamId].extra9Points += extra9Points;
+                            stats[t.teamId].ctpPoints += ctpPoints;
+                        });
+                    });
+                });
+                
+                // Calculate team points
+                Object.values(stats).forEach(team => {
+                    team.points = team.strokePoints + team.bbbPoints + team.ballPoints + team.ctpPoints + team.extra9Points;
+                });
+                
+                // Calculate wins
+                eventRounds.forEach(r => {
+                    const roundTeamTotals = r.teams.map(t => ({
+                        teamId: t.teamId,
+                        total: t.totalPoints || 0
+                    }));
+                    
+                    const maxPoints = Math.max(...roundTeamTotals.map(t => t.total));
+                    const winners = roundTeamTotals.filter(t => t.total === maxPoints);
+                    
+                    winners.forEach(w => {
+                        if (stats[w.teamId]) {
+                            stats[w.teamId].wins += 1;
+                        }
+                    });
+                });
+                
+                // Sort teams by points (lowest to highest for reveal)
+                const leaderboard = Object.values(stats)
+                    .filter(team => team.points > 0)
+                    .sort((a, b) => a.points - b.points); // Ascending for dramatic reveal
+                
+                // Initialize presentation state
+                presentationState = {
+                    active: true,
+                    currentSlide: 0,
+                    teamStandings: leaderboard,
+                    eventName: currentEvent.name,
+                    totalRounds: eventRounds.length
+                };
+                
+                // Render presentation
+                renderPresentation();
+                
+            } catch (err) {
+                console.error('Open presentation error:', err);
+                showError('Failed to open presentation: ' + err.message);
+            }
+        };
+
+        window.renderPresentation = () => {
+            const { currentSlide, teamStandings, eventName, totalRounds } = presentationState;
+            
+            // Build presentation HTML
+            let html = `
+                <div id="presentationMode" style="position:fixed;top:0;left:0;right:0;bottom:0;background:linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);z-index:2000;overflow:hidden;">
+                    <div style="position:absolute;top:20px;right:20px;z-index:10;">
+                        <button onclick="closePresentationMode()" 
+                                style="background:rgba(239,68,68,0.9);color:white;border:none;padding:12px 20px;border-radius:8px;cursor:pointer;font-weight:600;font-size:16px;box-shadow:0 4px 12px rgba(0,0,0,0.3);">
+                            ✕ Exit
+                        </button>
+                    </div>
+                    
+                    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;padding:40px;text-align:center;">
+            `;
+            
+            if (currentSlide === 0) {
+                // Title slide
+                html += `
+                    <div style="animation:fadeIn 1s ease-in;">
+                        <h1 style="color:white;font-size:64px;margin:0 0 20px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
+                            🏆 ${eventName}
+                        </h1>
+                        <p style="color:#a5b4fc;font-size:28px;margin:0 0 40px;">
+                            Team Standings
+                        </p>
+                        <p style="color:#818cf8;font-size:20px;margin:0 0 60px;">
+                            After ${totalRounds} round${totalRounds === 1 ? '' : 's'}
+                        </p>
+                        <button onclick="nextPresentationSlide()" 
+                                class="btn-primary" 
+                                style="padding:20px 40px;font-size:24px;background:linear-gradient(135deg, #10b981 0%, #059669 100%);box-shadow:0 8px 24px rgba(16,185,129,0.4);">
+                            Begin Reveal →
+                        </button>
+                    </div>
+                `;
+            } else {
+                // Team reveal slides (currentSlide 1 to teamStandings.length)
+                const teamIndex = currentSlide - 1;
+                const team = teamStandings[teamIndex];
+                const position = teamStandings.length - teamIndex; // Reverse for ranking
+                
+                if (team) {
+                    const isFirst = position === 1;
+                    const isLast = position === teamStandings.length;
+                    
+                    html += `
+                        <div style="animation:slideUp 0.8s ease-out;">
+                            ${!isLast ? `
+                                <p style="color:#a5b4fc;font-size:24px;margin:0 0 20px;opacity:0.6;">
+                                    Previously revealed...
+                                </p>
+                                <div style="max-height:200px;overflow-y:auto;margin-bottom:40px;">
+                                    ${teamStandings.slice(0, teamIndex).reverse().map((t, idx) => `
+                                        <div style="background:rgba(255,255,255,0.1);border-left:4px solid ${t.color};padding:12px 20px;margin:8px auto;max-width:500px;border-radius:8px;display:flex;justify-content:space-between;align-items:center;">
+                                            <div style="display:flex;align-items:center;gap:12px;">
+                                                <span style="color:#e0e7ff;font-size:18px;font-weight:600;">#${teamStandings.length - (teamIndex - idx - 1)}</span>
+                                                <span style="color:white;font-size:18px;">${t.name}</span>
+                                            </div>
+                                            <span style="color:${t.color};font-size:20px;font-weight:600;">${t.points} pts</span>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            ` : ''}
+                            
+                            <div style="background:linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 100%);border:3px solid ${team.color};border-radius:20px;padding:60px 80px;margin:40px auto;max-width:800px;box-shadow:0 20px 60px rgba(0,0,0,0.4);animation:pulse 2s ease-in-out;">
+                                <div style="font-size:${isFirst ? '80px' : '60px'};color:${team.color};margin-bottom:20px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
+                                    ${isFirst ? '🥇' : isLast ? '🎯' : position === 2 ? '🥈' : position === 3 ? '🥉' : '🏅'}
+                                </div>
+                                <h2 style="color:#e0e7ff;font-size:36px;margin:0 0 16px;">
+                                    ${isFirst ? '🎉 CHAMPION! 🎉' : `#${position}`}
+                                </h2>
+                                <h1 style="color:white;font-size:${isFirst ? '72px' : '56px'};margin:0 0 30px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
+                                    ${team.name}
+                                </h1>
+                                <div style="font-size:48px;color:${team.color};font-weight:600;margin-bottom:20px;">
+                                    ${team.points} Points
+                                </div>
+                                <div style="display:flex;gap:20px;justify-content:center;flex-wrap:wrap;margin-top:30px;">
+                                    <div style="background:rgba(255,255,255,0.1);padding:12px 20px;border-radius:8px;">
+                                        <div style="color:#a5b4fc;font-size:14px;">Stroke Play</div>
+                                        <div style="color:white;font-size:20px;font-weight:600;">${team.strokePoints}</div>
+                                    </div>
+                                    ${team.bbbPoints > 0 ? `
+                                        <div style="background:rgba(255,255,255,0.1);padding:12px 20px;border-radius:8px;">
+                                            <div style="color:#a5b4fc;font-size:14px;">Best Ball</div>
+                                            <div style="color:white;font-size:20px;font-weight:600;">${team.bbbPoints}</div>
+                                        </div>
+                                    ` : ''}
+                                    ${team.ballPoints > 0 ? `
+                                        <div style="background:rgba(255,255,255,0.1);padding:12px 20px;border-radius:8px;">
+                                            <div style="color:#a5b4fc;font-size:14px;">Ball Points</div>
+                                            <div style="color:white;font-size:20px;font-weight:600;">${team.ballPoints}</div>
+                                        </div>
+                                    ` : ''}
+                                    ${team.wins > 0 ? `
+                                        <div style="background:rgba(255,255,255,0.1);padding:12px 20px;border-radius:8px;">
+                                            <div style="color:#a5b4fc;font-size:14px;">Round Wins</div>
+                                            <div style="color:white;font-size:20px;font-weight:600;">${team.wins}</div>
+                                        </div>
+                                    ` : ''}
+                                </div>
+                            </div>
+                            
+                            ${!isFirst ? `
+                                <button onclick="nextPresentationSlide()" 
+                                        class="btn-primary" 
+                                        style="padding:20px 40px;font-size:24px;margin-top:40px;background:linear-gradient(135deg, #10b981 0%, #059669 100%);box-shadow:0 8px 24px rgba(16,185,129,0.4);">
+                                    Next Team →
+                                </button>
+                            ` : `
+                                <button onclick="closePresentationMode()" 
+                                        class="btn-primary" 
+                                        style="padding:20px 40px;font-size:24px;margin-top:40px;background:linear-gradient(135deg, #ef4444 0%, #dc2626 100%);box-shadow:0 8px 24px rgba(239,68,68,0.4);">
+                                    🎊 Finish Presentation
+                                </button>
+                            `}
+                        </div>
+                    `;
+                }
+            }
+            
+            html += `
+                    </div>
+                </div>
+                
+                <style>
+                    @keyframes fadeIn {
+                        from { opacity: 0; transform: scale(0.9); }
+                        to { opacity: 1; transform: scale(1); }
+                    }
+                    @keyframes slideUp {
+                        from { opacity: 0; transform: translateY(50px); }
+                        to { opacity: 1; transform: translateY(0); }
+                    }
+                    @keyframes pulse {
+                        0%, 100% { transform: scale(1); }
+                        50% { transform: scale(1.02); }
+                    }
+                </style>
+            `;
+            
+            // Add to body
+            const existingPresentation = document.getElementById('presentationMode');
+            if (existingPresentation) {
+                existingPresentation.remove();
+            }
+            document.body.insertAdjacentHTML('beforeend', html);
+        };
+
+        window.nextPresentationSlide = () => {
+            presentationState.currentSlide++;
+            if (presentationState.currentSlide > presentationState.teamStandings.length) {
+                closePresentationMode();
+            } else {
+                renderPresentation();
+            }
+        };
+
+        window.closePresentationMode = () => {
+            const presentationDiv = document.getElementById('presentationMode');
+            if (presentationDiv) {
+                presentationDiv.remove();
+            }
+            presentationState.active = false;
         };
 
         window.activateRound = (roundIndex) => {
@@ -8448,7 +8833,7 @@
 
         // Initialize
         console.log('========================================');
-        console.log('Golf League Tracker v7.93 - Firebase Edition');
+        console.log('Golf League Tracker v7.94 - Firebase Edition');
         console.log('✅ Firebase Firestore database integration');
         console.log('✅ Real-time data sync across devices');
         console.log('✅ Multi-league support via LEAGUE_ID');
@@ -8461,11 +8846,11 @@
             if (state.players.length === 0 && state.courses.length === 0) {
                 setTimeout(() => {
                     const dbType = useFirebase ? 'Firebase (cloud sync enabled! 🌐)' : 'LocalStorage (local only)';
-                    alert(`👋 Welcome to Golf League v7.93!\\n\\nDatabase: ${dbType}\\nLeague ID: ${LEAGUE_ID}\\n\\nTo get started:\\n1. Add Players (Admin → Players)\\n2. Add a Course (Admin → Courses)\\n3. Create Teams (Admin → Teams)\\n4. Start a Round!`);
+                    alert(`👋 Welcome to Golf League v7.94!\\n\\nDatabase: ${dbType}\\nLeague ID: ${LEAGUE_ID}\\n\\nTo get started:\\n1. Add Players (Admin → Players)\\n2. Add a Course (Admin → Courses)\\n3. Create Teams (Admin → Teams)\\n4. Start a Round!`);
                 }, 500);
             } else {
                 const dbType = useFirebase ? '☁️ Firebase' : '💾 LocalStorage';
-                notify(`✅ v7.93 Ready! (${dbType})`);
+                notify(`✅ v7.94 Ready! (${dbType})`);
             }
         });
     </script>
