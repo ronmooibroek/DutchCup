@@ -5390,94 +5390,117 @@
                     return;
                 }
                 
-                // Calculate team standings (same logic as leaderboard)
-                const stats = {};
-                
-                // Initialize stats for all teams
-                state.teams.forEach(team => {
-                    stats[team.id] = {
-                        id: team.id,
-                        name: team.name,
-                        color: team.color || '#3b82f6',
-                        points: 0,
-                        strokePoints: 0,
-                        bbbPoints: 0,
-                        ballPoints: 0,
-                        ctpPoints: 0,
-                        extra9Points: 0,
-                        wins: 0,
-                        players: {}
-                    };
-                });
-                
-                // Calculate points from all rounds
-                eventRounds.forEach(r => {
-                    r.teams.forEach(t => {
-                        if (!stats[t.teamId]) return;
-                        
-                        t.players.forEach(p => {
-                            if (!stats[t.teamId].players[p.id]) {
-                                stats[t.teamId].players[p.id] = {
-                                    id: p.id,
-                                    name: p.name,
-                                    points: 0
-                                };
-                            }
+                // Helper function to calculate standings from given rounds
+                const calculateStandings = (rounds) => {
+                    const stats = {};
+                    
+                    // Initialize stats for all teams
+                    state.teams.forEach(team => {
+                        stats[team.id] = {
+                            id: team.id,
+                            name: team.name,
+                            color: team.color || '#3b82f6',
+                            points: 0,
+                            strokePoints: 0,
+                            bbbPoints: 0,
+                            ballPoints: 0,
+                            ctpPoints: 0,
+                            extra9Points: 0,
+                            wins: 0,
+                            players: {}
+                        };
+                    });
+                    
+                    // Calculate points from rounds
+                    rounds.forEach(r => {
+                        r.teams.forEach(t => {
+                            if (!stats[t.teamId]) return;
                             
-                            const strokePoints = p.strokePoints || 0;
-                            const bbbPoints = p.bbbPoints || 0;
-                            const ballPoints = p.ballPoints || 0;
-                            const extra9Points = p.extra9Points || 0;
-                            
-                            let ctpPoints = 0;
-                            if (r.ctpWinners && r.ctpWinners.length > 0) {
-                                const playerPosition = `${r.teams.findIndex(team => team.teamId === t.teamId)}-${t.players.findIndex(player => player.id === p.id)}`;
-                                ctpPoints = r.ctpWinners.filter(w => w === playerPosition).length * state.settings.ctpPoints;
-                            }
-                            
-                            stats[t.teamId].strokePoints += strokePoints;
-                            stats[t.teamId].bbbPoints += bbbPoints;
-                            stats[t.teamId].ballPoints += ballPoints;
-                            stats[t.teamId].extra9Points += extra9Points;
-                            stats[t.teamId].ctpPoints += ctpPoints;
+                            t.players.forEach(p => {
+                                if (!stats[t.teamId].players[p.id]) {
+                                    stats[t.teamId].players[p.id] = {
+                                        id: p.id,
+                                        name: p.name,
+                                        points: 0
+                                    };
+                                }
+                                
+                                const strokePoints = p.strokePoints || 0;
+                                const bbbPoints = p.bbbPoints || 0;
+                                const ballPoints = p.ballPoints || 0;
+                                const extra9Points = p.extra9Points || 0;
+                                
+                                let ctpPoints = 0;
+                                if (r.ctpWinners && r.ctpWinners.length > 0) {
+                                    const playerPosition = `${r.teams.findIndex(team => team.teamId === t.teamId)}-${t.players.findIndex(player => player.id === p.id)}`;
+                                    ctpPoints = r.ctpWinners.filter(w => w === playerPosition).length * state.settings.ctpPoints;
+                                }
+                                
+                                stats[t.teamId].strokePoints += strokePoints;
+                                stats[t.teamId].bbbPoints += bbbPoints;
+                                stats[t.teamId].ballPoints += ballPoints;
+                                stats[t.teamId].extra9Points += extra9Points;
+                                stats[t.teamId].ctpPoints += ctpPoints;
+                            });
                         });
                     });
-                });
-                
-                // Calculate team points
-                Object.values(stats).forEach(team => {
-                    team.points = team.strokePoints + team.bbbPoints + team.ballPoints + team.ctpPoints + team.extra9Points;
-                });
-                
-                // Calculate wins
-                eventRounds.forEach(r => {
-                    const roundTeamTotals = r.teams.map(t => ({
-                        teamId: t.teamId,
-                        total: t.totalPoints || 0
-                    }));
                     
-                    const maxPoints = Math.max(...roundTeamTotals.map(t => t.total));
-                    const winners = roundTeamTotals.filter(t => t.total === maxPoints);
-                    
-                    winners.forEach(w => {
-                        if (stats[w.teamId]) {
-                            stats[w.teamId].wins += 1;
-                        }
+                    // Calculate team points
+                    Object.values(stats).forEach(team => {
+                        team.points = team.strokePoints + team.bbbPoints + team.ballPoints + team.ctpPoints + team.extra9Points;
                     });
-                });
+                    
+                    // Calculate wins
+                    rounds.forEach(r => {
+                        const roundTeamTotals = r.teams.map(t => ({
+                            teamId: t.teamId,
+                            total: t.totalPoints || 0
+                        }));
+                        
+                        const maxPoints = Math.max(...roundTeamTotals.map(t => t.total));
+                        const winners = roundTeamTotals.filter(t => t.total === maxPoints);
+                        
+                        winners.forEach(w => {
+                            if (stats[w.teamId]) {
+                                stats[w.teamId].wins += 1;
+                            }
+                        });
+                    });
+                    
+                    return Object.values(stats).filter(team => team.points > 0);
+                };
                 
-                // Sort teams by points (lowest to highest for reveal)
-                const leaderboard = Object.values(stats)
-                    .filter(team => team.points > 0)
-                    .sort((a, b) => a.points - b.points); // Ascending for dramatic reveal
+                // Calculate current standings (all rounds)
+                const currentStandings = calculateStandings(eventRounds);
+                
+                // Calculate previous standings (all rounds except most recent)
+                // Sort rounds by timestamp to find most recent
+                const sortedRounds = [...eventRounds].sort((a, b) => (b.timestamp || b.id) - (a.timestamp || a.id));
+                const mostRecentRound = sortedRounds[0];
+                const previousRounds = eventRounds.filter(r => r.id !== mostRecentRound.id);
+                
+                const previousStandings = previousRounds.length > 0 
+                    ? calculateStandings(previousRounds).sort((a, b) => b.points - a.points) // Descending for display
+                    : [];
+                
+                // Sort current standings by points (lowest to highest for reveal)
+                const leaderboard = currentStandings.sort((a, b) => a.points - b.points); // Ascending for dramatic reveal
+                
+                // Get most recent round info
+                const mostRecentDate = new Date(mostRecentRound.timestamp || mostRecentRound.id);
                 
                 // Initialize presentation state
                 presentationState = {
                     active: true,
                     currentSlide: 0,
                     teamStandings: leaderboard,
+                    previousStandings: previousStandings,
                     eventName: currentEvent.name,
-                    totalRounds: eventRounds.length
+                    totalRounds: eventRounds.length,
+                    mostRecentRound: {
+                        courseName: mostRecentRound.courseName,
+                        date: mostRecentDate.toLocaleDateString('en-US', {weekday: 'long', month: 'long', day: 'numeric'})
+                    }
                 };
                 
                 // Render presentation
@@ -5490,7 +5513,7 @@
         };
 
         window.renderPresentation = () => {
-            const { currentSlide, teamStandings, eventName, totalRounds } = presentationState;
+            const { currentSlide, teamStandings, previousStandings, eventName, totalRounds, mostRecentRound } = presentationState;
             
             // Build presentation HTML
             let html = `
@@ -5502,26 +5525,56 @@
                         </button>
                     </div>
                     
-                    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;padding:40px;text-align:center;">
+                    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;padding:40px;text-align:center;overflow-y:auto;">
             `;
             
             if (currentSlide === 0) {
-                // Title slide
+                // Title slide with previous day standings
                 html += `
-                    <div style="animation:fadeIn 1s ease-in;">
-                        <h1 style="color:white;font-size:64px;margin:0 0 20px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
+                    <div style="animation:fadeIn 1s ease-in;max-width:900px;width:100%;">
+                        <h1 style="color:white;font-size:56px;margin:0 0 16px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
                             🏆 ${eventName}
                         </h1>
-                        <p style="color:#a5b4fc;font-size:28px;margin:0 0 40px;">
+                        <p style="color:#a5b4fc;font-size:24px;margin:0 0 12px;">
                             Team Standings
                         </p>
-                        <p style="color:#818cf8;font-size:20px;margin:0 0 60px;">
+                        <p style="color:#818cf8;font-size:18px;margin:0 0 30px;">
                             After ${totalRounds} round${totalRounds === 1 ? '' : 's'}
                         </p>
+                        
+                        ${previousStandings.length > 0 ? `
+                            <div style="background:rgba(255,255,255,0.05);border:2px solid rgba(255,255,255,0.1);border-radius:16px;padding:24px;margin:20px auto 40px;max-width:600px;">
+                                <h3 style="color:#a5b4fc;font-size:20px;margin:0 0 8px;">
+                                    Standings Before Today
+                                </h3>
+                                <p style="color:#818cf8;font-size:14px;margin:0 0 20px;">
+                                    ${mostRecentRound.courseName} - ${mostRecentRound.date}
+                                </p>
+                                ${previousStandings.map((team, idx) => {
+                                    const position = idx + 1;
+                                    return `
+                                        <div style="background:rgba(255,255,255,0.08);border-left:4px solid ${team.color};padding:12px 16px;margin:8px 0;border-radius:8px;display:flex;justify-content:space-between;align-items:center;">
+                                            <div style="display:flex;align-items:center;gap:12px;text-align:left;">
+                                                <span style="color:#e0e7ff;font-size:20px;font-weight:600;min-width:40px;">
+                                                    ${position === 1 ? '🥇' : position === 2 ? '🥈' : position === 3 ? '🥉' : `#${position}`}
+                                                </span>
+                                                <span style="color:white;font-size:18px;font-weight:500;">${team.name}</span>
+                                            </div>
+                                            <span style="color:${team.color};font-size:20px;font-weight:600;">${team.points}</span>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                        ` : `
+                            <p style="color:#818cf8;font-size:18px;margin:30px 0;">
+                                First round of the event!
+                            </p>
+                        `}
+                        
                         <button onclick="nextPresentationSlide()" 
                                 class="btn-primary" 
-                                style="padding:20px 40px;font-size:24px;background:linear-gradient(135deg, #10b981 0%, #059669 100%);box-shadow:0 8px 24px rgba(16,185,129,0.4);">
-                            Begin Reveal →
+                                style="padding:20px 40px;font-size:24px;background:linear-gradient(135deg, #10b981 0%, #059669 100%);box-shadow:0 8px 24px rgba(16,185,129,0.4);margin-top:20px;">
+                            ${previousStandings.length > 0 ? '📊 Reveal Updated Standings →' : 'Begin Reveal →'}
                         </button>
                     </div>
                 `;
@@ -8833,7 +8886,7 @@
 
         // Initialize
         console.log('========================================');
-        console.log('Golf League Tracker v7.94 - Firebase Edition');
+        console.log('Golf League Tracker v7.95 - Firebase Edition');
         console.log('✅ Firebase Firestore database integration');
         console.log('✅ Real-time data sync across devices');
         console.log('✅ Multi-league support via LEAGUE_ID');
@@ -8846,11 +8899,11 @@
             if (state.players.length === 0 && state.courses.length === 0) {
                 setTimeout(() => {
                     const dbType = useFirebase ? 'Firebase (cloud sync enabled! 🌐)' : 'LocalStorage (local only)';
-                    alert(`👋 Welcome to Golf League v7.94!\\n\\nDatabase: ${dbType}\\nLeague ID: ${LEAGUE_ID}\\n\\nTo get started:\\n1. Add Players (Admin → Players)\\n2. Add a Course (Admin → Courses)\\n3. Create Teams (Admin → Teams)\\n4. Start a Round!`);
+                    alert(`👋 Welcome to Golf League v7.95!\\n\\nDatabase: ${dbType}\\nLeague ID: ${LEAGUE_ID}\\n\\nTo get started:\\n1. Add Players (Admin → Players)\\n2. Add a Course (Admin → Courses)\\n3. Create Teams (Admin → Teams)\\n4. Start a Round!`);
                 }, 500);
             } else {
                 const dbType = useFirebase ? '☁️ Firebase' : '💾 LocalStorage';
-                notify(`✅ v7.94 Ready! (${dbType})`);
+                notify(`✅ v7.95 Ready! (${dbType})`);
             }
         });
     </script>
