@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="theme-color" content="#f97316">
+    <meta name="theme-color" content="#FF9A00">
     <title>Golf League Tracker</title>
     <link rel="manifest" href="data:application/json;base64,eyJuYW1lIjoiR29sZiBMZWFndWUiLCJzaG9ydF9uYW1lIjoiR29sZiIsInN0YXJ0X3VybCI6Ii4iLCJkaXNwbGF5Ijoic3RhbmRhbG9uZSIsImJhY2tncm91bmRfY29sb3IiOiIjZmZmZmZmIiwidGhlbWVfY29sb3IiOiIjZjk3MzE2In0=">
     
@@ -23,7 +23,7 @@
         
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #fdba74 0%, #fb923c 100%);
+            background: linear-gradient(135deg, #FFB84D 0%, #FF9A00 100%);
             min-height: 100vh;
             padding: 16px;
             padding-bottom: 80px;
@@ -50,7 +50,7 @@
         }
         
         .card h2 {
-            color: #f97316;
+            color: #FF9A00;
             margin-bottom: 16px;
             font-size: 24px;
         }
@@ -73,7 +73,7 @@
         }
         
         .btn-primary {
-            background: #f97316;
+            background: #FF9A00;
             color: white;
             border: none;
             padding: 14px 24px;
@@ -129,7 +129,7 @@
         
         .score-input:focus {
             outline: none;
-            border-color: #f97316;
+            border-color: #FF9A00;
         }
         
         #toast {
@@ -161,8 +161,11 @@
 </head>
 <body>
     <div class="header">
-        <h1 id="headerTitle">🏆 Golf League</h1>
-        <p style="font-size:12px;opacity:0.8;margin-top:8px;">v7.25 - Dutch Orange Theme</p>
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+            <div style="font-size:48px;">🇳🇱</div>
+            <h1 id="headerTitle" style="margin:0;flex:1;text-align:center;">Golf League</h1>
+            <div style="font-size:48px;">🇨🇦</div>
+        </div>
     </div>
     
     <div id="app"></div>
@@ -342,6 +345,8 @@
             activeRound: null,
             selectedCourseId: null,
             selectedTeamIds: [],
+            isAuthenticated: false,
+            readOnly: true, // Start in read-only mode - require admin login to edit
             settings: {
                 albatrossPoints: 10,
                 eaglePoints: 7,
@@ -743,7 +748,7 @@
                                 </div>
                                 <div>
                                     <div style="font-size:11px;color:#6b7280;font-weight:600;">REQUIRED</div>
-                                    <div style="font-size:24px;font-weight:700;color:#f97316;">54</div>
+                                    <div style="font-size:24px;font-weight:700;color:#FF9A00;">54</div>
                                     <div style="font-size:11px;color:#6b7280;">BBB</div>
                                 </div>
                                 <div>
@@ -839,17 +844,33 @@
             
             const currentEvent = state.events.find(e => e.id === state.currentEventId);
             if (currentEvent) {
-                headerTitle.textContent = `🏆 ${currentEvent.name}`;
+                headerTitle.textContent = currentEvent.name;
                 document.title = currentEvent.name;
             } else {
-                headerTitle.textContent = '🏆 Golf League';
+                headerTitle.textContent = 'Golf League';
                 document.title = 'Golf League Tracker';
             }
         };
 
+        // Admin authentication is now handled via toggleAdminMode() in header
+
         // Render functions
         const render = () => {
             console.log('Rendering view:', state.view);
+            
+            // Protect edit pages in read-only mode
+            if (state.readOnly) {
+                const restrictedViews = ['newRound', 'groupSetup', 'scoreEntry', 'settings', 'export'];
+                const restrictedPrefixes = ['events', 'courses', 'teams', 'players'];
+                
+                // Check if trying to access restricted view
+                if (restrictedViews.includes(state.view) || 
+                    restrictedPrefixes.some(prefix => state.view.startsWith(prefix))) {
+                    console.log('Read-only mode: blocking access to', state.view);
+                    state.view = 'home';
+                    showError('🔒 Read-only mode - Admin access required to edit');
+                }
+            }
             
             // Update header title with active event name
             updateHeaderTitle();
@@ -887,28 +908,6 @@
             const currentEventRounds = state.rounds.filter(r => r.eventId === state.currentEventId);
             
             app.innerHTML = `
-                ${state.events.length > 0 ? `
-                    <div class="card" style="background:linear-gradient(135deg,#dbeafe,#e0e7ff);border:2px solid #3b82f6;">
-                        <h2>🎯 Current Event</h2>
-                        <div style="background:white;padding:16px;border-radius:8px;margin-bottom:12px;">
-                            <strong style="font-size:18px;color:#1e40af;">${currentEvent ? currentEvent.name : 'No Event Selected'}</strong>
-                            ${currentEvent && currentEvent.description ? `<br><small style="color:#6b7280;">${currentEvent.description}</small>` : ''}
-                            <br><small style="color:#6b7280;font-weight:600;">${currentEventRounds.length} round${currentEventRounds.length === 1 ? '' : 's'} played</small>
-                        </div>
-                        <button onclick="navigate('events')" class="btn-primary" style="width:100%;background:#3b82f6;">
-                            🗂️ Manage Events
-                        </button>
-                    </div>
-                ` : `
-                    <div class="card" style="background:#fef3c7;border:2px solid #f59e0b;">
-                        <p style="color:#92400e;margin-bottom:12px;"><strong>⚠️ No Events Yet</strong></p>
-                        <p style="color:#6b7280;margin-bottom:12px;">Create an event to organize your rounds into tournaments or seasons.</p>
-                        <button onclick="navigate('events')" class="btn-primary" style="width:100%;background:#f59e0b;">
-                            ➕ Create First Event
-                        </button>
-                    </div>
-                `}
-                
                 ${(() => {
                     const scheduledRounds = state.rounds.filter(r => r.eventId === state.currentEventId && r.active === false);
                     if (scheduledRounds.length === 0) return '';
@@ -943,18 +942,30 @@
                                                 ${hasGroups ? '<span style="color:#10b981;font-weight:600;"> • ✓ Groups set</span>' : '<span style="color:#f59e0b;"> • Groups not set</span>'}
                                             </div>
                                         </div>
-                                        <div style="display:flex;gap:8px;">
-                                            <button onclick="editScheduledRound(${state.rounds.indexOf(round)})" 
-                                                    class="btn-secondary" 
-                                                    style="padding:8px 12px;font-size:13px;">
-                                                ✏️ Edit
-                                            </button>
-                                            <button onclick="activateRound(${state.rounds.indexOf(round)})" 
-                                                    class="btn-primary" 
-                                                    style="padding:8px 16px;background:#10b981;">
-                                                ▶️ Start
-                                            </button>
-                                        </div>
+                                        ${!state.readOnly ? `
+                                            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                                                <button onclick="editScheduledRound(${state.rounds.indexOf(round)})" 
+                                                        class="btn-secondary" 
+                                                        style="padding:6px 10px;font-size:12px;">
+                                                    📅 Date
+                                                </button>
+                                                <button onclick="editScheduledGroups(${state.rounds.indexOf(round)})" 
+                                                        class="btn-secondary" 
+                                                        style="padding:6px 10px;font-size:12px;">
+                                                    👥 Groups
+                                                </button>
+                                                <button onclick="deleteScheduledRound(${state.rounds.indexOf(round)})" 
+                                                        class="btn-secondary" 
+                                                        style="padding:6px 10px;font-size:12px;background:#fee2e2;color:#991b1b;">
+                                                    🗑️ Delete
+                                                </button>
+                                                <button onclick="activateRound(${state.rounds.indexOf(round)})" 
+                                                        class="btn-primary" 
+                                                        style="padding:8px 16px;background:#10b981;">
+                                                    ▶️ Start
+                                                </button>
+                                            </div>
+                                        ` : ''}
                                     </div>
                                 `;
                             }).join('')}
@@ -962,30 +973,32 @@
                     `;
                 })()}
                 
-                <div class="card">
-                    <h2>⛳ Quick Actions</h2>
-                    ${!state.currentEventId ? `
-                        <div style="background:#fee2e2;padding:12px;border-radius:8px;color:#991b1b;margin-bottom:12px;">
-                            <strong>Create an event first!</strong>
-                        </div>
-                    ` : ''}
-                    <div class="list-item" onclick="${state.currentEventId ? 'navigate(\'newRound\')' : 'navigate(\'events\')'}" style="${!state.currentEventId ? 'opacity:0.5;' : ''}">
-                        <div>
-                            <strong>➕ New Round</strong><br>
-                            <small>Start scoring a new round</small>
-                        </div>
-                        <span style="font-size:24px;">→</span>
-                    </div>
-                    ${state.activeRound ? `
-                        <div class="list-item" onclick="navigate('scoreEntry')" style="background:#fef3c7;">
+                ${!state.readOnly ? `
+                    <div class="card">
+                        <h2>⛳ Quick Actions</h2>
+                        ${!state.currentEventId ? `
+                            <div style="background:#fee2e2;padding:12px;border-radius:8px;color:#991b1b;margin-bottom:12px;">
+                                <strong>Create an event first!</strong>
+                            </div>
+                        ` : ''}
+                        <div class="list-item" onclick="${state.currentEventId ? 'navigate(\'newRound\')' : 'navigate(\'events\')'}" style="${!state.currentEventId ? 'opacity:0.5;' : ''}">
                             <div>
-                                <strong>📝 Continue Round</strong><br>
-                                <small>${state.activeRound.courseName}</small>
+                                <strong>➕ New Round</strong><br>
+                                <small>Start scoring a new round</small>
                             </div>
                             <span style="font-size:24px;">→</span>
                         </div>
-                    ` : ''}
-                </div>
+                        ${state.activeRound ? `
+                            <div class="list-item" onclick="navigate('scoreEntry')" style="background:#fef3c7;">
+                                <div>
+                                    <strong>📝 Continue Round</strong><br>
+                                    <small>${state.activeRound.courseName}</small>
+                                </div>
+                                <span style="font-size:24px;">→</span>
+                            </div>
+                        ` : ''}
+                    </div>
+                ` : ''}
                 
                 <div class="card">
                     <h2>📊 Data</h2>
@@ -1005,8 +1018,9 @@
                     </div>
                 </div>
                 
-                <div class="card">
-                    <h2>⚙️ Admin</h2>
+                ${!state.readOnly ? `
+                    <div class="card">
+                        <h2>⚙️ Admin</h2>
                     <div class="list-item" onclick="navigate('courses')">
                         <div>
                             <strong>🏌️ Courses</strong><br>
@@ -1043,6 +1057,33 @@
                         <span style="font-size:24px;">→</span>
                     </div>
                 </div>
+                ` : `
+                    <div class="card" style="background:#fef3c7;border:2px solid #f59e0b;">
+                        <h2>👁️ Read-Only Mode</h2>
+                        <p style="color:#92400e;font-size:14px;margin-bottom:12px;">
+                            You're viewing in read-only mode. Need to make changes?
+                        </p>
+                        <button onclick="toggleAdminMode()" 
+                                class="btn-primary" 
+                                style="width:100%;background:#ef4444;padding:12px;font-weight:600;">
+                            🔒 Enable Admin Mode
+                        </button>
+                    </div>
+                `}
+                
+                ${!state.readOnly ? `
+                    <div class="card" style="background:#dcfce7;border:2px solid #10b981;">
+                        <h2>✅ Admin Mode Active</h2>
+                        <p style="color:#065f46;font-size:14px;margin-bottom:12px;">
+                            You have full editing access. Click below to return to read-only mode.
+                        </p>
+                        <button onclick="toggleAdminMode()" 
+                                class="btn-secondary" 
+                                style="width:100%;background:#ef4444;color:white;padding:12px;font-weight:600;">
+                            🔓 Exit Admin Mode
+                        </button>
+                    </div>
+                ` : ''}
             `;
         };
 
@@ -1872,7 +1913,7 @@
                                 <strong>${c.name}</strong><br>
                                 <small>Par ${c.pars.reduce((a,b) => a+b, 0)}</small>
                             </div>
-                            ${state.selectedCourseId === c.id ? '<span style="color:#f97316;font-size:24px;">✓</span>' : ''}
+                            ${state.selectedCourseId === c.id ? '<span style="color:#FF9A00;font-size:24px;">✓</span>' : ''}
                         </div>
                     `).join('')}
                     
@@ -1886,7 +1927,7 @@
                                     return p ? p.name : '?';
                                 }).join(' & ') : 'No players assigned'}</small>
                             </div>
-                            ${state.selectedTeamIds.includes(t.id) ? '<span style="color:#f97316;font-size:24px;">✓</span>' : ''}
+                            ${state.selectedTeamIds.includes(t.id) ? '<span style="color:#FF9A00;font-size:24px;">✓</span>' : ''}
                         </div>
                     `).join('')}
                     
@@ -1960,12 +2001,22 @@
             // Check if groups are already assigned (verification mode)
             const hasExistingGroups = allPlayers.some(p => p.groupNumber);
             
+            // Check if we're editing a scheduled round
+            const isEditingScheduled = state.editingScheduledRoundIndex !== undefined;
+            
             app.innerHTML = `
-                <button class="back-btn" onclick="navigate('newRound')">← Back</button>
+                <button class="back-btn" onclick="navigate('${isEditingScheduled ? 'home' : 'newRound'}')">← Back</button>
                 <div class="card">
                     <h2>⛳ ${hasExistingGroups ? 'Verify & Update' : 'Assign Players to'} Foursomes</h2>
                     
-                    ${hasExistingGroups ? `
+                    ${isEditingScheduled ? `
+                        <div style="background:#fef3c7;border-left:4px solid #f59e0b;padding:12px;margin-bottom:16px;border-radius:6px;">
+                            <strong style="color:#92400e;">✏️ Editing Scheduled Round</strong><br>
+                            <small style="color:#92400e;">Update player groups and save changes to this scheduled round.</small>
+                        </div>
+                    ` : ''}
+                    
+                    ${hasExistingGroups && !isEditingScheduled ? `
                         <div style="background:#dbeafe;border-left:4px solid #0ea5e9;padding:12px;margin-bottom:16px;border-radius:6px;">
                             <strong style="color:#0369a1;">✓ Groups Pre-Assigned</strong><br>
                             <small style="color:#0369a1;">Handicaps have been updated. Review groups and make changes if needed, or proceed to scoring.</small>
@@ -2063,7 +2114,11 @@
                         </div>
                     </div>
                     
-                    ${state.activeRound && state.activeRound.scheduledMode ? `
+                    ${isEditingScheduled ? `
+                        <button onclick="saveScheduledRoundGroups()" class="btn-primary" style="width:100%;margin-top:20px;font-size:16px;padding:16px;background:#10b981;">
+                            💾 Save Groups to Scheduled Round
+                        </button>
+                    ` : state.activeRound && state.activeRound.scheduledMode ? `
                         <button onclick="saveScheduledRound()" class="btn-primary" style="width:100%;margin-top:20px;font-size:16px;padding:16px;background:#10b981;">
                             📅 Save Scheduled Round
                         </button>
@@ -2183,7 +2238,7 @@
                                             🔄 Recalc
                                         </button>
                                         <div>
-                                            <div style="font-size:32px;font-weight:700;color:#f97316;">${grandTotal}</div>
+                                            <div style="font-size:32px;font-weight:700;color:#FF9A00;">${grandTotal}</div>
                                             <div style="font-size:11px;color:#6b7280;">${strokePlayPoints} stroke • ${bbbPoints} BBB • ${ballPoints} balls${extra9Points > 0 ? ` • ${extra9Points} extra9` : ''}${ctpPoints > 0 ? ` • ${ctpPoints} CTP` : ''}</div>
                                         </div>
                                     </div>
@@ -2561,8 +2616,8 @@
                         
                         ${eventRounds.length === 0 ? `
                             <p style="color:#6b7280;text-align:center;padding:40px 20px;">
-                                No rounds played in this event yet.<br>
-                                <button onclick="navigate('newRound')" class="btn-primary" style="margin-top:16px;">➕ Start First Round</button>
+                                No rounds played in this event yet.
+                                ${!state.readOnly ? `<br><button onclick="navigate('newRound')" class="btn-primary" style="margin-top:16px;">➕ Start First Round</button>` : ''}
                             </p>
                         ` : `
                             <div style="margin-bottom:16px;">
@@ -2579,30 +2634,30 @@
                                                 <strong style="font-size:22px;">#${idx + 1} ${team.name}</strong>
                                                 <small style="color:#6b7280;font-size:15px;margin-left:8px;">${team.rounds}R • ${team.wins}W • ${team.avg.toFixed(1)}avg</small>
                                             </div>
-                                            <strong style="font-size:33px;color:#f97316;">${team.points}</strong>
+                                            <strong style="font-size:33px;color:#FF9A00;">${team.points}</strong>
                                         </div>
                                         
                                         <div style="background:rgba(255,255,255,0.5);padding:6px;border-radius:4px;">
                                             <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;">
                                                 <div style="background:white;padding:4px;border-radius:3px;text-align:center;">
                                                     <div style="font-size:12px;color:#059669;font-weight:600;">⛳</div>
-                                                    <div style="font-size:20px;font-weight:700;color:#f97316;">${team.strokePoints.toFixed(1)}</div>
+                                                    <div style="font-size:20px;font-weight:700;color:#FF9A00;">${team.strokePoints.toFixed(1)}</div>
                                                 </div>
                                                 <div style="background:white;padding:4px;border-radius:3px;text-align:center;">
                                                     <div style="font-size:12px;color:#7c3aed;font-weight:600;">🎯 BBB</div>
-                                                    <div style="font-size:20px;font-weight:700;color:#f97316;">${team.bbbPoints.toFixed(1)}</div>
+                                                    <div style="font-size:20px;font-weight:700;color:#FF9A00;">${team.bbbPoints.toFixed(1)}</div>
                                                 </div>
                                                 <div style="background:white;padding:4px;border-radius:3px;text-align:center;">
                                                     <div style="font-size:12px;color:#ca8a04;font-weight:600;">⚪</div>
-                                                    <div style="font-size:20px;font-weight:700;color:#f97316;">${team.ballPoints.toFixed(1)}</div>
+                                                    <div style="font-size:20px;font-weight:700;color:#FF9A00;">${team.ballPoints.toFixed(1)}</div>
                                                 </div>
                                                 <div style="background:white;padding:4px;border-radius:3px;text-align:center;">
                                                     <div style="font-size:12px;color:#0284c7;font-weight:600;">🎯</div>
-                                                    <div style="font-size:20px;font-weight:700;color:#f97316;">${team.ctpPoints.toFixed(1)}</div>
+                                                    <div style="font-size:20px;font-weight:700;color:#FF9A00;">${team.ctpPoints.toFixed(1)}</div>
                                                 </div>
                                                 <div style="background:white;padding:4px;border-radius:3px;text-align:center;">
                                                     <div style="font-size:12px;color:#dc2626;font-weight:600;">🏆</div>
-                                                    <div style="font-size:20px;font-weight:700;color:#f97316;">${team.extra9Points.toFixed(1)}</div>
+                                                    <div style="font-size:20px;font-weight:700;color:#FF9A00;">${team.extra9Points.toFixed(1)}</div>
                                                 </div>
                                             </div>
                                         </div>
@@ -2970,24 +3025,30 @@
                                                             }
                                                             return `<strong style="color:#059669;font-size:15px;">${dateStr}</strong>`;
                                                         })()}
-                                                        <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
-                                                            <button onclick="editRoundDateTime(${globalRoundIndex})" 
-                                                                    style="padding:4px 8px;background:#3b82f6;color:white;border:none;border-radius:4px;cursor:pointer;font-size:11px;">
-                                                                ✏️ Edit Date/Time
-                                                            </button>
-                                                            <button onclick="showWinProbabilitiesSnapshot(${globalRoundIndex})" 
-                                                                    style="padding:4px 8px;background:#8b5cf6;color:white;border:none;border-radius:4px;cursor:pointer;font-size:11px;">
-                                                                🎲 Win Odds After This Round
-                                                            </button>
-                                                            <button onclick="resetRound(${globalRoundIndex})" 
-                                                                    style="padding:4px 8px;background:#f59e0b;color:white;border:none;border-radius:4px;cursor:pointer;font-size:11px;">
-                                                                ↩️ Reset to Scheduled
-                                                            </button>
-                                                        </div>
+                                                        ${!state.readOnly ? `
+                                                            <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
+                                                                <button onclick="editRoundDateTime(${globalRoundIndex})" 
+                                                                        style="padding:4px 8px;background:#3b82f6;color:white;border:none;border-radius:4px;cursor:pointer;font-size:11px;">
+                                                                    ✏️ Edit Date/Time
+                                                                </button>
+                                                                <button onclick="showWinProbabilitiesSnapshot(${globalRoundIndex})" 
+                                                                        style="padding:4px 8px;background:#8b5cf6;color:white;border:none;border-radius:4px;cursor:pointer;font-size:11px;">
+                                                                    🎲 Win Odds After This Round
+                                                                </button>
+                                                                <button onclick="showRoundHandicapChanges(${globalRoundIndex})" 
+                                                                        style="padding:4px 8px;background:#10b981;color:white;border:none;border-radius:4px;cursor:pointer;font-size:11px;">
+                                                                    📊 Handicap Changes
+                                                                </button>
+                                                                <button onclick="resetRound(${globalRoundIndex})" 
+                                                                        style="padding:4px 8px;background:#f59e0b;color:white;border:none;border-radius:4px;cursor:pointer;font-size:11px;">
+                                                                    ↩️ Reset to Scheduled
+                                                                </button>
+                                                            </div>
+                                                        ` : ''}
                                                     </div>
                                                     <div style="text-align:right;">
                                                         <div style="font-size:12px;color:#6b7280;">Team Winner</div>
-                                                        <strong style="color:#f97316;">${winner.teamName}</strong>
+                                                        <strong style="color:#FF9A00;">${winner.teamName}</strong>
                                                     </div>
                                                 </div>
                                                 
@@ -3067,29 +3128,24 @@
                                                                     ${ctpTotal > 0 ? `<span>📍 ${ctpTotal}</span>` : ''}
                                                                 </div>
                                                             </div>
-                                                            <strong style="font-size:24px;color:#f97316;">${correctTeamTotal.toFixed(1)}</strong>
+                                                            <strong style="font-size:24px;color:#FF9A00;">${correctTeamTotal.toFixed(1)}</strong>
                                                         </div>
                                                     `).join('');
                                                 })()}
                                             </div>
                                             
-                                            <div style="display:flex;gap:8px;margin-top:12px;">
-                                                <button onclick="showRoundHandicapChanges(${globalRoundIndex})" 
-                                                        style="flex:1;padding:10px;background:#10b981;color:white;border:none;border-radius:8px;cursor:pointer;font-weight:600;">
-                                                    📊 Handicap Changes
-                                                </button>
-                                            </div>
-                                            
-                                            <div style="display:flex;gap:8px;margin-top:8px;">
-                                                <button onclick="editRound(${globalRoundIndex})" 
-                                                        style="flex:1;padding:10px;background:#3b82f6;color:white;border:none;border-radius:8px;cursor:pointer;font-weight:600;">
-                                                    ✏️ Edit Round
-                                                </button>
-                                                <button onclick="deleteRound(${globalRoundIndex})" 
-                                                        style="flex:1;padding:10px;background:#ef4444;color:white;border:none;border-radius:8px;cursor:pointer;font-weight:600;">
-                                                    🗑️ Delete
-                                                </button>
-                                            </div>
+                                            ${!state.readOnly ? `
+                                                <div style="display:flex;gap:8px;margin-top:12px;">
+                                                    <button onclick="editRound(${globalRoundIndex})" 
+                                                            style="flex:1;padding:10px;background:#3b82f6;color:white;border:none;border-radius:8px;cursor:pointer;font-weight:600;">
+                                                        ✏️ Edit Round
+                                                    </button>
+                                                    <button onclick="deleteRound(${globalRoundIndex})" 
+                                                            style="flex:1;padding:10px;background:#ef4444;color:white;border:none;border-radius:8px;cursor:pointer;font-weight:600;">
+                                                        🗑️ Delete
+                                                    </button>
+                                                </div>
+                                            ` : ''}
                                         </div>
                                     `;
                                 }).join('')
@@ -3097,7 +3153,7 @@
                             </div>
                         `}
                         
-                        ${state.rounds.length > 0 ? `
+                        ${state.rounds.length > 0 && !state.readOnly ? `
                             <div style="margin-top:24px;padding-top:24px;border-top:2px solid #e5e7eb;">
                                 <button onclick="deleteAllRounds()" 
                                         style="width:100%;padding:12px;background:#ef4444;color:white;border:none;border-radius:8px;cursor:pointer;font-weight:600;font-size:14px;">
@@ -3135,8 +3191,8 @@
                                 </div>
                             ` : ''}
                             <p style="color:#6b7280;text-align:center;padding:40px 20px;">
-                                No rounds played in this event yet.<br>
-                                <button onclick="navigate('newRound')" class="btn-primary" style="margin-top:16px;">➕ Start First Round</button>
+                                No rounds played in this event yet.
+                                ${!state.readOnly ? `<br><button onclick="navigate('newRound')" class="btn-primary" style="margin-top:16px;">➕ Start First Round</button>` : ''}
                             </p>
                         </div>
                     `;
@@ -3290,13 +3346,13 @@
                                         <strong style="font-size:20px;">#${idx + 1} ${player.name}</strong>${playerTeam ? ` <span style="color:${teamColor};font-size:14px;">• ${playerTeam.name}</span>` : ''}<br>
                                         <small>Handicap: ${player.handicap} • ${player.rounds} round${player.rounds === 1 ? '' : 's'} • ${player.avgPoints.toFixed(1)} avg pts • ${player.totalGrossStrokes} gross strokes</small>
                                     </div>
-                                    <strong style="font-size:28px;color:#f97316;">${player.totalPoints}</strong>
+                                    <strong style="font-size:28px;color:#FF9A00;">${player.totalPoints}</strong>
                                 </div>
                                 
                                 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(95px,1fr));gap:8px;">
                                     <div style="background:#ecfdf5;padding:8px;border-radius:6px;">
                                         <div style="font-size:10px;color:#065f46;font-weight:600;margin-bottom:3px;">⛳ STROKE</div>
-                                        <div style="font-size:18px;font-weight:700;color:#f97316;">${player.totalStrokePoints}</div>
+                                        <div style="font-size:18px;font-weight:700;color:#FF9A00;">${player.totalStrokePoints}</div>
                                         <div style="font-size:10px;color:#6b7280;">${player.avgStroke.toFixed(1)} avg</div>
                                     </div>
                                     
@@ -3337,11 +3393,35 @@
 
         const renderSettings = () => {
             const app = document.getElementById('app');
+            const currentEvent = state.events.find(e => e.id === state.currentEventId);
+            const currentEventRounds = state.rounds.filter(r => r.eventId === state.currentEventId);
+            
             app.innerHTML = `
                 <button class="back-btn" onclick="navigate('home')">← Back</button>
                 <div class="card">
                     <h2>⚙️ Settings</h2>
-                    <p style="color:#6b7280;margin-bottom:20px;">Configure point values for your league</p>
+                    
+                    ${state.events.length > 0 ? `
+                        <div style="background:#f0f9ff;border:2px solid #0ea5e9;border-radius:12px;padding:16px;margin-bottom:24px;">
+                            <h3 style="margin:0 0 12px;color:#0369a1;">🎯 Current Event</h3>
+                            <div style="background:white;padding:12px;border-radius:8px;margin-bottom:12px;">
+                                <strong style="font-size:16px;color:#0c4a6e;">${currentEvent ? currentEvent.name : 'No Event Selected'}</strong>
+                                ${currentEvent && currentEvent.description ? `<br><small style="color:#6b7280;">${currentEvent.description}</small>` : ''}
+                                <br><small style="color:#6b7280;font-weight:600;">${currentEventRounds.length} round${currentEventRounds.length === 1 ? '' : 's'} played</small>
+                            </div>
+                            <button onclick="navigate('events')" class="btn-secondary" style="width:100%;background:#0ea5e9;color:white;">
+                                🗂️ Manage Events
+                            </button>
+                        </div>
+                    ` : `
+                        <div style="background:#fef3c7;border:2px solid #f59e0b;border-radius:12px;padding:16px;margin-bottom:24px;">
+                            <p style="color:#92400e;margin-bottom:12px;"><strong>⚠️ No Events Yet</strong></p>
+                            <p style="color:#6b7280;margin-bottom:12px;font-size:14px;">Create an event to organize your rounds into tournaments or seasons.</p>
+                            <button onclick="navigate('events')" class="btn-primary" style="width:100%;background:#f59e0b;">
+                                ➕ Create First Event
+                            </button>
+                        </div>
+                    `}
                     
                     <h3 style="margin:20px 0 12px;">Stroke Play Points</h3>
                     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px;">
@@ -4772,6 +4852,35 @@
             render();
         };
 
+        window.toggleAdminMode = () => {
+            // If already in admin mode, log out
+            if (!state.readOnly && state.isAuthenticated) {
+                if (confirm('Exit Admin Mode? You\'ll need to re-enter the password to edit again.')) {
+                    state.readOnly = true;
+                    state.isAuthenticated = false;
+                    notify('🔒 Admin Mode Disabled');
+                    render();
+                }
+                return;
+            }
+            
+            // Prompt for password
+            const password = prompt('Enter Admin Password:');
+            
+            if (!password) {
+                return; // User cancelled
+            }
+            
+            if (password === 'DutchGolf') {
+                state.readOnly = false;
+                state.isAuthenticated = true;
+                notify('✅ Admin Mode Enabled');
+                render();
+            } else {
+                showError('❌ Incorrect password!');
+            }
+        };
+
         window.selectCourse = (courseId) => {
             state.selectedCourseId = courseId;
             render();
@@ -4940,6 +5049,68 @@
             }
         };
 
+        window.saveScheduledRoundGroups = () => {
+            try {
+                if (state.editingScheduledRoundIndex === undefined) {
+                    showError('No scheduled round being edited!');
+                    return;
+                }
+                
+                const round = state.activeRound;
+                if (!round) {
+                    showError('No active round data!');
+                    return;
+                }
+                
+                // Validate that all players are assigned to groups
+                const allPlayers = [];
+                round.teams.forEach((team, teamIdx) => {
+                    team.players.forEach((player, playerIdx) => {
+                        allPlayers.push({
+                            teamIdx,
+                            playerIdx,
+                            groupNumber: player.groupNumber
+                        });
+                    });
+                });
+                
+                const unassigned = allPlayers.filter(p => !p.groupNumber);
+                if (unassigned.length > 0) {
+                    showError(`Please assign all ${unassigned.length} player${unassigned.length === 1 ? '' : 's'} to groups before saving!`);
+                    return;
+                }
+                
+                // Update the scheduled round in the rounds array
+                const scheduledRound = state.rounds[state.editingScheduledRoundIndex];
+                if (!scheduledRound) {
+                    showError('Scheduled round not found!');
+                    return;
+                }
+                
+                // Update the teams with new group assignments
+                scheduledRound.teams = round.teams;
+                
+                // Also update course if it was changed
+                scheduledRound.courseId = round.courseId;
+                scheduledRound.courseName = round.courseName;
+                scheduledRound.pars = round.pars;
+                scheduledRound.handicaps = round.handicaps;
+                
+                // Save to database
+                save('rounds', state.rounds);
+                
+                // Clear editing state
+                state.activeRound = null;
+                state.editingScheduledRoundIndex = undefined;
+                
+                notify('✅ Groups updated for scheduled round!');
+                navigate('home');
+            } catch (err) {
+                console.error('Save scheduled round groups error:', err);
+                showError('Failed to save groups: ' + err.message);
+            }
+        };
+
         window.editScheduledRound = (roundIndex) => {
             try {
                 const round = state.rounds[roundIndex];
@@ -5039,6 +5210,64 @@
             } catch (err) {
                 console.error('Save round edit error:', err);
                 showError('Failed to save changes: ' + err.message);
+            }
+        };
+
+        window.deleteScheduledRound = (roundIndex) => {
+            try {
+                const round = state.rounds[roundIndex];
+                if (!round) {
+                    showError('Round not found!');
+                    return;
+                }
+                
+                if (round.active !== false) {
+                    showError('Can only delete scheduled rounds!');
+                    return;
+                }
+                
+                const confirmMsg = `Delete this scheduled round?\n\n${round.courseName}\n${round.date}\n\nThis cannot be undone!`;
+                
+                if (!confirm(confirmMsg)) {
+                    return;
+                }
+                
+                // Remove the round
+                state.rounds.splice(roundIndex, 1);
+                
+                // Save to database
+                save('rounds', state.rounds);
+                
+                notify('✅ Scheduled round deleted!');
+                navigate('home');
+            } catch (err) {
+                console.error('Delete scheduled round error:', err);
+                showError('Failed to delete round: ' + err.message);
+            }
+        };
+
+        window.editScheduledGroups = (roundIndex) => {
+            try {
+                const round = state.rounds[roundIndex];
+                if (!round) {
+                    showError('Round not found!');
+                    return;
+                }
+                
+                if (round.active !== false) {
+                    showError('Can only edit groups for scheduled rounds!');
+                    return;
+                }
+                
+                // Set this round as the active round for editing
+                state.activeRound = {...round};
+                state.editingScheduledRoundIndex = roundIndex;
+                
+                // Navigate to group setup
+                navigate('groupSetup');
+            } catch (err) {
+                console.error('Edit scheduled groups error:', err);
+                showError('Failed to edit groups: ' + err.message);
             }
         };
 
@@ -7809,7 +8038,7 @@
                 let html = `
                     <div style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.9);z-index:9999;overflow-y:auto;padding:20px;">
                         <div style="max-width:1200px;margin:0 auto;background:white;border-radius:12px;box-shadow:0 20px 25px -5px rgba(0,0,0,0.3);">
-                            <div style="background:linear-gradient(135deg,#f97316,#ea580c);color:white;padding:20px;border-radius:12px 12px 0 0;position:sticky;top:0;z-index:10;">
+                            <div style="background:linear-gradient(135deg,#FF9A00,#ea580c);color:white;padding:20px;border-radius:12px 12px 0 0;position:sticky;top:0;z-index:10;">
                                 <div style="display:flex;justify-content:space-between;align-items:center;">
                                     <div>
                                         <h2 style="margin:0;font-size:24px;">📊 ${team.teamName}</h2>
@@ -7862,7 +8091,7 @@
                                                     <span style="color:#6b7280;margin-left:8px;font-size:14px;">HC: ${player.handicap} • Gross: ${grossScore} (${overPar > 0 ? '+' : ''}${overPar})</span>
                                                 </div>
                                                 <div style="text-align:right;">
-                                                    <div style="font-size:28px;font-weight:700;color:#f97316;">${totalPoints.toFixed(1)}</div>
+                                                    <div style="font-size:28px;font-weight:700;color:#FF9A00;">${totalPoints.toFixed(1)}</div>
                                                     <div style="font-size:11px;color:#6b7280;">${playerStrokePoints} stroke • ${bbbPoints.toFixed(1)} BBB • ${ballPoints} balls${extra9Points > 0 ? ` • ${extra9Points} extra9` : ''}${ctpPoints > 0 ? ` • ${ctpPoints} CTP` : ''}</div>
                                                 </div>
                                             </div>
@@ -8004,7 +8233,7 @@
                                     const correctTeamTotal = teamStrokePoints + teamBBBPoints + teamBallPoints + teamCTPPoints + teamExtra9Points;
                                     
                                     return `
-                                        <div style="background:linear-gradient(135deg,#f97316,#ea580c);color:white;border-radius:12px;padding:20px;margin-top:20px;">
+                                        <div style="background:linear-gradient(135deg,#FF9A00,#ea580c);color:white;border-radius:12px;padding:20px;margin-top:20px;">
                                             <h3 style="margin:0 0 16px 0;font-size:20px;">Team Total: ${correctTeamTotal.toFixed(1)} Points</h3>
                                             <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;">
                                                 <div style="background:rgba(255,255,255,0.2);padding:12px;border-radius:8px;text-align:center;">
@@ -8219,7 +8448,7 @@
 
         // Initialize
         console.log('========================================');
-        console.log('Golf League Tracker v7.84 - Firebase Edition');
+        console.log('Golf League Tracker v7.93 - Firebase Edition');
         console.log('✅ Firebase Firestore database integration');
         console.log('✅ Real-time data sync across devices');
         console.log('✅ Multi-league support via LEAGUE_ID');
@@ -8232,11 +8461,11 @@
             if (state.players.length === 0 && state.courses.length === 0) {
                 setTimeout(() => {
                     const dbType = useFirebase ? 'Firebase (cloud sync enabled! 🌐)' : 'LocalStorage (local only)';
-                    alert(`👋 Welcome to Golf League v7.84!\\n\\nDatabase: ${dbType}\\nLeague ID: ${LEAGUE_ID}\\n\\nTo get started:\\n1. Add Players (Admin → Players)\\n2. Add a Course (Admin → Courses)\\n3. Create Teams (Admin → Teams)\\n4. Start a Round!`);
+                    alert(`👋 Welcome to Golf League v7.93!\\n\\nDatabase: ${dbType}\\nLeague ID: ${LEAGUE_ID}\\n\\nTo get started:\\n1. Add Players (Admin → Players)\\n2. Add a Course (Admin → Courses)\\n3. Create Teams (Admin → Teams)\\n4. Start a Round!`);
                 }, 500);
             } else {
                 const dbType = useFirebase ? '☁️ Firebase' : '💾 LocalStorage';
-                notify(`✅ v7.84 Ready! (${dbType})`);
+                notify(`✅ v7.93 Ready! (${dbType})`);
             }
         });
     </script>
