@@ -5483,18 +5483,289 @@
                     ? calculateStandings(previousRounds).sort((a, b) => b.points - a.points) // Descending for display
                     : [];
                 
+                // Calculate today's scores from most recent round
+                const todaysScores = {};
+                mostRecentRound.teams.forEach(t => {
+                    if (!todaysScores[t.teamId]) {
+                        todaysScores[t.teamId] = {
+                            strokePoints: 0,
+                            bbbPoints: 0,
+                            ballPoints: 0,
+                            ctpPoints: 0,
+                            extra9Points: 0,
+                            total: 0
+                        };
+                    }
+                    
+                    t.players.forEach(p => {
+                        todaysScores[t.teamId].strokePoints += p.strokePoints || 0;
+                        todaysScores[t.teamId].bbbPoints += p.bbbPoints || 0;
+                        todaysScores[t.teamId].ballPoints += p.ballPoints || 0;
+                        todaysScores[t.teamId].extra9Points += p.extra9Points || 0;
+                        
+                        // Calculate CTP
+                        if (mostRecentRound.ctpWinners && mostRecentRound.ctpWinners.length > 0) {
+                            const playerPosition = `${mostRecentRound.teams.findIndex(team => team.teamId === t.teamId)}-${t.players.findIndex(player => player.id === p.id)}`;
+                            todaysScores[t.teamId].ctpPoints += mostRecentRound.ctpWinners.filter(w => w === playerPosition).length * state.settings.ctpPoints;
+                        }
+                    });
+                    
+                    todaysScores[t.teamId].total = 
+                        todaysScores[t.teamId].strokePoints + 
+                        todaysScores[t.teamId].bbbPoints + 
+                        todaysScores[t.teamId].ballPoints + 
+                        todaysScores[t.teamId].ctpPoints + 
+                        todaysScores[t.teamId].extra9Points;
+                });
+                
+                // Check for scheduled rounds
+                const scheduledRounds = state.rounds.filter(r => r.eventId === state.currentEventId && r.active === false);
+                const hasScheduledRounds = scheduledRounds.length > 0;
+                
+                // Calculate win probabilities
+                const calculateWinProbabilities = (standings, previousStandings, scheduledRoundsCount) => {
+                    if (scheduledRoundsCount === 0) {
+                        // Event is over - winner is 100%, others 0%
+                        return standings.map((team, idx) => ({
+                            teamId: team.id,
+                            probability: idx === standings.length - 1 ? 100 : 0,
+                            previousProbability: 0
+                        }));
+                    }
+                    
+                    const leader = standings[standings.length - 1];
+                    const leaderPoints = leader.points;
+                    
+                    // Estimate max points per round from recent rounds
+                    const avgMaxPointsPerRound = eventRounds.length > 0 
+                        ? Math.max(...eventRounds.map(r => Math.max(...r.teams.map(t => t.totalPoints || 0)))) 
+                        : 50;
+                    
+                    const maxPointsRemaining = avgMaxPointsPerRound * scheduledRoundsCount;
+                    
+                    // Calculate probabilities for current standings
+                    const probabilities = standings.map(team => {
+                        const pointsBehind = leaderPoints - team.points;
+                        
+                        if (pointsBehind === 0) {
+                            // This is the leader
+                            // Probability decreases with more rounds remaining and closer competitors
+                            const closestCompetitor = standings[standings.length - 2];
+                            const gap = closestCompetitor ? (team.points - closestCompetitor.points) : 100;
+                            const gapRatio = Math.min(gap / maxPointsRemaining, 1);
+                            return 40 + (gapRatio * 50); // 40-90% for leader
+                        } else if (pointsBehind <= maxPointsRemaining) {
+                            // Mathematically possible to win
+                            const catchUpRatio = 1 - (pointsBehind / maxPointsRemaining);
+                            return 5 + (catchUpRatio * 35); // 5-40% based on gap
+                        } else {
+                            // Mathematically eliminated
+                            return 0;
+                        }
+                    });
+                    
+                    // Normalize to 100%
+                    const total = probabilities.reduce((sum, p) => sum + p, 0);
+                    const normalized = probabilities.map(p => (p / total) * 100);
+                    
+                    // Calculate previous probabilities if we have previous standings
+                    let previousProbs = {};
+                    if (previousStandings.length > 0) {
+                        const prevLeader = previousStandings[0];
+                        const prevLeaderPoints = prevLeader.points;
+                        const prevRoundsRemaining = scheduledRoundsCount + 1; // One more round than now
+                        const prevMaxRemaining = avgMaxPointsPerRound * prevRoundsRemaining;
+                        
+                        const prevProbabilities = previousStandings.map(team => {
+                            const pointsBehind = prevLeaderPoints - team.points;
+                            
+                            if (pointsBehind === 0) {
+                                const closestCompetitor = previousStandings[1];
+                                const gap = closestCompetitor ? (team.points - closestCompetitor.points) : 100;
+                                const gapRatio = Math.min(gap / prevMaxRemaining, 1);
+                                return 40 + (gapRatio * 50);
+                            } else if (pointsBehind <= prevMaxRemaining) {
+                                const catchUpRatio = 1 - (pointsBehind / prevMaxRemaining);
+                                return 5 + (catchUpRatio * 35);
+                            } else {
+                                return 0;
+                            }
+                        });
+                        
+                        const prevTotal = prevProbabilities.reduce((sum, p) => sum + p, 0);
+                        const prevNormalized = prevProbabilities.map(p => (p / prevTotal) * 100);
+                        
+                        previousStandings.forEach((team, idx) => {
+                            previousProbs[team.id] = prevNormalized[idx];
+                        });
+                    }
+                    
+                    return standings.map((team, idx) => ({
+                        teamId: team.id,
+                        probability: Math.round(normalized[idx]),
+                        previousProbability: previousProbs[team.id] ? Math.round(previousProbs[team.id]) : 0
+                    }));
+                };
+                
+                const winProbabilities = calculateWinProbabilities(
+                    currentStandings, 
+                    previousStandings, 
+                    scheduledRounds.length
+                );
+                
+                // Add probabilities to standings
+                currentStandings.forEach(team => {
+                    const prob = winProbabilities.find(p => p.teamId === team.id);
+                    if (prob) {
+                        team.winProbability = prob.probability;
+                        team.previousWinProbability = prob.previousProbability;
+                        team.probabilityChange = prob.probability - prob.previousProbability;
+                    }
+                });
+                
                 // Sort current standings by points (lowest to highest for reveal)
                 const leaderboard = currentStandings.sort((a, b) => a.points - b.points); // Ascending for dramatic reveal
                 
                 // Get most recent round info
                 const mostRecentDate = new Date(mostRecentRound.timestamp || mostRecentRound.id);
                 
+                // Calculate individual awards from today's round
+                
+                // 1. NET SCORE WINNERS
+                // Find previous net winners (not eligible for today)
+                const previousNetWinners = new Set();
+                previousRounds.forEach(r => {
+                    if (r.netWinners && r.netWinners.length > 0) {
+                        r.netWinners.forEach(winnerId => {
+                            previousNetWinners.add(winnerId);
+                        });
+                    }
+                });
+                
+                // Calculate net scores for today's round
+                const todaysNetScores = [];
+                mostRecentRound.teams.forEach(team => {
+                    team.players.forEach(player => {
+                        if (!previousNetWinners.has(player.id)) {
+                            // Calculate gross score (sum of all holes)
+                            const grossScore = player.scores ? player.scores.reduce((sum, s) => sum + (s || 0), 0) : 0;
+                            const netScore = grossScore - (player.handicap || 0);
+                            
+                            todaysNetScores.push({
+                                playerId: player.id,
+                                playerName: player.name,
+                                teamName: team.name,
+                                teamColor: team.color || '#3b82f6',
+                                grossScore: grossScore,
+                                netScore: netScore,
+                                handicap: player.handicap || 0
+                            });
+                        }
+                    });
+                });
+                
+                // Sort by net score (lowest wins)
+                todaysNetScores.sort((a, b) => a.netScore - b.netScore);
+                
+                // Get top 3 (or ties)
+                const netWinners = [];
+                if (todaysNetScores.length > 0) {
+                    const lowestNet = todaysNetScores[0].netScore;
+                    netWinners.push(...todaysNetScores.filter(p => p.netScore === lowestNet).slice(0, 3));
+                }
+                
+                // Get previous winners info for display
+                const previousNetWinnersInfo = [];
+                previousRounds.forEach(r => {
+                    if (r.netWinners && r.netWinners.length > 0) {
+                        r.netWinners.forEach(winnerId => {
+                            // Find player in the round
+                            r.teams.forEach(team => {
+                                const player = team.players.find(p => p.id === winnerId);
+                                if (player && !previousNetWinnersInfo.find(p => p.playerId === winnerId)) {
+                                    previousNetWinnersInfo.push({
+                                        playerId: player.id,
+                                        playerName: player.name,
+                                        teamName: team.name
+                                    });
+                                }
+                            });
+                        });
+                    }
+                });
+                
+                // 2. EXTRA 9 WINNERS
+                const extra9Winners = [];
+                if (mostRecentRound.extra9Winners && mostRecentRound.extra9Winners.length > 0) {
+                    mostRecentRound.extra9Winners.forEach(winnerPosition => {
+                        // Parse position "teamIndex-playerIndex"
+                        const [teamIdx, playerIdx] = winnerPosition.split('-').map(Number);
+                        const team = mostRecentRound.teams[teamIdx];
+                        const player = team ? team.players[playerIdx] : null;
+                        
+                        if (player) {
+                            extra9Winners.push({
+                                playerName: player.name,
+                                teamName: team.name,
+                                teamColor: team.color || '#3b82f6'
+                            });
+                        }
+                    });
+                }
+                
+                // 3. CTP WINNERS
+                const ctpWinners = [];
+                if (mostRecentRound.ctpWinners && mostRecentRound.ctpWinners.length > 0) {
+                    mostRecentRound.ctpWinners.forEach(winnerPosition => {
+                        // Parse position "teamIndex-playerIndex"
+                        const [teamIdx, playerIdx] = winnerPosition.split('-').map(Number);
+                        const team = mostRecentRound.teams[teamIdx];
+                        const player = team ? team.players[playerIdx] : null;
+                        
+                        if (player) {
+                            // Check if already in list (avoid duplicates from multiple CTPs)
+                            if (!ctpWinners.find(w => w.playerName === player.name)) {
+                                ctpWinners.push({
+                                    playerName: player.name,
+                                    teamName: team.name,
+                                    teamColor: team.color || '#3b82f6',
+                                    count: mostRecentRound.ctpWinners.filter(w => w === winnerPosition).length
+                                });
+                            }
+                        }
+                    });
+                }
+                
+                // Calculate total slides
+                // Title + (Net if scheduled) + (Extra9 if winners) + (CTP if winners) + Teams
+                let totalSlides = 1; // Title
+                const hasNetSlide = hasScheduledRounds && netWinners.length > 0;
+                const hasExtra9Slide = hasScheduledRounds && extra9Winners.length > 0;
+                const hasCtpSlide = hasScheduledRounds && ctpWinners.length > 0;
+                
+                if (hasNetSlide) totalSlides++;
+                if (hasExtra9Slide) totalSlides++;
+                if (hasCtpSlide) totalSlides++;
+                totalSlides += leaderboard.length; // Team slides
+                
                 // Initialize presentation state
                 presentationState = {
                     active: true,
                     currentSlide: 0,
+                    totalSlides: totalSlides,
                     teamStandings: leaderboard,
                     previousStandings: previousStandings,
+                    todaysScores: todaysScores,
+                    hasScheduledRounds: hasScheduledRounds,
+                    // Individual awards
+                    netWinners: netWinners,
+                    previousNetWinners: previousNetWinnersInfo,
+                    extra9Winners: extra9Winners,
+                    ctpWinners: ctpWinners,
+                    hasNetSlide: hasNetSlide,
+                    hasExtra9Slide: hasExtra9Slide,
+                    hasCtpSlide: hasCtpSlide,
+                    // Event info
                     eventName: currentEvent.name,
                     totalRounds: eventRounds.length,
                     mostRecentRound: {
@@ -5513,7 +5784,19 @@
         };
 
         window.renderPresentation = () => {
-            const { currentSlide, teamStandings, previousStandings, eventName, totalRounds, mostRecentRound } = presentationState;
+            const { 
+                currentSlide, teamStandings, previousStandings, todaysScores, hasScheduledRounds, 
+                eventName, totalRounds, mostRecentRound,
+                netWinners, previousNetWinners, extra9Winners, ctpWinners,
+                hasNetSlide, hasExtra9Slide, hasCtpSlide
+            } = presentationState;
+            
+            // Calculate slide indices
+            let slideIndex = 1; // Start after title (0)
+            const netSlideIndex = hasNetSlide ? slideIndex++ : -1;
+            const extra9SlideIndex = hasExtra9Slide ? slideIndex++ : -1;
+            const ctpSlideIndex = hasCtpSlide ? slideIndex++ : -1;
+            const teamSlidesStartIndex = slideIndex;
             
             // Build presentation HTML
             let html = `
@@ -5529,14 +5812,14 @@
             `;
             
             if (currentSlide === 0) {
-                // Title slide with previous day standings
+                // TITLE SLIDE
                 html += `
                     <div style="animation:fadeIn 1s ease-in;max-width:900px;width:100%;">
                         <h1 style="color:white;font-size:56px;margin:0 0 16px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
                             🏆 ${eventName}
                         </h1>
                         <p style="color:#a5b4fc;font-size:24px;margin:0 0 12px;">
-                            Team Standings
+                            ${hasScheduledRounds ? 'Daily Awards & ' : ''}Team Standings
                         </p>
                         <p style="color:#818cf8;font-size:18px;margin:0 0 30px;">
                             After ${totalRounds} round${totalRounds === 1 ? '' : 's'}
@@ -5574,13 +5857,164 @@
                         <button onclick="nextPresentationSlide()" 
                                 class="btn-primary" 
                                 style="padding:20px 40px;font-size:24px;background:linear-gradient(135deg, #10b981 0%, #059669 100%);box-shadow:0 8px 24px rgba(16,185,129,0.4);margin-top:20px;">
-                            ${previousStandings.length > 0 ? '📊 Reveal Updated Standings →' : 'Begin Reveal →'}
+                            ${hasScheduledRounds ? '🏅 Reveal Today\'s Winners →' : 'Begin Reveal →'}
+                        </button>
+                    </div>
+                `;
+            } else if (currentSlide === netSlideIndex) {
+                // NET SCORE WINNERS SLIDE
+                html += `
+                    <div style="animation:slideUp 0.8s ease-out;max-width:900px;width:100%;">
+                        <h1 style="color:white;font-size:48px;margin:0 0 20px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
+                            🏌️ Low Net Score Winners
+                        </h1>
+                        <p style="color:#a5b4fc;font-size:20px;margin:0 0 40px;">
+                            ${mostRecentRound.courseName} - ${mostRecentRound.date}
+                        </p>
+                        
+                        ${previousNetWinners.length > 0 ? `
+                            <div style="background:rgba(239,68,68,0.1);border:2px solid rgba(239,68,68,0.3);border-radius:12px;padding:20px;margin-bottom:40px;">
+                                <h3 style="color:#fca5a5;font-size:18px;margin:0 0 12px;">
+                                    🚫 Previous Winners (Not Eligible)
+                                </h3>
+                                <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;">
+                                    ${previousNetWinners.map(p => `
+                                        <div style="background:rgba(255,255,255,0.1);padding:8px 16px;border-radius:6px;">
+                                            <span style="color:white;font-size:14px;">${p.playerName}</span>
+                                            <span style="color:#a5b4fc;font-size:12px;margin-left:8px;">${p.teamName}</span>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        ` : ''}
+                        
+                        <div style="background:rgba(16,185,129,0.15);border:3px solid rgba(16,185,129,0.4);border-radius:20px;padding:40px;box-shadow:0 20px 60px rgba(0,0,0,0.4);">
+                            <h2 style="color:#10b981;font-size:36px;margin:0 0 30px;">
+                                🏆 Today's Winners
+                            </h2>
+                            ${netWinners.map((winner, idx) => `
+                                <div style="background:linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 100%);border-left:6px solid ${winner.teamColor};border-radius:12px;padding:24px;margin-bottom:20px;">
+                                    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:20px;">
+                                        <div style="text-align:left;">
+                                            <div style="font-size:${idx === 0 ? '48px' : '36px'};color:white;font-weight:600;margin-bottom:8px;">
+                                                ${winner.playerName}
+                                            </div>
+                                            <div style="font-size:18px;color:${winner.teamColor};font-weight:500;">
+                                                ${winner.teamName}
+                                            </div>
+                                        </div>
+                                        <div style="text-align:right;">
+                                            <div style="font-size:56px;color:#10b981;font-weight:700;line-height:1;">
+                                                ${winner.netScore}
+                                            </div>
+                                            <div style="color:#a5b4fc;font-size:14px;margin-top:8px;">
+                                                Gross: ${winner.grossScore} | HCP: ${winner.handicap}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                        
+                        <button onclick="nextPresentationSlide()" 
+                                class="btn-primary" 
+                                style="padding:20px 40px;font-size:24px;margin-top:40px;background:linear-gradient(135deg, #10b981 0%, #059669 100%);box-shadow:0 8px 24px rgba(16,185,129,0.4);">
+                            Next Award →
+                        </button>
+                    </div>
+                `;
+            } else if (currentSlide === extra9SlideIndex) {
+                // EXTRA 9 WINNERS SLIDE
+                html += `
+                    <div style="animation:slideUp 0.8s ease-out;max-width:900px;width:100%;">
+                        <h1 style="color:white;font-size:48px;margin:0 0 20px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
+                            🎯 Extra 9 Winners
+                        </h1>
+                        <p style="color:#a5b4fc;font-size:20px;margin:0 0 40px;">
+                            ${mostRecentRound.courseName} - ${mostRecentRound.date}
+                        </p>
+                        
+                        <div style="background:rgba(249,115,22,0.15);border:3px solid rgba(249,115,22,0.4);border-radius:20px;padding:40px;box-shadow:0 20px 60px rgba(0,0,0,0.4);">
+                            <h2 style="color:#fb923c;font-size:36px;margin:0 0 30px;">
+                                🏆 Today's Winners
+                            </h2>
+                            ${extra9Winners.map((winner, idx) => `
+                                <div style="background:linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 100%);border-left:6px solid ${winner.teamColor};border-radius:12px;padding:24px;margin-bottom:16px;">
+                                    <div style="display:flex;align-items:center;justify-content:space-between;">
+                                        <div>
+                                            <div style="font-size:${idx === 0 ? '40px' : '32px'};color:white;font-weight:600;">
+                                                ${winner.playerName}
+                                            </div>
+                                            <div style="font-size:18px;color:${winner.teamColor};font-weight:500;margin-top:4px;">
+                                                ${winner.teamName}
+                                            </div>
+                                        </div>
+                                        <div style="font-size:56px;">
+                                            🎯
+                                        </div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                        
+                        <button onclick="nextPresentationSlide()" 
+                                class="btn-primary" 
+                                style="padding:20px 40px;font-size:24px;margin-top:40px;background:linear-gradient(135deg, #10b981 0%, #059669 100%);box-shadow:0 8px 24px rgba(16,185,129,0.4);">
+                            Next Award →
+                        </button>
+                    </div>
+                `;
+            } else if (currentSlide === ctpSlideIndex) {
+                // CTP WINNERS SLIDE
+                html += `
+                    <div style="animation:slideUp 0.8s ease-out;max-width:900px;width:100%;">
+                        <h1 style="color:white;font-size:48px;margin:0 0 20px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
+                            📍 Closest to Pin Winners
+                        </h1>
+                        <p style="color:#a5b4fc;font-size:20px;margin:0 0 40px;">
+                            ${mostRecentRound.courseName} - ${mostRecentRound.date}
+                        </p>
+                        
+                        <div style="background:rgba(59,130,246,0.15);border:3px solid rgba(59,130,246,0.4);border-radius:20px;padding:40px;box-shadow:0 20px 60px rgba(0,0,0,0.4);">
+                            <h2 style="color:#60a5fa;font-size:36px;margin:0 0 30px;">
+                                🏆 Today's Winners
+                            </h2>
+                            ${ctpWinners.map((winner, idx) => `
+                                <div style="background:linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 100%);border-left:6px solid ${winner.teamColor};border-radius:12px;padding:24px;margin-bottom:16px;">
+                                    <div style="display:flex;align-items:center;justify-content:space-between;">
+                                        <div>
+                                            <div style="font-size:${idx === 0 ? '40px' : '32px'};color:white;font-weight:600;">
+                                                ${winner.playerName}
+                                            </div>
+                                            <div style="font-size:18px;color:${winner.teamColor};font-weight:500;margin-top:4px;">
+                                                ${winner.teamName}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <div style="font-size:56px;">
+                                                📍
+                                            </div>
+                                            ${winner.count > 1 ? `
+                                                <div style="color:#60a5fa;font-size:14px;font-weight:600;text-align:center;">
+                                                    ×${winner.count}
+                                                </div>
+                                            ` : ''}
+                                        </div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                        
+                        <button onclick="nextPresentationSlide()" 
+                                class="btn-primary" 
+                                style="padding:20px 40px;font-size:24px;margin-top:40px;background:linear-gradient(135deg, #10b981 0%, #059669 100%);box-shadow:0 8px 24px rgba(16,185,129,0.4);">
+                            Team Standings →
                         </button>
                     </div>
                 `;
             } else {
-                // Team reveal slides (currentSlide 1 to teamStandings.length)
-                const teamIndex = currentSlide - 1;
+                // TEAM REVEAL SLIDES
+                const teamIndex = currentSlide - teamSlidesStartIndex;
                 const team = teamStandings[teamIndex];
                 const position = teamStandings.length - teamIndex; // Reverse for ranking
                 
@@ -5607,33 +6041,106 @@
                                 </div>
                             ` : ''}
                             
-                            <div style="background:linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 100%);border:3px solid ${team.color};border-radius:20px;padding:60px 80px;margin:40px auto;max-width:800px;box-shadow:0 20px 60px rgba(0,0,0,0.4);animation:pulse 2s ease-in-out;">
+                            <div style="background:linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 100%);border:3px solid ${team.color};border-radius:20px;padding:60px 80px;margin:40px auto;max-width:900px;box-shadow:0 20px 60px rgba(0,0,0,0.4);animation:pulse 2s ease-in-out;">
                                 <div style="font-size:${isFirst ? '80px' : '60px'};color:${team.color};margin-bottom:20px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
                                     ${isFirst ? '🥇' : isLast ? '🎯' : position === 2 ? '🥈' : position === 3 ? '🥉' : '🏅'}
                                 </div>
                                 <h2 style="color:#e0e7ff;font-size:36px;margin:0 0 16px;">
-                                    ${isFirst ? '🎉 CHAMPION! 🎉' : `#${position}`}
+                                    ${isFirst && !hasScheduledRounds ? '🎉 CHAMPION! 🎉' : isFirst ? '🏆 Current Leader' : `#${position}`}
                                 </h2>
-                                <h1 style="color:white;font-size:${isFirst ? '72px' : '56px'};margin:0 0 30px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
+                                <h1 style="color:white;font-size:${isFirst ? '72px' : '56px'};margin:0 0 20px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
                                     ${team.name}
                                 </h1>
-                                <div style="font-size:48px;color:${team.color};font-weight:600;margin-bottom:20px;">
-                                    ${team.points} Points
+                                
+                                <div style="margin-bottom:30px;">
+                                    <div style="font-size:48px;color:${team.color};font-weight:600;margin-bottom:10px;">
+                                        ${team.points} Points
+                                    </div>
+                                    <div style="font-size:18px;color:#a5b4fc;">
+                                        Total After ${totalRounds} Round${totalRounds === 1 ? '' : 's'}
+                                    </div>
                                 </div>
-                                <div style="display:flex;gap:20px;justify-content:center;flex-wrap:wrap;margin-top:30px;">
+                                
+                                ${todaysScores[team.id] ? `
+                                    <div style="background:rgba(16,185,129,0.15);border:2px solid rgba(16,185,129,0.3);border-radius:12px;padding:20px;margin-bottom:30px;">
+                                        <h3 style="color:#10b981;font-size:20px;margin:0 0 16px;">
+                                            📊 Today's Performance
+                                        </h3>
+                                        <div style="font-size:36px;color:#10b981;font-weight:600;margin-bottom:16px;">
+                                            +${todaysScores[team.id].total} Points
+                                        </div>
+                                        <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+                                            ${todaysScores[team.id].strokePoints > 0 ? `
+                                                <div style="background:rgba(255,255,255,0.1);padding:8px 12px;border-radius:6px;">
+                                                    <div style="color:#a5b4fc;font-size:12px;">Stroke</div>
+                                                    <div style="color:white;font-size:16px;font-weight:600;">${todaysScores[team.id].strokePoints}</div>
+                                                </div>
+                                            ` : ''}
+                                            ${todaysScores[team.id].bbbPoints > 0 ? `
+                                                <div style="background:rgba(255,255,255,0.1);padding:8px 12px;border-radius:6px;">
+                                                    <div style="color:#a5b4fc;font-size:12px;">Best Ball</div>
+                                                    <div style="color:white;font-size:16px;font-weight:600;">${todaysScores[team.id].bbbPoints}</div>
+                                                </div>
+                                            ` : ''}
+                                            ${todaysScores[team.id].ballPoints > 0 ? `
+                                                <div style="background:rgba(255,255,255,0.1);padding:8px 12px;border-radius:6px;">
+                                                    <div style="color:#a5b4fc;font-size:12px;">Ball</div>
+                                                    <div style="color:white;font-size:16px;font-weight:600;">${todaysScores[team.id].ballPoints}</div>
+                                                </div>
+                                            ` : ''}
+                                            ${todaysScores[team.id].ctpPoints > 0 ? `
+                                                <div style="background:rgba(255,255,255,0.1);padding:8px 12px;border-radius:6px;">
+                                                    <div style="color:#a5b4fc;font-size:12px;">CTP</div>
+                                                    <div style="color:white;font-size:16px;font-weight:600;">${todaysScores[team.id].ctpPoints}</div>
+                                                </div>
+                                            ` : ''}
+                                            ${todaysScores[team.id].extra9Points > 0 ? `
+                                                <div style="background:rgba(255,255,255,0.1);padding:8px 12px;border-radius:6px;">
+                                                    <div style="color:#a5b4fc;font-size:12px;">Extra 9</div>
+                                                    <div style="color:white;font-size:16px;font-weight:600;">${todaysScores[team.id].extra9Points}</div>
+                                                </div>
+                                            ` : ''}
+                                        </div>
+                                    </div>
+                                ` : ''}
+                                
+                                ${hasScheduledRounds ? `
+                                    <div style="background:rgba(139,92,246,0.15);border:2px solid rgba(139,92,246,0.3);border-radius:12px;padding:20px;margin-bottom:20px;">
+                                        <h3 style="color:#a78bfa;font-size:18px;margin:0 0 12px;">
+                                            🎯 Chance to Win Event
+                                        </h3>
+                                        <div style="display:flex;align-items:center;justify-content:center;gap:16px;">
+                                            <div style="font-size:48px;color:#a78bfa;font-weight:600;">
+                                                ${team.winProbability}%
+                                            </div>
+                                            ${team.probabilityChange !== 0 ? `
+                                                <div style="font-size:24px;color:${team.probabilityChange > 0 ? '#10b981' : '#ef4444'};font-weight:600;">
+                                                    ${team.probabilityChange > 0 ? '↗' : '↘'} ${Math.abs(team.probabilityChange)}%
+                                                </div>
+                                            ` : ''}
+                                        </div>
+                                        ${team.previousWinProbability > 0 ? `
+                                            <div style="color:#a5b4fc;font-size:14px;margin-top:8px;">
+                                                Yesterday: ${team.previousWinProbability}%
+                                            </div>
+                                        ` : ''}
+                                    </div>
+                                ` : ''}
+                                
+                                <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-top:20px;">
                                     <div style="background:rgba(255,255,255,0.1);padding:12px 20px;border-radius:8px;">
-                                        <div style="color:#a5b4fc;font-size:14px;">Stroke Play</div>
+                                        <div style="color:#a5b4fc;font-size:14px;">Total Stroke</div>
                                         <div style="color:white;font-size:20px;font-weight:600;">${team.strokePoints}</div>
                                     </div>
                                     ${team.bbbPoints > 0 ? `
                                         <div style="background:rgba(255,255,255,0.1);padding:12px 20px;border-radius:8px;">
-                                            <div style="color:#a5b4fc;font-size:14px;">Best Ball</div>
+                                            <div style="color:#a5b4fc;font-size:14px;">Total Best Ball</div>
                                             <div style="color:white;font-size:20px;font-weight:600;">${team.bbbPoints}</div>
                                         </div>
                                     ` : ''}
                                     ${team.ballPoints > 0 ? `
                                         <div style="background:rgba(255,255,255,0.1);padding:12px 20px;border-radius:8px;">
-                                            <div style="color:#a5b4fc;font-size:14px;">Ball Points</div>
+                                            <div style="color:#a5b4fc;font-size:14px;">Total Ball</div>
                                             <div style="color:white;font-size:20px;font-weight:600;">${team.ballPoints}</div>
                                         </div>
                                     ` : ''}
@@ -5694,7 +6201,7 @@
 
         window.nextPresentationSlide = () => {
             presentationState.currentSlide++;
-            if (presentationState.currentSlide > presentationState.teamStandings.length) {
+            if (presentationState.currentSlide >= presentationState.totalSlides) {
                 closePresentationMode();
             } else {
                 renderPresentation();
@@ -8886,7 +9393,7 @@
 
         // Initialize
         console.log('========================================');
-        console.log('Golf League Tracker v7.95 - Firebase Edition');
+        console.log('Golf League Tracker v7.97 - Firebase Edition');
         console.log('✅ Firebase Firestore database integration');
         console.log('✅ Real-time data sync across devices');
         console.log('✅ Multi-league support via LEAGUE_ID');
@@ -8899,11 +9406,11 @@
             if (state.players.length === 0 && state.courses.length === 0) {
                 setTimeout(() => {
                     const dbType = useFirebase ? 'Firebase (cloud sync enabled! 🌐)' : 'LocalStorage (local only)';
-                    alert(`👋 Welcome to Golf League v7.95!\\n\\nDatabase: ${dbType}\\nLeague ID: ${LEAGUE_ID}\\n\\nTo get started:\\n1. Add Players (Admin → Players)\\n2. Add a Course (Admin → Courses)\\n3. Create Teams (Admin → Teams)\\n4. Start a Round!`);
+                    alert(`👋 Welcome to Golf League v7.97!\\n\\nDatabase: ${dbType}\\nLeague ID: ${LEAGUE_ID}\\n\\nTo get started:\\n1. Add Players (Admin → Players)\\n2. Add a Course (Admin → Courses)\\n3. Create Teams (Admin → Teams)\\n4. Start a Round!`);
                 }, 500);
             } else {
                 const dbType = useFirebase ? '☁️ Firebase' : '💾 LocalStorage';
-                notify(`✅ v7.95 Ready! (${dbType})`);
+                notify(`✅ v7.97 Ready! (${dbType})`);
             }
         });
     </script>
