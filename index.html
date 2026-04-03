@@ -5754,12 +5754,15 @@
                         const player = team ? team.players[playerIdx] : null;
                         
                         if (player) {
+                            // Look up team info from state
+                            const stateTeam = state.teams.find(t => t.id === team.teamId);
+                            
                             // Check if already in list (avoid duplicates from multiple CTPs)
                             if (!ctpWinners.find(w => w.playerName === player.name)) {
                                 ctpWinners.push({
                                     playerName: player.name,
-                                    teamName: team.name,
-                                    teamColor: team.color || '#3b82f6',
+                                    teamName: stateTeam ? stateTeam.name : 'Unknown',
+                                    teamColor: stateTeam ? (stateTeam.color || '#3b82f6') : '#3b82f6',
                                     count: mostRecentRound.ctpWinners.filter(w => w === winnerPosition).length
                                 });
                             }
@@ -5816,13 +5819,14 @@
         };
 
         window.renderPresentation = () => {
-            const { 
-                currentSlide, teamStandings, previousStandings, todaysScores, hasScheduledRounds, 
-                eventName, totalRounds, mostRecentRound,
-                netWinners, previousNetWinners, extra9Winners, ctpWinners,
-                hasNetSlide, hasExtra9Slide, hasCtpSlide
-            } = presentationState;
-            
+            try {
+                const { 
+                    currentSlide, teamStandings, previousStandings, todaysScores, hasScheduledRounds, 
+                    eventName, totalRounds, mostRecentRound,
+                    netWinner, netTop3, previousNetWinners, extra9Winners, ctpWinners,
+                    hasNetSlide, hasExtra9Slide, hasCtpSlide
+                } = presentationState;
+                
             // Calculate slide indices
             let slideIndex = 1; // Start after title (0)
             const netSlideIndex = hasNetSlide ? slideIndex++ : -1;
@@ -5897,25 +5901,30 @@
                 // NET SCORE WINNERS SLIDE
                 const { netWinner, netTop3, previousNetWinners } = presentationState;
                 
+                // Check if there's a tie for first place
+                const tiedForFirst = netTop3 && netTop3.length > 0 && netTop3.filter(p => p.place === 1).length > 1;
+                const tiebreaker = tiedForFirst && netWinner ? 
+                    `Won on handicap tiebreaker (HCP: ${netWinner.handicap})` : '';
+                
                 html += `
-                    <div style="animation:slideUp 0.8s ease-out;max-width:900px;width:100%;">
-                        <h1 style="color:white;font-size:48px;margin:0 0 20px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
+                    <div style="animation:slideUp 0.8s ease-out;max-width:800px;width:100%;">
+                        <h1 style="color:white;font-size:36px;margin:0 0 12px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
                             🏌️ Low Net Score Winner
                         </h1>
-                        <p style="color:#a5b4fc;font-size:20px;margin:0 0 40px;">
+                        <p style="color:#a5b4fc;font-size:16px;margin:0 0 20px;">
                             ${mostRecentRound.courseName} - ${mostRecentRound.date}
                         </p>
                         
                         ${previousNetWinners.length > 0 ? `
-                            <div style="background:rgba(239,68,68,0.1);border:2px solid rgba(239,68,68,0.3);border-radius:12px;padding:20px;margin-bottom:40px;">
-                                <h3 style="color:#fca5a5;font-size:18px;margin:0 0 12px;">
+                            <div style="background:rgba(239,68,68,0.1);border:2px solid rgba(239,68,68,0.3);border-radius:10px;padding:14px;margin-bottom:20px;">
+                                <h3 style="color:#fca5a5;font-size:14px;margin:0 0 8px;">
                                     🚫 Previous Winners (Not Eligible)
                                 </h3>
-                                <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;">
+                                <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
                                     ${previousNetWinners.map(p => `
-                                        <div style="background:rgba(255,255,255,0.1);padding:8px 16px;border-radius:6px;">
-                                            <span style="color:white;font-size:14px;">${p.playerName}</span>
-                                            <span style="color:#a5b4fc;font-size:12px;margin-left:8px;">${p.teamName}</span>
+                                        <div style="background:rgba(255,255,255,0.1);padding:6px 12px;border-radius:6px;">
+                                            <span style="color:white;font-size:12px;">${p.playerName}</span>
+                                            <span style="color:#a5b4fc;font-size:10px;margin-left:6px;">${p.teamName}</span>
                                         </div>
                                     `).join('')}
                                 </div>
@@ -5923,25 +5932,30 @@
                         ` : ''}
                         
                         ${netWinner ? `
-                            <div style="background:rgba(16,185,129,0.15);border:3px solid rgba(16,185,129,0.4);border-radius:20px;padding:40px;margin-bottom:30px;box-shadow:0 20px 60px rgba(0,0,0,0.4);">
-                                <h2 style="color:#10b981;font-size:36px;margin:0 0 30px;">
+                            <div style="background:rgba(16,185,129,0.15);border:3px solid rgba(16,185,129,0.4);border-radius:16px;padding:24px;margin-bottom:16px;box-shadow:0 20px 60px rgba(0,0,0,0.4);">
+                                <h2 style="color:#10b981;font-size:24px;margin:0 0 16px;">
                                     🏆 Winner
                                 </h2>
-                                <div style="background:linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 100%);border-left:6px solid ${netWinner.teamColor};border-radius:12px;padding:32px;">
-                                    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:20px;">
+                                <div style="background:linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 100%);border-left:6px solid ${netWinner.teamColor};border-radius:12px;padding:20px;">
+                                    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;">
                                         <div style="text-align:left;">
-                                            <div style="font-size:52px;color:white;font-weight:600;margin-bottom:8px;">
+                                            <div style="font-size:36px;color:white;font-weight:600;margin-bottom:6px;">
                                                 ${netWinner.playerName}
                                             </div>
-                                            <div style="font-size:20px;color:${netWinner.teamColor};font-weight:500;">
+                                            <div style="font-size:16px;color:${netWinner.teamColor};font-weight:500;">
                                                 ${netWinner.teamName}
                                             </div>
+                                            ${tiebreaker ? `
+                                                <div style="color:#fbbf24;font-size:12px;margin-top:6px;font-style:italic;">
+                                                    ⚡ ${tiebreaker}
+                                                </div>
+                                            ` : ''}
                                         </div>
                                         <div style="text-align:right;">
-                                            <div style="font-size:72px;color:#10b981;font-weight:700;line-height:1;">
+                                            <div style="font-size:48px;color:#10b981;font-weight:700;line-height:1;">
                                                 ${netWinner.netScore}
                                             </div>
-                                            <div style="color:#a5b4fc;font-size:16px;margin-top:8px;">
+                                            <div style="color:#a5b4fc;font-size:12px;margin-top:6px;">
                                                 Gross: ${netWinner.grossScore} | HCP: ${netWinner.handicap}
                                             </div>
                                         </div>
@@ -5949,24 +5963,24 @@
                                 </div>
                             </div>
                             
-                            <div style="background:rgba(255,255,255,0.05);border:2px solid rgba(255,255,255,0.1);border-radius:12px;padding:24px;">
-                                <h3 style="color:#a5b4fc;font-size:20px;margin:0 0 20px;">
+                            <div style="background:rgba(255,255,255,0.05);border:2px solid rgba(255,255,255,0.1);border-radius:10px;padding:16px;">
+                                <h3 style="color:#a5b4fc;font-size:16px;margin:0 0 12px;">
                                     Top 3 Places
                                 </h3>
                                 ${netTop3.map((player, idx) => `
-                                    <div style="background:rgba(255,255,255,0.08);border-left:4px solid ${player.teamColor};padding:16px;margin-bottom:12px;border-radius:8px;display:flex;justify-content:space-between;align-items:center;">
-                                        <div style="display:flex;align-items:center;gap:16px;">
-                                            <span style="color:#e0e7ff;font-size:24px;font-weight:600;min-width:40px;">
+                                    <div style="background:rgba(255,255,255,0.08);border-left:4px solid ${player.teamColor};padding:12px;margin-bottom:8px;border-radius:8px;display:flex;justify-content:space-between;align-items:center;">
+                                        <div style="display:flex;align-items:center;gap:12px;">
+                                            <span style="color:#e0e7ff;font-size:20px;font-weight:600;min-width:32px;">
                                                 ${player.place === 1 ? '🥇' : player.place === 2 ? '🥈' : '🥉'}
                                             </span>
                                             <div>
-                                                <div style="color:white;font-size:18px;font-weight:500;">${player.playerName}</div>
-                                                <div style="color:${player.teamColor};font-size:14px;">${player.teamName}</div>
+                                                <div style="color:white;font-size:16px;font-weight:500;">${player.playerName}</div>
+                                                <div style="color:${player.teamColor};font-size:12px;">${player.teamName}</div>
                                             </div>
                                         </div>
                                         <div style="text-align:right;">
-                                            <div style="color:#10b981;font-size:28px;font-weight:600;">${player.netScore}</div>
-                                            <div style="color:#a5b4fc;font-size:12px;">Gross: ${player.grossScore} | HCP: ${player.handicap}</div>
+                                            <div style="color:#10b981;font-size:22px;font-weight:600;">${player.netScore}</div>
+                                            <div style="color:#a5b4fc;font-size:10px;">G:${player.grossScore} H:${player.handicap}</div>
                                         </div>
                                     </div>
                                 `).join('')}
@@ -5975,7 +5989,7 @@
                         
                         <button onclick="nextPresentationSlide()" 
                                 class="btn-primary" 
-                                style="padding:20px 40px;font-size:24px;margin-top:40px;background:linear-gradient(135deg, #10b981 0%, #059669 100%);box-shadow:0 8px 24px rgba(16,185,129,0.4);">
+                                style="padding:16px 32px;font-size:20px;margin-top:20px;background:linear-gradient(135deg, #10b981 0%, #059669 100%);box-shadow:0 8px 24px rgba(16,185,129,0.4);">
                             Next Award →
                         </button>
                     </div>
@@ -5983,66 +5997,31 @@
             } else if (currentSlide === extra9SlideIndex) {
                 // EXTRA 9 WINNERS SLIDE
                 html += `
-                    <div style="animation:slideUp 0.8s ease-out;max-width:900px;width:100%;">
-                        <h1 style="color:white;font-size:48px;margin:0 0 20px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
+                    <div style="animation:slideUp 0.8s ease-out;max-width:800px;width:100%;">
+                        <h1 style="color:white;font-size:36px;margin:0 0 12px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
                             🎯 Extra 9 Winners
                         </h1>
-                        <p style="color:#a5b4fc;font-size:20px;margin:0 0 20px;">
+                        <p style="color:#a5b4fc;font-size:16px;margin:0 0 24px;">
                             ${mostRecentRound.courseName} - ${mostRecentRound.date}
                         </p>
                         
-                        <!-- Money Wallet Animation -->
-                        <div style="margin:20px auto 40px;position:relative;width:200px;height:200px;">
-                            <svg width="200" height="200" viewBox="0 0 200 200" style="filter:drop-shadow(0 4px 12px rgba(0,0,0,0.3));">
-                                <!-- Wallet -->
-                                <rect x="50" y="100" width="100" height="70" rx="8" fill="#fb923c" stroke="#f59e0b" stroke-width="3"/>
-                                <rect x="50" y="100" width="100" height="15" fill="#f59e0b"/>
-                                <circle cx="130" cy="135" r="4" fill="#fef3c7"/>
-                                
-                                <!-- Money bills (animated) -->
-                                <g style="animation:moneyDrop 2s infinite;">
-                                    <rect x="70" y="30" width="60" height="35" rx="4" fill="#10b981" stroke="#059669" stroke-width="2" opacity="0.9"/>
-                                    <text x="100" y="52" text-anchor="middle" fill="white" font-size="18" font-weight="bold">€</text>
-                                </g>
-                                <g style="animation:moneyDrop 2s infinite 0.3s;">
-                                    <rect x="75" y="40" width="60" height="35" rx="4" fill="#10b981" stroke="#059669" stroke-width="2" opacity="0.8"/>
-                                    <text x="105" y="62" text-anchor="middle" fill="white" font-size="18" font-weight="bold">€</text>
-                                </g>
-                                <g style="animation:moneyDrop 2s infinite 0.6s;">
-                                    <rect x="80" y="50" width="60" height="35" rx="4" fill="#10b981" stroke="#059669" stroke-width="2" opacity="0.7"/>
-                                    <text x="110" y="72" text-anchor="middle" fill="white" font-size="18" font-weight="bold">€</text>
-                                </g>
-                            </svg>
-                            <div style="position:absolute;bottom:-30px;left:50%;transform:translateX(-50%);background:#fb923c;padding:6px 16px;border-radius:20px;font-weight:600;color:white;font-size:16px;box-shadow:0 2px 8px rgba(0,0,0,0.3);">
-                                Portemonnee
-                            </div>
-                        </div>
-                        
-                        <style>
-                            @keyframes moneyDrop {
-                                0% { transform: translateY(0); opacity: 1; }
-                                50% { transform: translateY(40px); opacity: 0.5; }
-                                100% { transform: translateY(70px); opacity: 0; }
-                            }
-                        </style>
-                        
-                        <div style="background:rgba(249,115,22,0.15);border:3px solid rgba(249,115,22,0.4);border-radius:20px;padding:40px;box-shadow:0 20px 60px rgba(0,0,0,0.4);">
-                            <h2 style="color:#fb923c;font-size:36px;margin:0 0 30px;">
+                        <div style="background:rgba(249,115,22,0.15);border:3px solid rgba(249,115,22,0.4);border-radius:16px;padding:30px;box-shadow:0 20px 60px rgba(0,0,0,0.4);">
+                            <h2 style="color:#fb923c;font-size:28px;margin:0 0 20px;">
                                 🏆 Today's Winners
                             </h2>
                             ${extra9Winners.map((winner, idx) => `
-                                <div style="background:linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 100%);border-left:6px solid ${winner.teamColor};border-radius:12px;padding:24px;margin-bottom:16px;">
+                                <div style="background:linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 100%);border-left:6px solid ${winner.teamColor};border-radius:12px;padding:20px;margin-bottom:12px;">
                                     <div style="display:flex;align-items:center;justify-content:space-between;">
                                         <div>
-                                            <div style="font-size:${idx === 0 ? '40px' : '32px'};color:white;font-weight:600;">
+                                            <div style="font-size:${idx === 0 ? '32px' : '28px'};color:white;font-weight:600;">
                                                 ${winner.playerName}
                                             </div>
-                                            <div style="font-size:18px;color:${winner.teamColor};font-weight:500;margin-top:4px;">
+                                            <div style="font-size:16px;color:${winner.teamColor};font-weight:500;margin-top:4px;">
                                                 ${winner.teamName}
                                             </div>
                                         </div>
-                                        <div style="font-size:56px;">
-                                            💰
+                                        <div style="font-size:48px;">
+                                            🎯
                                         </div>
                                     </div>
                                 </div>
@@ -6051,7 +6030,7 @@
                         
                         <button onclick="nextPresentationSlide()" 
                                 class="btn-primary" 
-                                style="padding:20px 40px;font-size:24px;margin-top:40px;background:linear-gradient(135deg, #10b981 0%, #059669 100%);box-shadow:0 8px 24px rgba(16,185,129,0.4);">
+                                style="padding:16px 32px;font-size:20px;margin-top:24px;background:linear-gradient(135deg, #10b981 0%, #059669 100%);box-shadow:0 8px 24px rgba(16,185,129,0.4);">
                             Next Award →
                         </button>
                     </div>
@@ -6133,127 +6112,102 @@
                                 </div>
                             ` : ''}
                             
-                            <div style="background:linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 100%);border:3px solid ${team.color};border-radius:20px;padding:60px 80px;margin:40px auto;max-width:900px;box-shadow:0 20px 60px rgba(0,0,0,0.4);animation:pulse 2s ease-in-out;">
-                                <div style="font-size:${isFirst ? '80px' : '60px'};color:${team.color};margin-bottom:20px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
+                            <div style="background:linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 100%);border:3px solid ${team.color};border-radius:16px;padding:40px 50px;margin:20px auto;max-width:800px;box-shadow:0 20px 60px rgba(0,0,0,0.4);animation:pulse 2s ease-in-out;">
+                                <div style="font-size:${isFirst ? '60px' : '48px'};color:${team.color};margin-bottom:12px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
                                     ${isFirst ? '🥇' : isLast ? '🎯' : position === 2 ? '🥈' : position === 3 ? '🥉' : '🏅'}
                                 </div>
-                                <h2 style="color:#e0e7ff;font-size:36px;margin:0 0 16px;">
+                                <h2 style="color:#e0e7ff;font-size:24px;margin:0 0 8px;">
                                     ${isFirst && !hasScheduledRounds ? '🎉 CHAMPION! 🎉' : isFirst ? '🏆 Current Leader' : `#${position}`}
                                 </h2>
-                                <h1 style="color:white;font-size:${isFirst ? '72px' : '56px'};margin:0 0 20px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
+                                <h1 style="color:white;font-size:${isFirst ? '48px' : '40px'};margin:0 0 16px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
                                     ${team.name}
                                 </h1>
                                 
-                                <div style="margin-bottom:30px;">
-                                    <div style="font-size:48px;color:${team.color};font-weight:600;margin-bottom:10px;">
+                                <div style="margin-bottom:20px;">
+                                    <div style="font-size:36px;color:${team.color};font-weight:600;margin-bottom:6px;">
                                         ${team.points} Points
                                     </div>
-                                    <div style="font-size:18px;color:#a5b4fc;">
+                                    <div style="font-size:14px;color:#a5b4fc;">
                                         Total After ${totalRounds} Round${totalRounds === 1 ? '' : 's'}
                                     </div>
                                 </div>
                                 
                                 ${todaysScores[team.id] ? `
-                                    <div style="background:rgba(16,185,129,0.15);border:2px solid rgba(16,185,129,0.3);border-radius:12px;padding:20px;margin-bottom:30px;">
-                                        <h3 style="color:#10b981;font-size:20px;margin:0 0 16px;">
+                                    <div style="background:rgba(16,185,129,0.15);border:2px solid rgba(16,185,129,0.3);border-radius:12px;padding:16px;margin-bottom:20px;">
+                                        <h3 style="color:#10b981;font-size:16px;margin:0 0 12px;">
                                             📊 Today's Performance
                                         </h3>
-                                        <div style="font-size:36px;color:#10b981;font-weight:600;margin-bottom:16px;">
+                                        <div style="font-size:28px;color:#10b981;font-weight:600;margin-bottom:12px;">
                                             +${todaysScores[team.id].total} Points
                                         </div>
-                                        <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
-                                            ${todaysScores[team.id].strokePoints > 0 ? `
-                                                <div style="background:rgba(255,255,255,0.1);padding:8px 12px;border-radius:6px;">
-                                                    <div style="color:#a5b4fc;font-size:12px;">Stroke</div>
-                                                    <div style="color:white;font-size:16px;font-weight:600;">${todaysScores[team.id].strokePoints}</div>
-                                                </div>
-                                            ` : ''}
-                                            ${todaysScores[team.id].bbbPoints > 0 ? `
-                                                <div style="background:rgba(255,255,255,0.1);padding:8px 12px;border-radius:6px;">
-                                                    <div style="color:#a5b4fc;font-size:12px;">Best Ball</div>
-                                                    <div style="color:white;font-size:16px;font-weight:600;">${todaysScores[team.id].bbbPoints}</div>
-                                                </div>
-                                            ` : ''}
-                                            ${todaysScores[team.id].ballPoints > 0 ? `
-                                                <div style="background:rgba(255,255,255,0.1);padding:8px 12px;border-radius:6px;">
-                                                    <div style="color:#a5b4fc;font-size:12px;">Ball</div>
-                                                    <div style="color:white;font-size:16px;font-weight:600;">${todaysScores[team.id].ballPoints}</div>
-                                                </div>
-                                            ` : ''}
-                                            ${todaysScores[team.id].ctpPoints > 0 ? `
-                                                <div style="background:rgba(255,255,255,0.1);padding:8px 12px;border-radius:6px;">
-                                                    <div style="color:#a5b4fc;font-size:12px;">CTP</div>
-                                                    <div style="color:white;font-size:16px;font-weight:600;">${todaysScores[team.id].ctpPoints}</div>
-                                                </div>
-                                            ` : ''}
-                                            ${todaysScores[team.id].extra9Points > 0 ? `
-                                                <div style="background:rgba(255,255,255,0.1);padding:8px 12px;border-radius:6px;">
-                                                    <div style="color:#a5b4fc;font-size:12px;">Extra 9</div>
-                                                    <div style="color:white;font-size:16px;font-weight:600;">${todaysScores[team.id].extra9Points}</div>
-                                                </div>
-                                            ` : ''}
+                                        <div style="display:grid;grid-template-columns:repeat(5, 1fr);gap:8px;">
+                                            <div style="background:rgba(255,255,255,0.1);padding:8px;border-radius:6px;text-align:center;">
+                                                <div style="color:#a5b4fc;font-size:10px;">Stroke</div>
+                                                <div style="color:white;font-size:18px;font-weight:600;">${todaysScores[team.id].strokePoints || 0}</div>
+                                            </div>
+                                            <div style="background:rgba(255,255,255,0.1);padding:8px;border-radius:6px;text-align:center;">
+                                                <div style="color:#a5b4fc;font-size:10px;">BBB</div>
+                                                <div style="color:white;font-size:18px;font-weight:600;">${todaysScores[team.id].bbbPoints || 0}</div>
+                                            </div>
+                                            <div style="background:rgba(255,255,255,0.1);padding:8px;border-radius:6px;text-align:center;">
+                                                <div style="color:#a5b4fc;font-size:10px;">Ball</div>
+                                                <div style="color:white;font-size:18px;font-weight:600;">${todaysScores[team.id].ballPoints || 0}</div>
+                                            </div>
+                                            <div style="background:rgba(255,255,255,0.1);padding:8px;border-radius:6px;text-align:center;">
+                                                <div style="color:#a5b4fc;font-size:10px;">CTP</div>
+                                                <div style="color:white;font-size:18px;font-weight:600;">${todaysScores[team.id].ctpPoints || 0}</div>
+                                            </div>
+                                            <div style="background:rgba(255,255,255,0.1);padding:8px;border-radius:6px;text-align:center;">
+                                                <div style="color:#a5b4fc;font-size:10px;">Ex9</div>
+                                                <div style="color:white;font-size:18px;font-weight:600;">${todaysScores[team.id].extra9Points || 0}</div>
+                                            </div>
                                         </div>
                                     </div>
                                 ` : ''}
                                 
                                 ${hasScheduledRounds ? `
-                                    <div style="background:rgba(139,92,246,0.15);border:2px solid rgba(139,92,246,0.3);border-radius:12px;padding:20px;margin-bottom:20px;">
-                                        <h3 style="color:#a78bfa;font-size:18px;margin:0 0 12px;">
+                                    <div style="background:rgba(139,92,246,0.15);border:2px solid rgba(139,92,246,0.3);border-radius:12px;padding:16px;margin-bottom:16px;">
+                                        <h3 style="color:#a78bfa;font-size:14px;margin:0 0 8px;">
                                             🎯 Chance to Win Event
                                         </h3>
-                                        <div style="display:flex;align-items:center;justify-content:center;gap:16px;">
-                                            <div style="font-size:48px;color:#a78bfa;font-weight:600;">
+                                        <div style="display:flex;align-items:center;justify-content:center;gap:12px;">
+                                            <div style="font-size:32px;color:#a78bfa;font-weight:600;">
                                                 ${team.winProbability}%
                                             </div>
                                             ${team.probabilityChange !== 0 ? `
-                                                <div style="font-size:24px;color:${team.probabilityChange > 0 ? '#10b981' : '#ef4444'};font-weight:600;">
+                                                <div style="font-size:20px;color:${team.probabilityChange > 0 ? '#10b981' : '#ef4444'};font-weight:600;">
                                                     ${team.probabilityChange > 0 ? '↗' : '↘'} ${Math.abs(team.probabilityChange)}%
                                                 </div>
                                             ` : ''}
                                         </div>
-                                        ${team.previousWinProbability > 0 ? `
-                                            <div style="color:#a5b4fc;font-size:14px;margin-top:8px;">
-                                                Yesterday: ${team.previousWinProbability}%
-                                            </div>
-                                        ` : ''}
                                     </div>
                                 ` : ''}
                                 
-                                <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-top:20px;">
-                                    <div style="background:rgba(255,255,255,0.1);padding:12px 20px;border-radius:8px;">
-                                        <div style="color:#a5b4fc;font-size:14px;">Total Stroke</div>
-                                        <div style="color:white;font-size:20px;font-weight:600;">${team.strokePoints}</div>
+                                <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:10px;margin-top:16px;">
+                                    <div style="background:rgba(255,255,255,0.1);padding:10px;border-radius:8px;text-align:center;">
+                                        <div style="color:#a5b4fc;font-size:11px;">Total Stroke</div>
+                                        <div style="color:white;font-size:18px;font-weight:600;">${team.strokePoints || 0}</div>
                                     </div>
-                                    ${team.bbbPoints > 0 ? `
-                                        <div style="background:rgba(255,255,255,0.1);padding:12px 20px;border-radius:8px;">
-                                            <div style="color:#a5b4fc;font-size:14px;">Total Best Ball</div>
-                                            <div style="color:white;font-size:20px;font-weight:600;">${team.bbbPoints}</div>
-                                        </div>
-                                    ` : ''}
-                                    ${team.ballPoints > 0 ? `
-                                        <div style="background:rgba(255,255,255,0.1);padding:12px 20px;border-radius:8px;">
-                                            <div style="color:#a5b4fc;font-size:14px;">Total Balls</div>
-                                            <div style="color:white;font-size:20px;font-weight:600;">${team.ballPoints}</div>
-                                        </div>
-                                    ` : ''}
-                                    ${team.ctpPoints > 0 ? `
-                                        <div style="background:rgba(255,255,255,0.1);padding:12px 20px;border-radius:8px;">
-                                            <div style="color:#a5b4fc;font-size:14px;">Total CTP</div>
-                                            <div style="color:white;font-size:20px;font-weight:600;">${team.ctpPoints}</div>
-                                        </div>
-                                    ` : ''}
-                                    ${team.extra9Points > 0 ? `
-                                        <div style="background:rgba(255,255,255,0.1);padding:12px 20px;border-radius:8px;">
-                                            <div style="color:#a5b4fc;font-size:14px;">Total Extra 9</div>
-                                            <div style="color:white;font-size:20px;font-weight:600;">${team.extra9Points}</div>
-                                        </div>
-                                    ` : ''}
-                                    ${team.wins > 0 ? `
-                                        <div style="background:rgba(255,255,255,0.1);padding:12px 20px;border-radius:8px;">
-                                            <div style="color:#a5b4fc;font-size:14px;">Round Wins</div>
-                                            <div style="color:white;font-size:20px;font-weight:600;">${team.wins}</div>
-                                        </div>
-                                    ` : ''}
+                                    <div style="background:rgba(255,255,255,0.1);padding:10px;border-radius:8px;text-align:center;">
+                                        <div style="color:#a5b4fc;font-size:11px;">Total BBB</div>
+                                        <div style="color:white;font-size:18px;font-weight:600;">${team.bbbPoints || 0}</div>
+                                    </div>
+                                    <div style="background:rgba(255,255,255,0.1);padding:10px;border-radius:8px;text-align:center;">
+                                        <div style="color:#a5b4fc;font-size:11px;">Total Balls</div>
+                                        <div style="color:white;font-size:18px;font-weight:600;">${team.ballPoints || 0}</div>
+                                    </div>
+                                    <div style="background:rgba(255,255,255,0.1);padding:10px;border-radius:8px;text-align:center;">
+                                        <div style="color:#a5b4fc;font-size:11px;">Total CTP</div>
+                                        <div style="color:white;font-size:18px;font-weight:600;">${team.ctpPoints || 0}</div>
+                                    </div>
+                                    <div style="background:rgba(255,255,255,0.1);padding:10px;border-radius:8px;text-align:center;">
+                                        <div style="color:#a5b4fc;font-size:11px;">Total Ex9</div>
+                                        <div style="color:white;font-size:18px;font-weight:600;">${team.extra9Points || 0}</div>
+                                    </div>
+                                    <div style="background:rgba(255,255,255,0.1);padding:10px;border-radius:8px;text-align:center;">
+                                        <div style="color:#a5b4fc;font-size:11px;">Round Wins</div>
+                                        <div style="color:white;font-size:18px;font-weight:600;">${team.wins || 0}</div>
+                                    </div>
                                 </div>
                             </div>
                             
@@ -6301,6 +6255,11 @@
                 existingPresentation.remove();
             }
             document.body.insertAdjacentHTML('beforeend', html);
+            } catch (error) {
+                console.error('Presentation rendering error:', error);
+                console.error('Error stack:', error.stack);
+                alert('Error rendering presentation: ' + error.message + '\n\nCheck console for details.');
+            }
         };
 
         window.nextPresentationSlide = () => {
@@ -9497,7 +9456,7 @@
 
         // Initialize
         console.log('========================================');
-        console.log('Golf League Tracker v7.99 - Firebase Edition');
+        console.log('Golf League Tracker v8.03 - Firebase Edition');
         console.log('✅ Firebase Firestore database integration');
         console.log('✅ Real-time data sync across devices');
         console.log('✅ Multi-league support via LEAGUE_ID');
@@ -9510,11 +9469,11 @@
             if (state.players.length === 0 && state.courses.length === 0) {
                 setTimeout(() => {
                     const dbType = useFirebase ? 'Firebase (cloud sync enabled! 🌐)' : 'LocalStorage (local only)';
-                    alert(`👋 Welcome to Golf League v7.99!\\n\\nDatabase: ${dbType}\\nLeague ID: ${LEAGUE_ID}\\n\\nTo get started:\\n1. Add Players (Admin → Players)\\n2. Add a Course (Admin → Courses)\\n3. Create Teams (Admin → Teams)\\n4. Start a Round!`);
+                    alert(`👋 Welcome to Golf League v8.03!\\n\\nDatabase: ${dbType}\\nLeague ID: ${LEAGUE_ID}\\n\\nTo get started:\\n1. Add Players (Admin → Players)\\n2. Add a Course (Admin → Courses)\\n3. Create Teams (Admin → Teams)\\n4. Start a Round!`);
                 }, 500);
             } else {
                 const dbType = useFirebase ? '☁️ Firebase' : '💾 LocalStorage';
-                notify(`✅ v7.99 Ready! (${dbType})`);
+                notify(`✅ v8.03 Ready! (${dbType})`);
             }
         });
     </script>
