@@ -6204,7 +6204,7 @@
                     const positionChange = previousPosition > 0 ? previousPosition - position : 0;
                     
                     // Sort standings for sidebar (highest to lowest)
-                    const sortedStandings = [...currentStandings].sort((a, b) => b.points - a.points);
+                    const sortedStandings = [...teamStandings].sort((a, b) => b.points - a.points);
                     
                     html += `
                         <div style="display:flex;gap:20px;width:100%;max-width:1920px;margin:0 auto;animation:slideUp 0.8s ease-out;">
@@ -9626,7 +9626,7 @@
 
         // Initialize
         console.log('========================================');
-        console.log('Golf League Tracker v8.3 - Firebase Edition');
+        console.log('Golf League Tracker v8.31 - Firebase Edition');
         console.log('✅ Firebase Firestore database integration');
         console.log('✅ Real-time data sync across devices');
         console.log('✅ Multi-league support via LEAGUE_ID');
@@ -9639,11 +9639,11 @@
             if (state.players.length === 0 && state.courses.length === 0) {
                 setTimeout(() => {
                     const dbType = useFirebase ? 'Firebase (cloud sync enabled! 🌐)' : 'LocalStorage (local only)';
-                    alert(`👋 Welcome to Golf League v8.3!\\n\\nDatabase: ${dbType}\\nLeague ID: ${LEAGUE_ID}\\n\\nTo get started:\\n1. Add Players (Admin → Players)\\n2. Add a Course (Admin → Courses)\\n3. Create Teams (Admin → Teams)\\n4. Start a Round!`);
+                    alert(`👋 Welcome to Golf League v8.31!\\n\\nDatabase: ${dbType}\\nLeague ID: ${LEAGUE_ID}\\n\\nTo get started:\\n1. Add Players (Admin → Players)\\n2. Add a Course (Admin → Courses)\\n3. Create Teams (Admin → Teams)\\n4. Start a Round!`);
                 }, 500);
             } else {
                 const dbType = useFirebase ? '☁️ Firebase' : '💾 LocalStorage';
-                notify(`✅ v8.3 Ready! (${dbType})`);
+                notify(`✅ v8.31 Ready! (${dbType})`);
             }
         });
     </script>
