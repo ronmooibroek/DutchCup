@@ -5297,6 +5297,11 @@
                 // Organize players by group
                 const groupsMap = {};
                 round.teams.forEach(team => {
+                    // Look up actual team data from state
+                    const stateTeam = state.teams.find(t => t.id === team.teamId);
+                    const teamName = team.teamName || (stateTeam ? stateTeam.name : 'Unknown Team');
+                    const teamColor = team.color || (stateTeam ? stateTeam.color : '#3b82f6');
+                    
                     team.players.forEach(player => {
                         if (player.groupNumber) {
                             if (!groupsMap[player.groupNumber]) {
@@ -5304,8 +5309,8 @@
                             }
                             groupsMap[player.groupNumber].push({
                                 ...player,
-                                teamName: team.name,
-                                teamColor: team.color || '#3b82f6'
+                                teamName: teamName,
+                                teamColor: teamColor
                             });
                         }
                     });
@@ -5876,17 +5881,46 @@
                     });
                 }
                 
+                // Calculate handicap changes from most recent round
+                const handicapChanges = [];
+                mostRecentRound.teams.forEach(team => {
+                    team.players.forEach(player => {
+                        const statePlayer = state.players.find(p => p.id === player.id);
+                        if (statePlayer && player.previousHandicap !== undefined && statePlayer.handicap !== player.previousHandicap) {
+                            handicapChanges.push({
+                                playerId: player.id,
+                                playerName: player.name,
+                                beforeHandicap: player.previousHandicap,
+                                afterHandicap: statePlayer.handicap
+                            });
+                        }
+                    });
+                });
+                
+                // Filter to only show changes (where handicap actually changed)
+                const actualHandicapChanges = handicapChanges.filter(ch => ch.beforeHandicap !== ch.afterHandicap);
+                
+                // Find next scheduled round
+                const upcomingRounds = scheduledRounds
+                    .map(r => ({...r, timestamp: r.timestamp || r.id}))
+                    .sort((a, b) => a.timestamp - b.timestamp);
+                const nextRound = upcomingRounds.length > 0 ? upcomingRounds[0] : null;
+                
                 // Calculate total slides
-                // Title + (Net if scheduled) + (Extra9 if winners) + (CTP if winners) + Teams
+                // Title + (Net if scheduled) + (Extra9 if winners) + (CTP if winners) + Teams + (Handicaps if changes) + (Next Round if exists)
                 let totalSlides = 1; // Title
                 const hasNetSlide = hasScheduledRounds && netWinner !== null;
                 const hasExtra9Slide = hasScheduledRounds && extra9Winners.length > 0;
                 const hasCtpSlide = hasScheduledRounds && ctpWinners.length > 0;
+                const hasHandicapSlide = actualHandicapChanges.length > 0;
+                const hasNextRoundSlide = nextRound !== null;
                 
                 if (hasNetSlide) totalSlides++;
                 if (hasExtra9Slide) totalSlides++;
                 if (hasCtpSlide) totalSlides++;
                 totalSlides += leaderboard.length; // Team slides
+                if (hasHandicapSlide) totalSlides++;
+                if (hasNextRoundSlide) totalSlides++;
                 
                 // Initialize presentation state
                 presentationState = {
@@ -5907,6 +5941,12 @@
                     hasNetSlide: hasNetSlide,
                     hasExtra9Slide: hasExtra9Slide,
                     hasCtpSlide: hasCtpSlide,
+                    // Handicap changes
+                    handicapChanges: actualHandicapChanges,
+                    hasHandicapSlide: hasHandicapSlide,
+                    // Next round
+                    nextRound: nextRound,
+                    hasNextRoundSlide: hasNextRoundSlide,
                     // Event info
                     eventName: currentEvent.name,
                     totalRounds: eventRounds.length,
@@ -5932,7 +5972,9 @@
                     currentSlide, teamStandings, previousStandings, todaysScores, hasScheduledRounds, scheduledRoundsCount,
                     eventName, totalRounds, mostRecentRound,
                     netWinner, netTop3, previousNetWinners, extra9Winners, ctpWinners,
-                    hasNetSlide, hasExtra9Slide, hasCtpSlide
+                    hasNetSlide, hasExtra9Slide, hasCtpSlide,
+                    handicapChanges, hasHandicapSlide,
+                    nextRound, hasNextRoundSlide
                 } = presentationState;
                 
             // Calculate slide indices
@@ -5941,6 +5983,9 @@
             const extra9SlideIndex = hasExtra9Slide ? slideIndex++ : -1;
             const ctpSlideIndex = hasCtpSlide ? slideIndex++ : -1;
             const teamSlidesStartIndex = slideIndex;
+            slideIndex += teamStandings.length; // Team slides
+            const handicapSlideIndex = hasHandicapSlide ? slideIndex++ : -1;
+            const nextRoundSlideIndex = hasNextRoundSlide ? slideIndex++ : -1;
             
             // Build presentation HTML
             let html = `
@@ -6417,6 +6462,161 @@
                         </div>
                     `;
                 }
+            } else if (currentSlide === handicapSlideIndex) {
+                // HANDICAP CHANGES SLIDE
+                html += `
+                    <div style="animation:slideUp 0.8s ease-out;max-width:900px;width:100%;">
+                        <h1 style="color:white;font-size:48px;margin:0 0 16px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
+                            📊 Handicap Changes
+                        </h1>
+                        <p style="color:#a5b4fc;font-size:20px;margin:0 0 40px;">
+                            Based on ${mostRecentRound.courseName}
+                        </p>
+                        
+                        <div style="background:rgba(255,255,255,0.1);border:3px solid rgba(255,255,255,0.2);border-radius:20px;padding:30px;box-shadow:0 20px 60px rgba(0,0,0,0.4);">
+                            ${handicapChanges.map(change => {
+                                const diff = change.afterHandicap - change.beforeHandicap;
+                                const isDrop = diff < 0;
+                                const bgColor = isDrop ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)';
+                                const borderColor = isDrop ? '#10b981' : '#ef4444';
+                                const arrowIcon = isDrop ? '⬇️' : '⬆️';
+                                const diffColor = isDrop ? '#10b981' : '#ef4444';
+                                
+                                return `
+                                    <div style="background:${bgColor};border:3px solid ${borderColor};border-radius:16px;padding:24px;margin-bottom:20px;">
+                                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                                            <strong style="font-size:32px;color:white;">${change.playerName}</strong>
+                                            <div style="display:flex;align-items:center;gap:12px;">
+                                                <span style="font-size:20px;color:#a5b4fc;font-weight:600;">
+                                                    ${Math.abs(diff)} ${isDrop ? 'lower' : 'higher'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        
+                                        <div style="display:flex;align-items:center;gap:24px;justify-content:center;">
+                                            <div style="text-align:center;">
+                                                <div style="font-size:16px;color:#a5b4fc;margin-bottom:8px;">Before</div>
+                                                <div style="font-size:48px;font-weight:700;color:white;">${change.beforeHandicap}</div>
+                                            </div>
+                                            
+                                            <div style="font-size:56px;">${arrowIcon}</div>
+                                            
+                                            <div style="text-align:center;">
+                                                <div style="font-size:16px;color:#a5b4fc;margin-bottom:8px;">After</div>
+                                                <div style="font-size:48px;font-weight:700;color:${diffColor};">${change.afterHandicap}</div>
+                                            </div>
+                                            
+                                            <div style="background:rgba(255,255,255,0.15);border-radius:12px;padding:16px;min-width:100px;">
+                                                <div style="font-size:40px;font-weight:700;color:${diffColor};text-align:center;">
+                                                    ${diff > 0 ? '+' : ''}${diff}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                        
+                        <button onclick="nextPresentationSlide()" 
+                                class="btn-primary" 
+                                style="padding:20px 40px;font-size:24px;margin-top:40px;background:linear-gradient(135deg, #10b981 0%, #059669 100%);box-shadow:0 8px 24px rgba(16,185,129,0.4);">
+                            ${hasNextRoundSlide ? 'Next Round Details →' : '🎊 Finish'}
+                        </button>
+                    </div>
+                `;
+            } else if (currentSlide === nextRoundSlideIndex) {
+                // NEXT ROUND DETAILS SLIDE
+                const roundDate = new Date(nextRound.timestamp);
+                const dateStr = roundDate.toLocaleDateString('en-US', {weekday: 'long', month: 'long', day: 'numeric'});
+                const timeStr = roundDate.toLocaleTimeString('en-US', {hour: 'numeric', minute: '2-digit'});
+                
+                // Organize players by group
+                const groupsMap = {};
+                nextRound.teams.forEach(team => {
+                    const stateTeam = state.teams.find(t => t.id === team.teamId);
+                    const teamName = team.teamName || (stateTeam ? stateTeam.name : 'Unknown Team');
+                    const teamColor = team.color || (stateTeam ? stateTeam.color : '#3b82f6');
+                    
+                    team.players.forEach(player => {
+                        if (player.groupNumber) {
+                            if (!groupsMap[player.groupNumber]) {
+                                groupsMap[player.groupNumber] = [];
+                            }
+                            groupsMap[player.groupNumber].push({
+                                ...player,
+                                teamName: teamName,
+                                teamColor: teamColor
+                            });
+                        }
+                    });
+                });
+                
+                const sortedGroups = Object.keys(groupsMap).sort((a, b) => parseInt(a) - parseInt(b));
+                
+                html += `
+                    <div style="animation:slideUp 0.8s ease-out;max-width:1000px;width:100%;">
+                        <h1 style="color:white;font-size:48px;margin:0 0 16px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
+                            ⛳ Next Round
+                        </h1>
+                        <p style="color:#a5b4fc;font-size:24px;margin:0 0 40px;">
+                            ${nextRound.courseName}
+                        </p>
+                        
+                        <!-- Date & Time -->
+                        <div style="background:rgba(59,130,246,0.2);border:3px solid rgba(59,130,246,0.4);border-radius:16px;padding:24px;margin-bottom:30px;">
+                            <div style="display:flex;justify-content:center;gap:40px;align-items:center;">
+                                <div style="text-align:center;">
+                                    <div style="font-size:48px;margin-bottom:8px;">📅</div>
+                                    <div style="color:#a5b4fc;font-size:16px;margin-bottom:4px;">Date</div>
+                                    <div style="color:white;font-size:28px;font-weight:700;">${dateStr}</div>
+                                </div>
+                                <div style="text-align:center;">
+                                    <div style="font-size:48px;margin-bottom:8px;">⏰</div>
+                                    <div style="color:#a5b4fc;font-size:16px;margin-bottom:4px;">Tee Time</div>
+                                    <div style="color:white;font-size:28px;font-weight:700;">${timeStr}</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Groups -->
+                        ${sortedGroups.length > 0 ? `
+                            <div style="background:rgba(255,255,255,0.1);border:3px solid rgba(255,255,255,0.2);border-radius:16px;padding:24px;max-height:400px;overflow-y:auto;">
+                                <h2 style="color:white;font-size:28px;margin:0 0 20px;">👥 Groups</h2>
+                                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px;">
+                                    ${sortedGroups.map(groupNum => {
+                                        const players = groupsMap[groupNum];
+                                        return `
+                                            <div style="background:rgba(255,255,255,0.1);border-radius:12px;padding:16px;">
+                                                <h3 style="color:#a5b4fc;font-size:18px;margin:0 0 12px;">Group ${groupNum}</h3>
+                                                ${players.map(player => `
+                                                    <div style="display:flex;align-items:center;gap:8px;padding:8px;background:rgba(255,255,255,0.05);border-radius:6px;margin-bottom:6px;">
+                                                        <div style="width:8px;height:8px;border-radius:50%;background:${player.teamColor};"></div>
+                                                        <div style="flex:1;">
+                                                            <div style="color:white;font-size:14px;font-weight:600;">${player.name}</div>
+                                                            <div style="color:#a5b4fc;font-size:11px;">${player.teamName}</div>
+                                                        </div>
+                                                        <div style="color:#a5b4fc;font-size:11px;">HCP: ${player.handicap || 0}</div>
+                                                    </div>
+                                                `).join('')}
+                                            </div>
+                                        `;
+                                    }).join('')}
+                                </div>
+                            </div>
+                        ` : `
+                            <div style="background:rgba(239,68,68,0.2);border:3px solid rgba(239,68,68,0.4);border-radius:16px;padding:24px;text-align:center;">
+                                <div style="font-size:48px;margin-bottom:12px;">⚠️</div>
+                                <div style="color:white;font-size:20px;">Groups not yet assigned</div>
+                            </div>
+                        `}
+                        
+                        <button onclick="closePresentationMode()" 
+                                class="btn-primary" 
+                                style="padding:20px 40px;font-size:24px;margin-top:40px;background:linear-gradient(135deg, #ef4444 0%, #dc2626 100%);box-shadow:0 8px 24px rgba(239,68,68,0.4);">
+                            🎊 Finish Presentation
+                        </button>
+                    </div>
+                `;
             }
             
             html += `
@@ -9688,7 +9888,7 @@
 
         // Initialize
         console.log('========================================');
-        console.log('Golf League Tracker v8.4 - Firebase Edition');
+        console.log('Golf League Tracker v8.5 - Firebase Edition');
         console.log('✅ Firebase Firestore database integration');
         console.log('✅ Real-time data sync across devices');
         console.log('✅ Multi-league support via LEAGUE_ID');
@@ -9701,11 +9901,11 @@
             if (state.players.length === 0 && state.courses.length === 0) {
                 setTimeout(() => {
                     const dbType = useFirebase ? 'Firebase (cloud sync enabled! 🌐)' : 'LocalStorage (local only)';
-                    alert(`👋 Welcome to Golf League v8.4!\\n\\nDatabase: ${dbType}\\nLeague ID: ${LEAGUE_ID}\\n\\nTo get started:\\n1. Add Players (Admin → Players)\\n2. Add a Course (Admin → Courses)\\n3. Create Teams (Admin → Teams)\\n4. Start a Round!`);
+                    alert(`👋 Welcome to Golf League v8.5!\\n\\nDatabase: ${dbType}\\nLeague ID: ${LEAGUE_ID}\\n\\nTo get started:\\n1. Add Players (Admin → Players)\\n2. Add a Course (Admin → Courses)\\n3. Create Teams (Admin → Teams)\\n4. Start a Round!`);
                 }, 500);
             } else {
                 const dbType = useFirebase ? '☁️ Firebase' : '💾 LocalStorage';
-                notify(`✅ v8.4 Ready! (${dbType})`);
+                notify(`✅ v8.5 Ready! (${dbType})`);
             }
         });
     </script>
