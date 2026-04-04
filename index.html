@@ -1220,6 +1220,7 @@
                 if (!state.tempCourse) {
                     state.tempCourse = {
                         name: '',
+                        address: '',
                         pars: Array(18).fill(''),
                         handicaps: Array(18).fill('')
                     };
@@ -1345,6 +1346,7 @@
                     state.tempCourse = {
                         id: courseId,
                         name: course.name,
+                        address: course.address || '',
                         pars: [...course.pars],
                         handicaps: [...course.handicaps]
                     };
@@ -6258,54 +6260,55 @@
                         </p>
                         
                         <div style="background:rgba(255,255,255,0.1);border:3px solid rgba(255,255,255,0.2);border-radius:20px;padding:30px;max-height:60vh;overflow-y:auto;">
-                            ${bottomReversed.map(player => `
-                                <div style="background:rgba(255,255,255,0.08);border:2px solid ${player.teamColor}40;border-radius:12px;padding:20px;margin-bottom:16px;">
-                                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-                                        <div style="display:flex;align-items:center;gap:16px;flex:1;">
-                                            <div style="text-align:center;min-width:60px;">
-                                                <div style="color:#a5b4fc;font-size:14px;margin-bottom:4px;">Position</div>
-                                                <div style="color:white;font-size:32px;font-weight:700;">#${player.position}</div>
+                            ${bottomReversed.map(player => {
+                                const medal = player.position === 1 ? '🥇' : player.position === 2 ? '🥈' : player.position === 3 ? '🥉' : player.position === 4 ? '🏅' : '';
+                                return `
+                                <div style="background:rgba(255,255,255,0.08);border:2px solid ${player.teamColor}40;border-radius:12px;padding:16px;margin-bottom:16px;">
+                                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                                        <div style="display:flex;align-items:center;gap:12px;flex:1;">
+                                            ${medal ? `<div style="font-size:32px;">${medal}</div>` : ''}
+                                            <div style="text-align:center;min-width:50px;">
+                                                <div style="color:#a5b4fc;font-size:12px;margin-bottom:2px;">Position</div>
+                                                <div style="color:white;font-size:24px;font-weight:700;">#${player.position}</div>
                                             </div>
                                             <div style="flex:1;">
-                                                <div style="color:white;font-size:22px;font-weight:700;margin-bottom:6px;">${player.playerName}</div>
-                                                <div style="display:flex;align-items:center;gap:8px;">
-                                                    <div style="width:10px;height:10px;border-radius:50%;background:${player.teamColor};"></div>
-                                                    <div style="color:#a5b4fc;font-size:15px;">${player.teamName}</div>
+                                                <div style="color:white;font-size:18px;font-weight:700;margin-bottom:4px;">${player.playerName}</div>
+                                                <div style="display:flex;align-items:center;gap:6px;">
+                                                    <div style="width:8px;height:8px;border-radius:50%;background:${player.teamColor};"></div>
+                                                    <div style="color:#a5b4fc;font-size:13px;">${player.teamName}</div>
                                                 </div>
                                             </div>
                                         </div>
-                                        <div style="background:${player.teamColor}20;border:2px solid ${player.teamColor};border-radius:12px;padding:12px;min-width:80px;text-align:center;">
-                                            <div style="color:#a5b4fc;font-size:12px;margin-bottom:4px;">Total</div>
-                                            <div style="color:${player.teamColor};font-size:32px;font-weight:700;">${player.totalPoints}</div>
+                                        <div style="background:${player.teamColor}20;border:2px solid ${player.teamColor};border-radius:10px;padding:10px;min-width:70px;text-align:center;">
+                                            <div style="color:#a5b4fc;font-size:11px;margin-bottom:2px;">Total</div>
+                                            <div style="color:${player.teamColor};font-size:26px;font-weight:700;">${player.totalPoints}</div>
                                         </div>
                                     </div>
                                     
-                                    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">
-                                        <div style="background:rgba(255,255,255,0.05);border-radius:8px;padding:12px;text-align:center;">
-                                            <div style="color:#a5b4fc;font-size:12px;margin-bottom:4px;">Stroke</div>
-                                            <div style="color:white;font-size:20px;font-weight:600;">${player.strokePoints || 0}</div>
+                                    <div style="display:flex;gap:8px;justify-content:space-between;">
+                                        <div style="background:rgba(255,255,255,0.05);border-radius:6px;padding:8px;flex:1;text-align:center;">
+                                            <div style="color:#a5b4fc;font-size:10px;margin-bottom:2px;">Stroke</div>
+                                            <div style="color:white;font-size:16px;font-weight:600;">${player.strokePoints || 0}</div>
                                         </div>
-                                        <div style="background:rgba(255,255,255,0.05);border-radius:8px;padding:12px;text-align:center;">
-                                            <div style="color:#a5b4fc;font-size:12px;margin-bottom:4px;">BBB</div>
-                                            <div style="color:white;font-size:20px;font-weight:600;">${player.bbbPoints || 0}</div>
+                                        <div style="background:rgba(255,255,255,0.05);border-radius:6px;padding:8px;flex:1;text-align:center;">
+                                            <div style="color:#a5b4fc;font-size:10px;margin-bottom:2px;">BBB</div>
+                                            <div style="color:white;font-size:16px;font-weight:600;">${player.bbbPoints || 0}</div>
                                         </div>
-                                        <div style="background:rgba(255,255,255,0.05);border-radius:8px;padding:12px;text-align:center;">
-                                            <div style="color:#a5b4fc;font-size:12px;margin-bottom:4px;">Balls</div>
-                                            <div style="color:white;font-size:20px;font-weight:600;">${player.ballPoints || 0}</div>
+                                        <div style="background:rgba(255,255,255,0.05);border-radius:6px;padding:8px;flex:1;text-align:center;">
+                                            <div style="color:#a5b4fc;font-size:10px;margin-bottom:2px;">Balls</div>
+                                            <div style="color:white;font-size:16px;font-weight:600;">${player.ballPoints || 0}</div>
                                         </div>
-                                        <div style="background:rgba(255,255,255,0.05);border-radius:8px;padding:12px;text-align:center;">
-                                            <div style="color:#a5b4fc;font-size:12px;margin-bottom:4px;">Extra 9</div>
-                                            <div style="color:white;font-size:20px;font-weight:600;">${player.extra9Points || 0}</div>
+                                        <div style="background:rgba(255,255,255,0.05);border-radius:6px;padding:8px;flex:1;text-align:center;">
+                                            <div style="color:#a5b4fc;font-size:10px;margin-bottom:2px;">Extra 9</div>
+                                            <div style="color:white;font-size:16px;font-weight:600;">${player.extra9Points || 0}</div>
+                                        </div>
+                                        <div style="background:${player.ctpPoints > 0 ? 'rgba(16,185,129,0.2)' : 'rgba(255,255,255,0.05)'};border:${player.ctpPoints > 0 ? '2px solid #10b981' : 'none'};border-radius:6px;padding:8px;flex:1;text-align:center;">
+                                            <div style="color:${player.ctpPoints > 0 ? '#10b981' : '#a5b4fc'};font-size:10px;margin-bottom:2px;">CTP</div>
+                                            <div style="color:${player.ctpPoints > 0 ? '#10b981' : 'white'};font-size:16px;font-weight:600;">${player.ctpPoints || 0}</div>
                                         </div>
                                     </div>
-                                    ${player.ctpPoints > 0 ? `
-                                        <div style="background:rgba(16,185,129,0.2);border:2px solid #10b981;border-radius:8px;padding:12px;margin-top:12px;text-align:center;">
-                                            <span style="color:#10b981;font-size:14px;margin-right:8px;">🎯 CTP</span>
-                                            <span style="color:#10b981;font-size:20px;font-weight:700;">${player.ctpPoints}</span>
-                                        </div>
-                                    ` : ''}
                                 </div>
-                            `).join('')}
+                            `}).join('')}
                         </div>
                         
                         <div style="display:flex;gap:16px;justify-content:center;margin-top:30px;">
@@ -6334,54 +6337,55 @@
                         </p>
                         
                         <div style="background:rgba(255,255,255,0.1);border:3px solid rgba(255,255,255,0.2);border-radius:20px;padding:30px;max-height:60vh;overflow-y:auto;">
-                            ${middleReversed.map(player => `
-                                <div style="background:rgba(255,255,255,0.08);border:2px solid ${player.teamColor}40;border-radius:12px;padding:20px;margin-bottom:16px;">
-                                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-                                        <div style="display:flex;align-items:center;gap:16px;flex:1;">
-                                            <div style="text-align:center;min-width:60px;">
-                                                <div style="color:#a5b4fc;font-size:14px;margin-bottom:4px;">Position</div>
-                                                <div style="color:white;font-size:32px;font-weight:700;">#${player.position}</div>
+                            ${middleReversed.map(player => {
+                                const medal = player.position === 1 ? '🥇' : player.position === 2 ? '🥈' : player.position === 3 ? '🥉' : player.position === 4 ? '🏅' : '';
+                                return `
+                                <div style="background:rgba(255,255,255,0.08);border:2px solid ${player.teamColor}40;border-radius:12px;padding:16px;margin-bottom:16px;">
+                                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                                        <div style="display:flex;align-items:center;gap:12px;flex:1;">
+                                            ${medal ? `<div style="font-size:32px;">${medal}</div>` : ''}
+                                            <div style="text-align:center;min-width:50px;">
+                                                <div style="color:#a5b4fc;font-size:12px;margin-bottom:2px;">Position</div>
+                                                <div style="color:white;font-size:24px;font-weight:700;">#${player.position}</div>
                                             </div>
                                             <div style="flex:1;">
-                                                <div style="color:white;font-size:22px;font-weight:700;margin-bottom:6px;">${player.playerName}</div>
-                                                <div style="display:flex;align-items:center;gap:8px;">
-                                                    <div style="width:10px;height:10px;border-radius:50%;background:${player.teamColor};"></div>
-                                                    <div style="color:#a5b4fc;font-size:15px;">${player.teamName}</div>
+                                                <div style="color:white;font-size:18px;font-weight:700;margin-bottom:4px;">${player.playerName}</div>
+                                                <div style="display:flex;align-items:center;gap:6px;">
+                                                    <div style="width:8px;height:8px;border-radius:50%;background:${player.teamColor};"></div>
+                                                    <div style="color:#a5b4fc;font-size:13px;">${player.teamName}</div>
                                                 </div>
                                             </div>
                                         </div>
-                                        <div style="background:${player.teamColor}20;border:2px solid ${player.teamColor};border-radius:12px;padding:12px;min-width:80px;text-align:center;">
-                                            <div style="color:#a5b4fc;font-size:12px;margin-bottom:4px;">Total</div>
-                                            <div style="color:${player.teamColor};font-size:32px;font-weight:700;">${player.totalPoints}</div>
+                                        <div style="background:${player.teamColor}20;border:2px solid ${player.teamColor};border-radius:10px;padding:10px;min-width:70px;text-align:center;">
+                                            <div style="color:#a5b4fc;font-size:11px;margin-bottom:2px;">Total</div>
+                                            <div style="color:${player.teamColor};font-size:26px;font-weight:700;">${player.totalPoints}</div>
                                         </div>
                                     </div>
                                     
-                                    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">
-                                        <div style="background:rgba(255,255,255,0.05);border-radius:8px;padding:12px;text-align:center;">
-                                            <div style="color:#a5b4fc;font-size:12px;margin-bottom:4px;">Stroke</div>
-                                            <div style="color:white;font-size:20px;font-weight:600;">${player.strokePoints || 0}</div>
+                                    <div style="display:flex;gap:8px;justify-content:space-between;">
+                                        <div style="background:rgba(255,255,255,0.05);border-radius:6px;padding:8px;flex:1;text-align:center;">
+                                            <div style="color:#a5b4fc;font-size:10px;margin-bottom:2px;">Stroke</div>
+                                            <div style="color:white;font-size:16px;font-weight:600;">${player.strokePoints || 0}</div>
                                         </div>
-                                        <div style="background:rgba(255,255,255,0.05);border-radius:8px;padding:12px;text-align:center;">
-                                            <div style="color:#a5b4fc;font-size:12px;margin-bottom:4px;">BBB</div>
-                                            <div style="color:white;font-size:20px;font-weight:600;">${player.bbbPoints || 0}</div>
+                                        <div style="background:rgba(255,255,255,0.05);border-radius:6px;padding:8px;flex:1;text-align:center;">
+                                            <div style="color:#a5b4fc;font-size:10px;margin-bottom:2px;">BBB</div>
+                                            <div style="color:white;font-size:16px;font-weight:600;">${player.bbbPoints || 0}</div>
                                         </div>
-                                        <div style="background:rgba(255,255,255,0.05);border-radius:8px;padding:12px;text-align:center;">
-                                            <div style="color:#a5b4fc;font-size:12px;margin-bottom:4px;">Balls</div>
-                                            <div style="color:white;font-size:20px;font-weight:600;">${player.ballPoints || 0}</div>
+                                        <div style="background:rgba(255,255,255,0.05);border-radius:6px;padding:8px;flex:1;text-align:center;">
+                                            <div style="color:#a5b4fc;font-size:10px;margin-bottom:2px;">Balls</div>
+                                            <div style="color:white;font-size:16px;font-weight:600;">${player.ballPoints || 0}</div>
                                         </div>
-                                        <div style="background:rgba(255,255,255,0.05);border-radius:8px;padding:12px;text-align:center;">
-                                            <div style="color:#a5b4fc;font-size:12px;margin-bottom:4px;">Extra 9</div>
-                                            <div style="color:white;font-size:20px;font-weight:600;">${player.extra9Points || 0}</div>
+                                        <div style="background:rgba(255,255,255,0.05);border-radius:6px;padding:8px;flex:1;text-align:center;">
+                                            <div style="color:#a5b4fc;font-size:10px;margin-bottom:2px;">Extra 9</div>
+                                            <div style="color:white;font-size:16px;font-weight:600;">${player.extra9Points || 0}</div>
+                                        </div>
+                                        <div style="background:${player.ctpPoints > 0 ? 'rgba(16,185,129,0.2)' : 'rgba(255,255,255,0.05)'};border:${player.ctpPoints > 0 ? '2px solid #10b981' : 'none'};border-radius:6px;padding:8px;flex:1;text-align:center;">
+                                            <div style="color:${player.ctpPoints > 0 ? '#10b981' : '#a5b4fc'};font-size:10px;margin-bottom:2px;">CTP</div>
+                                            <div style="color:${player.ctpPoints > 0 ? '#10b981' : 'white'};font-size:16px;font-weight:600;">${player.ctpPoints || 0}</div>
                                         </div>
                                     </div>
-                                    ${player.ctpPoints > 0 ? `
-                                        <div style="background:rgba(16,185,129,0.2);border:2px solid #10b981;border-radius:8px;padding:12px;margin-top:12px;text-align:center;">
-                                            <span style="color:#10b981;font-size:14px;margin-right:8px;">🎯 CTP</span>
-                                            <span style="color:#10b981;font-size:20px;font-weight:700;">${player.ctpPoints}</span>
-                                        </div>
-                                    ` : ''}
                                 </div>
-                            `).join('')}
+                            `}).join('')}
                         </div>
                         
                         <div style="display:flex;gap:16px;justify-content:center;margin-top:30px;">
@@ -6405,11 +6409,12 @@
                 const isFirstTopPlayer = playerIndex === 0;
                 const isLastTopPlayer = playerIndex === topThirdPlayers.length - 1;
                 const previousSlideIndex = isFirstTopPlayer ? middleThirdSlideIndex : currentSlide - 1;
+                const medal = player.position === 1 ? '🥇' : player.position === 2 ? '🥈' : player.position === 3 ? '🥉' : player.position === 4 ? '🏅' : '';
                 
                 html += `
                     <div style="animation:slideUp 0.8s ease-out;max-width:900px;width:100%;">
                         <h1 style="color:white;font-size:48px;margin:0 0 16px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
-                            ${playerIndex === 0 ? '🌟 Top Players' : '🌟'}
+                            ${medal ? medal + ' ' : ''}${playerIndex === 0 ? 'Top Players' : ''}
                         </h1>
                         <p style="color:#a5b4fc;font-size:20px;margin:0 0 20px;">
                             Position #${player.position} • Player ${bottomThirdPlayers.length + middleThirdPlayers.length + playerIndex + 1} of ${bottomThirdPlayers.length + middleThirdPlayers.length + topThirdPlayers.length}
@@ -6459,7 +6464,7 @@
                                 </div>
                             </div>
                             
-                            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:16px;margin-top:30px;">
+                            <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-top:30px;">
                                 <div style="background:rgba(255,255,255,0.15);border-radius:12px;padding:20px;text-align:center;">
                                     <div style="color:#a5b4fc;font-size:16px;margin-bottom:8px;font-weight:600;">Stroke Play</div>
                                     <div style="color:white;font-size:36px;font-weight:700;">${player.strokePoints || 0}</div>
@@ -6476,12 +6481,10 @@
                                     <div style="color:#a5b4fc;font-size:16px;margin-bottom:8px;font-weight:600;">Extra 9</div>
                                     <div style="color:white;font-size:36px;font-weight:700;">${player.extra9Points || 0}</div>
                                 </div>
-                                ${player.ctpPoints > 0 ? `
-                                    <div style="background:linear-gradient(135deg, #10b981 0%, #059669 100%);border:3px solid #10b981;border-radius:12px;padding:20px;text-align:center;grid-column:1/-1;box-shadow:0 8px 24px rgba(16,185,129,0.4);">
-                                        <div style="color:white;font-size:16px;margin-bottom:8px;font-weight:600;">🎯 Closest to Pin</div>
-                                        <div style="color:white;font-size:36px;font-weight:700;">${player.ctpPoints}</div>
-                                    </div>
-                                ` : ''}
+                                <div style="background:${player.ctpPoints > 0 ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : 'rgba(255,255,255,0.15)'};border:${player.ctpPoints > 0 ? '3px solid #10b981' : 'none'};border-radius:12px;padding:20px;text-align:center;${player.ctpPoints > 0 ? 'box-shadow:0 8px 24px rgba(16,185,129,0.4);' : ''}">
+                                    <div style="color:${player.ctpPoints > 0 ? 'white' : '#a5b4fc'};font-size:16px;margin-bottom:8px;font-weight:600;">🎯 CTP</div>
+                                    <div style="color:white;font-size:36px;font-weight:700;">${player.ctpPoints || 0}</div>
+                                </div>
                             </div>
                         </div>
                         
@@ -9186,8 +9189,10 @@
                     // Calculate BEFORE handicaps for all players in this round
                     const handicapChanges = [];
                     const playersToUpdate = new Set();
+                    
+                    // Store previousHandicap on each player in the round
                     round.teams.forEach(team => {
-                        team.players.forEach(player => {
+                        team.players = team.players.map(player => {
                             playersToUpdate.add(player.id);
                             const foundPlayer = state.players.find(p => p.id === player.id);
                             const beforeHandicap = foundPlayer && foundPlayer.handicap ? foundPlayer.handicap : 0;
@@ -9197,6 +9202,11 @@
                                 beforeHandicap: beforeHandicap,
                                 afterHandicap: null  // Will calculate after saving
                             });
+                            // Store previousHandicap on player for presentation mode
+                            return {
+                                ...player,
+                                previousHandicap: beforeHandicap
+                            };
                         });
                     });
                     
