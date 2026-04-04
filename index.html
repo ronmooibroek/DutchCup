@@ -6557,13 +6557,13 @@
                                                 style="padding:12px 24px;font-size:16px;background:linear-gradient(135deg, #10b981 0%, #059669 100%);box-shadow:0 8px 24px rgba(16,185,129,0.4);">
                                             Next Team →
                                         </button>
-                                    ` : `
-                                        <button onclick="closePresentationMode()" 
+                                    ` : (hasHandicapSlide || hasNextRoundSlide) ? `
+                                        <button onclick="nextPresentationSlide()" 
                                                 class="btn-primary" 
-                                                style="padding:12px 24px;font-size:16px;background:linear-gradient(135deg, #ef4444 0%, #dc2626 100%);box-shadow:0 8px 24px rgba(239,68,68,0.4);">
-                                            🎊 Finish Presentation
+                                                style="padding:12px 24px;font-size:16px;background:linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);box-shadow:0 8px 24px rgba(139,92,246,0.4);">
+                                            ${hasHandicapSlide ? '📊 Handicap Changes →' : '⛳ Next Round →'}
                                         </button>
-                                    `}
+                                    ` : ''}
                                 </div>
                                 
                                 <!-- TEAM CARD -->
@@ -6793,11 +6793,13 @@
                             }).join('')}
                         </div>
                         
-                        <button onclick="nextPresentationSlide()" 
-                                class="btn-primary" 
-                                style="padding:20px 40px;font-size:24px;margin-top:40px;background:linear-gradient(135deg, #10b981 0%, #059669 100%);box-shadow:0 8px 24px rgba(16,185,129,0.4);">
-                            ${hasNextRoundSlide ? 'Next Round Details →' : '🎊 Finish'}
-                        </button>
+                        ${hasNextRoundSlide ? `
+                            <button onclick="nextPresentationSlide()" 
+                                    class="btn-primary" 
+                                    style="padding:20px 40px;font-size:24px;margin-top:40px;background:linear-gradient(135deg, #10b981 0%, #059669 100%);box-shadow:0 8px 24px rgba(16,185,129,0.4);">
+                                ⛳ Next Round Details →
+                            </button>
+                        ` : ''}
                     </div>
                 `;
             } else if (currentSlide === nextRoundSlideIndex) {
@@ -6885,12 +6887,6 @@
                                 <div style="color:white;font-size:20px;">Groups not yet assigned</div>
                             </div>
                         `}
-                        
-                        <button onclick="closePresentationMode()" 
-                                class="btn-primary" 
-                                style="padding:20px 40px;font-size:24px;margin-top:40px;background:linear-gradient(135deg, #ef4444 0%, #dc2626 100%);box-shadow:0 8px 24px rgba(239,68,68,0.4);">
-                            🎊 Finish Presentation
-                        </button>
                     </div>
                 `;
             }
@@ -10164,7 +10160,7 @@
 
         // Initialize
         console.log('========================================');
-        console.log('Golf League Tracker v8.6 - Firebase Edition');
+        console.log('Golf League Tracker v8.61 - Firebase Edition');
         console.log('✅ Firebase Firestore database integration');
         console.log('✅ Real-time data sync across devices');
         console.log('✅ Multi-league support via LEAGUE_ID');
@@ -10177,11 +10173,11 @@
             if (state.players.length === 0 && state.courses.length === 0) {
                 setTimeout(() => {
                     const dbType = useFirebase ? 'Firebase (cloud sync enabled! 🌐)' : 'LocalStorage (local only)';
-                    alert(`👋 Welcome to Golf League v8.6!\\n\\nDatabase: ${dbType}\\nLeague ID: ${LEAGUE_ID}\\n\\nTo get started:\\n1. Add Players (Admin → Players)\\n2. Add a Course (Admin → Courses)\\n3. Create Teams (Admin → Teams)\\n4. Start a Round!`);
+                    alert(`👋 Welcome to Golf League v8.61!\\n\\nDatabase: ${dbType}\\nLeague ID: ${LEAGUE_ID}\\n\\nTo get started:\\n1. Add Players (Admin → Players)\\n2. Add a Course (Admin → Courses)\\n3. Create Teams (Admin → Teams)\\n4. Start a Round!`);
                 }, 500);
             } else {
                 const dbType = useFirebase ? '☁️ Firebase' : '💾 LocalStorage';
-                notify(`✅ v8.6 Ready! (${dbType})`);
+                notify(`✅ v8.61 Ready! (${dbType})`);
             }
         });
     </script>
