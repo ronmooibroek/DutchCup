@@ -1240,6 +1240,14 @@
                                    style="width:100%;padding:12px;border:2px solid #d1d5db;border-radius:8px;font-size:16px;">
                         </div>
                         
+                        <div style="margin-bottom:20px;">
+                            <label style="display:block;margin-bottom:8px;font-weight:600;">Address:</label>
+                            <input type="text" id="courseAddress" value="${state.tempCourse.address || ''}" 
+                                   oninput="state.tempCourse.address = this.value"
+                                   placeholder="e.g., 1700 17-Mile Drive, Pebble Beach, CA"
+                                   style="width:100%;padding:12px;border:2px solid #d1d5db;border-radius:8px;font-size:16px;">
+                        </div>
+                        
                         <div style="background:#dbeafe;padding:16px;border-radius:8px;margin-bottom:20px;">
                             <h3 style="margin:0 0 12px;color:#1e40af;">⛳ Par Values</h3>
                             <p style="margin:0 0 12px;font-size:13px;color:#6b7280;">Enter par for each hole (3, 4, 5, or 6). Total Par: <strong id="totalParDisplay">${totalPar}</strong></p>
@@ -1354,6 +1362,14 @@
                             <input type="text" id="courseName" value="${state.tempCourse.name}" 
                                    oninput="state.tempCourse.name = this.value"
                                    placeholder="e.g., Pebble Beach"
+                                   style="width:100%;padding:12px;border:2px solid #d1d5db;border-radius:8px;font-size:16px;">
+                        </div>
+                        
+                        <div style="margin-bottom:20px;">
+                            <label style="display:block;margin-bottom:8px;font-weight:600;">Address:</label>
+                            <input type="text" id="courseAddress" value="${state.tempCourse.address || ''}" 
+                                   oninput="state.tempCourse.address = this.value"
+                                   placeholder="e.g., 1700 17-Mile Drive, Pebble Beach, CA"
                                    style="width:100%;padding:12px;border:2px solid #d1d5db;border-radius:8px;font-size:16px;">
                         </div>
                         
@@ -4989,6 +5005,7 @@
                 state.activeRound = {
                     courseId: course.id,
                     courseName: course.name,
+                    courseAddress: course.address || '',
                     pars: course.pars,
                     handicaps: course.handicaps,
                     date: roundDate,
@@ -5041,6 +5058,7 @@
                     eventId: state.currentEventId,
                     courseId: round.courseId,
                     courseName: round.courseName,
+                    courseAddress: round.courseAddress || '',
                     pars: round.pars,
                     handicaps: round.handicaps,
                     date: round.date,
@@ -5792,8 +5810,106 @@
                 // Sort by total points (lowest to highest for reveal order)
                 allPlayerPerformances.sort((a, b) => a.totalPoints - b.totalPoints);
                 
-                // Split into thirds
                 const totalPlayers = allPlayerPerformances.length;
+                
+                // Add position numbers (1 = highest score, last = lowest score)
+                allPlayerPerformances.forEach((p, idx) => {
+                    p.position = totalPlayers - idx; // First in sorted array (lowest) = last position, last in array (highest) = position 1
+                });
+                
+                // Calculate averages and record detection for each player
+                allPlayerPerformances.forEach(p => {
+                    const statePlayer = state.players.find(sp => sp.id === p.playerId);
+                    if (statePlayer && statePlayer.historicScores && statePlayer.historicScores.length > 0) {
+                        // Calculate average total points from all historic rounds
+                        let totalHistoricPoints = 0;
+                        let roundCount = 0;
+                        
+                        // Get all rounds for this event
+                        const eventRounds = state.rounds.filter(r => r.eventId === state.currentEventId && r.active === true);
+                        
+                        eventRounds.forEach(round => {
+                            round.teams.forEach((team, teamIdx) => {
+                                team.players.forEach((player, playerIdx) => {
+                                    if (player.id === p.playerId) {
+                                        // Calculate total points for this round
+                                        const sp = player.strokePoints !== undefined 
+                                            ? player.strokePoints 
+                                            : calcPlayerTotal(player.scores, round.pars, round.handicaps, player.handicap);
+                                        const bp = player.bbbPoints !== undefined 
+                                            ? player.bbbPoints 
+                                            : (player.bbbTotal || 0) * state.settings.bbbPoints;
+                                        const ballp = player.ballPoints !== undefined 
+                                            ? player.ballPoints 
+                                            : (player.ballsRemaining || 0) * state.settings.ballPoints;
+                                        
+                                        let e9p = player.extra9Points || 0;
+                                        if (e9p === 0 && round.extra9Winners && round.extra9Winners.length > 0) {
+                                            const playerPosition = `${teamIdx}-${playerIdx}`;
+                                            e9p = round.extra9Winners.filter(w => w === playerPosition).length * state.settings.extra9Points;
+                                        }
+                                        
+                                        let ctpp = player.ctpPoints || 0;
+                                        if (ctpp === 0 && round.ctpWinners && round.ctpWinners.length > 0) {
+                                            const playerPosition = `${teamIdx}-${playerIdx}`;
+                                            ctpp = round.ctpWinners.filter(w => w === playerPosition).length * state.settings.ctpPoints;
+                                        }
+                                        
+                                        totalHistoricPoints += sp + bp + ballp + e9p + ctpp;
+                                        roundCount++;
+                                    }
+                                });
+                            });
+                        });
+                        
+                        if (roundCount > 0) {
+                            p.averagePoints = Math.round(totalHistoricPoints / roundCount);
+                            p.comparisonToAverage = roundCount > 1 ? Math.round(((p.totalPoints - p.averagePoints) / p.averagePoints) * 100) : 0;
+                            
+                            // Find personal best
+                            let personalBest = p.totalPoints;
+                            eventRounds.forEach(round => {
+                                round.teams.forEach((team, teamIdx) => {
+                                    team.players.forEach((player, playerIdx) => {
+                                        if (player.id === p.playerId) {
+                                            const sp = player.strokePoints !== undefined 
+                                                ? player.strokePoints 
+                                                : calcPlayerTotal(player.scores, round.pars, round.handicaps, player.handicap);
+                                            const bp = player.bbbPoints !== undefined 
+                                                ? player.bbbPoints 
+                                                : (player.bbbTotal || 0) * state.settings.bbbPoints;
+                                            const ballp = player.ballPoints !== undefined 
+                                                ? player.ballPoints 
+                                                : (player.ballsRemaining || 0) * state.settings.ballPoints;
+                                            
+                                            let e9p = player.extra9Points || 0;
+                                            if (e9p === 0 && round.extra9Winners && round.extra9Winners.length > 0) {
+                                                const playerPosition = `${teamIdx}-${playerIdx}`;
+                                                e9p = round.extra9Winners.filter(w => w === playerPosition).length * state.settings.extra9Points;
+                                            }
+                                            
+                                            let ctpp = player.ctpPoints || 0;
+                                            if (ctpp === 0 && round.ctpWinners && round.ctpWinners.length > 0) {
+                                                const playerPosition = `${teamIdx}-${playerIdx}`;
+                                                ctpp = round.ctpWinners.filter(w => w === playerPosition).length * state.settings.ctpPoints;
+                                            }
+                                            
+                                            const roundTotal = sp + bp + ballp + e9p + ctpp;
+                                            if (roundTotal > personalBest) personalBest = roundTotal;
+                                        }
+                                    });
+                                });
+                            });
+                            
+                            p.isPersonalRecord = p.totalPoints >= personalBest && roundCount > 1;
+                        }
+                    }
+                    
+                    // Check if this is the highest score ever (across all players today)
+                    p.isHighScore = p.position === totalPlayers; // Position 1 is highest
+                });
+                
+                // Split into thirds
                 const thirdSize = Math.ceil(totalPlayers / 3);
                 const bottomThird = allPlayerPerformances.slice(0, thirdSize);
                 const middleThird = allPlayerPerformances.slice(thirdSize, thirdSize * 2);
@@ -5945,7 +6061,7 @@
                 mostRecentRound.teams.forEach(team => {
                     team.players.forEach(player => {
                         const statePlayer = state.players.find(p => p.id === player.id);
-                        if (statePlayer && player.previousHandicap !== undefined && statePlayer.handicap !== player.previousHandicap) {
+                        if (statePlayer && player.previousHandicap !== undefined) {
                             handicapChanges.push({
                                 playerId: player.id,
                                 playerName: player.name,
@@ -5958,6 +6074,9 @@
                 
                 // Filter to only show changes (where handicap actually changed)
                 const actualHandicapChanges = handicapChanges.filter(ch => ch.beforeHandicap !== ch.afterHandicap);
+                
+                // ALWAYS show handicap screen
+                const hasHandicapSlide = true;
                 
                 // Find next scheduled round
                 const upcomingRounds = scheduledRounds
@@ -5974,7 +6093,6 @@
                 const hasNetSlide = hasScheduledRounds && netWinner !== null;
                 const hasExtra9Slide = hasScheduledRounds && extra9Winners.length > 0;
                 const hasCtpSlide = hasScheduledRounds && ctpWinners.length > 0;
-                const hasHandicapSlide = actualHandicapChanges.length > 0;
                 const hasNextRoundSlide = nextRound !== null;
                 
                 if (hasNetSlide) totalSlides++;
@@ -6008,7 +6126,7 @@
                     hasExtra9Slide: hasExtra9Slide,
                     hasCtpSlide: hasCtpSlide,
                     // Handicap changes
-                    handicapChanges: actualHandicapChanges,
+                    handicapChanges: handicapChanges,
                     hasHandicapSlide: hasHandicapSlide,
                     // Next round
                     nextRound: nextRound,
@@ -6123,9 +6241,12 @@
                     </div>
                 `;
             } else if (currentSlide === bottomThirdSlideIndex) {
-                // BOTTOM THIRD PLAYERS SLIDE
+                // BOTTOM THIRD PLAYERS SLIDE - VERTICAL STACK
+                // Reverse the array so last place is at bottom
+                const bottomReversed = [...bottomThirdPlayers].reverse();
+                
                 html += `
-                    <div style="animation:slideUp 0.8s ease-out;max-width:1100px;width:100%;">
+                    <div style="animation:slideUp 0.8s ease-out;max-width:900px;width:100%;">
                         <h1 style="color:white;font-size:48px;margin:0 0 16px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
                             🎯 Player Performance
                         </h1>
@@ -6136,63 +6257,72 @@
                             Showing ${bottomThirdPlayers.length} of ${bottomThirdPlayers.length + middleThirdPlayers.length + topThirdPlayers.length} players
                         </p>
                         
-                        <div style="background:rgba(255,255,255,0.1);border:3px solid rgba(255,255,255,0.2);border-radius:20px;padding:30px;max-height:65vh;overflow-y:auto;">
-                            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;">
-                                ${bottomThirdPlayers.map(player => `
-                                    <div style="background:rgba(255,255,255,0.08);border:2px solid ${player.teamColor}40;border-radius:12px;padding:16px;">
-                                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-                                            <div style="flex:1;">
-                                                <div style="color:white;font-size:18px;font-weight:700;margin-bottom:4px;">${player.playerName}</div>
-                                                <div style="display:flex;align-items:center;gap:6px;">
-                                                    <div style="width:8px;height:8px;border-radius:50%;background:${player.teamColor};"></div>
-                                                    <div style="color:#a5b4fc;font-size:13px;">${player.teamName}</div>
-                                                </div>
+                        <div style="background:rgba(255,255,255,0.1);border:3px solid rgba(255,255,255,0.2);border-radius:20px;padding:30px;max-height:60vh;overflow-y:auto;">
+                            ${bottomReversed.map(player => `
+                                <div style="background:rgba(255,255,255,0.08);border:2px solid ${player.teamColor}40;border-radius:12px;padding:20px;margin-bottom:16px;">
+                                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                                        <div style="display:flex;align-items:center;gap:16px;flex:1;">
+                                            <div style="text-align:center;min-width:60px;">
+                                                <div style="color:#a5b4fc;font-size:14px;margin-bottom:4px;">Position</div>
+                                                <div style="color:white;font-size:32px;font-weight:700;">#${player.position}</div>
                                             </div>
-                                            <div style="background:${player.teamColor}20;border:2px solid ${player.teamColor};border-radius:8px;padding:8px;min-width:60px;text-align:center;">
-                                                <div style="color:${player.teamColor};font-size:24px;font-weight:700;">${player.totalPoints}</div>
+                                            <div style="flex:1;">
+                                                <div style="color:white;font-size:22px;font-weight:700;margin-bottom:6px;">${player.playerName}</div>
+                                                <div style="display:flex;align-items:center;gap:8px;">
+                                                    <div style="width:10px;height:10px;border-radius:50%;background:${player.teamColor};"></div>
+                                                    <div style="color:#a5b4fc;font-size:15px;">${player.teamName}</div>
+                                                </div>
                                             </div>
                                         </div>
-                                        
-                                        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:12px;">
-                                            <div style="background:rgba(255,255,255,0.05);border-radius:6px;padding:8px;">
-                                                <div style="color:#a5b4fc;font-size:11px;margin-bottom:2px;">Stroke</div>
-                                                <div style="color:white;font-size:16px;font-weight:600;">${player.strokePoints || 0}</div>
-                                            </div>
-                                            <div style="background:rgba(255,255,255,0.05);border-radius:6px;padding:8px;">
-                                                <div style="color:#a5b4fc;font-size:11px;margin-bottom:2px;">BBB</div>
-                                                <div style="color:white;font-size:16px;font-weight:600;">${player.bbbPoints || 0}</div>
-                                            </div>
-                                            <div style="background:rgba(255,255,255,0.05);border-radius:6px;padding:8px;">
-                                                <div style="color:#a5b4fc;font-size:11px;margin-bottom:2px;">Balls</div>
-                                                <div style="color:white;font-size:16px;font-weight:600;">${player.ballPoints || 0}</div>
-                                            </div>
-                                            <div style="background:rgba(255,255,255,0.05);border-radius:6px;padding:8px;">
-                                                <div style="color:#a5b4fc;font-size:11px;margin-bottom:2px;">Extra 9</div>
-                                                <div style="color:white;font-size:16px;font-weight:600;">${player.extra9Points || 0}</div>
-                                            </div>
-                                            ${player.ctpPoints > 0 ? `
-                                                <div style="background:rgba(16,185,129,0.2);border:2px solid #10b981;border-radius:6px;padding:8px;grid-column:1/-1;">
-                                                    <div style="color:#10b981;font-size:11px;margin-bottom:2px;">🎯 CTP</div>
-                                                    <div style="color:#10b981;font-size:16px;font-weight:600;">${player.ctpPoints}</div>
-                                                </div>
-                                            ` : ''}
+                                        <div style="background:${player.teamColor}20;border:2px solid ${player.teamColor};border-radius:12px;padding:12px;min-width:80px;text-align:center;">
+                                            <div style="color:#a5b4fc;font-size:12px;margin-bottom:4px;">Total</div>
+                                            <div style="color:${player.teamColor};font-size:32px;font-weight:700;">${player.totalPoints}</div>
                                         </div>
                                     </div>
-                                `).join('')}
-                            </div>
+                                    
+                                    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">
+                                        <div style="background:rgba(255,255,255,0.05);border-radius:8px;padding:12px;text-align:center;">
+                                            <div style="color:#a5b4fc;font-size:12px;margin-bottom:4px;">Stroke</div>
+                                            <div style="color:white;font-size:20px;font-weight:600;">${player.strokePoints || 0}</div>
+                                        </div>
+                                        <div style="background:rgba(255,255,255,0.05);border-radius:8px;padding:12px;text-align:center;">
+                                            <div style="color:#a5b4fc;font-size:12px;margin-bottom:4px;">BBB</div>
+                                            <div style="color:white;font-size:20px;font-weight:600;">${player.bbbPoints || 0}</div>
+                                        </div>
+                                        <div style="background:rgba(255,255,255,0.05);border-radius:8px;padding:12px;text-align:center;">
+                                            <div style="color:#a5b4fc;font-size:12px;margin-bottom:4px;">Balls</div>
+                                            <div style="color:white;font-size:20px;font-weight:600;">${player.ballPoints || 0}</div>
+                                        </div>
+                                        <div style="background:rgba(255,255,255,0.05);border-radius:8px;padding:12px;text-align:center;">
+                                            <div style="color:#a5b4fc;font-size:12px;margin-bottom:4px;">Extra 9</div>
+                                            <div style="color:white;font-size:20px;font-weight:600;">${player.extra9Points || 0}</div>
+                                        </div>
+                                    </div>
+                                    ${player.ctpPoints > 0 ? `
+                                        <div style="background:rgba(16,185,129,0.2);border:2px solid #10b981;border-radius:8px;padding:12px;margin-top:12px;text-align:center;">
+                                            <span style="color:#10b981;font-size:14px;margin-right:8px;">🎯 CTP</span>
+                                            <span style="color:#10b981;font-size:20px;font-weight:700;">${player.ctpPoints}</span>
+                                        </div>
+                                    ` : ''}
+                                </div>
+                            `).join('')}
                         </div>
                         
-                        <button onclick="nextPresentationSlide()" 
-                                class="btn-primary" 
-                                style="padding:20px 40px;font-size:24px;margin-top:30px;background:linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);box-shadow:0 8px 24px rgba(59,130,246,0.4);">
-                            Next ${middleThirdPlayers.length} Players →
-                        </button>
+                        <div style="display:flex;gap:16px;justify-content:center;margin-top:30px;">
+                            <button onclick="nextPresentationSlide()" 
+                                    class="btn-primary" 
+                                    style="padding:20px 40px;font-size:24px;background:linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);box-shadow:0 8px 24px rgba(59,130,246,0.4);">
+                                Next ${middleThirdPlayers.length} Players →
+                            </button>
+                        </div>
                     </div>
                 `;
             } else if (currentSlide === middleThirdSlideIndex) {
-                // MIDDLE THIRD PLAYERS SLIDE
+                // MIDDLE THIRD PLAYERS SLIDE - VERTICAL STACK
+                const middleReversed = [...middleThirdPlayers].reverse();
+                
                 html += `
-                    <div style="animation:slideUp 0.8s ease-out;max-width:1100px;width:100%;">
+                    <div style="animation:slideUp 0.8s ease-out;max-width:900px;width:100%;">
                         <h1 style="color:white;font-size:48px;margin:0 0 16px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
                             🎯 Player Performance
                         </h1>
@@ -6203,82 +6333,125 @@
                             Showing ${bottomThirdPlayers.length + middleThirdPlayers.length} of ${bottomThirdPlayers.length + middleThirdPlayers.length + topThirdPlayers.length} players
                         </p>
                         
-                        <div style="background:rgba(255,255,255,0.1);border:3px solid rgba(255,255,255,0.2);border-radius:20px;padding:30px;max-height:65vh;overflow-y:auto;">
-                            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;">
-                                ${middleThirdPlayers.map(player => `
-                                    <div style="background:rgba(255,255,255,0.08);border:2px solid ${player.teamColor}40;border-radius:12px;padding:16px;">
-                                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-                                            <div style="flex:1;">
-                                                <div style="color:white;font-size:18px;font-weight:700;margin-bottom:4px;">${player.playerName}</div>
-                                                <div style="display:flex;align-items:center;gap:6px;">
-                                                    <div style="width:8px;height:8px;border-radius:50%;background:${player.teamColor};"></div>
-                                                    <div style="color:#a5b4fc;font-size:13px;">${player.teamName}</div>
-                                                </div>
+                        <div style="background:rgba(255,255,255,0.1);border:3px solid rgba(255,255,255,0.2);border-radius:20px;padding:30px;max-height:60vh;overflow-y:auto;">
+                            ${middleReversed.map(player => `
+                                <div style="background:rgba(255,255,255,0.08);border:2px solid ${player.teamColor}40;border-radius:12px;padding:20px;margin-bottom:16px;">
+                                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                                        <div style="display:flex;align-items:center;gap:16px;flex:1;">
+                                            <div style="text-align:center;min-width:60px;">
+                                                <div style="color:#a5b4fc;font-size:14px;margin-bottom:4px;">Position</div>
+                                                <div style="color:white;font-size:32px;font-weight:700;">#${player.position}</div>
                                             </div>
-                                            <div style="background:${player.teamColor}20;border:2px solid ${player.teamColor};border-radius:8px;padding:8px;min-width:60px;text-align:center;">
-                                                <div style="color:${player.teamColor};font-size:24px;font-weight:700;">${player.totalPoints}</div>
+                                            <div style="flex:1;">
+                                                <div style="color:white;font-size:22px;font-weight:700;margin-bottom:6px;">${player.playerName}</div>
+                                                <div style="display:flex;align-items:center;gap:8px;">
+                                                    <div style="width:10px;height:10px;border-radius:50%;background:${player.teamColor};"></div>
+                                                    <div style="color:#a5b4fc;font-size:15px;">${player.teamName}</div>
+                                                </div>
                                             </div>
                                         </div>
-                                        
-                                        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:12px;">
-                                            <div style="background:rgba(255,255,255,0.05);border-radius:6px;padding:8px;">
-                                                <div style="color:#a5b4fc;font-size:11px;margin-bottom:2px;">Stroke</div>
-                                                <div style="color:white;font-size:16px;font-weight:600;">${player.strokePoints || 0}</div>
-                                            </div>
-                                            <div style="background:rgba(255,255,255,0.05);border-radius:6px;padding:8px;">
-                                                <div style="color:#a5b4fc;font-size:11px;margin-bottom:2px;">BBB</div>
-                                                <div style="color:white;font-size:16px;font-weight:600;">${player.bbbPoints || 0}</div>
-                                            </div>
-                                            <div style="background:rgba(255,255,255,0.05);border-radius:6px;padding:8px;">
-                                                <div style="color:#a5b4fc;font-size:11px;margin-bottom:2px;">Balls</div>
-                                                <div style="color:white;font-size:16px;font-weight:600;">${player.ballPoints || 0}</div>
-                                            </div>
-                                            <div style="background:rgba(255,255,255,0.05);border-radius:6px;padding:8px;">
-                                                <div style="color:#a5b4fc;font-size:11px;margin-bottom:2px;">Extra 9</div>
-                                                <div style="color:white;font-size:16px;font-weight:600;">${player.extra9Points || 0}</div>
-                                            </div>
-                                            ${player.ctpPoints > 0 ? `
-                                                <div style="background:rgba(16,185,129,0.2);border:2px solid #10b981;border-radius:6px;padding:8px;grid-column:1/-1;">
-                                                    <div style="color:#10b981;font-size:11px;margin-bottom:2px;">🎯 CTP</div>
-                                                    <div style="color:#10b981;font-size:16px;font-weight:600;">${player.ctpPoints}</div>
-                                                </div>
-                                            ` : ''}
+                                        <div style="background:${player.teamColor}20;border:2px solid ${player.teamColor};border-radius:12px;padding:12px;min-width:80px;text-align:center;">
+                                            <div style="color:#a5b4fc;font-size:12px;margin-bottom:4px;">Total</div>
+                                            <div style="color:${player.teamColor};font-size:32px;font-weight:700;">${player.totalPoints}</div>
                                         </div>
                                     </div>
-                                `).join('')}
-                            </div>
+                                    
+                                    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">
+                                        <div style="background:rgba(255,255,255,0.05);border-radius:8px;padding:12px;text-align:center;">
+                                            <div style="color:#a5b4fc;font-size:12px;margin-bottom:4px;">Stroke</div>
+                                            <div style="color:white;font-size:20px;font-weight:600;">${player.strokePoints || 0}</div>
+                                        </div>
+                                        <div style="background:rgba(255,255,255,0.05);border-radius:8px;padding:12px;text-align:center;">
+                                            <div style="color:#a5b4fc;font-size:12px;margin-bottom:4px;">BBB</div>
+                                            <div style="color:white;font-size:20px;font-weight:600;">${player.bbbPoints || 0}</div>
+                                        </div>
+                                        <div style="background:rgba(255,255,255,0.05);border-radius:8px;padding:12px;text-align:center;">
+                                            <div style="color:#a5b4fc;font-size:12px;margin-bottom:4px;">Balls</div>
+                                            <div style="color:white;font-size:20px;font-weight:600;">${player.ballPoints || 0}</div>
+                                        </div>
+                                        <div style="background:rgba(255,255,255,0.05);border-radius:8px;padding:12px;text-align:center;">
+                                            <div style="color:#a5b4fc;font-size:12px;margin-bottom:4px;">Extra 9</div>
+                                            <div style="color:white;font-size:20px;font-weight:600;">${player.extra9Points || 0}</div>
+                                        </div>
+                                    </div>
+                                    ${player.ctpPoints > 0 ? `
+                                        <div style="background:rgba(16,185,129,0.2);border:2px solid #10b981;border-radius:8px;padding:12px;margin-top:12px;text-align:center;">
+                                            <span style="color:#10b981;font-size:14px;margin-right:8px;">🎯 CTP</span>
+                                            <span style="color:#10b981;font-size:20px;font-weight:700;">${player.ctpPoints}</span>
+                                        </div>
+                                    ` : ''}
+                                </div>
+                            `).join('')}
                         </div>
                         
-                        <button onclick="nextPresentationSlide()" 
-                                class="btn-primary" 
-                                style="padding:20px 40px;font-size:24px;margin-top:30px;background:linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);box-shadow:0 8px 24px rgba(139,92,246,0.4);">
-                            Top Players →
-                        </button>
+                        <div style="display:flex;gap:16px;justify-content:center;margin-top:30px;">
+                            <button onclick="navigateToPresentationSlide(${bottomThirdSlideIndex})" 
+                                    class="btn-secondary" 
+                                    style="padding:20px 40px;font-size:24px;background:rgba(255,255,255,0.1);border:2px solid rgba(255,255,255,0.3);color:white;">
+                                ← Back
+                            </button>
+                            <button onclick="nextPresentationSlide()" 
+                                    class="btn-primary" 
+                                    style="padding:20px 40px;font-size:24px;background:linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);box-shadow:0 8px 24px rgba(139,92,246,0.4);">
+                                Top Players →
+                            </button>
+                        </div>
                     </div>
                 `;
             } else if (currentSlide >= topThirdStartIndex && currentSlide < topThirdStartIndex + topThirdPlayers.length) {
                 // TOP THIRD PLAYERS - ONE BY ONE
                 const playerIndex = currentSlide - topThirdStartIndex;
                 const player = topThirdPlayers[playerIndex];
+                const isFirstTopPlayer = playerIndex === 0;
                 const isLastTopPlayer = playerIndex === topThirdPlayers.length - 1;
+                const previousSlideIndex = isFirstTopPlayer ? middleThirdSlideIndex : currentSlide - 1;
                 
                 html += `
                     <div style="animation:slideUp 0.8s ease-out;max-width:900px;width:100%;">
                         <h1 style="color:white;font-size:48px;margin:0 0 16px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
                             ${playerIndex === 0 ? '🌟 Top Players' : '🌟'}
                         </h1>
-                        <p style="color:#a5b4fc;font-size:20px;margin:0 0 40px;">
-                            Player ${bottomThirdPlayers.length + middleThirdPlayers.length + playerIndex + 1} of ${bottomThirdPlayers.length + middleThirdPlayers.length + topThirdPlayers.length}
+                        <p style="color:#a5b4fc;font-size:20px;margin:0 0 20px;">
+                            Position #${player.position} • Player ${bottomThirdPlayers.length + middleThirdPlayers.length + playerIndex + 1} of ${bottomThirdPlayers.length + middleThirdPlayers.length + topThirdPlayers.length}
                         </p>
+                        
+                        ${player.isHighScore && player.isPersonalRecord ? `
+                            <div style="background:linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);border:3px solid #fbbf24;border-radius:16px;padding:20px;margin-bottom:20px;text-align:center;animation:pulse 2s ease-in-out infinite;box-shadow:0 8px 24px rgba(251,191,36,0.6);">
+                                <div style="font-size:40px;margin-bottom:8px;">🏆🎉🏆</div>
+                                <div style="color:white;font-size:28px;font-weight:700;text-shadow:0 2px 8px rgba(0,0,0,0.3);">
+                                    NEW HIGH SCORE!!!
+                                </div>
+                                <div style="color:rgba(255,255,255,0.9);font-size:16px;margin-top:8px;">
+                                    Highest score of the day!
+                                </div>
+                            </div>
+                        ` : player.isPersonalRecord ? `
+                            <div style="background:linear-gradient(135deg, #10b981 0%, #059669 100%);border:3px solid #10b981;border-radius:16px;padding:20px;margin-bottom:20px;text-align:center;box-shadow:0 8px 24px rgba(16,185,129,0.4);">
+                                <div style="font-size:36px;margin-bottom:8px;">🎉</div>
+                                <div style="color:white;font-size:24px;font-weight:700;">
+                                    New record for ${player.playerName}!!
+                                </div>
+                            </div>
+                        ` : ''}
                         
                         <div style="background:linear-gradient(135deg, ${player.teamColor}30 0%, ${player.teamColor}10 100%);border:4px solid ${player.teamColor};border-radius:24px;padding:40px;box-shadow:0 20px 60px rgba(0,0,0,0.4);">
                             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:30px;">
                                 <div style="flex:1;">
                                     <div style="color:white;font-size:42px;font-weight:700;margin-bottom:12px;">${player.playerName}</div>
-                                    <div style="display:flex;align-items:center;gap:12px;">
+                                    <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
                                         <div style="width:16px;height:16px;border-radius:50%;background:${player.teamColor};"></div>
                                         <div style="color:#a5b4fc;font-size:24px;">${player.teamName}</div>
                                     </div>
+                                    ${player.averagePoints !== undefined && player.comparisonToAverage !== 0 ? `
+                                        <div style="background:rgba(255,255,255,0.1);border-radius:10px;padding:12px;margin-top:12px;">
+                                            <div style="color:${player.comparisonToAverage > 0 ? '#10b981' : '#ef4444'};font-size:18px;font-weight:600;">
+                                                ${Math.abs(player.comparisonToAverage)}% ${player.comparisonToAverage > 0 ? 'better' : 'worse'} than average
+                                            </div>
+                                            <div style="color:#a5b4fc;font-size:14px;margin-top:4px;">
+                                                Average: ${player.averagePoints} pts
+                                            </div>
+                                        </div>
+                                    ` : ''}
                                 </div>
                                 <div style="background:${player.teamColor};border-radius:20px;padding:24px;min-width:140px;text-align:center;box-shadow:0 8px 24px ${player.teamColor}60;">
                                     <div style="color:white;font-size:20px;margin-bottom:4px;opacity:0.9;">Total</div>
@@ -6312,11 +6485,18 @@
                             </div>
                         </div>
                         
-                        <button onclick="nextPresentationSlide()" 
-                                class="btn-primary" 
-                                style="padding:20px 40px;font-size:24px;margin-top:30px;background:linear-gradient(135deg, #f59e0b 0%, #d97706 100%);box-shadow:0 8px 24px rgba(245,158,11,0.4);">
-                            ${isLastTopPlayer ? (hasNetSlide ? 'Individual Awards →' : 'Team Standings →') : 'Next Player →'}
-                        </button>
+                        <div style="display:flex;gap:16px;justify-content:center;margin-top:30px;">
+                            <button onclick="navigateToPresentationSlide(${previousSlideIndex})" 
+                                    class="btn-secondary" 
+                                    style="padding:20px 40px;font-size:24px;background:rgba(255,255,255,0.1);border:2px solid rgba(255,255,255,0.3);color:white;">
+                                ← Back
+                            </button>
+                            <button onclick="nextPresentationSlide()" 
+                                    class="btn-primary" 
+                                    style="padding:20px 40px;font-size:24px;background:linear-gradient(135deg, #f59e0b 0%, #d97706 100%);box-shadow:0 8px 24px rgba(245,158,11,0.4);">
+                                ${isLastTopPlayer ? (hasNetSlide ? 'Individual Awards →' : 'Team Standings →') : 'Next Player →'}
+                            </button>
+                        </div>
                     </div>
                 `;
             } else if (currentSlide === netSlideIndex) {
@@ -6740,6 +6920,8 @@
                 }
             } else if (currentSlide === handicapSlideIndex) {
                 // HANDICAP CHANGES SLIDE
+                const actualChanges = handicapChanges.filter(ch => ch.beforeHandicap !== ch.afterHandicap);
+                
                 html += `
                     <div style="animation:slideUp 0.8s ease-out;max-width:900px;width:100%;">
                         <h1 style="color:white;font-size:48px;margin:0 0 16px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
@@ -6749,57 +6931,74 @@
                             Based on ${mostRecentRound.courseName}
                         </p>
                         
-                        <div style="background:rgba(255,255,255,0.1);border:3px solid rgba(255,255,255,0.2);border-radius:20px;padding:30px;box-shadow:0 20px 60px rgba(0,0,0,0.4);">
-                            ${handicapChanges.map(change => {
-                                const diff = change.afterHandicap - change.beforeHandicap;
-                                const isDrop = diff < 0;
-                                const bgColor = isDrop ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)';
-                                const borderColor = isDrop ? '#10b981' : '#ef4444';
-                                const arrowIcon = isDrop ? '⬇️' : '⬆️';
-                                const diffColor = isDrop ? '#10b981' : '#ef4444';
-                                
-                                return `
-                                    <div style="background:${bgColor};border:3px solid ${borderColor};border-radius:16px;padding:24px;margin-bottom:20px;">
-                                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-                                            <strong style="font-size:32px;color:white;">${change.playerName}</strong>
-                                            <div style="display:flex;align-items:center;gap:12px;">
-                                                <span style="font-size:20px;color:#a5b4fc;font-weight:600;">
-                                                    ${Math.abs(diff)} ${isDrop ? 'lower' : 'higher'}
-                                                </span>
-                                            </div>
-                                        </div>
-                                        
-                                        <div style="display:flex;align-items:center;gap:24px;justify-content:center;">
-                                            <div style="text-align:center;">
-                                                <div style="font-size:16px;color:#a5b4fc;margin-bottom:8px;">Before</div>
-                                                <div style="font-size:48px;font-weight:700;color:white;">${change.beforeHandicap}</div>
+                        ${actualChanges.length > 0 ? `
+                            <div style="background:rgba(255,255,255,0.1);border:3px solid rgba(255,255,255,0.2);border-radius:20px;padding:30px;box-shadow:0 20px 60px rgba(0,0,0,0.4);">
+                                ${actualChanges.map(change => {
+                                    const diff = change.afterHandicap - change.beforeHandicap;
+                                    const isDrop = diff < 0;
+                                    const bgColor = isDrop ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)';
+                                    const borderColor = isDrop ? '#10b981' : '#ef4444';
+                                    const arrowIcon = isDrop ? '⬇️' : '⬆️';
+                                    const diffColor = isDrop ? '#10b981' : '#ef4444';
+                                    
+                                    return `
+                                        <div style="background:${bgColor};border:3px solid ${borderColor};border-radius:16px;padding:24px;margin-bottom:20px;">
+                                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                                                <strong style="font-size:32px;color:white;">${change.playerName}</strong>
+                                                <div style="display:flex;align-items:center;gap:12px;">
+                                                    <span style="font-size:20px;color:#a5b4fc;font-weight:600;">
+                                                        ${Math.abs(diff)} ${isDrop ? 'lower' : 'higher'}
+                                                    </span>
+                                                </div>
                                             </div>
                                             
-                                            <div style="font-size:56px;">${arrowIcon}</div>
-                                            
-                                            <div style="text-align:center;">
-                                                <div style="font-size:16px;color:#a5b4fc;margin-bottom:8px;">After</div>
-                                                <div style="font-size:48px;font-weight:700;color:${diffColor};">${change.afterHandicap}</div>
-                                            </div>
-                                            
-                                            <div style="background:rgba(255,255,255,0.15);border-radius:12px;padding:16px;min-width:100px;">
-                                                <div style="font-size:40px;font-weight:700;color:${diffColor};text-align:center;">
-                                                    ${diff > 0 ? '+' : ''}${diff}
+                                            <div style="display:flex;align-items:center;gap:24px;justify-content:center;">
+                                                <div style="text-align:center;">
+                                                    <div style="font-size:16px;color:#a5b4fc;margin-bottom:8px;">Before</div>
+                                                    <div style="font-size:48px;font-weight:700;color:white;">${change.beforeHandicap}</div>
+                                                </div>
+                                                
+                                                <div style="font-size:56px;">${arrowIcon}</div>
+                                                
+                                                <div style="text-align:center;">
+                                                    <div style="font-size:16px;color:#a5b4fc;margin-bottom:8px;">After</div>
+                                                    <div style="font-size:48px;font-weight:700;color:${diffColor};">${change.afterHandicap}</div>
+                                                </div>
+                                                
+                                                <div style="background:rgba(255,255,255,0.15);border-radius:12px;padding:16px;min-width:100px;">
+                                                    <div style="font-size:40px;font-weight:700;color:${diffColor};text-align:center;">
+                                                        ${diff > 0 ? '+' : ''}${diff}
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
-                                    </div>
-                                `;
-                            }).join('')}
-                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                        ` : `
+                            <div style="background:rgba(59,130,246,0.2);border:3px solid rgba(59,130,246,0.4);border-radius:20px;padding:60px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.4);">
+                                <div style="font-size:72px;margin-bottom:20px;">✓</div>
+                                <div style="color:white;font-size:36px;font-weight:700;margin-bottom:12px;">No Changes</div>
+                                <div style="color:#a5b4fc;font-size:20px;">
+                                    All handicaps remained the same
+                                </div>
+                            </div>
+                        `}
                         
-                        ${hasNextRoundSlide ? `
-                            <button onclick="nextPresentationSlide()" 
-                                    class="btn-primary" 
-                                    style="padding:20px 40px;font-size:24px;margin-top:40px;background:linear-gradient(135deg, #10b981 0%, #059669 100%);box-shadow:0 8px 24px rgba(16,185,129,0.4);">
-                                ⛳ Next Round Details →
+                        <div style="display:flex;gap:16px;justify-content:center;margin-top:40px;">
+                            <button onclick="navigateToPresentationSlide(${teamSlidesStartIndex + teamStandings.length - 1})" 
+                                    class="btn-secondary" 
+                                    style="padding:20px 40px;font-size:24px;background:rgba(255,255,255,0.1);border:2px solid rgba(255,255,255,0.3);color:white;">
+                                ← Back
                             </button>
-                        ` : ''}
+                            ${hasNextRoundSlide ? `
+                                <button onclick="nextPresentationSlide()" 
+                                        class="btn-primary" 
+                                        style="padding:20px 40px;font-size:24px;background:linear-gradient(135deg, #10b981 0%, #059669 100%);box-shadow:0 8px 24px rgba(16,185,129,0.4);">
+                                    ⛳ Next Round Details →
+                                </button>
+                            ` : ''}
+                        </div>
                     </div>
                 `;
             } else if (currentSlide === nextRoundSlideIndex) {
@@ -6840,9 +7039,9 @@
                             ${nextRound.courseName}
                         </p>
                         
-                        <!-- Date & Time -->
+                        <!-- Date, Time & Address -->
                         <div style="background:rgba(59,130,246,0.2);border:3px solid rgba(59,130,246,0.4);border-radius:16px;padding:24px;margin-bottom:30px;">
-                            <div style="display:flex;justify-content:center;gap:40px;align-items:center;">
+                            <div style="display:flex;justify-content:center;gap:40px;align-items:center;flex-wrap:wrap;">
                                 <div style="text-align:center;">
                                     <div style="font-size:48px;margin-bottom:8px;">📅</div>
                                     <div style="color:#a5b4fc;font-size:16px;margin-bottom:4px;">Date</div>
@@ -6853,6 +7052,13 @@
                                     <div style="color:#a5b4fc;font-size:16px;margin-bottom:4px;">Tee Time</div>
                                     <div style="color:white;font-size:28px;font-weight:700;">${timeStr}</div>
                                 </div>
+                                ${nextRound.courseAddress ? `
+                                    <div style="text-align:center;min-width:200px;">
+                                        <div style="font-size:48px;margin-bottom:8px;">📍</div>
+                                        <div style="color:#a5b4fc;font-size:16px;margin-bottom:4px;">Location</div>
+                                        <div style="color:white;font-size:18px;font-weight:600;">${nextRound.courseAddress}</div>
+                                    </div>
+                                ` : ''}
                             </div>
                         </div>
                         
@@ -6887,6 +7093,14 @@
                                 <div style="color:white;font-size:20px;">Groups not yet assigned</div>
                             </div>
                         `}
+                        
+                        <div style="display:flex;gap:16px;justify-content:center;margin-top:40px;">
+                            <button onclick="navigateToPresentationSlide(${handicapSlideIndex})" 
+                                    class="btn-secondary" 
+                                    style="padding:20px 40px;font-size:24px;background:rgba(255,255,255,0.1);border:2px solid rgba(255,255,255,0.3);color:white;">
+                                ← Back
+                            </button>
+                        </div>
                     </div>
                 `;
             }
@@ -7107,6 +7321,7 @@
                 state.activeRound = {
                     courseId: course.id,
                     courseName: course.name,
+                    courseAddress: course.address || '',
                     pars: course.pars,
                     handicaps: course.handicaps,
                     date: date,
@@ -8468,6 +8683,7 @@
                 const newCourse = {
                     id: Date.now(),
                     name: name,
+                    address: state.tempCourse.address || '',
                     pars: pars,
                     handicaps: handicaps
                 };
@@ -8517,6 +8733,7 @@
                         return {
                             id: courseId,
                             name: name,
+                            address: state.tempCourse.address || '',
                             pars: pars,
                             handicaps: handicaps
                         };
@@ -8885,8 +9102,12 @@
                 if (round.isEditing && round.originalIndex !== undefined) {
                     // Update the round in state.rounds
                     const updatedRounds = [...state.rounds];
+                    const originalRound = updatedRounds[round.originalIndex];
                     const updatedRound = {
                         ...round,
+                        // Explicitly preserve the original timestamp and date
+                        timestamp: originalRound.timestamp,
+                        date: originalRound.date,
                         isEditing: undefined,
                         originalIndex: undefined
                     };
@@ -10160,7 +10381,7 @@
 
         // Initialize
         console.log('========================================');
-        console.log('Golf League Tracker v8.61 - Firebase Edition');
+        console.log('Golf League Tracker v8.7 - Firebase Edition');
         console.log('✅ Firebase Firestore database integration');
         console.log('✅ Real-time data sync across devices');
         console.log('✅ Multi-league support via LEAGUE_ID');
@@ -10173,11 +10394,11 @@
             if (state.players.length === 0 && state.courses.length === 0) {
                 setTimeout(() => {
                     const dbType = useFirebase ? 'Firebase (cloud sync enabled! 🌐)' : 'LocalStorage (local only)';
-                    alert(`👋 Welcome to Golf League v8.61!\\n\\nDatabase: ${dbType}\\nLeague ID: ${LEAGUE_ID}\\n\\nTo get started:\\n1. Add Players (Admin → Players)\\n2. Add a Course (Admin → Courses)\\n3. Create Teams (Admin → Teams)\\n4. Start a Round!`);
+                    alert(`👋 Welcome to Golf League v8.7!\\n\\nDatabase: ${dbType}\\nLeague ID: ${LEAGUE_ID}\\n\\nTo get started:\\n1. Add Players (Admin → Players)\\n2. Add a Course (Admin → Courses)\\n3. Create Teams (Admin → Teams)\\n4. Start a Round!`);
                 }, 500);
             } else {
                 const dbType = useFirebase ? '☁️ Firebase' : '💾 LocalStorage';
-                notify(`✅ v8.61 Ready! (${dbType})`);
+                notify(`✅ v8.7 Ready! (${dbType})`);
             }
         });
     </script>
