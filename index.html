@@ -5897,6 +5897,7 @@
                     previousStandings: previousStandings,
                     todaysScores: todaysScores,
                     hasScheduledRounds: hasScheduledRounds,
+                    scheduledRoundsCount: scheduledRounds.length,
                     // Individual awards
                     netWinner: netWinner,
                     netTop3: netTop3,
@@ -5927,7 +5928,7 @@
         window.renderPresentation = () => {
             try {
                 const { 
-                    currentSlide, teamStandings, previousStandings, todaysScores, hasScheduledRounds, 
+                    currentSlide, teamStandings, previousStandings, todaysScores, hasScheduledRounds, scheduledRoundsCount,
                     eventName, totalRounds, mostRecentRound,
                     netWinner, netTop3, previousNetWinners, extra9Winners, ctpWinners,
                     hasNetSlide, hasExtra9Slide, hasCtpSlide
@@ -6310,7 +6311,7 @@
                                 ${hasScheduledRounds && team.winProbability !== undefined ? `
                                     <div style="background:rgba(139,92,246,0.2);border:3px solid rgba(139,92,246,0.4);border-radius:16px;padding:30px;">
                                         <h3 style="color:#a78bfa;font-size:24px;font-weight:700;margin:0 0 8px;">🎲 Chance to Win Event</h3>
-                                        <p style="color:#a5b4fc;font-size:14px;margin:0 0 24px;">Based on ${scheduledRounds.length} scheduled round${scheduledRounds.length === 1 ? '' : 's'} remaining</p>
+                                        <p style="color:#a5b4fc;font-size:14px;margin:0 0 24px;">Based on ${scheduledRoundsCount} scheduled round${scheduledRoundsCount === 1 ? '' : 's'} remaining</p>
                                         
                                         <!-- Current Team's Probability Bar -->
                                         <div style="margin-bottom:12px;">
@@ -9626,7 +9627,7 @@
 
         // Initialize
         console.log('========================================');
-        console.log('Golf League Tracker v8.31 - Firebase Edition');
+        console.log('Golf League Tracker v8.32 - Firebase Edition');
         console.log('✅ Firebase Firestore database integration');
         console.log('✅ Real-time data sync across devices');
         console.log('✅ Multi-league support via LEAGUE_ID');
@@ -9639,11 +9640,11 @@
             if (state.players.length === 0 && state.courses.length === 0) {
                 setTimeout(() => {
                     const dbType = useFirebase ? 'Firebase (cloud sync enabled! 🌐)' : 'LocalStorage (local only)';
-                    alert(`👋 Welcome to Golf League v8.31!\\n\\nDatabase: ${dbType}\\nLeague ID: ${LEAGUE_ID}\\n\\nTo get started:\\n1. Add Players (Admin → Players)\\n2. Add a Course (Admin → Courses)\\n3. Create Teams (Admin → Teams)\\n4. Start a Round!`);
+                    alert(`👋 Welcome to Golf League v8.32!\\n\\nDatabase: ${dbType}\\nLeague ID: ${LEAGUE_ID}\\n\\nTo get started:\\n1. Add Players (Admin → Players)\\n2. Add a Course (Admin → Courses)\\n3. Create Teams (Admin → Teams)\\n4. Start a Round!`);
                 }, 500);
             } else {
                 const dbType = useFirebase ? '☁️ Firebase' : '💾 LocalStorage';
-                notify(`✅ v8.31 Ready! (${dbType})`);
+                notify(`✅ v8.32 Ready! (${dbType})`);
             }
         });
     </script>
