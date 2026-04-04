@@ -5413,10 +5413,10 @@
                     
                     // Calculate points from rounds
                     rounds.forEach(r => {
-                        r.teams.forEach(t => {
+                        r.teams.forEach((t, teamIdx) => {
                             if (!stats[t.teamId]) return;
                             
-                            t.players.forEach(p => {
+                            t.players.forEach((p, playerIdx) => {
                                 if (!stats[t.teamId].players[p.id]) {
                                     stats[t.teamId].players[p.id] = {
                                         id: p.id,
@@ -5425,14 +5425,28 @@
                                     };
                                 }
                                 
-                                const strokePoints = p.strokePoints || 0;
-                                const bbbPoints = p.bbbPoints || 0;
-                                const ballPoints = p.ballPoints || 0;
-                                const extra9Points = p.extra9Points || 0;
+                                // Use saved values if they exist, otherwise calculate on the fly
+                                const strokePoints = p.strokePoints !== undefined 
+                                    ? p.strokePoints 
+                                    : calcPlayerTotal(p.scores, r.pars, r.handicaps, p.handicap);
+                                const bbbPoints = p.bbbPoints !== undefined 
+                                    ? p.bbbPoints 
+                                    : (p.bbbTotal || 0) * state.settings.bbbPoints;
+                                const ballPoints = p.ballPoints !== undefined 
+                                    ? p.ballPoints 
+                                    : (p.ballsRemaining || 0) * state.settings.ballPoints;
                                 
-                                let ctpPoints = 0;
-                                if (r.ctpWinners && r.ctpWinners.length > 0) {
-                                    const playerPosition = `${r.teams.findIndex(team => team.teamId === t.teamId)}-${t.players.findIndex(player => player.id === p.id)}`;
+                                // Calculate extra9 points
+                                let extra9Points = p.extra9Points || 0;
+                                if (extra9Points === 0 && r.extra9Winners && r.extra9Winners.length > 0) {
+                                    const playerPosition = `${teamIdx}-${playerIdx}`;
+                                    extra9Points = r.extra9Winners.filter(w => w === playerPosition).length * state.settings.extra9Points;
+                                }
+                                
+                                // Calculate CTP points
+                                let ctpPoints = p.ctpPoints || 0;
+                                if (ctpPoints === 0 && r.ctpWinners && r.ctpWinners.length > 0) {
+                                    const playerPosition = `${teamIdx}-${playerIdx}`;
                                     ctpPoints = r.ctpWinners.filter(w => w === playerPosition).length * state.settings.ctpPoints;
                                 }
                                 
@@ -5485,7 +5499,7 @@
                 
                 // Calculate today's scores from most recent round
                 const todaysScores = {};
-                mostRecentRound.teams.forEach(t => {
+                mostRecentRound.teams.forEach((t, teamIdx) => {
                     if (!todaysScores[t.teamId]) {
                         todaysScores[t.teamId] = {
                             strokePoints: 0,
@@ -5497,17 +5511,37 @@
                         };
                     }
                     
-                    t.players.forEach(p => {
-                        todaysScores[t.teamId].strokePoints += p.strokePoints || 0;
-                        todaysScores[t.teamId].bbbPoints += p.bbbPoints || 0;
-                        todaysScores[t.teamId].ballPoints += p.ballPoints || 0;
-                        todaysScores[t.teamId].extra9Points += p.extra9Points || 0;
+                    t.players.forEach((p, playerIdx) => {
+                        // Use saved values if they exist, otherwise calculate on the fly
+                        const strokePoints = p.strokePoints !== undefined 
+                            ? p.strokePoints 
+                            : calcPlayerTotal(p.scores, mostRecentRound.pars, mostRecentRound.handicaps, p.handicap);
+                        const bbbPoints = p.bbbPoints !== undefined 
+                            ? p.bbbPoints 
+                            : (p.bbbTotal || 0) * state.settings.bbbPoints;
+                        const ballPoints = p.ballPoints !== undefined 
+                            ? p.ballPoints 
+                            : (p.ballsRemaining || 0) * state.settings.ballPoints;
                         
-                        // Calculate CTP
-                        if (mostRecentRound.ctpWinners && mostRecentRound.ctpWinners.length > 0) {
-                            const playerPosition = `${mostRecentRound.teams.findIndex(team => team.teamId === t.teamId)}-${t.players.findIndex(player => player.id === p.id)}`;
-                            todaysScores[t.teamId].ctpPoints += mostRecentRound.ctpWinners.filter(w => w === playerPosition).length * state.settings.ctpPoints;
+                        // Calculate extra9 points
+                        let extra9Points = p.extra9Points || 0;
+                        if (extra9Points === 0 && mostRecentRound.extra9Winners && mostRecentRound.extra9Winners.length > 0) {
+                            const playerPosition = `${teamIdx}-${playerIdx}`;
+                            extra9Points = mostRecentRound.extra9Winners.filter(w => w === playerPosition).length * state.settings.extra9Points;
                         }
+                        
+                        // Calculate CTP points
+                        let ctpPoints = p.ctpPoints || 0;
+                        if (ctpPoints === 0 && mostRecentRound.ctpWinners && mostRecentRound.ctpWinners.length > 0) {
+                            const playerPosition = `${teamIdx}-${playerIdx}`;
+                            ctpPoints = mostRecentRound.ctpWinners.filter(w => w === playerPosition).length * state.settings.ctpPoints;
+                        }
+                        
+                        todaysScores[t.teamId].strokePoints += strokePoints;
+                        todaysScores[t.teamId].bbbPoints += bbbPoints;
+                        todaysScores[t.teamId].ballPoints += ballPoints;
+                        todaysScores[t.teamId].extra9Points += extra9Points;
+                        todaysScores[t.teamId].ctpPoints += ctpPoints;
                     });
                     
                     todaysScores[t.teamId].total = 
@@ -6112,7 +6146,7 @@
                                 </div>
                             ` : ''}
                             
-                            <div style="background:linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 100%);border:3px solid ${team.color};border-radius:16px;padding:40px 50px;margin:20px auto;max-width:800px;box-shadow:0 20px 60px rgba(0,0,0,0.4);animation:pulse 2s ease-in-out;">
+                            <div style="background:linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 100%);border:3px solid ${team.color};border-radius:16px;padding:30px 40px;margin:20px auto;max-width:1200px;box-shadow:0 20px 60px rgba(0,0,0,0.4);animation:pulse 2s ease-in-out;">
                                 <div style="font-size:${isFirst ? '60px' : '48px'};color:${team.color};margin-bottom:12px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
                                     ${isFirst ? '🥇' : isLast ? '🎯' : position === 2 ? '🥈' : position === 3 ? '🥉' : '🏅'}
                                 </div>
@@ -8157,25 +8191,41 @@
                 round.teams = round.teams.map((t, teamIdx) => {
                     let totalPoints = 0;
                     
-                    t.players.forEach((p, playerIdx) => {
-                        totalPoints += calcPlayerTotal(p.scores, round.pars, round.handicaps, p.handicap);
-                        totalPoints += (p.bbbTotal || 0) * state.settings.bbbPoints;
-                        totalPoints += (p.ballsRemaining || 0) * state.settings.ballPoints;
+                    const updatedPlayers = t.players.map((p, playerIdx) => {
+                        // Calculate individual point breakdowns
+                        const strokePoints = calcPlayerTotal(p.scores, round.pars, round.handicaps, p.handicap);
+                        const bbbPoints = (p.bbbTotal || 0) * state.settings.bbbPoints;
+                        const ballPoints = (p.ballsRemaining || 0) * state.settings.ballPoints;
                         
-                        // Add extra9 points from array
+                        // Calculate extra9 points
+                        let extra9Points = 0;
                         if (round.extra9Winners && round.extra9Winners.length > 0) {
                             const playerPosition = `${teamIdx}-${playerIdx}`;
-                            totalPoints += round.extra9Winners.filter(w => w === playerPosition).length * state.settings.extra9Points;
+                            extra9Points = round.extra9Winners.filter(w => w === playerPosition).length * state.settings.extra9Points;
                         }
                         
-                        // Add CTP points from array
+                        // Calculate CTP points
+                        let ctpPoints = 0;
                         if (round.ctpWinners && round.ctpWinners.length > 0) {
                             const playerPosition = `${teamIdx}-${playerIdx}`;
-                            totalPoints += round.ctpWinners.filter(w => w === playerPosition).length * state.settings.ctpPoints;
+                            ctpPoints = round.ctpWinners.filter(w => w === playerPosition).length * state.settings.ctpPoints;
                         }
+                        
+                        // Add to team total
+                        totalPoints += strokePoints + bbbPoints + ballPoints + extra9Points + ctpPoints;
+                        
+                        // Return player with point breakdowns saved
+                        return {
+                            ...p,
+                            strokePoints: strokePoints,
+                            bbbPoints: bbbPoints,
+                            ballPoints: ballPoints,
+                            extra9Points: extra9Points,
+                            ctpPoints: ctpPoints
+                        };
                     });
                     
-                    return { ...t, totalPoints: totalPoints };
+                    return { ...t, players: updatedPlayers, totalPoints: totalPoints };
                 });
                 
                 if (round.isEditing && round.originalIndex !== undefined) {
@@ -9456,7 +9506,7 @@
 
         // Initialize
         console.log('========================================');
-        console.log('Golf League Tracker v8.03 - Firebase Edition');
+        console.log('Golf League Tracker v8.1 - Firebase Edition');
         console.log('✅ Firebase Firestore database integration');
         console.log('✅ Real-time data sync across devices');
         console.log('✅ Multi-league support via LEAGUE_ID');
@@ -9469,11 +9519,11 @@
             if (state.players.length === 0 && state.courses.length === 0) {
                 setTimeout(() => {
                     const dbType = useFirebase ? 'Firebase (cloud sync enabled! 🌐)' : 'LocalStorage (local only)';
-                    alert(`👋 Welcome to Golf League v8.03!\\n\\nDatabase: ${dbType}\\nLeague ID: ${LEAGUE_ID}\\n\\nTo get started:\\n1. Add Players (Admin → Players)\\n2. Add a Course (Admin → Courses)\\n3. Create Teams (Admin → Teams)\\n4. Start a Round!`);
+                    alert(`👋 Welcome to Golf League v8.1!\\n\\nDatabase: ${dbType}\\nLeague ID: ${LEAGUE_ID}\\n\\nTo get started:\\n1. Add Players (Admin → Players)\\n2. Add a Course (Admin → Courses)\\n3. Create Teams (Admin → Teams)\\n4. Start a Round!`);
                 }, 500);
             } else {
                 const dbType = useFirebase ? '☁️ Firebase' : '💾 LocalStorage';
-                notify(`✅ v8.03 Ready! (${dbType})`);
+                notify(`✅ v8.1 Ready! (${dbType})`);
             }
         });
     </script>
