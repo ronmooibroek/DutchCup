@@ -5912,7 +5912,8 @@
                     totalRounds: eventRounds.length,
                     mostRecentRound: {
                         courseName: mostRecentRound.courseName,
-                        date: mostRecentDate.toLocaleDateString('en-US', {weekday: 'long', month: 'long', day: 'numeric'})
+                        date: mostRecentDate.toLocaleDateString('en-US', {weekday: 'long', month: 'long', day: 'numeric'}),
+                        timestamp: mostRecentRound.timestamp || mostRecentRound.id
                     }
                 };
                 
@@ -6204,14 +6205,45 @@
                     const previousPosition = previousStandings.findIndex(t => t.id === team.id) + 1;
                     const positionChange = previousPosition > 0 ? previousPosition - position : 0;
                     
-                    // Sort standings for sidebar (highest to lowest)
-                    const sortedStandings = [...teamStandings].sort((a, b) => b.points - a.points);
+                    // Filter standings to only show revealed teams (teams 0 through teamIndex)
+                    const revealedTeams = teamStandings.slice(0, teamIndex + 1);
+                    const sortedRevealed = [...revealedTeams].sort((a, b) => b.points - a.points);
+                    
+                    // Find round index for this event
+                    const roundIndex = state.rounds.findIndex(r => 
+                        r.eventId === state.currentEventId && 
+                        r.timestamp === mostRecentRound.timestamp
+                    );
                     
                     html += `
                         <div style="display:flex;gap:20px;width:100%;max-width:1920px;margin:0 auto;animation:slideUp 0.8s ease-out;">
                             
                             <!-- LEFT COLUMN: Current Team (75%) -->
                             <div style="flex:0 0 75%;display:flex;flex-direction:column;gap:20px;">
+                                
+                                <!-- Navigation Buttons -->
+                                <div style="display:flex;gap:12px;justify-content:center;">
+                                    ${teamIndex > 0 ? `
+                                        <button onclick="navigateToPresentationSlide(${currentSlide - 1})" 
+                                                class="btn-secondary" 
+                                                style="padding:12px 24px;font-size:16px;background:rgba(255,255,255,0.1);border:2px solid rgba(255,255,255,0.3);color:white;">
+                                            ← Previous Team
+                                        </button>
+                                    ` : ''}
+                                    ${!isFirst ? `
+                                        <button onclick="nextPresentationSlide()" 
+                                                class="btn-primary" 
+                                                style="padding:12px 24px;font-size:16px;background:linear-gradient(135deg, #10b981 0%, #059669 100%);box-shadow:0 8px 24px rgba(16,185,129,0.4);">
+                                            Next Team →
+                                        </button>
+                                    ` : `
+                                        <button onclick="closePresentationMode()" 
+                                                class="btn-primary" 
+                                                style="padding:12px 24px;font-size:16px;background:linear-gradient(135deg, #ef4444 0%, #dc2626 100%);box-shadow:0 8px 24px rgba(239,68,68,0.4);">
+                                            🎊 Finish Presentation
+                                        </button>
+                                    `}
+                                </div>
                                 
                                 <!-- TEAM CARD -->
                                 <div style="background:linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 100%);border:4px solid ${team.color};border-radius:20px;padding:40px;box-shadow:0 20px 60px rgba(0,0,0,0.5);">
@@ -6230,7 +6262,11 @@
                                             </div>
                                             <div>
                                                 <div style="color:white;font-size:48px;font-weight:700;line-height:1.2;margin-bottom:10px;">${team.name}</div>
-                                                <div style="color:${team.color};font-size:56px;font-weight:700;line-height:1;">${team.points} pts</div>
+                                                <div style="color:${team.color};font-size:56px;font-weight:700;line-height:1;cursor:pointer;" 
+                                                     onclick="closePresentationMode(); navigate('stats');" 
+                                                     title="Click to view player statistics">
+                                                    ${team.points} pts
+                                                </div>
                                             </div>
                                         </div>
                                         ${isFirst && !hasScheduledRounds ? `
@@ -6245,8 +6281,12 @@
                                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
                                         
                                         <!-- Today's Performance -->
-                                        ${todaysScores[team.id] ? `
-                                            <div style="background:rgba(16,185,129,0.2);border:3px solid rgba(16,185,129,0.4);border-radius:12px;padding:20px;">
+                                        ${todaysScores[team.id] && roundIndex >= 0 ? `
+                                            <div style="background:rgba(16,185,129,0.2);border:3px solid rgba(16,185,129,0.4);border-radius:12px;padding:20px;cursor:pointer;transition:all 0.3s;" 
+                                                 onclick="closePresentationMode(); viewRoundDetails(${roundIndex});"
+                                                 onmouseover="this.style.background='rgba(16,185,129,0.3)'; this.style.transform='scale(1.02)';"
+                                                 onmouseout="this.style.background='rgba(16,185,129,0.2)'; this.style.transform='scale(1)';"
+                                                 title="Click to view team scorecard">
                                                 <h3 style="color:#10b981;font-size:20px;font-weight:700;margin:0 0 16px;">📊 Today's Performance</h3>
                                                 <div style="font-size:40px;color:#10b981;font-weight:700;margin-bottom:16px;">+${todaysScores[team.id].total} pts</div>
                                                 <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;">
@@ -6336,32 +6376,27 @@
                                         </div>
                                     </div>
                                 ` : ''}
-                                
-                                <!-- Navigation Button -->
-                                ${!isFirst ? `
-                                    <button onclick="nextPresentationSlide()" 
-                                            class="btn-primary" 
-                                            style="padding:20px 40px;font-size:24px;background:linear-gradient(135deg, #10b981 0%, #059669 100%);box-shadow:0 8px 24px rgba(16,185,129,0.4);align-self:center;">
-                                        Next Team →
-                                    </button>
-                                ` : `
-                                    <button onclick="closePresentationMode()" 
-                                            class="btn-primary" 
-                                            style="padding:20px 40px;font-size:24px;background:linear-gradient(135deg, #ef4444 0%, #dc2626 100%);box-shadow:0 8px 24px rgba(239,68,68,0.4);align-self:center;">
-                                        🎊 Finish Presentation
-                                    </button>
-                                `}
                             </div>
                             
-                            <!-- RIGHT COLUMN: All Team Standings (25%) -->
+                            <!-- RIGHT COLUMN: Revealed Team Standings (25%) -->
                             <div style="flex:0 0 25%;background:rgba(255,255,255,0.1);border:3px solid rgba(255,255,255,0.2);border-radius:16px;padding:20px;max-height:90vh;overflow-y:auto;">
-                                <h3 style="color:white;font-size:20px;font-weight:700;margin:0 0 16px;text-align:center;">📊 Current Standings</h3>
+                                <h3 style="color:white;font-size:20px;font-weight:700;margin:0 0 16px;text-align:center;">📊 Standings</h3>
+                                <p style="color:#a5b4fc;font-size:12px;text-align:center;margin:0 0 16px;">
+                                    Revealed: ${sortedRevealed.length} of ${teamStandings.length}
+                                </p>
                                 
-                                ${sortedStandings.map((t, idx) => {
+                                ${sortedRevealed.map((t, idx) => {
                                     const isCurrentTeam = t.id === team.id;
                                     const standingPosition = idx + 1;
+                                    const teamSlideIndex = teamStandings.findIndex(st => st.id === t.id);
+                                    const slideNumber = teamSlidesStartIndex + teamSlideIndex;
+                                    
                                     return `
-                                        <div style="background:${isCurrentTeam ? `linear-gradient(135deg, ${t.color}40 0%, ${t.color}20 100%)` : 'rgba(255,255,255,0.05)'};border:${isCurrentTeam ? `3px solid ${t.color}` : '2px solid rgba(255,255,255,0.1)'};border-radius:12px;padding:12px;margin-bottom:10px;${isCurrentTeam ? 'box-shadow:0 0 20px ' + t.color + '60;animation:pulse 2s ease-in-out infinite;' : ''}">
+                                        <div style="background:${isCurrentTeam ? `linear-gradient(135deg, ${t.color}40 0%, ${t.color}20 100%)` : 'rgba(255,255,255,0.05)'};border:${isCurrentTeam ? `3px solid ${t.color}` : '2px solid rgba(255,255,255,0.1)'};border-radius:12px;padding:12px;margin-bottom:10px;cursor:pointer;transition:all 0.3s;${isCurrentTeam ? 'box-shadow:0 0 20px ' + t.color + '60;animation:pulse 2s ease-in-out infinite;' : ''}"
+                                             onclick="navigateToPresentationSlide(${slideNumber})"
+                                             onmouseover="if (!${isCurrentTeam}) this.style.background='rgba(255,255,255,0.15)'"
+                                             onmouseout="if (!${isCurrentTeam}) this.style.background='rgba(255,255,255,0.05)'"
+                                             title="Click to view this team">
                                             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
                                                 <div style="display:flex;align-items:center;gap:8px;">
                                                     <span style="font-size:${isCurrentTeam ? '24px' : '18px'};line-height:1;">${standingPosition === 1 ? '🥇' : standingPosition === 2 ? '🥈' : standingPosition === 3 ? '🥉' : '🏅'}</span>
@@ -6424,6 +6459,32 @@
             } else {
                 renderPresentation();
             }
+        };
+
+        window.navigateToPresentationSlide = (slideNumber) => {
+            if (slideNumber >= 0 && slideNumber < presentationState.totalSlides) {
+                presentationState.currentSlide = slideNumber;
+                renderPresentation();
+            }
+        };
+
+        window.viewRoundDetails = (roundIndex) => {
+            // Close presentation mode and show round details
+            closePresentationMode();
+            
+            const round = state.rounds[roundIndex];
+            if (!round) {
+                showError('Round not found!');
+                return;
+            }
+            
+            // Navigate to home and scroll to round or show details
+            navigate('home');
+            
+            // After a brief delay to let the page render, scroll to or highlight the round
+            setTimeout(() => {
+                notify(`📊 Round: ${round.courseName} - ${new Date(round.timestamp || round.id).toLocaleDateString()}`);
+            }, 100);
         };
 
         window.closePresentationMode = () => {
@@ -9627,7 +9688,7 @@
 
         // Initialize
         console.log('========================================');
-        console.log('Golf League Tracker v8.32 - Firebase Edition');
+        console.log('Golf League Tracker v8.4 - Firebase Edition');
         console.log('✅ Firebase Firestore database integration');
         console.log('✅ Real-time data sync across devices');
         console.log('✅ Multi-league support via LEAGUE_ID');
@@ -9640,11 +9701,11 @@
             if (state.players.length === 0 && state.courses.length === 0) {
                 setTimeout(() => {
                     const dbType = useFirebase ? 'Firebase (cloud sync enabled! 🌐)' : 'LocalStorage (local only)';
-                    alert(`👋 Welcome to Golf League v8.32!\\n\\nDatabase: ${dbType}\\nLeague ID: ${LEAGUE_ID}\\n\\nTo get started:\\n1. Add Players (Admin → Players)\\n2. Add a Course (Admin → Courses)\\n3. Create Teams (Admin → Teams)\\n4. Start a Round!`);
+                    alert(`👋 Welcome to Golf League v8.4!\\n\\nDatabase: ${dbType}\\nLeague ID: ${LEAGUE_ID}\\n\\nTo get started:\\n1. Add Players (Admin → Players)\\n2. Add a Course (Admin → Courses)\\n3. Create Teams (Admin → Teams)\\n4. Start a Round!`);
                 }, 500);
             } else {
                 const dbType = useFirebase ? '☁️ Firebase' : '💾 LocalStorage';
-                notify(`✅ v8.32 Ready! (${dbType})`);
+                notify(`✅ v8.4 Ready! (${dbType})`);
             }
         });
     </script>
