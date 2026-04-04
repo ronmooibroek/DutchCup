@@ -6190,7 +6190,7 @@
                     </div>
                 `;
             } else {
-                // TEAM REVEAL SLIDES
+                // TEAM REVEAL SLIDES - 75/25 SPLIT LAYOUT
                 const teamIndex = currentSlide - teamSlidesStartIndex;
                 const team = teamStandings[teamIndex];
                 const position = teamStandings.length - teamIndex; // Reverse for ranking
@@ -6203,101 +6203,181 @@
                     const previousPosition = previousStandings.findIndex(t => t.id === team.id) + 1;
                     const positionChange = previousPosition > 0 ? previousPosition - position : 0;
                     
+                    // Sort standings for sidebar (highest to lowest)
+                    const sortedStandings = [...currentStandings].sort((a, b) => b.points - a.points);
+                    
                     html += `
-                        <div style="animation:slideUp 0.8s ease-out;width:100%;max-width:1400px;margin:0 auto;">
-                            ${!isLast ? `
-                                <p style="color:#a5b4fc;font-size:16px;margin:0 0 12px;opacity:0.6;">
-                                    Previously revealed...
-                                </p>
-                                <div style="max-height:120px;overflow-y:auto;margin-bottom:20px;">
-                                    ${teamStandings.slice(0, teamIndex).reverse().map((t, idx) => `
-                                        <div style="background:rgba(255,255,255,0.1);border-left:3px solid ${t.color};padding:6px 12px;margin:4px auto;max-width:400px;border-radius:6px;display:flex;justify-content:space-between;align-items:center;">
-                                            <div style="display:flex;align-items:center;gap:8px;">
-                                                <span style="color:#e0e7ff;font-size:14px;font-weight:600;">#${teamStandings.length - (teamIndex - idx - 1)}</span>
-                                                <span style="color:white;font-size:14px;">${t.name}</span>
-                                            </div>
-                                            <span style="color:${t.color};font-size:14px;font-weight:600;">${t.points}</span>
-                                        </div>
-                                    `).join('')}
-                                </div>
-                            ` : ''}
+                        <div style="display:flex;gap:20px;width:100%;max-width:1920px;margin:0 auto;animation:slideUp 0.8s ease-out;">
                             
-                            <!-- ULTRA COMPACT TEAM CARD - Fits in ~100px height -->
-                            <div style="background:linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 100%);border:3px solid ${team.color};border-radius:12px;padding:12px 20px;margin:0 auto;box-shadow:0 20px 60px rgba(0,0,0,0.4);animation:pulse 2s ease-in-out;">
+                            <!-- LEFT COLUMN: Current Team (75%) -->
+                            <div style="flex:0 0 75%;display:flex;flex-direction:column;gap:20px;">
                                 
-                                <!-- Single Row Layout -->
-                                <div style="display:grid;grid-template-columns:80px 1fr 300px 400px 250px;gap:20px;align-items:center;">
+                                <!-- TEAM CARD -->
+                                <div style="background:linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 100%);border:4px solid ${team.color};border-radius:20px;padding:40px;box-shadow:0 20px 60px rgba(0,0,0,0.5);">
                                     
-                                    <!-- Position & Medal -->
-                                    <div style="text-align:center;">
-                                        <div style="font-size:40px;line-height:1;">${isFirst ? '🥇' : isLast ? '🎯' : position === 2 ? '🥈' : position === 3 ? '🥉' : '🏅'}</div>
-                                        <div style="color:#e0e7ff;font-size:18px;font-weight:600;margin-top:4px;">#${position}</div>
-                                        ${positionChange !== 0 ? `
-                                            <div style="color:${positionChange > 0 ? '#10b981' : '#ef4444'};font-size:12px;font-weight:600;margin-top:2px;">
-                                                ${positionChange > 0 ? '↗' : '↘'} ${Math.abs(positionChange)}
+                                    <!-- Header Row -->
+                                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:30px;">
+                                        <div style="display:flex;align-items:center;gap:30px;">
+                                            <div style="text-align:center;">
+                                                <div style="font-size:80px;line-height:1;">${isFirst ? '🥇' : isLast ? '🎯' : position === 2 ? '🥈' : position === 3 ? '🥉' : '🏅'}</div>
+                                                <div style="color:#e0e7ff;font-size:32px;font-weight:700;margin-top:8px;">#${position}</div>
+                                                ${positionChange !== 0 ? `
+                                                    <div style="color:${positionChange > 0 ? '#10b981' : '#ef4444'};font-size:20px;font-weight:700;margin-top:6px;">
+                                                        ${positionChange > 0 ? '↗' : '↘'} ${Math.abs(positionChange)}
+                                                    </div>
+                                                ` : ''}
+                                            </div>
+                                            <div>
+                                                <div style="color:white;font-size:48px;font-weight:700;line-height:1.2;margin-bottom:10px;">${team.name}</div>
+                                                <div style="color:${team.color};font-size:56px;font-weight:700;line-height:1;">${team.points} pts</div>
+                                            </div>
+                                        </div>
+                                        ${isFirst && !hasScheduledRounds ? `
+                                            <div style="text-align:center;">
+                                                <div style="font-size:64px;">🏆</div>
+                                                <div style="color:#fbbf24;font-size:24px;font-weight:700;text-shadow:0 2px 10px rgba(0,0,0,0.5);">CHAMPION!</div>
                                             </div>
                                         ` : ''}
                                     </div>
                                     
-                                    <!-- Team Name & Points -->
-                                    <div>
-                                        <div style="color:white;font-size:24px;font-weight:600;line-height:1.2;margin-bottom:4px;">${team.name}</div>
-                                        <div style="color:${team.color};font-size:28px;font-weight:700;line-height:1;">${team.points} pts</div>
-                                        ${hasScheduledRounds && team.winProbability ? `
-                                            <div style="color:#a78bfa;font-size:11px;margin-top:2px;">
-                                                Win: ${team.winProbability}% ${team.probabilityChange !== 0 ? `(${team.probabilityChange > 0 ? '+' : ''}${team.probabilityChange}%)` : ''}
+                                    <!-- Stats Grid -->
+                                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+                                        
+                                        <!-- Today's Performance -->
+                                        ${todaysScores[team.id] ? `
+                                            <div style="background:rgba(16,185,129,0.2);border:3px solid rgba(16,185,129,0.4);border-radius:12px;padding:20px;">
+                                                <h3 style="color:#10b981;font-size:20px;font-weight:700;margin:0 0 16px;">📊 Today's Performance</h3>
+                                                <div style="font-size:40px;color:#10b981;font-weight:700;margin-bottom:16px;">+${todaysScores[team.id].total} pts</div>
+                                                <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;">
+                                                    <div style="background:rgba(255,255,255,0.15);padding:10px;border-radius:8px;text-align:center;">
+                                                        <div style="color:#a5b4fc;font-size:12px;font-weight:600;">Stroke</div>
+                                                        <div style="color:white;font-size:24px;font-weight:700;">${todaysScores[team.id].strokePoints || 0}</div>
+                                                    </div>
+                                                    <div style="background:rgba(255,255,255,0.15);padding:10px;border-radius:8px;text-align:center;">
+                                                        <div style="color:#a5b4fc;font-size:12px;font-weight:600;">BBB</div>
+                                                        <div style="color:white;font-size:24px;font-weight:700;">${todaysScores[team.id].bbbPoints || 0}</div>
+                                                    </div>
+                                                    <div style="background:rgba(255,255,255,0.15);padding:10px;border-radius:8px;text-align:center;">
+                                                        <div style="color:#a5b4fc;font-size:12px;font-weight:600;">Ball</div>
+                                                        <div style="color:white;font-size:24px;font-weight:700;">${todaysScores[team.id].ballPoints || 0}</div>
+                                                    </div>
+                                                    <div style="background:rgba(255,255,255,0.15);padding:10px;border-radius:8px;text-align:center;">
+                                                        <div style="color:#a5b4fc;font-size:12px;font-weight:600;">CTP</div>
+                                                        <div style="color:white;font-size:24px;font-weight:700;">${todaysScores[team.id].ctpPoints || 0}</div>
+                                                    </div>
+                                                    <div style="background:rgba(255,255,255,0.15);padding:10px;border-radius:8px;text-align:center;">
+                                                        <div style="color:#a5b4fc;font-size:12px;font-weight:600;">Ex9</div>
+                                                        <div style="color:white;font-size:24px;font-weight:700;">${todaysScores[team.id].extra9Points || 0}</div>
+                                                    </div>
+                                                </div>
                                             </div>
-                                        ` : isFirst && !hasScheduledRounds ? `
-                                            <div style="color:#fbbf24;font-size:12px;font-weight:600;margin-top:2px;">🎉 CHAMPION! 🎉</div>
-                                        ` : ''}
-                                    </div>
-                                    
-                                    <!-- Today's Performance -->
-                                    ${todaysScores[team.id] ? `
-                                        <div style="background:rgba(16,185,129,0.15);border:2px solid rgba(16,185,129,0.3);border-radius:8px;padding:8px 12px;">
-                                            <div style="color:#10b981;font-size:11px;font-weight:600;margin-bottom:4px;">📊 Today: +${todaysScores[team.id].total}</div>
-                                            <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;font-size:10px;">
-                                                <div style="text-align:center;"><div style="color:#a5b4fc;">Str</div><div style="color:white;font-weight:600;">${todaysScores[team.id].strokePoints || 0}</div></div>
-                                                <div style="text-align:center;"><div style="color:#a5b4fc;">BBB</div><div style="color:white;font-weight:600;">${todaysScores[team.id].bbbPoints || 0}</div></div>
-                                                <div style="text-align:center;"><div style="color:#a5b4fc;">Ball</div><div style="color:white;font-weight:600;">${todaysScores[team.id].ballPoints || 0}</div></div>
-                                                <div style="text-align:center;"><div style="color:#a5b4fc;">CTP</div><div style="color:white;font-weight:600;">${todaysScores[team.id].ctpPoints || 0}</div></div>
-                                                <div style="text-align:center;"><div style="color:#a5b4fc;">Ex9</div><div style="color:white;font-weight:600;">${todaysScores[team.id].extra9Points || 0}</div></div>
+                                        ` : '<div></div>'}
+                                        
+                                        <!-- Season Totals -->
+                                        <div style="background:rgba(59,130,246,0.2);border:3px solid rgba(59,130,246,0.4);border-radius:12px;padding:20px;">
+                                            <h3 style="color:#60a5fa;font-size:20px;font-weight:700;margin:0 0 16px;">🏆 Season Totals</h3>
+                                            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
+                                                <div style="background:rgba(255,255,255,0.15);padding:10px;border-radius:8px;text-align:center;">
+                                                    <div style="color:#a5b4fc;font-size:12px;font-weight:600;">Stroke</div>
+                                                    <div style="color:white;font-size:20px;font-weight:700;">${team.strokePoints || 0}</div>
+                                                </div>
+                                                <div style="background:rgba(255,255,255,0.15);padding:10px;border-radius:8px;text-align:center;">
+                                                    <div style="color:#a5b4fc;font-size:12px;font-weight:600;">BBB</div>
+                                                    <div style="color:white;font-size:20px;font-weight:700;">${team.bbbPoints || 0}</div>
+                                                </div>
+                                                <div style="background:rgba(255,255,255,0.15);padding:10px;border-radius:8px;text-align:center;">
+                                                    <div style="color:#a5b4fc;font-size:12px;font-weight:600;">Balls</div>
+                                                    <div style="color:white;font-size:20px;font-weight:700;">${team.ballPoints || 0}</div>
+                                                </div>
+                                                <div style="background:rgba(255,255,255,0.15);padding:10px;border-radius:8px;text-align:center;">
+                                                    <div style="color:#a5b4fc;font-size:12px;font-weight:600;">CTP</div>
+                                                    <div style="color:white;font-size:20px;font-weight:700;">${team.ctpPoints || 0}</div>
+                                                </div>
+                                                <div style="background:rgba(255,255,255,0.15);padding:10px;border-radius:8px;text-align:center;">
+                                                    <div style="color:#a5b4fc;font-size:12px;font-weight:600;">Ex9</div>
+                                                    <div style="color:white;font-size:20px;font-weight:700;">${team.extra9Points || 0}</div>
+                                                </div>
+                                                <div style="background:rgba(255,255,255,0.15);padding:10px;border-radius:8px;text-align:center;">
+                                                    <div style="color:#a5b4fc;font-size:12px;font-weight:600;">Wins</div>
+                                                    <div style="color:white;font-size:20px;font-weight:700;">${team.wins || 0}</div>
+                                                </div>
                                             </div>
                                         </div>
-                                    ` : '<div></div>'}
-                                    
-                                    <!-- Cumulative Totals -->
-                                    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;font-size:10px;">
-                                        <div style="background:rgba(255,255,255,0.1);padding:4px;border-radius:4px;text-align:center;"><div style="color:#a5b4fc;">Stroke</div><div style="color:white;font-weight:600;">${team.strokePoints || 0}</div></div>
-                                        <div style="background:rgba(255,255,255,0.1);padding:4px;border-radius:4px;text-align:center;"><div style="color:#a5b4fc;">BBB</div><div style="color:white;font-weight:600;">${team.bbbPoints || 0}</div></div>
-                                        <div style="background:rgba(255,255,255,0.1);padding:4px;border-radius:4px;text-align:center;"><div style="color:#a5b4fc;">Balls</div><div style="color:white;font-weight:600;">${team.ballPoints || 0}</div></div>
-                                        <div style="background:rgba(255,255,255,0.1);padding:4px;border-radius:4px;text-align:center;"><div style="color:#a5b4fc;">CTP</div><div style="color:white;font-weight:600;">${team.ctpPoints || 0}</div></div>
-                                        <div style="background:rgba(255,255,255,0.1);padding:4px;border-radius:4px;text-align:center;"><div style="color:#a5b4fc;">Ex9</div><div style="color:white;font-weight:600;">${team.extra9Points || 0}</div></div>
-                                        <div style="background:rgba(255,255,255,0.1);padding:4px;border-radius:4px;text-align:center;"><div style="color:#a5b4fc;">Wins</div><div style="color:white;font-weight:600;">${team.wins || 0}</div></div>
                                     </div>
-                                    
-                                    <!-- Champion Status -->
-                                    ${isFirst && !hasScheduledRounds ? `
-                                        <div style="position:absolute;top:50%;right:20px;transform:translateY(-50%);font-size:40px;opacity:0.3;">
-                                            🏆
-                                        </div>
-                                    ` : ''}
                                 </div>
+                                
+                                <!-- WIN PROBABILITY GRAPH (show current team's bar) -->
+                                ${hasScheduledRounds && team.winProbability !== undefined ? `
+                                    <div style="background:rgba(139,92,246,0.2);border:3px solid rgba(139,92,246,0.4);border-radius:16px;padding:30px;">
+                                        <h3 style="color:#a78bfa;font-size:24px;font-weight:700;margin:0 0 8px;">🎲 Chance to Win Event</h3>
+                                        <p style="color:#a5b4fc;font-size:14px;margin:0 0 24px;">Based on ${scheduledRounds.length} scheduled round${scheduledRounds.length === 1 ? '' : 's'} remaining</p>
+                                        
+                                        <!-- Current Team's Probability Bar -->
+                                        <div style="margin-bottom:12px;">
+                                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                                                <div style="display:flex;align-items:center;gap:12px;">
+                                                    <div style="width:16px;height:16px;background:${team.color};border-radius:3px;"></div>
+                                                    <strong style="font-size:20px;color:white;">${team.name}</strong>
+                                                </div>
+                                                <div style="display:flex;align-items:center;gap:12px;">
+                                                    ${team.probabilityChange !== 0 ? `
+                                                        <span style="font-size:18px;color:${team.probabilityChange > 0 ? '#10b981' : '#ef4444'};font-weight:700;">
+                                                            ${team.probabilityChange > 0 ? '↗' : '↘'} ${Math.abs(team.probabilityChange)}%
+                                                        </span>
+                                                    ` : ''}
+                                                    <strong style="font-size:32px;color:#a78bfa;">${team.winProbability}%</strong>
+                                                </div>
+                                            </div>
+                                            
+                                            <div style="background:#1e293b;border-radius:12px;height:40px;position:relative;overflow:hidden;box-shadow:inset 0 2px 8px rgba(0,0,0,0.3);">
+                                                <div style="background:linear-gradient(90deg, #8b5cf6 0%, #a78bfa 100%);height:100%;width:${team.winProbability}%;transition:width 1s ease-out;box-shadow:0 0 20px rgba(139,92,246,0.5);"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ` : ''}
+                                
+                                <!-- Navigation Button -->
+                                ${!isFirst ? `
+                                    <button onclick="nextPresentationSlide()" 
+                                            class="btn-primary" 
+                                            style="padding:20px 40px;font-size:24px;background:linear-gradient(135deg, #10b981 0%, #059669 100%);box-shadow:0 8px 24px rgba(16,185,129,0.4);align-self:center;">
+                                        Next Team →
+                                    </button>
+                                ` : `
+                                    <button onclick="closePresentationMode()" 
+                                            class="btn-primary" 
+                                            style="padding:20px 40px;font-size:24px;background:linear-gradient(135deg, #ef4444 0%, #dc2626 100%);box-shadow:0 8px 24px rgba(239,68,68,0.4);align-self:center;">
+                                        🎊 Finish Presentation
+                                    </button>
+                                `}
                             </div>
                             
-                            ${!isFirst ? `
-                                <button onclick="nextPresentationSlide()" 
-                                        class="btn-primary" 
-                                        style="padding:12px 24px;font-size:16px;margin-top:16px;background:linear-gradient(135deg, #10b981 0%, #059669 100%);box-shadow:0 8px 24px rgba(16,185,129,0.4);">
-                                    Next Team →
-                                </button>
-                            ` : `
-                                <button onclick="closePresentationMode()" 
-                                        class="btn-primary" 
-                                        style="padding:12px 24px;font-size:16px;margin-top:16px;background:linear-gradient(135deg, #ef4444 0%, #dc2626 100%);box-shadow:0 8px 24px rgba(239,68,68,0.4);">
-                                    🎊 Finish Presentation
-                                </button>
-                            `}
+                            <!-- RIGHT COLUMN: All Team Standings (25%) -->
+                            <div style="flex:0 0 25%;background:rgba(255,255,255,0.1);border:3px solid rgba(255,255,255,0.2);border-radius:16px;padding:20px;max-height:90vh;overflow-y:auto;">
+                                <h3 style="color:white;font-size:20px;font-weight:700;margin:0 0 16px;text-align:center;">📊 Current Standings</h3>
+                                
+                                ${sortedStandings.map((t, idx) => {
+                                    const isCurrentTeam = t.id === team.id;
+                                    const standingPosition = idx + 1;
+                                    return `
+                                        <div style="background:${isCurrentTeam ? `linear-gradient(135deg, ${t.color}40 0%, ${t.color}20 100%)` : 'rgba(255,255,255,0.05)'};border:${isCurrentTeam ? `3px solid ${t.color}` : '2px solid rgba(255,255,255,0.1)'};border-radius:12px;padding:12px;margin-bottom:10px;${isCurrentTeam ? 'box-shadow:0 0 20px ' + t.color + '60;animation:pulse 2s ease-in-out infinite;' : ''}">
+                                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                                                <div style="display:flex;align-items:center;gap:8px;">
+                                                    <span style="font-size:${isCurrentTeam ? '24px' : '18px'};line-height:1;">${standingPosition === 1 ? '🥇' : standingPosition === 2 ? '🥈' : standingPosition === 3 ? '🥉' : '🏅'}</span>
+                                                    <strong style="color:white;font-size:${isCurrentTeam ? '18px' : '14px'};font-weight:${isCurrentTeam ? '700' : '600'};">#${standingPosition}</strong>
+                                                </div>
+                                                <strong style="color:${t.color};font-size:${isCurrentTeam ? '24px' : '18px'};font-weight:700;">${t.points}</strong>
+                                            </div>
+                                            <div style="color:white;font-size:${isCurrentTeam ? '16px' : '13px'};font-weight:${isCurrentTeam ? '600' : '500'};margin-bottom:4px;">${t.name}</div>
+                                            ${hasScheduledRounds && t.winProbability !== undefined ? `
+                                                <div style="color:#a78bfa;font-size:11px;font-weight:600;">
+                                                    Win: ${t.winProbability}%
+                                                </div>
+                                            ` : ''}
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
                         </div>
                     `;
                 }
@@ -9546,7 +9626,7 @@
 
         // Initialize
         console.log('========================================');
-        console.log('Golf League Tracker v8.2 - Firebase Edition');
+        console.log('Golf League Tracker v8.3 - Firebase Edition');
         console.log('✅ Firebase Firestore database integration');
         console.log('✅ Real-time data sync across devices');
         console.log('✅ Multi-league support via LEAGUE_ID');
@@ -9559,11 +9639,11 @@
             if (state.players.length === 0 && state.courses.length === 0) {
                 setTimeout(() => {
                     const dbType = useFirebase ? 'Firebase (cloud sync enabled! 🌐)' : 'LocalStorage (local only)';
-                    alert(`👋 Welcome to Golf League v8.2!\\n\\nDatabase: ${dbType}\\nLeague ID: ${LEAGUE_ID}\\n\\nTo get started:\\n1. Add Players (Admin → Players)\\n2. Add a Course (Admin → Courses)\\n3. Create Teams (Admin → Teams)\\n4. Start a Round!`);
+                    alert(`👋 Welcome to Golf League v8.3!\\n\\nDatabase: ${dbType}\\nLeague ID: ${LEAGUE_ID}\\n\\nTo get started:\\n1. Add Players (Admin → Players)\\n2. Add a Course (Admin → Courses)\\n3. Create Teams (Admin → Teams)\\n4. Start a Round!`);
                 }, 500);
             } else {
                 const dbType = useFirebase ? '☁️ Firebase' : '💾 LocalStorage';
-                notify(`✅ v8.2 Ready! (${dbType})`);
+                notify(`✅ v8.3 Ready! (${dbType})`);
             }
         });
     </script>
