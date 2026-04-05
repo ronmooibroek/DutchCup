@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#FF9A00">
@@ -6275,7 +6276,8 @@
                 const groupReversed = [...group].reverse();
                 
                 // Calculate total players for display
-                const totalPlayers = playerGroups.flat().length + top3Players.length;
+                const totalGroupPlayers = playerGroups.reduce((sum, group) => sum + group.length, 0);
+                const totalPlayers = totalGroupPlayers + top3Players.length;
                 
                 html += `
                     <div style="animation:slideUp 0.8s ease-out;max-width:900px;width:100%;">
@@ -6367,7 +6369,8 @@
                 const isFirstTop = playerIndex === 0;
                 const isLastTop = playerIndex === top3Players.length - 1;
                 const previousSlideIndex = isFirstTop ? (playerGroupSlidesStart + playerGroups.length - 1) : (currentSlide - 1);
-                const totalPlayers = playerGroups.flat().length + top3Players.length;
+                const totalGroupPlayers = playerGroups.reduce((sum, group) => sum + group.length, 0);
+                const totalPlayers = totalGroupPlayers + top3Players.length;
                 const medal = player.position === totalPlayers ? '🥇' : 
                              player.position === totalPlayers - 1 ? '🥈' : 
                              player.position === totalPlayers - 2 ? '🥉' : '';
@@ -9842,33 +9845,6 @@
                         const historicalStdDev = Math.sqrt(variance);
                         const weight = Math.min(0.5, team.pointsHistory.length * 0.1);
                         finalStdDev = handicapBasedStdDev * (1 - weight) + historicalStdDev * weight;
-                        if (finalStdDev < 10) finalStdDev = 10;
-                    }
-                    
-                    team.avgPerRound = historicalMean;
-                    team.stdDev = finalStdDev;
-                });
-                
-                // Monte Carlo simulation
-                const normalRandom = (mean, stdDev) => {
-                    const u1 = Math.random();
-                    const u2 = Math.random();
-                    const z0 = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
-                    return z0 * stdDev + mean;
-                };
-                
-                const numSimulations = 10000;
-                const winCounts = {};
-                
-                for (let sim = 0; sim < numSimulations; sim++) {
-                    const finalTotals = {};
-                    
-                    Object.keys(stats).forEach(teamId => {
-                        const team = stats[teamId];
-                        let projectedTotal = team.currentPoints;
-                        
-                        for (let r = 0; r < totalRemaining; r++) {
-                            const simulatedScore = normalRandom(team.avgPerRound, team.stdDev);
                         if (finalStdDev < 10) finalStdDev = 10;
                     }
                     
