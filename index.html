@@ -6088,8 +6088,8 @@
                     }
                 });
                 
-                // Sort current standings by points (lowest to highest for reveal)
-                const leaderboard = currentStandings.sort((a, b) => a.points - b.points); // Ascending for dramatic reveal
+                // Sort current standings by points (highest to lowest)
+                const leaderboard = currentStandings.sort((a, b) => b.points - a.points); // Descending - 1st place at index 0
                 
                 // Get most recent round info
                 const mostRecentDate = new Date(mostRecentRound.timestamp || mostRecentRound.id);
@@ -7286,6 +7286,25 @@
                     }
                 };
                 
+                // Setup keyboard navigation
+                window.presentationKeyHandler = (e) => {
+                    if (!presentationState.active) return;
+                    
+                    if (e.key === 'ArrowRight' || e.key === 'Right') {
+                        e.preventDefault();
+                        nextPresentationSlide();
+                    } else if (e.key === 'ArrowLeft' || e.key === 'Left') {
+                        e.preventDefault();
+                        previousPresentationSlide();
+                    } else if (e.key === 'Escape') {
+                        e.preventDefault();
+                        closePresentationMode();
+                    }
+                };
+                
+                // Add keyboard event listener
+                document.addEventListener('keydown', window.presentationKeyHandler);
+                
                 // Render presentation
                 renderPresentation();
                 
@@ -8290,9 +8309,10 @@
                 `;
             } else if (currentSlide >= teamSlidesStartIndex && currentSlide < teamSlidesStartIndex + teamStandings.length) {
                 // TEAM REVEAL SLIDES - 75/25 SPLIT LAYOUT
-                const teamIndex = currentSlide - teamSlidesStartIndex;
-                const team = teamStandings[teamIndex];
-                const position = teamStandings.length - teamIndex; // Reverse for ranking
+                // Show teams in reverse order (last to first) for dramatic reveal
+                const reverseIndex = teamStandings.length - 1 - (currentSlide - teamSlidesStartIndex);
+                const team = teamStandings[reverseIndex];
+                const position = reverseIndex + 1; // Position based on descending sorted array
                 
                 if (team) {
                     const isFirst = position === 1;
@@ -8302,14 +8322,14 @@
                     const previousPosition = previousStandings.findIndex(t => t.id === team.id) + 1;
                     const positionChange = previousPosition > 0 ? previousPosition - position : 0;
                     
-                    // Filter standings to only show revealed teams (teams 0 through teamIndex)
-                    const revealedTeams = teamStandings.slice(0, teamIndex + 1);
+                    // Filter standings to show all teams revealed so far (from last to current in descending array)
+                    const numRevealed = currentSlide - teamSlidesStartIndex + 1;
+                    const revealedTeams = teamStandings.slice(teamStandings.length - numRevealed);
                     const sortedRevealed = [...revealedTeams].sort((a, b) => b.points - a.points);
                     
-                    // Create a map of final positions (from all teams sorted by points)
-                    const allTeamsSorted = [...teamStandings].sort((a, b) => b.points - a.points);
+                    // teamStandings is already sorted descending, so we can use it directly for positions
                     const finalPositions = {};
-                    allTeamsSorted.forEach((t, idx) => {
+                    teamStandings.forEach((t, idx) => {
                         finalPositions[t.id] = idx + 1; // Position is 1-indexed
                     });
                     
@@ -9120,6 +9140,11 @@
                 presentationDiv.remove();
             }
             presentationState.active = false;
+            
+            // Remove keyboard event listener
+            if (window.presentationKeyHandler) {
+                document.removeEventListener('keydown', window.presentationKeyHandler);
+            }
         };
         
         window.showFunAwardScorecard = (playerName) => {
