@@ -15,6 +15,90 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
     
     <style>
+        /* ========================================
+           DESIGN SYSTEM - Country Club Modern
+           ======================================== */
+        
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        :root {
+            /* Color Palette - Golf Course Inspired */
+            --color-grass-dark: #1a4d2e;
+            --color-grass: #2d5f3f;
+            --color-grass-light: #3a7850;
+            --color-fairway: #4a9d5f;
+            --color-green: #5cb574;
+            
+            --color-sand: #d4a574;
+            --color-sand-light: #e8c9a0;
+            
+            --color-earth: #8b7355;
+            --color-leather: #6b563f;
+            
+            --color-gold: #d4a054;
+            --color-gold-bright: #f4c55e;
+            --color-trophy: #ffd700;
+            
+            --color-cream: #faf8f3;
+            --color-ivory: #f5f3ed;
+            --color-scorecard: #fffef8;
+            
+            --color-slate: #2c3640;
+            --color-slate-light: #4a5568;
+            --color-text-primary: #1a202c;
+            --color-text-secondary: #64748b;
+            --color-text-muted: #94a3b8;
+            
+            --color-danger: #dc2626;
+            --color-success: #059669;
+            --color-warning: #d97706;
+            
+            /* Typography Scale */
+            --font-display: 'Playfair Display', Georgia, serif;
+            --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            
+            --text-xs: 0.75rem;      /* 12px */
+            --text-sm: 0.875rem;     /* 14px */
+            --text-base: 1rem;       /* 16px */
+            --text-lg: 1.125rem;     /* 18px */
+            --text-xl: 1.25rem;      /* 20px */
+            --text-2xl: 1.5rem;      /* 24px */
+            --text-3xl: 1.875rem;    /* 30px */
+            --text-4xl: 2.25rem;     /* 36px */
+            --text-5xl: 3rem;        /* 48px */
+            --text-6xl: 3.75rem;     /* 60px */
+            
+            /* Spacing Scale */
+            --space-xs: 0.25rem;     /* 4px */
+            --space-sm: 0.5rem;      /* 8px */
+            --space-md: 1rem;        /* 16px */
+            --space-lg: 1.5rem;      /* 24px */
+            --space-xl: 2rem;        /* 32px */
+            --space-2xl: 3rem;       /* 48px */
+            --space-3xl: 4rem;       /* 64px */
+            
+            /* Elevation */
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            
+            /* Border Radius */
+            --radius-sm: 0.375rem;   /* 6px */
+            --radius-md: 0.5rem;     /* 8px */
+            --radius-lg: 0.75rem;    /* 12px */
+            --radius-xl: 1rem;       /* 16px */
+            --radius-2xl: 1.5rem;    /* 24px */
+            --radius-full: 9999px;
+            
+            /* Transitions */
+            --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+            --transition-base: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+            --transition-slow: 350ms cubic-bezier(0.4, 0, 0.2, 1);
+            --transition-bounce: 500ms cubic-bezier(0.68, -0.55, 0.265, 1.55);
+        }
+        
         * {
             margin: 0;
             padding: 0;
@@ -23,141 +107,329 @@
         }
         
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #FFB84D 0%, #FF9A00 100%);
+            font-family: var(--font-body);
+            font-size: var(--text-base);
+            color: var(--color-text-primary);
+            background: linear-gradient(135deg, var(--color-grass-dark) 0%, var(--color-grass) 100%);
+            background-attachment: fixed;
             min-height: 100vh;
-            padding: 16px;
-            padding-bottom: 80px;
+            line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
         }
         
-        .header {
-            text-align: center;
-            color: white;
-            margin-bottom: 24px;
-            padding: 20px;
+        /* Typography */
+        h1, h2, h3, h4, h5, h6 {
+            font-family: var(--font-display);
+            font-weight: 700;
+            line-height: 1.2;
+            color: var(--color-text-primary);
         }
         
-        .header h1 {
-            font-size: 32px;
-            margin-bottom: 8px;
-        }
+        h1 { font-size: var(--text-5xl); margin-bottom: var(--space-lg); }
+        h2 { font-size: var(--text-4xl); margin-bottom: var(--space-md); }
+        h3 { font-size: var(--text-3xl); margin-bottom: var(--space-md); }
+        h4 { font-size: var(--text-2xl); margin-bottom: var(--space-sm); }
         
+        /* Enhanced Card Component */
         .card {
-            background: white;
-            border-radius: 16px;
-            padding: 20px;
-            margin-bottom: 16px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            background: var(--color-cream);
+            border-radius: var(--radius-2xl);
+            padding: var(--space-xl);
+            margin-bottom: var(--space-lg);
+            box-shadow: var(--shadow-xl);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            transition: all var(--transition-base);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--color-gold) 0%, var(--color-gold-bright) 100%);
+            opacity: 0;
+            transition: opacity var(--transition-base);
+        }
+        
+        .card:hover::before {
+            opacity: 1;
+        }
+        
+        .card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-2xl);
         }
         
         .card h2 {
-            color: #FF9A00;
-            margin-bottom: 16px;
-            font-size: 24px;
+            color: var(--color-grass-dark);
+            font-size: var(--text-3xl);
+            margin-bottom: var(--space-lg);
+            font-weight: 800;
         }
         
+        /* Premium Button Styles */
+        .btn-primary {
+            background: linear-gradient(135deg, var(--color-grass) 0%, var(--color-grass-dark) 100%);
+            color: white;
+            border: none;
+            padding: var(--space-md) var(--space-xl);
+            border-radius: var(--radius-lg);
+            font-size: var(--text-base);
+            font-weight: 600;
+            font-family: var(--font-body);
+            cursor: pointer;
+            transition: all var(--transition-base);
+            box-shadow: var(--shadow-lg);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .btn-primary::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+            transition: left var(--transition-slow);
+        }
+        
+        .btn-primary:hover::before {
+            left: 100%;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-xl);
+        }
+        
+        .btn-primary:active {
+            transform: translateY(0);
+        }
+        
+        .btn-secondary {
+            background: var(--color-cream);
+            color: var(--color-grass-dark);
+            border: 2px solid var(--color-grass-dark);
+            padding: var(--space-md) var(--space-xl);
+            border-radius: var(--radius-lg);
+            font-size: var(--text-base);
+            font-weight: 600;
+            cursor: pointer;
+            transition: all var(--transition-base);
+        }
+        
+        .btn-secondary:hover {
+            background: var(--color-grass-dark);
+            color: white;
+            transform: translateY(-2px);
+        }
+        
+        /* Sophisticated List Items */
         .list-item {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 16px;
-            border: 1px solid #e5e7eb;
-            border-radius: 12px;
-            margin-bottom: 12px;
+            padding: var(--space-lg);
+            background: white;
+            border: 1px solid rgba(0,0,0,0.05);
+            border-radius: var(--radius-xl);
+            margin-bottom: var(--space-md);
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all var(--transition-base);
+            box-shadow: var(--shadow-sm);
         }
         
         .list-item:hover {
-            background: #f9fafb;
-            transform: translateY(-2px);
+            background: var(--color-scorecard);
+            transform: translateX(4px);
+            box-shadow: var(--shadow-md);
+            border-color: var(--color-gold);
         }
         
-        .btn-primary {
-            background: #FF9A00;
-            color: white;
-            border: none;
-            padding: 14px 24px;
-            border-radius: 12px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
+        .list-item:active {
+            transform: translateX(2px) translateY(1px);
         }
         
-        .btn-primary:hover {
-            background: #ea580c;
-        }
-        
-        .btn-secondary {
-            background: #6b7280;
-            color: white;
-            border: none;
-            padding: 14px 24px;
-            border-radius: 12px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-        }
-        
+        /* Enhanced Back Button */
         .back-btn {
-            background: rgba(255,255,255,0.2);
+            background: rgba(255,255,255,0.15);
             color: white;
-            border: 2px solid white;
-            padding: 10px 20px;
-            border-radius: 12px;
-            font-size: 14px;
+            border: 2px solid rgba(255,255,255,0.5);
+            padding: var(--space-md) var(--space-xl);
+            border-radius: var(--radius-lg);
+            font-size: var(--text-sm);
             font-weight: 600;
             cursor: pointer;
-            margin-bottom: 16px;
+            margin-bottom: var(--space-md);
+            backdrop-filter: blur(10px);
+            transition: all var(--transition-base);
         }
         
+        .back-btn:hover {
+            background: rgba(255,255,255,0.25);
+            border-color: rgba(255,255,255,0.8);
+            transform: translateX(-4px);
+        }
+        
+        /* Scorecard-Inspired Grid */
         .score-grid {
             display: grid;
             grid-template-columns: repeat(9, 1fr);
-            gap: 4px;
-            margin-bottom: 8px;
+            gap: var(--space-xs);
+            margin-bottom: var(--space-sm);
+            background: var(--color-scorecard);
+            padding: var(--space-md);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-md);
         }
         
+        /* Premium Input Fields */
         .score-input {
             width: 100%;
-            padding: 8px 4px;
-            border-radius: 6px;
+            padding: var(--space-md) var(--space-sm);
+            border-radius: var(--radius-md);
             text-align: center;
-            font-size: 16px;
+            font-size: var(--text-lg);
             font-weight: 700;
+            font-family: var(--font-body);
+            border: 2px solid var(--color-ivory);
+            background: white;
+            transition: all var(--transition-base);
         }
         
         .score-input:focus {
             outline: none;
-            border-color: #FF9A00;
+            border-color: var(--color-gold);
+            box-shadow: 0 0 0 3px rgba(212, 160, 84, 0.1);
+            transform: scale(1.05);
         }
         
+        /* Elevated Toast Notifications */
         #toast {
             position: fixed;
-            bottom: 20px;
+            bottom: var(--space-xl);
             left: 50%;
             transform: translateX(-50%);
-            background: #1f2937;
+            background: var(--color-grass-dark);
             color: white;
-            padding: 12px 24px;
-            border-radius: 12px;
+            padding: var(--space-md) var(--space-xl);
+            border-radius: var(--radius-xl);
             display: none;
             z-index: 1000;
+            box-shadow: var(--shadow-2xl);
+            font-weight: 600;
+            font-size: var(--text-base);
+            border: 1px solid rgba(255,255,255,0.2);
+            backdrop-filter: blur(10px);
+            animation: slideUp 0.3s ease-out;
         }
         
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateX(-50%) translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(-50%) translateY(0);
+            }
+        }
+        
+        /* Sophisticated Points Badges */
         .points-badge {
             display: inline-block;
-            padding: 4px 8px;
-            border-radius: 6px;
+            padding: var(--space-xs) var(--space-md);
+            border-radius: var(--radius-full);
             font-weight: 700;
-            font-size: 11px;
+            font-size: var(--text-xs);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            box-shadow: var(--shadow-sm);
         }
         
-        .pts-birdie { background: #d1fae5; color: #065f46; }
-        .pts-par { background: #dbeafe; color: #1e40af; }
-        .pts-bogey { background: #f3f4f6; color: #374151; }
-        .pts-0 { background: #fee2e2; color: #b91c1c; }
+        .pts-birdie { 
+            background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+            color: #065f46;
+            border: 1px solid #6ee7b7;
+        }
+        
+        .pts-par { 
+            background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+            color: #1e40af;
+            border: 1px solid #93c5fd;
+        }
+        
+        .pts-bogey { 
+            background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+            color: #374151;
+            border: 1px solid #d1d5db;
+        }
+        
+        .pts-0 { 
+            background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+            color: #b91c1c;
+            border: 1px solid #fca5a5;
+        }
+        
+        /* Elegant Animations */
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.7;
+            }
+        }
+        
+        @keyframes shimmer {
+            0% {
+                background-position: -1000px 0;
+            }
+            100% {
+                background-position: 1000px 0;
+            }
+        }
+        
+        /* Loading State */
+        .loading {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            :root {
+                --text-5xl: 2.25rem;
+                --text-4xl: 1.875rem;
+                --text-3xl: 1.5rem;
+            }
+            
+            .card {
+                padding: var(--space-lg);
+            }
+            
+            body {
+                padding: var(--space-md);
+                padding-bottom: 80px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -623,17 +895,19 @@
         };
         
         const showHandicapSummary = (handicapChanges) => {
-            const app = document.getElementById('app');
+            // Create modal container
+            const modal = document.createElement('div');
+            modal.id = 'handicap-modal';
+            modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
             
             let html = `
-                <div style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;" onclick="closeHandicapSummary()">
-                    <div style="background:white;border-radius:12px;max-width:600px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 20px 25px -5px rgba(0,0,0,0.3);" onclick="event.stopPropagation()">
-                        <div style="background:linear-gradient(135deg,#10b981,#059669);color:white;padding:20px;border-radius:12px 12px 0 0;">
-                            <h2 style="margin:0;font-size:24px;">✅ Round Saved!</h2>
-                            <p style="margin:8px 0 0;opacity:0.9;">Handicap Updates</p>
-                        </div>
-                        
-                        <div style="padding:20px;">
+                <div style="background:white;border-radius:12px;max-width:600px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 20px 25px -5px rgba(0,0,0,0.3);">
+                    <div style="background:linear-gradient(135deg,#10b981,#059669);color:white;padding:20px;border-radius:12px 12px 0 0;">
+                        <h2 style="margin:0;font-size:24px;">✅ Round Saved!</h2>
+                        <p style="margin:8px 0 0;opacity:0.9;">Handicap Updates</p>
+                    </div>
+                    
+                    <div style="padding:20px;">
             `;
             
             handicapChanges.forEach(change => {
@@ -703,21 +977,25 @@
             });
             
             html += `
-                        </div>
-                        
-                        <div style="padding:0 20px 20px;">
-                            <button onclick="closeHandicapSummary()" class="btn-primary" style="width:100%;font-size:16px;padding:16px;">
-                                ✅ Continue
-                            </button>
-                        </div>
+                    </div>
+                    
+                    <div style="padding:0 20px 20px;">
+                        <button onclick="closeHandicapSummary()" class="btn-primary" style="width:100%;font-size:16px;padding:16px;">
+                            ✅ Continue
+                        </button>
                     </div>
                 </div>
             `;
             
-            app.innerHTML += html;
+            modal.innerHTML = html;
+            document.body.appendChild(modal);
         };
         
         window.closeHandicapSummary = () => {
+            const modal = document.getElementById('handicap-modal');
+            if (modal) {
+                modal.remove();
+            }
             navigate('leaderboard');
         };
         
@@ -2660,36 +2938,36 @@
                                     const teamColor = stateTeam && stateTeam.color ? stateTeam.color : '#3b82f6';
                                     
                                     return `
-                                    <div class="list-item" style="background:${teamColor}20;border-left:4px solid ${teamColor};display:block;padding:8px;margin-bottom:6px;">
+                                    <div class="list-item" onclick="navigateToTeamStats(${team.id})" style="background:${teamColor}20;border-left:4px solid ${teamColor};display:block;padding:8px;margin-bottom:6px;cursor:pointer;">
                                         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
                                             <div style="flex:1;">
                                                 <strong style="font-size:22px;">#${idx + 1} ${team.name}</strong>
                                                 <small style="color:#6b7280;font-size:15px;margin-left:8px;">${team.rounds}R • ${team.wins}W • ${team.avg.toFixed(1)}avg</small>
                                             </div>
-                                            <strong style="font-size:33px;color:#FF9A00;">${team.points}</strong>
+                                            <strong style="font-size:33px;color:white;background:${teamColor};padding:8px 16px;border-radius:8px;">${team.points}</strong>
                                         </div>
                                         
                                         <div style="background:rgba(255,255,255,0.5);padding:6px;border-radius:4px;">
                                             <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;">
-                                                <div style="background:white;padding:4px;border-radius:3px;text-align:center;">
-                                                    <div style="font-size:12px;color:#059669;font-weight:600;">⛳</div>
-                                                    <div style="font-size:20px;font-weight:700;color:#FF9A00;">${team.strokePoints.toFixed(1)}</div>
+                                                <div style="background:${teamColor};padding:4px;border-radius:3px;text-align:center;">
+                                                    <div style="font-size:12px;color:rgba(255,255,255,0.8);font-weight:600;">⛳</div>
+                                                    <div style="font-size:20px;font-weight:700;color:white;">${team.strokePoints.toFixed(1)}</div>
                                                 </div>
-                                                <div style="background:white;padding:4px;border-radius:3px;text-align:center;">
-                                                    <div style="font-size:12px;color:#7c3aed;font-weight:600;">🎯 BBB</div>
-                                                    <div style="font-size:20px;font-weight:700;color:#FF9A00;">${team.bbbPoints.toFixed(1)}</div>
+                                                <div style="background:${teamColor};padding:4px;border-radius:3px;text-align:center;">
+                                                    <div style="font-size:12px;color:rgba(255,255,255,0.8);font-weight:600;">🎯 BBB</div>
+                                                    <div style="font-size:20px;font-weight:700;color:white;">${team.bbbPoints.toFixed(1)}</div>
                                                 </div>
-                                                <div style="background:white;padding:4px;border-radius:3px;text-align:center;">
-                                                    <div style="font-size:12px;color:#ca8a04;font-weight:600;">⚪</div>
-                                                    <div style="font-size:20px;font-weight:700;color:#FF9A00;">${team.ballPoints.toFixed(1)}</div>
+                                                <div style="background:${teamColor};padding:4px;border-radius:3px;text-align:center;">
+                                                    <div style="font-size:12px;color:rgba(255,255,255,0.8);font-weight:600;">⚪</div>
+                                                    <div style="font-size:20px;font-weight:700;color:white;">${team.ballPoints.toFixed(1)}</div>
                                                 </div>
-                                                <div style="background:white;padding:4px;border-radius:3px;text-align:center;">
-                                                    <div style="font-size:12px;color:#0284c7;font-weight:600;">🎯</div>
-                                                    <div style="font-size:20px;font-weight:700;color:#FF9A00;">${team.ctpPoints.toFixed(1)}</div>
+                                                <div style="background:${teamColor};padding:4px;border-radius:3px;text-align:center;">
+                                                    <div style="font-size:12px;color:rgba(255,255,255,0.8);font-weight:600;">🎯</div>
+                                                    <div style="font-size:20px;font-weight:700;color:white;">${team.ctpPoints.toFixed(1)}</div>
                                                 </div>
-                                                <div style="background:white;padding:4px;border-radius:3px;text-align:center;">
-                                                    <div style="font-size:12px;color:#dc2626;font-weight:600;">🏆</div>
-                                                    <div style="font-size:20px;font-weight:700;color:#FF9A00;">${team.extra9Points.toFixed(1)}</div>
+                                                <div style="background:${teamColor};padding:4px;border-radius:3px;text-align:center;">
+                                                    <div style="font-size:12px;color:rgba(255,255,255,0.8);font-weight:600;">🏆</div>
+                                                    <div style="font-size:20px;font-weight:700;color:white;">${team.extra9Points.toFixed(1)}</div>
                                                 </div>
                                             </div>
                                         </div>
@@ -3373,6 +3651,18 @@
                     }))
                     .sort((a, b) => b.totalPoints - a.totalPoints);
                 
+                // Filter by selected team if one is set
+                let filteredPlayers = sortedPlayers;
+                let selectedTeam = null;
+                if (state.selectedTeamFilter) {
+                    selectedTeam = state.teams.find(t => t.id === state.selectedTeamFilter);
+                    if (selectedTeam) {
+                        filteredPlayers = sortedPlayers.filter(player => 
+                            selectedTeam.players && selectedTeam.players.includes(player.id)
+                        );
+                    }
+                }
+                
                 app.innerHTML = `
                     <button class="back-btn" onclick="navigate('home')">← Back</button>
                     <div class="card">
@@ -3383,9 +3673,22 @@
                                 <br><small style="color:#6b7280;">${eventRounds.length} round${eventRounds.length === 1 ? '' : 's'} played</small>
                             </div>
                         ` : ''}
-                        <p style="color:#6b7280;margin-bottom:20px;">Individual performance in this event</p>
                         
-                        ${sortedPlayers.map((player, idx) => {
+                        ${selectedTeam ? `
+                            <div style="background:${selectedTeam.color}20;border:2px solid ${selectedTeam.color};padding:12px;border-radius:8px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;">
+                                <div>
+                                    <strong style="color:${selectedTeam.color};font-size:16px;">👥 Filtered: ${selectedTeam.name}</strong>
+                                    <br><small style="color:#6b7280;">Showing ${filteredPlayers.length} player${filteredPlayers.length === 1 ? '' : 's'}</small>
+                                </div>
+                                <button onclick="clearTeamFilter()" class="btn-secondary" style="padding:8px 16px;font-size:14px;">
+                                    ✕ Clear Filter
+                                </button>
+                            </div>
+                        ` : `
+                            <p style="color:#6b7280;margin-bottom:20px;">Individual performance in this event</p>
+                        `}
+                        
+                        ${filteredPlayers.map((player, idx) => {
                             // Find player's team to get color
                             const playerTeam = state.teams.find(t => 
                                 t.players && t.players.includes(player.id)
@@ -3399,38 +3702,38 @@
                                         <strong style="font-size:20px;">#${idx + 1} ${player.name}</strong>${playerTeam ? ` <span style="color:${teamColor};font-size:14px;">• ${playerTeam.name}</span>` : ''}<br>
                                         <small>Handicap: ${player.handicap} • ${player.rounds} round${player.rounds === 1 ? '' : 's'} • ${player.avgPoints.toFixed(1)} avg pts • ${player.totalGrossStrokes} gross strokes</small>
                                     </div>
-                                    <strong style="font-size:28px;color:#FF9A00;">${player.totalPoints}</strong>
+                                    <strong style="font-size:28px;color:white;background:${teamColor};padding:6px 12px;border-radius:6px;">${player.totalPoints}</strong>
                                 </div>
                                 
                                 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(95px,1fr));gap:8px;">
-                                    <div style="background:#ecfdf5;padding:8px;border-radius:6px;">
-                                        <div style="font-size:10px;color:#065f46;font-weight:600;margin-bottom:3px;">⛳ STROKE</div>
-                                        <div style="font-size:18px;font-weight:700;color:#FF9A00;">${player.totalStrokePoints}</div>
-                                        <div style="font-size:10px;color:#6b7280;">${player.avgStroke.toFixed(1)} avg</div>
+                                    <div style="background:${teamColor};padding:8px;border-radius:6px;">
+                                        <div style="font-size:10px;color:rgba(255,255,255,0.8);font-weight:600;margin-bottom:3px;">⛳ STROKE</div>
+                                        <div style="font-size:18px;font-weight:700;color:white;">${player.totalStrokePoints}</div>
+                                        <div style="font-size:10px;color:rgba(255,255,255,0.7);">${player.avgStroke.toFixed(1)} avg</div>
                                     </div>
                                     
-                                    <div style="background:#e0f2fe;padding:8px;border-radius:6px;">
-                                        <div style="font-size:10px;color:#0c4a6e;font-weight:600;margin-bottom:3px;">🎯 CTP</div>
-                                        <div style="font-size:18px;font-weight:700;color:#0284c7;">${player.totalCTPPoints}</div>
-                                        <div style="font-size:10px;color:#6b7280;">${(player.totalCTPPoints / state.settings.ctpPoints).toFixed(0)} wins</div>
+                                    <div style="background:${teamColor};padding:8px;border-radius:6px;">
+                                        <div style="font-size:10px;color:rgba(255,255,255,0.8);font-weight:600;margin-bottom:3px;">🎯 CTP</div>
+                                        <div style="font-size:18px;font-weight:700;color:white;">${player.totalCTPPoints}</div>
+                                        <div style="font-size:10px;color:rgba(255,255,255,0.7);">${(player.totalCTPPoints / state.settings.ctpPoints).toFixed(0)} wins</div>
                                     </div>
                                     
-                                    <div style="background:#fae8ff;padding:8px;border-radius:6px;">
-                                        <div style="font-size:10px;color:#6b21a8;font-weight:600;margin-bottom:3px;">🎯 BBB</div>
-                                        <div style="font-size:18px;font-weight:700;color:#8b5cf6;">${player.totalBBBPoints}</div>
-                                        <div style="font-size:10px;color:#6b7280;">${player.totalBBB} BBB</div>
+                                    <div style="background:${teamColor};padding:8px;border-radius:6px;">
+                                        <div style="font-size:10px;color:rgba(255,255,255,0.8);font-weight:600;margin-bottom:3px;">🎯 BBB</div>
+                                        <div style="font-size:18px;font-weight:700;color:white;">${player.totalBBBPoints}</div>
+                                        <div style="font-size:10px;color:rgba(255,255,255,0.7);">${player.totalBBB} BBB</div>
                                     </div>
                                     
-                                    <div style="background:#fef3c7;padding:8px;border-radius:6px;">
-                                        <div style="font-size:10px;color:#92400e;font-weight:600;margin-bottom:3px;">⚪ BALLS</div>
-                                        <div style="font-size:18px;font-weight:700;color:#d97706;">${player.totalBallPoints}</div>
-                                        <div style="font-size:10px;color:#6b7280;">${player.totalBalls} kept</div>
+                                    <div style="background:${teamColor};padding:8px;border-radius:6px;">
+                                        <div style="font-size:10px;color:rgba(255,255,255,0.8);font-weight:600;margin-bottom:3px;">⚪ BALLS</div>
+                                        <div style="font-size:18px;font-weight:700;color:white;">${player.totalBallPoints}</div>
+                                        <div style="font-size:10px;color:rgba(255,255,255,0.7);">${player.totalBalls} kept</div>
                                     </div>
                                     
-                                    <div style="background:#fee2e2;padding:8px;border-radius:6px;">
-                                        <div style="font-size:10px;color:#991b1b;font-weight:600;margin-bottom:3px;">🏆 EXTRA9</div>
-                                        <div style="font-size:18px;font-weight:700;color:#dc2626;">${player.totalExtra9Points}</div>
-                                        <div style="font-size:10px;color:#6b7280;">${(player.totalExtra9Points / state.settings.extra9Points).toFixed(0)} wins</div>
+                                    <div style="background:${teamColor};padding:8px;border-radius:6px;">
+                                        <div style="font-size:10px;color:rgba(255,255,255,0.8);font-weight:600;margin-bottom:3px;">🏆 EXTRA9</div>
+                                        <div style="font-size:18px;font-weight:700;color:white;">${player.totalExtra9Points}</div>
+                                        <div style="font-size:10px;color:rgba(255,255,255,0.7);">${(player.totalExtra9Points / state.settings.extra9Points).toFixed(0)} wins</div>
                                     </div>
                                 </div>
                             </div>
@@ -4904,6 +5207,17 @@
             state.view = view;
             render();
         };
+        
+        window.navigateToTeamStats = (teamId) => {
+            state.selectedTeamFilter = teamId;
+            state.view = 'stats';
+            render();
+        };
+        
+        window.clearTeamFilter = () => {
+            state.selectedTeamFilter = null;
+            render();
+        };
 
         window.toggleAdminMode = () => {
             // If already in admin mode, log out
@@ -5788,6 +6102,9 @@
                     const teamColor = stateTeam ? (stateTeam.color || '#3b82f6') : '#3b82f6';
                     
                     team.players.forEach((player, playerIdx) => {
+                        // Calculate gross score
+                        const grossScore = player.scores ? player.scores.reduce((sum, score) => sum + (score || 0), 0) : 0;
+                        
                         // Calculate all point categories
                         const strokePoints = player.strokePoints !== undefined 
                             ? player.strokePoints 
@@ -5824,7 +6141,8 @@
                             extra9Points: extra9Points,
                             ctpPoints: ctpPoints,
                             totalPoints: totalPoints,
-                            handicap: player.handicap || 0
+                            handicap: player.handicap || 0,
+                            grossScore: grossScore
                         });
                     });
                 });
@@ -6105,6 +6423,49 @@
                 // ALWAYS show handicap screen
                 const hasHandicapSlide = true;
                 
+                // Calculate top 3 lowest net scores across entire event
+                const eventNetScores = [];
+                eventRounds.forEach(round => {
+                    round.teams.forEach((team, teamIdx) => {
+                        const stateTeam = state.teams.find(t => t.id === team.teamId);
+                        team.players.forEach(player => {
+                            if (player.scores && round.pars && round.handicaps) {
+                                // Calculate gross score
+                                const grossScore = player.scores.reduce((sum, score) => sum + (score || 0), 0);
+                                
+                                // Calculate net score (gross - handicap strokes based on course rating)
+                                let netScore = grossScore;
+                                player.scores.forEach((score, holeIdx) => {
+                                    if (score && round.handicaps[holeIdx]) {
+                                        const holeHandicap = round.handicaps[holeIdx];
+                                        const strokes = player.handicap >= holeHandicap ? 1 : 0;
+                                        netScore -= strokes;
+                                    }
+                                });
+                                
+                                eventNetScores.push({
+                                    playerName: player.name,
+                                    playerId: player.id,
+                                    teamName: stateTeam ? stateTeam.name : 'Unknown',
+                                    teamColor: stateTeam ? (stateTeam.color || '#3b82f6') : '#3b82f6',
+                                    netScore: netScore,
+                                    grossScore: grossScore,
+                                    handicap: player.handicap || 0,
+                                    courseName: round.courseName,
+                                    date: new Date(round.timestamp || round.id).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})
+                                });
+                            }
+                        });
+                    });
+                });
+                
+                // Sort by net score (lowest first) and take top 3
+                eventNetScores.sort((a, b) => a.netScore - b.netScore);
+                const top3EventNetScores = eventNetScores.slice(0, 3);
+                
+                // Only show event net scores slide when event is complete (no scheduled rounds)
+                const hasEventNetSlide = !hasScheduledRounds && top3EventNetScores.length > 0;
+                
                 // Find next scheduled round
                 const upcomingRounds = scheduledRounds
                     .map(r => ({...r, timestamp: r.timestamp || r.id}))
@@ -6125,6 +6486,7 @@
                 if (hasExtra9Slide) totalSlides++;
                 if (hasCtpSlide) totalSlides++;
                 totalSlides += leaderboard.length; // Team slides
+                if (hasEventNetSlide) totalSlides++; // Event net scores (only when complete)
                 if (hasHandicapSlide) totalSlides++;
                 if (hasNextRoundSlide) totalSlides++;
                 
@@ -6150,6 +6512,9 @@
                     hasNetSlide: hasNetSlide,
                     hasExtra9Slide: hasExtra9Slide,
                     hasCtpSlide: hasCtpSlide,
+                    // Event net scores
+                    top3EventNetScores: top3EventNetScores,
+                    hasEventNetSlide: hasEventNetSlide,
                     // Handicap changes
                     handicapChanges: handicapChanges,
                     hasHandicapSlide: hasHandicapSlide,
@@ -6184,6 +6549,7 @@
                     eventName, totalRounds, mostRecentRound,
                     netWinner, netTop3, previousNetWinners, extra9Winners, ctpWinners,
                     hasNetSlide, hasExtra9Slide, hasCtpSlide,
+                    top3EventNetScores, hasEventNetSlide,
                     handicapChanges, hasHandicapSlide,
                     nextRound, hasNextRoundSlide
                 } = presentationState;
@@ -6199,6 +6565,7 @@
             const ctpSlideIndex = hasCtpSlide ? slideIndex++ : -1;
             const teamSlidesStartIndex = slideIndex;
             slideIndex += teamStandings.length; // Team slides
+            const eventNetSlideIndex = hasEventNetSlide ? slideIndex++ : -1;
             const handicapSlideIndex = hasHandicapSlide ? slideIndex++ : -1;
             const nextRoundSlideIndex = hasNextRoundSlide ? slideIndex++ : -1;
             
@@ -6279,6 +6646,14 @@
                 const totalGroupPlayers = playerGroups.reduce((sum, group) => sum + group.length, 0);
                 const totalPlayers = totalGroupPlayers + top3Players.length;
                 
+                // Determine group nickname based on position
+                const groupNicknames = [
+                    "Room to improve",
+                    "Ok, but need to pick it up", 
+                    "Making an impact"
+                ];
+                const groupNickname = groupNicknames[groupIndex] || "Rising stars";
+                
                 html += `
                     <div style="animation:slideUp 0.8s ease-out;max-width:900px;width:100%;">
                         <h1 style="color:white;font-size:48px;margin:0 0 16px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
@@ -6287,8 +6662,11 @@
                         <p style="color:#a5b4fc;font-size:24px;margin:0 0 12px;">
                             ${mostRecentRound.courseName}
                         </p>
-                        <p style="color:#818cf8;font-size:18px;margin:0 0 40px;">
+                        <p style="color:#818cf8;font-size:18px;margin:0 0 12px;">
                             Group ${groupIndex + 1} of ${playerGroups.length} • ${totalPlayers} total players
+                        </p>
+                        <p style="color:#fbbf24;font-size:22px;font-weight:700;margin:0 0 40px;text-shadow:0 2px 10px rgba(0,0,0,0.3);">
+                            "${groupNickname}"
                         </p>
                         
                         <div style="background:rgba(255,255,255,0.1);border:3px solid rgba(255,255,255,0.2);border-radius:20px;padding:30px;">
@@ -6299,6 +6677,13 @@
                                              player.position === totalPlayers - 3 ? '🏅' : '';
                                 return `
                                 <div style="background:rgba(255,255,255,0.08);border:2px solid ${player.teamColor}40;border-radius:12px;padding:16px;margin-bottom:16px;">
+                                    ${player.isPersonalRecord ? `
+                                        <div style="background:linear-gradient(135deg, #10b981 0%, #059669 100%);border:2px solid #10b981;border-radius:8px;padding:12px;margin-bottom:12px;text-align:center;">
+                                            <div style="color:white;font-size:16px;font-weight:700;">
+                                                🎉 New Personal Record!
+                                            </div>
+                                        </div>
+                                    ` : ''}
                                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
                                         <div style="display:flex;align-items:center;gap:12px;flex:1;">
                                             ${medal ? `<div style="font-size:32px;">${medal}</div>` : ''}
@@ -6308,15 +6693,16 @@
                                             </div>
                                             <div style="flex:1;">
                                                 <div style="color:white;font-size:18px;font-weight:700;margin-bottom:4px;">${player.playerName}</div>
-                                                <div style="display:flex;align-items:center;gap:6px;">
+                                                <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
                                                     <div style="width:8px;height:8px;border-radius:50%;background:${player.teamColor};"></div>
                                                     <div style="color:#a5b4fc;font-size:13px;">${player.teamName}</div>
                                                 </div>
+                                                <div style="color:#818cf8;font-size:12px;">Gross: ${player.grossScore || 0}</div>
                                             </div>
                                         </div>
                                         <div style="background:${player.teamColor}20;border:2px solid ${player.teamColor};border-radius:10px;padding:10px;min-width:70px;text-align:center;">
                                             <div style="color:#a5b4fc;font-size:11px;margin-bottom:2px;">Total</div>
-                                            <div style="color:${player.teamColor};font-size:26px;font-weight:700;">${player.totalPoints}</div>
+                                            <div style="color:white;font-size:26px;font-weight:700;">${player.totalPoints}</div>
                                         </div>
                                     </div>
                                     
@@ -6411,6 +6797,7 @@
                                         <div style="width:16px;height:16px;border-radius:50%;background:${player.teamColor};"></div>
                                         <div style="color:#a5b4fc;font-size:24px;">${player.teamName}</div>
                                     </div>
+                                    <div style="color:#818cf8;font-size:18px;margin-bottom:12px;">Gross Score: ${player.grossScore || 0}</div>
                                     ${player.averagePoints !== undefined && player.comparisonToAverage !== 0 ? `
                                         <div style="background:rgba(255,255,255,0.1);border-radius:10px;padding:12px;margin-top:12px;">
                                             <div style="color:${player.comparisonToAverage > 0 ? '#10b981' : '#ef4444'};font-size:18px;font-weight:600;">
@@ -6735,6 +7122,11 @@
                                                      title="Click to view player statistics">
                                                     ${team.points} pts
                                                 </div>
+                                                ${todaysScores[team.id] ? `
+                                                    <div style="color:#10b981;font-size:24px;font-weight:700;margin-top:8px;">
+                                                        +${todaysScores[team.id].total} today
+                                                    </div>
+                                                ` : ''}
                                             </div>
                                         </div>
                                         ${isFirst && !hasScheduledRounds ? `
@@ -6782,9 +7174,9 @@
                                             </div>
                                         ` : '<div></div>'}
                                         
-                                        <!-- Season Totals -->
+                                        <!-- Event Totals -->
                                         <div style="background:rgba(59,130,246,0.2);border:3px solid rgba(59,130,246,0.4);border-radius:12px;padding:20px;">
-                                            <h3 style="color:#60a5fa;font-size:20px;font-weight:700;margin:0 0 16px;">🏆 Season Totals</h3>
+                                            <h3 style="color:#60a5fa;font-size:20px;font-weight:700;margin:0 0 16px;">🏆 Event Totals</h3>
                                             <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
                                                 <div style="background:rgba(255,255,255,0.15);padding:10px;border-radius:8px;text-align:center;">
                                                     <div style="color:#a5b4fc;font-size:12px;font-weight:600;">Stroke</div>
@@ -6885,6 +7277,75 @@
                         </div>
                     `;
                 }
+            } else if (currentSlide === eventNetSlideIndex) {
+                // EVENT NET SCORES SLIDE - Top 3 lowest net scores across entire event
+                html += `
+                    <div style="animation:slideUp 0.8s ease-out;max-width:900px;width:100%;">
+                        <h1 style="color:white;font-size:48px;margin:0 0 16px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
+                            🏆 Event Champions
+                        </h1>
+                        <p style="color:#a5b4fc;font-size:24px;margin:0 0 12px;">
+                            ${eventName}
+                        </p>
+                        <p style="color:#818cf8;font-size:18px;margin:0 0 40px;">
+                            Top 3 Lowest Net Scores • ${totalRounds} round${totalRounds === 1 ? '' : 's'} played
+                        </p>
+                        
+                        <div style="display:flex;flex-direction:column;gap:20px;">
+                            ${top3EventNetScores.map((player, idx) => {
+                                const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉';
+                                const bgGradient = idx === 0 
+                                    ? 'linear-gradient(135deg, rgba(255,215,0,0.2) 0%, rgba(255,215,0,0.1) 100%)'
+                                    : idx === 1 
+                                    ? 'linear-gradient(135deg, rgba(192,192,192,0.2) 0%, rgba(192,192,192,0.1) 100%)'
+                                    : 'linear-gradient(135deg, rgba(205,127,50,0.2) 0%, rgba(205,127,50,0.1) 100%)';
+                                const borderColor = idx === 0 ? '#ffd700' : idx === 1 ? '#c0c0c0' : '#cd7f32';
+                                
+                                return `
+                                    <div style="background:${bgGradient};border:3px solid ${borderColor};border-radius:16px;padding:24px;box-shadow:0 10px 30px rgba(0,0,0,0.3);">
+                                        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;">
+                                            <div style="display:flex;align-items:center;gap:16px;flex:1;">
+                                                <div style="font-size:56px;line-height:1;">${medal}</div>
+                                                <div>
+                                                    <div style="font-size:32px;color:white;font-weight:700;margin-bottom:4px;">
+                                                        ${player.playerName}
+                                                    </div>
+                                                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                                                        <div style="width:10px;height:10px;border-radius:50%;background:${player.teamColor};"></div>
+                                                        <div style="color:#a5b4fc;font-size:16px;">${player.teamName}</div>
+                                                    </div>
+                                                    <div style="color:#818cf8;font-size:14px;">${player.courseName} • ${player.date}</div>
+                                                </div>
+                                            </div>
+                                            <div style="text-align:center;">
+                                                <div style="background:rgba(255,255,255,0.15);border-radius:12px;padding:16px;min-width:120px;">
+                                                    <div style="color:#a5b4fc;font-size:14px;margin-bottom:4px;">Net Score</div>
+                                                    <div style="color:white;font-size:48px;font-weight:700;">${player.netScore}</div>
+                                                    <div style="color:#818cf8;font-size:12px;margin-top:4px;">
+                                                        Gross: ${player.grossScore} • HCP: ${player.handicap}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                        
+                        <div style="display:flex;gap:16px;justify-content:center;margin-top:40px;">
+                            <button onclick="navigateToPresentationSlide(${teamSlidesStartIndex + teamStandings.length - 1})" 
+                                    class="btn-secondary" 
+                                    style="padding:20px 40px;font-size:24px;background:rgba(255,255,255,0.1);border:2px solid rgba(255,255,255,0.3);color:white;">
+                                ← Team Standings
+                            </button>
+                            <button onclick="nextPresentationSlide()" 
+                                    class="btn-primary" 
+                                    style="padding:20px 40px;font-size:24px;background:linear-gradient(135deg, #f59e0b 0%, #d97706 100%);box-shadow:0 8px 24px rgba(245,158,11,0.4);">
+                                ${handicapSlideIndex >= 0 ? 'Handicap Changes →' : 'Close'}
+                            </button>
+                        </div>
+                    </div>
+                `;
             } else if (currentSlide === handicapSlideIndex) {
                 // HANDICAP CHANGES SLIDE
                 const actualChanges = handicapChanges.filter(ch => ch.beforeHandicap !== ch.afterHandicap);
@@ -9167,13 +9628,15 @@
                     save('players', updatedPlayers);
                     notify('✅ Round updated!');
                     
-                    // Clear active round and navigate to leaderboard
+                    // Clear active round but DON'T navigate yet - wait for user to close handicap modal
                     state.activeRound = null;
-                    navigate('leaderboard');
                     
                     // Show handicap changes if any
                     if (handicapChanges.length > 0) {
                         setTimeout(() => showHandicapSummary(handicapChanges), 300);
+                    } else {
+                        // If no handicap changes, navigate immediately
+                        navigate('leaderboard');
                     }
                 } else {
                     // Calculate BEFORE handicaps for all players in this round
@@ -9275,12 +9738,16 @@
                     
                     save('players', updatedPlayers);
                     
-                    // Clear active round and navigate to leaderboard
+                    // Clear active round but DON'T navigate yet - wait for user to close handicap modal
                     state.activeRound = null;
-                    navigate('leaderboard');
                     
-                    // Show handicap change summary after navigation
-                    setTimeout(() => showHandicapSummary(handicapChanges), 100);
+                    // Show handicap change summary BEFORE navigation, let user close it
+                    if (handicapChanges.length > 0 && handicapChanges.some(hc => hc.afterHandicap !== null)) {
+                        setTimeout(() => showHandicapSummary(handicapChanges), 100);
+                    } else {
+                        // If no handicap changes, navigate immediately
+                        navigate('leaderboard');
+                    }
                 }
                 
             } catch (err) {
