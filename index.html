@@ -1341,16 +1341,14 @@
                     return;
                 }
                 
-                // Initialize temp course data for editing
-                if (!state.tempCourse || state.tempCourse.id !== courseId) {
-                    state.tempCourse = {
-                        id: courseId,
-                        name: course.name,
-                        address: course.address || '',
-                        pars: [...course.pars],
-                        handicaps: [...course.handicaps]
-                    };
-                }
+                // Initialize temp course data for editing (always reinitialize to ensure fresh data)
+                state.tempCourse = {
+                    id: courseId,
+                    name: course.name,
+                    address: course.address || '',
+                    pars: [...course.pars],
+                    handicaps: [...course.handicaps]
+                };
                 
                 const totalPar = state.tempCourse.pars.reduce((sum, p) => sum + (parseInt(p) || 0), 0);
                 
@@ -3034,27 +3032,48 @@
                                                         <strong style="font-size:20px;color:#1f2937;">${round.courseName}</strong><br>
                                                         ${(() => {
                                                             // Format date with day of week
-                                                            let dateStr = round.date;
-                                                            if (round.timestamp) {
-                                                                const date = new Date(round.timestamp);
-                                                                dateStr = date.toLocaleDateString('en-US', {
-                                                                    weekday: 'short',
-                                                                    month: 'short',
-                                                                    day: 'numeric',
-                                                                    year: 'numeric'
-                                                                }) + ' • ' + date.toLocaleTimeString('en-US', {
-                                                                    hour: 'numeric',
-                                                                    minute: '2-digit'
-                                                                });
-                                                            } else if (round.date) {
-                                                                const [year, month, day] = round.date.split('-');
-                                                                const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-                                                                dateStr = date.toLocaleDateString('en-US', {
-                                                                    weekday: 'short',
-                                                                    month: 'short',
-                                                                    day: 'numeric',
-                                                                    year: 'numeric'
-                                                                });
+                                                            let dateStr = round.date || 'No date';
+                                                            try {
+                                                                if (round.timestamp) {
+                                                                    const date = new Date(round.timestamp);
+                                                                    if (!isNaN(date.getTime())) {
+                                                                        dateStr = date.toLocaleDateString('en-US', {
+                                                                            weekday: 'short',
+                                                                            month: 'short',
+                                                                            day: 'numeric',
+                                                                            year: 'numeric'
+                                                                        }) + ' • ' + date.toLocaleTimeString('en-US', {
+                                                                            hour: 'numeric',
+                                                                            minute: '2-digit'
+                                                                        });
+                                                                    } else if (round.date) {
+                                                                        // Timestamp was invalid, fall back to date string
+                                                                        const [year, month, day] = round.date.split('-');
+                                                                        const date2 = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+                                                                        if (!isNaN(date2.getTime())) {
+                                                                            dateStr = date2.toLocaleDateString('en-US', {
+                                                                                weekday: 'short',
+                                                                                month: 'short',
+                                                                                day: 'numeric',
+                                                                                year: 'numeric'
+                                                                            });
+                                                                        }
+                                                                    }
+                                                                } else if (round.date) {
+                                                                    const [year, month, day] = round.date.split('-');
+                                                                    const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+                                                                    if (!isNaN(date.getTime())) {
+                                                                        dateStr = date.toLocaleDateString('en-US', {
+                                                                            weekday: 'short',
+                                                                            month: 'short',
+                                                                            day: 'numeric',
+                                                                            year: 'numeric'
+                                                                        });
+                                                                    }
+                                                                }
+                                                            } catch (e) {
+                                                                console.error('Error formatting date:', e, 'round:', round);
+                                                                dateStr = round.date || 'Invalid date';
                                                             }
                                                             return `<strong style="color:#059669;font-size:15px;">${dateStr}</strong>`;
                                                         })()}
@@ -5911,11 +5930,15 @@
                     p.isHighScore = p.position === totalPlayers; // Position 1 is highest
                 });
                 
-                // Split into thirds
-                const thirdSize = Math.ceil(totalPlayers / 3);
-                const bottomThird = allPlayerPerformances.slice(0, thirdSize);
-                const middleThird = allPlayerPerformances.slice(thirdSize, thirdSize * 2);
-                const topThird = allPlayerPerformances.slice(thirdSize * 2);
+                // Group players: top 3 get individual slides, rest in groups of 3
+                const top3Players = totalPlayers >= 3 ? allPlayerPerformances.slice(-3) : allPlayerPerformances; // Last 3 = highest positions
+                const remainingPlayers = totalPlayers >= 3 ? allPlayerPerformances.slice(0, -3) : []; // Everyone else
+                
+                // Group remaining players into sets of 3 (from lowest to highest)
+                const playerGroups = [];
+                for (let i = 0; i < remainingPlayers.length; i += 3) {
+                    playerGroups.push(remainingPlayers.slice(i, i + 3));
+                }
                 
                 // Calculate individual awards from today's round
                 
@@ -6063,6 +6086,7 @@
                 mostRecentRound.teams.forEach(team => {
                     team.players.forEach(player => {
                         const statePlayer = state.players.find(p => p.id === player.id);
+                        // Only show handicap changes if previousHandicap was captured when round was saved
                         if (statePlayer && player.previousHandicap !== undefined) {
                             handicapChanges.push({
                                 playerId: player.id,
@@ -6087,11 +6111,10 @@
                 const nextRound = upcomingRounds.length > 0 ? upcomingRounds[0] : null;
                 
                 // Calculate total slides
-                // Title + Player Perf (1 bottom + 1 middle + topThird individual) + Awards + Teams + Handicaps + Next Round
+                // Title + Player Groups (3 per slide) + Top 3 Individual + Awards + Teams + Handicaps + Next Round
                 let totalSlides = 1; // Title
-                totalSlides += 1; // Bottom third players
-                totalSlides += 1; // Middle third players
-                totalSlides += topThird.length; // Top third players (one by one)
+                totalSlides += playerGroups.length; // Groups of 3 players
+                totalSlides += top3Players.length; // Top 3 players (one by one)
                 const hasNetSlide = hasScheduledRounds && netWinner !== null;
                 const hasExtra9Slide = hasScheduledRounds && extra9Winners.length > 0;
                 const hasCtpSlide = hasScheduledRounds && ctpWinners.length > 0;
@@ -6110,9 +6133,8 @@
                     currentSlide: 0,
                     totalSlides: totalSlides,
                     // Player performances
-                    bottomThirdPlayers: bottomThird,
-                    middleThirdPlayers: middleThird,
-                    topThirdPlayers: topThird,
+                    playerGroups: playerGroups,
+                    top3Players: top3Players,
                     teamStandings: leaderboard,
                     previousStandings: previousStandings,
                     todaysScores: todaysScores,
@@ -6156,7 +6178,7 @@
             try {
                 const { 
                     currentSlide, 
-                    bottomThirdPlayers, middleThirdPlayers, topThirdPlayers,
+                    playerGroups, top3Players,
                     teamStandings, previousStandings, todaysScores, hasScheduledRounds, scheduledRoundsCount,
                     eventName, totalRounds, mostRecentRound,
                     netWinner, netTop3, previousNetWinners, extra9Winners, ctpWinners,
@@ -6167,10 +6189,10 @@
                 
             // Calculate slide indices
             let slideIndex = 1; // Start after title (0)
-            const bottomThirdSlideIndex = slideIndex++;
-            const middleThirdSlideIndex = slideIndex++;
-            const topThirdStartIndex = slideIndex;
-            slideIndex += topThirdPlayers.length;
+            const playerGroupSlidesStart = slideIndex;
+            slideIndex += playerGroups.length;
+            const top3SlidesStart = slideIndex;
+            slideIndex += top3Players.length;
             const netSlideIndex = hasNetSlide ? slideIndex++ : -1;
             const extra9SlideIndex = hasExtra9Slide ? slideIndex++ : -1;
             const ctpSlideIndex = hasCtpSlide ? slideIndex++ : -1;
@@ -6242,10 +6264,18 @@
                         </button>
                     </div>
                 `;
-            } else if (currentSlide === bottomThirdSlideIndex) {
-                // BOTTOM THIRD PLAYERS SLIDE - VERTICAL STACK
-                // Reverse the array so last place is at bottom
-                const bottomReversed = [...bottomThirdPlayers].reverse();
+            } else if (currentSlide >= playerGroupSlidesStart && currentSlide < playerGroupSlidesStart + playerGroups.length) {
+                // PLAYER GROUP SLIDES - 3 PLAYERS PER SLIDE
+                const groupIndex = currentSlide - playerGroupSlidesStart;
+                const group = playerGroups[groupIndex];
+                const isFirstGroup = groupIndex === 0;
+                const isLastGroup = groupIndex === playerGroups.length - 1;
+                
+                // Reverse group so lowest position is at bottom
+                const groupReversed = [...group].reverse();
+                
+                // Calculate total players for display
+                const totalPlayers = playerGroups.flat().length + top3Players.length;
                 
                 html += `
                     <div style="animation:slideUp 0.8s ease-out;max-width:900px;width:100%;">
@@ -6256,12 +6286,15 @@
                             ${mostRecentRound.courseName}
                         </p>
                         <p style="color:#818cf8;font-size:18px;margin:0 0 40px;">
-                            Showing ${bottomThirdPlayers.length} of ${bottomThirdPlayers.length + middleThirdPlayers.length + topThirdPlayers.length} players
+                            Group ${groupIndex + 1} of ${playerGroups.length} • ${totalPlayers} total players
                         </p>
                         
-                        <div style="background:rgba(255,255,255,0.1);border:3px solid rgba(255,255,255,0.2);border-radius:20px;padding:30px;max-height:60vh;overflow-y:auto;">
-                            ${bottomReversed.map(player => {
-                                const medal = player.position === 1 ? '🥇' : player.position === 2 ? '🥈' : player.position === 3 ? '🥉' : player.position === 4 ? '🏅' : '';
+                        <div style="background:rgba(255,255,255,0.1);border:3px solid rgba(255,255,255,0.2);border-radius:20px;padding:30px;">
+                            ${groupReversed.map(player => {
+                                const medal = player.position === totalPlayers ? '🥇' : 
+                                             player.position === totalPlayers - 1 ? '🥈' : 
+                                             player.position === totalPlayers - 2 ? '🥉' : 
+                                             player.position === totalPlayers - 3 ? '🏅' : '';
                                 return `
                                 <div style="background:rgba(255,255,255,0.08);border:2px solid ${player.teamColor}40;border-radius:12px;padding:16px;margin-bottom:16px;">
                                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
@@ -6312,104 +6345,32 @@
                         </div>
                         
                         <div style="display:flex;gap:16px;justify-content:center;margin-top:30px;">
+                            ${!isFirstGroup ? `
+                                <button onclick="previousPresentationSlide()" 
+                                        class="btn-secondary" 
+                                        style="padding:20px 40px;font-size:24px;background:rgba(255,255,255,0.1);border:2px solid rgba(255,255,255,0.3);color:white;">
+                                    ← Back
+                                </button>
+                            ` : ''}
                             <button onclick="nextPresentationSlide()" 
                                     class="btn-primary" 
                                     style="padding:20px 40px;font-size:24px;background:linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);box-shadow:0 8px 24px rgba(59,130,246,0.4);">
-                                Next ${middleThirdPlayers.length} Players →
+                                ${isLastGroup ? 'Top 3 Players →' : 'Next Group →'}
                             </button>
                         </div>
                     </div>
                 `;
-            } else if (currentSlide === middleThirdSlideIndex) {
-                // MIDDLE THIRD PLAYERS SLIDE - VERTICAL STACK
-                const middleReversed = [...middleThirdPlayers].reverse();
-                
-                html += `
-                    <div style="animation:slideUp 0.8s ease-out;max-width:900px;width:100%;">
-                        <h1 style="color:white;font-size:48px;margin:0 0 16px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
-                            🎯 Player Performance
-                        </h1>
-                        <p style="color:#a5b4fc;font-size:24px;margin:0 0 12px;">
-                            ${mostRecentRound.courseName}
-                        </p>
-                        <p style="color:#818cf8;font-size:18px;margin:0 0 40px;">
-                            Showing ${bottomThirdPlayers.length + middleThirdPlayers.length} of ${bottomThirdPlayers.length + middleThirdPlayers.length + topThirdPlayers.length} players
-                        </p>
-                        
-                        <div style="background:rgba(255,255,255,0.1);border:3px solid rgba(255,255,255,0.2);border-radius:20px;padding:30px;max-height:60vh;overflow-y:auto;">
-                            ${middleReversed.map(player => {
-                                const medal = player.position === 1 ? '🥇' : player.position === 2 ? '🥈' : player.position === 3 ? '🥉' : player.position === 4 ? '🏅' : '';
-                                return `
-                                <div style="background:rgba(255,255,255,0.08);border:2px solid ${player.teamColor}40;border-radius:12px;padding:16px;margin-bottom:16px;">
-                                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-                                        <div style="display:flex;align-items:center;gap:12px;flex:1;">
-                                            ${medal ? `<div style="font-size:32px;">${medal}</div>` : ''}
-                                            <div style="text-align:center;min-width:50px;">
-                                                <div style="color:#a5b4fc;font-size:12px;margin-bottom:2px;">Position</div>
-                                                <div style="color:white;font-size:24px;font-weight:700;">#${player.position}</div>
-                                            </div>
-                                            <div style="flex:1;">
-                                                <div style="color:white;font-size:18px;font-weight:700;margin-bottom:4px;">${player.playerName}</div>
-                                                <div style="display:flex;align-items:center;gap:6px;">
-                                                    <div style="width:8px;height:8px;border-radius:50%;background:${player.teamColor};"></div>
-                                                    <div style="color:#a5b4fc;font-size:13px;">${player.teamName}</div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div style="background:${player.teamColor}20;border:2px solid ${player.teamColor};border-radius:10px;padding:10px;min-width:70px;text-align:center;">
-                                            <div style="color:#a5b4fc;font-size:11px;margin-bottom:2px;">Total</div>
-                                            <div style="color:${player.teamColor};font-size:26px;font-weight:700;">${player.totalPoints}</div>
-                                        </div>
-                                    </div>
-                                    
-                                    <div style="display:flex;gap:8px;justify-content:space-between;">
-                                        <div style="background:rgba(255,255,255,0.05);border-radius:6px;padding:8px;flex:1;text-align:center;">
-                                            <div style="color:#a5b4fc;font-size:10px;margin-bottom:2px;">Stroke</div>
-                                            <div style="color:white;font-size:16px;font-weight:600;">${player.strokePoints || 0}</div>
-                                        </div>
-                                        <div style="background:rgba(255,255,255,0.05);border-radius:6px;padding:8px;flex:1;text-align:center;">
-                                            <div style="color:#a5b4fc;font-size:10px;margin-bottom:2px;">BBB</div>
-                                            <div style="color:white;font-size:16px;font-weight:600;">${player.bbbPoints || 0}</div>
-                                        </div>
-                                        <div style="background:rgba(255,255,255,0.05);border-radius:6px;padding:8px;flex:1;text-align:center;">
-                                            <div style="color:#a5b4fc;font-size:10px;margin-bottom:2px;">Balls</div>
-                                            <div style="color:white;font-size:16px;font-weight:600;">${player.ballPoints || 0}</div>
-                                        </div>
-                                        <div style="background:rgba(255,255,255,0.05);border-radius:6px;padding:8px;flex:1;text-align:center;">
-                                            <div style="color:#a5b4fc;font-size:10px;margin-bottom:2px;">Extra 9</div>
-                                            <div style="color:white;font-size:16px;font-weight:600;">${player.extra9Points || 0}</div>
-                                        </div>
-                                        <div style="background:${player.ctpPoints > 0 ? 'rgba(16,185,129,0.2)' : 'rgba(255,255,255,0.05)'};border:${player.ctpPoints > 0 ? '2px solid #10b981' : 'none'};border-radius:6px;padding:8px;flex:1;text-align:center;">
-                                            <div style="color:${player.ctpPoints > 0 ? '#10b981' : '#a5b4fc'};font-size:10px;margin-bottom:2px;">CTP</div>
-                                            <div style="color:${player.ctpPoints > 0 ? '#10b981' : 'white'};font-size:16px;font-weight:600;">${player.ctpPoints || 0}</div>
-                                        </div>
-                                    </div>
-                                </div>
-                            `}).join('')}
-                        </div>
-                        
-                        <div style="display:flex;gap:16px;justify-content:center;margin-top:30px;">
-                            <button onclick="navigateToPresentationSlide(${bottomThirdSlideIndex})" 
-                                    class="btn-secondary" 
-                                    style="padding:20px 40px;font-size:24px;background:rgba(255,255,255,0.1);border:2px solid rgba(255,255,255,0.3);color:white;">
-                                ← Back
-                            </button>
-                            <button onclick="nextPresentationSlide()" 
-                                    class="btn-primary" 
-                                    style="padding:20px 40px;font-size:24px;background:linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);box-shadow:0 8px 24px rgba(139,92,246,0.4);">
-                                Top Players →
-                            </button>
-                        </div>
-                    </div>
-                `;
-            } else if (currentSlide >= topThirdStartIndex && currentSlide < topThirdStartIndex + topThirdPlayers.length) {
-                // TOP THIRD PLAYERS - ONE BY ONE
-                const playerIndex = currentSlide - topThirdStartIndex;
-                const player = topThirdPlayers[playerIndex];
-                const isFirstTopPlayer = playerIndex === 0;
-                const isLastTopPlayer = playerIndex === topThirdPlayers.length - 1;
-                const previousSlideIndex = isFirstTopPlayer ? middleThirdSlideIndex : currentSlide - 1;
-                const medal = player.position === 1 ? '🥇' : player.position === 2 ? '🥈' : player.position === 3 ? '🥉' : player.position === 4 ? '🏅' : '';
+            } else if (currentSlide >= top3SlidesStart && currentSlide < top3SlidesStart + top3Players.length) {
+                // TOP 3 PLAYERS - INDIVIDUAL CARDS
+                const playerIndex = currentSlide - top3SlidesStart;
+                const player = top3Players[playerIndex];
+                const isFirstTop = playerIndex === 0;
+                const isLastTop = playerIndex === top3Players.length - 1;
+                const previousSlideIndex = isFirstTop ? (playerGroupSlidesStart + playerGroups.length - 1) : (currentSlide - 1);
+                const totalPlayers = playerGroups.flat().length + top3Players.length;
+                const medal = player.position === totalPlayers ? '🥇' : 
+                             player.position === totalPlayers - 1 ? '🥈' : 
+                             player.position === totalPlayers - 2 ? '🥉' : '';
                 
                 html += `
                     <div style="animation:slideUp 0.8s ease-out;max-width:900px;width:100%;">
@@ -6417,7 +6378,7 @@
                             ${medal ? medal + ' ' : ''}${playerIndex === 0 ? 'Top Players' : ''}
                         </h1>
                         <p style="color:#a5b4fc;font-size:20px;margin:0 0 20px;">
-                            Position #${player.position} • Player ${bottomThirdPlayers.length + middleThirdPlayers.length + playerIndex + 1} of ${bottomThirdPlayers.length + middleThirdPlayers.length + topThirdPlayers.length}
+                            Position #${player.position} • Top ${top3Players.length - playerIndex} Player
                         </p>
                         
                         ${player.isHighScore && player.isPersonalRecord ? `
@@ -6481,8 +6442,8 @@
                                     <div style="color:#a5b4fc;font-size:16px;margin-bottom:8px;font-weight:600;">Extra 9</div>
                                     <div style="color:white;font-size:36px;font-weight:700;">${player.extra9Points || 0}</div>
                                 </div>
-                                <div style="background:${player.ctpPoints > 0 ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : 'rgba(255,255,255,0.15)'};border:${player.ctpPoints > 0 ? '3px solid #10b981' : 'none'};border-radius:12px;padding:20px;text-align:center;${player.ctpPoints > 0 ? 'box-shadow:0 8px 24px rgba(16,185,129,0.4);' : ''}">
-                                    <div style="color:${player.ctpPoints > 0 ? 'white' : '#a5b4fc'};font-size:16px;margin-bottom:8px;font-weight:600;">🎯 CTP</div>
+                                <div style="background:rgba(255,255,255,0.15);border-radius:12px;padding:20px;text-align:center;">
+                                    <div style="color:#a5b4fc;font-size:16px;margin-bottom:8px;font-weight:600;">🎯 CTP</div>
                                     <div style="color:white;font-size:36px;font-weight:700;">${player.ctpPoints || 0}</div>
                                 </div>
                             </div>
@@ -6497,7 +6458,7 @@
                             <button onclick="nextPresentationSlide()" 
                                     class="btn-primary" 
                                     style="padding:20px 40px;font-size:24px;background:linear-gradient(135deg, #f59e0b 0%, #d97706 100%);box-shadow:0 8px 24px rgba(245,158,11,0.4);">
-                                ${isLastTopPlayer ? (hasNetSlide ? 'Individual Awards →' : 'Team Standings →') : 'Next Player →'}
+                                ${isLastTop ? (hasNetSlide ? 'Individual Awards →' : 'Team Standings →') : 'Next Player →'}
                             </button>
                         </div>
                     </div>
@@ -9106,8 +9067,34 @@
                     // Update the round in state.rounds
                     const updatedRounds = [...state.rounds];
                     const originalRound = updatedRounds[round.originalIndex];
-                    const updatedRound = {
+                    
+                    // Set or preserve previousHandicap on each player for handicap changes display
+                    const preservedRound = {
                         ...round,
+                        teams: round.teams.map(team => ({
+                            ...team,
+                            players: team.players.map(player => {
+                                // Try to get previousHandicap from original round
+                                const originalTeam = originalRound.teams.find(t => t.teamId === team.teamId);
+                                const originalPlayer = originalTeam?.players.find(p => p.id === player.id);
+                                let previousHandicap = originalPlayer?.previousHandicap;
+                                
+                                // If not set in original round, capture current handicap as previousHandicap
+                                if (previousHandicap === undefined) {
+                                    const statePlayer = state.players.find(p => p.id === player.id);
+                                    previousHandicap = statePlayer?.handicap || player.handicap;
+                                }
+                                
+                                return {
+                                    ...player,
+                                    previousHandicap: previousHandicap
+                                };
+                            })
+                        }))
+                    };
+                    
+                    const updatedRound = {
+                        ...preservedRound,
                         // Explicitly preserve the original timestamp and date
                         timestamp: originalRound.timestamp,
                         date: originalRound.date,
@@ -9768,7 +9755,16 @@
         window.showWinProbabilitiesSnapshot = (roundIndex) => {
             try {
                 const app = document.getElementById('app');
+                const round = state.rounds[roundIndex];
                 
+                // Check if this round already has saved win probabilities
+                if (round.winProbabilitiesSnapshot) {
+                    // Display saved snapshot
+                    displayWinProbabilitiesSnapshot(round.winProbabilitiesSnapshot, roundIndex, round, true);
+                    return;
+                }
+                
+                // Calculate and save new snapshot
                 // Get rounds up to and including this round
                 const allRounds = state.rounds.filter(r => r.eventId === state.currentEventId && r.active !== false);
                 const roundsUpToHere = allRounds.slice(0, roundIndex + 1);
@@ -9873,6 +9869,33 @@
                         
                         for (let r = 0; r < totalRemaining; r++) {
                             const simulatedScore = normalRandom(team.avgPerRound, team.stdDev);
+                        if (finalStdDev < 10) finalStdDev = 10;
+                    }
+                    
+                    team.avgPerRound = historicalMean;
+                    team.stdDev = finalStdDev;
+                });
+                
+                // Monte Carlo simulation
+                const normalRandom = (mean, stdDev) => {
+                    const u1 = Math.random();
+                    const u2 = Math.random();
+                    const z0 = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+                    return z0 * stdDev + mean;
+                };
+                
+                const numSimulations = 10000;
+                const winCounts = {};
+                
+                for (let sim = 0; sim < numSimulations; sim++) {
+                    const finalTotals = {};
+                    
+                    Object.keys(stats).forEach(teamId => {
+                        const team = stats[teamId];
+                        let projectedTotal = team.currentPoints;
+                        
+                        for (let r = 0; r < totalRemaining; r++) {
+                            const simulatedScore = normalRandom(team.avgPerRound, team.stdDev);
                             projectedTotal += Math.max(0, simulatedScore);
                         }
                         
@@ -9900,8 +9923,33 @@
                     };
                 }).sort((a, b) => b.probability - a.probability);
                 
-                // Build display
-                const round = state.rounds[roundIndex];
+                // Save snapshot to round
+                const snapshot = {
+                    probabilities: probabilities,
+                    roundsCompleted: roundsUpToHere.length,
+                    roundsRemaining: totalRemaining,
+                    calculatedAt: Date.now()
+                };
+                
+                // Update round with snapshot
+                const updatedRounds = [...state.rounds];
+                updatedRounds[roundIndex] = {
+                    ...updatedRounds[roundIndex],
+                    winProbabilitiesSnapshot: snapshot
+                };
+                save('rounds', updatedRounds);
+                
+                // Display the snapshot
+                displayWinProbabilitiesSnapshot(snapshot, roundIndex, round, false);
+            } catch (err) {
+                console.error('Win probabilities snapshot error:', err);
+                showError('Failed to show probabilities: ' + err.message);
+            }
+        };
+        
+        window.displayWinProbabilitiesSnapshot = (snapshot, roundIndex, round, isSaved) => {
+            try {
+                const app = document.getElementById('app');
                 const barColors = ['#10b981', '#3b82f6', '#8b5cf6', '#ef4444'];
                 
                 let html = '<div style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.9);z-index:9999;overflow-y:auto;padding:20px;">';
@@ -9909,12 +9957,16 @@
                 html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">';
                 html += '<div>';
                 html += '<h2 style="margin:0;">🎲 Win Probabilities After Round ' + (roundIndex + 1) + '</h2>';
-                html += '<p style="color:#6b7280;margin:4px 0 0;">After ' + round.courseName + ' • ' + roundsUpToHere.length + ' rounds completed • ' + totalRemaining + ' remaining</p>';
+                html += '<p style="color:#6b7280;margin:4px 0 0;">After ' + round.courseName + ' • ' + snapshot.roundsCompleted + ' rounds completed • ' + snapshot.roundsRemaining + ' remaining</p>';
+                if (isSaved) {
+                    const savedDate = new Date(snapshot.calculatedAt);
+                    html += '<p style="color:#8b5cf6;margin:4px 0 0;font-size:12px;">📌 Saved snapshot from ' + savedDate.toLocaleDateString() + '</p>';
+                }
                 html += '</div>';
                 html += '<button onclick="navigate(\'leaderboard\')" style="background:#6b7280;color:white;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;">✕ Close</button>';
                 html += '</div>';
                 
-                probabilities.forEach((team, idx) => {
+                snapshot.probabilities.forEach((team, idx) => {
                     const barColor = barColors[idx] || '#6b7280';
                     html += '<div style="margin-bottom:12px;">';
                     html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">';
@@ -9937,8 +9989,8 @@
                 html += '</div></div>';
                 app.innerHTML = html;
             } catch (err) {
-                console.error('Win probabilities snapshot error:', err);
-                showError('Failed to show probabilities: ' + err.message);
+                console.error('Display win probabilities error:', err);
+                showError('Failed to display probabilities: ' + err.message);
             }
         };
 
