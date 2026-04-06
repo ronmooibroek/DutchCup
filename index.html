@@ -7523,6 +7523,9 @@
                     hasMilestonesSlide, hasWhatIfSlide
                 } = presentationState;
                 
+                // Reset celebration flag
+                presentationState.isWinnerSlide = false;
+                
             // Calculate slide indices - NEW ORDER
             let slideIndex = 1; // Start after title (0)
             const storySlideIndex = hasStorySlide ? slideIndex++ : -1;
@@ -7863,13 +7866,8 @@
                 // Check if this is the #1 player (winner)
                 const isWinner = player.position === totalPlayers;
                 
-                // Trigger celebration effects for winner
-                if (isWinner) {
-                    setTimeout(() => {
-                        playWinnerCelebration();
-                        createConfetti();
-                    }, 500); // Slight delay for dramatic effect
-                }
+                // Set flag so celebration triggers after rendering
+                presentationState.isWinnerSlide = isWinner;
                 
                 html += `
                     <div style="animation:slideUp 0.8s ease-out;max-width:900px;width:100%;">
@@ -9399,6 +9397,14 @@
                 existingPresentation.remove();
             }
             document.body.insertAdjacentHTML('beforeend', html);
+            
+            // Trigger celebration effects if showing the winner
+            if (presentationState.isWinnerSlide) {
+                setTimeout(() => {
+                    playWinnerCelebration();
+                    createConfetti();
+                }, 500); // Slight delay for dramatic effect
+            }
             } catch (error) {
                 console.error('Presentation rendering error:', error);
                 console.error('Error stack:', error.stack);
@@ -13125,7 +13131,7 @@
                 }, 500);
             } else {
                 const dbType = useFirebase ? '☁️ Firebase' : '💾 LocalStorage';
-                notify(`✅ v9.5 Ready! (${dbType})`);
+                notify(`✅ v9.9 Ready! (${dbType})`);
             }
         });
     </script>
