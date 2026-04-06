@@ -342,6 +342,56 @@
             }
         }
         
+        @keyframes whoosh {
+            from {
+                left: -100%;
+            }
+            to {
+                left: 100%;
+            }
+        }
+        
+        /* Confetti Animation */
+        @keyframes confettiFall {
+            0% {
+                transform: translateY(-100vh) rotate(0deg);
+                opacity: 1;
+            }
+            100% {
+                transform: translateY(100vh) rotate(720deg);
+                opacity: 0;
+            }
+        }
+        
+        @keyframes winnerPulse {
+            0%, 100% {
+                transform: scale(1);
+                box-shadow: 0 20px 60px rgba(251, 191, 36, 0.4);
+            }
+            50% {
+                transform: scale(1.05);
+                box-shadow: 0 25px 70px rgba(251, 191, 36, 0.6);
+            }
+        }
+        
+        .confetti-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 9999;
+            overflow: hidden;
+        }
+        
+        .confetti {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            animation: confettiFall linear forwards;
+        }
+        
         /* Sophisticated Points Badges */
         .points-badge {
             display: inline-block;
@@ -6103,7 +6153,7 @@
                     
                     team.players.forEach((player, playerIdx) => {
                         // Calculate gross score
-                        const grossScore = player.scores ? player.scores.reduce((sum, score) => sum + (score || 0), 0) : 0;
+                        const grossScore = player.scores ? player.scores.reduce((sum, score) => sum + (parseInt(score) || 0), 0) : 0;
                         
                         // Calculate all point categories
                         const strokePoints = player.strokePoints !== undefined 
@@ -6283,7 +6333,7 @@
                     team.players.forEach(player => {
                         if (!previousNetWinners.has(player.id)) {
                             // Calculate gross score (sum of all holes)
-                            const grossScore = player.scores ? player.scores.reduce((sum, s) => sum + (s || 0), 0) : 0;
+                            const grossScore = player.scores ? player.scores.reduce((sum, s) => sum + (parseInt(s) || 0), 0) : 0;
                             const netScore = grossScore - (player.handicap || 0);
                             
                             todaysNetScores.push({
@@ -6422,20 +6472,77 @@
                     }
                 }
                 
-                // Hot streaks (only exceptional BBB performances - 5+ BBBs OR top BBB scorer)
+                // Hot streaks - diversified to cover different achievements
+                const hotStreakCandidates = [];
+                
+                // 1. BBB hot streaks (5+ BBBs or significantly better than second)
                 const bbbScorers = allPlayerPerformances.filter(p => p.bbbPoints > 0).sort((a, b) => b.bbbPoints - a.bbbPoints);
                 if (bbbScorers.length > 0) {
                     const topBBB = bbbScorers[0];
                     const topBBBCount = topBBB.bbbPoints / state.settings.bbbPoints;
-                    
-                    // Only show if 5+ BBBs or significantly better than second place
                     if (topBBBCount >= 5 || (bbbScorers.length > 1 && topBBBCount >= bbbScorers[1].bbbPoints / state.settings.bbbPoints + 2)) {
-                        presentationAnalytics.stories.push({
+                        hotStreakCandidates.push({
                             type: 'hot_streak',
-                            title: '🔥 Hot Streak',
-                            description: `${topBBB.playerName}: ${topBBBCount} BBBs!`
+                            title: '🔥 BBB Machine',
+                            description: `${topBBB.playerName} dominated with ${topBBBCount} BBBs!`,
+                            priority: topBBBCount
                         });
                     }
+                }
+                
+                // 2. Par streak hot streaks (from On Fire award)
+                if (presentationAnalytics.awards && presentationAnalytics.awards.onFire && presentationAnalytics.awards.onFire[0].streak >= 7) {
+                    const winner = presentationAnalytics.awards.onFire[0];
+                    hotStreakCandidates.push({
+                        type: 'hot_streak',
+                        title: '🔥 On Fire',
+                        description: `${winner.player} with ${winner.streak} consecutive pars or better!`,
+                        priority: winner.streak
+                    });
+                }
+                
+                // 3. Low variance hot streaks (Steady Eddie with exceptional consistency)
+                if (presentationAnalytics.awards && presentationAnalytics.awards.steadyEddie && presentationAnalytics.awards.steadyEddie[0].variance <= 0.5) {
+                    const winner = presentationAnalytics.awards.steadyEddie[0];
+                    hotStreakCandidates.push({
+                        type: 'hot_streak',
+                        title: '🔥 Locked In',
+                        description: `${winner.player} with incredible consistency (variance: ${winner.variance})!`,
+                        priority: 10 - winner.variance
+                    });
+                }
+                
+                // 4. High point total hot streaks (140+ individual points)
+                allPlayerPerformances.forEach(p => {
+                    if (p.totalPoints >= 140) {
+                        hotStreakCandidates.push({
+                            type: 'hot_streak',
+                            title: '🔥 Point Explosion',
+                            description: `${p.playerName} erupted for ${p.totalPoints} points!`,
+                            priority: p.totalPoints / 10
+                        });
+                    }
+                });
+                
+                // 5. Comeback hot streaks (big position gains)
+                if (previousStandings.length > 0) {
+                    leaderboard.forEach((team, idx) => {
+                        const prevIdx = previousStandings.findIndex(t => t.id === team.id);
+                        if (prevIdx >= 3 && idx === 0) { // Jumped to first from 4th+ position
+                            hotStreakCandidates.push({
+                                type: 'hot_streak',
+                                title: '🔥 Unstoppable Rise',
+                                description: `${team.name} surged from ${prevIdx + 1}${prevIdx === 0 ? 'st' : prevIdx === 1 ? 'nd' : prevIdx === 2 ? 'rd' : 'th'} to 1st place!`,
+                                priority: prevIdx * 2
+                            });
+                        }
+                    });
+                }
+                
+                // Pick the best hot streak (highest priority)
+                if (hotStreakCandidates.length > 0) {
+                    hotStreakCandidates.sort((a, b) => b.priority - a.priority);
+                    presentationAnalytics.stories.push(hotStreakCandidates[0]);
                 }
                 
                 // Sharpshooters (multiple CTP winners)
@@ -6461,6 +6568,51 @@
                                 description: `${team.name}: Jumped from ${prevIdx + 1}${prevIdx === 0 ? 'st' : prevIdx === 1 ? 'nd' : prevIdx === 2 ? 'rd' : 'th'} to ${idx + 1}${idx === 0 ? 'st' : idx === 1 ? 'nd' : idx === 2 ? 'rd' : 'th'}!`
                             });
                         }
+                    });
+                }
+                
+                // Round statistics and interesting patterns
+                const totalTeams = leaderboard.length;
+                const avgPointsPerTeam = Math.round(leaderboard.reduce((sum, t) => sum + (todaysScores[t.id]?.total || 0), 0) / totalTeams);
+                const topTeamPoints = todaysScores[leaderboard[0].id]?.total || 0;
+                const bottomTeamPoints = todaysScores[leaderboard[totalTeams - 1].id]?.total || 0;
+                const pointSpread = topTeamPoints - bottomTeamPoints;
+                
+                // High-scoring round
+                if (avgPointsPerTeam >= 140) {
+                    presentationAnalytics.stories.push({
+                        type: 'high_scoring',
+                        title: '⭐ High-Scoring Round',
+                        description: `Teams averaged ${avgPointsPerTeam} points - outstanding golf all around!`
+                    });
+                }
+                
+                // Tight competition
+                if (pointSpread <= 20 && totalTeams >= 3) {
+                    presentationAnalytics.stories.push({
+                        type: 'tight_race',
+                        title: '⚔️ Battle Royale',
+                        description: `Just ${pointSpread} points separated 1st from last - incredibly tight competition!`
+                    });
+                }
+                
+                // Dominant performance
+                if (pointSpread >= 60 && totalTeams >= 3) {
+                    presentationAnalytics.stories.push({
+                        type: 'dominant',
+                        title: '👑 Dominant Display',
+                        description: `${leaderboard[0].name} crushed the field with a ${pointSpread}-point margin!`
+                    });
+                }
+                
+                // Best individual performance
+                const topIndividual = allPlayerPerformances.reduce((best, p) => 
+                    p.totalPoints > best.totalPoints ? p : best, allPlayerPerformances[0]);
+                if (topIndividual && topIndividual.totalPoints >= 150) {
+                    presentationAnalytics.stories.push({
+                        type: 'individual_brilliance',
+                        title: '💎 Individual Brilliance',
+                        description: `${topIndividual.playerName} led all players with ${topIndividual.totalPoints} points!`
                     });
                 }
                 
@@ -6683,7 +6835,7 @@
                 
                 // Rollercoaster Award - biggest variance
                 let maxVariance = 0;
-                let rollercoasterWinner = null;
+                const rollercoasterWinners = [];
                 
                 allPlayerPerformances.forEach(p => {
                     const scores = [];
@@ -6708,63 +6860,78 @@
                         
                         if (variance > maxVariance) {
                             maxVariance = variance;
-                            rollercoasterWinner = {
+                            rollercoasterWinners.length = 0; // Clear previous winners
+                            rollercoasterWinners.push({
                                 player: p.playerName,
                                 team: p.teamName,
                                 teamColor: p.teamColor,
                                 variance: variance.toFixed(1)
-                            };
+                            });
+                        } else if (variance === maxVariance && variance > 0) {
+                            // Tie - add to winners
+                            rollercoasterWinners.push({
+                                player: p.playerName,
+                                team: p.teamName,
+                                teamColor: p.teamColor,
+                                variance: variance.toFixed(1)
+                            });
                         }
                     }
                 });
                 
-                presentationAnalytics.awards.rollercoaster = rollercoasterWinner;
+                presentationAnalytics.awards.rollercoaster = rollercoasterWinners.length > 0 ? rollercoasterWinners : null;
                 
-                // Steady Eddie Award - most consecutive pars
-                let maxPars = 0;
-                let steadyEddieWinner = null;
+                // Steady Eddie Award - lowest variance (opposite of rollercoaster)
+                let minVariance = Infinity;
+                const steadyEddieWinners = [];
                 
                 allPlayerPerformances.forEach(p => {
+                    const scores = [];
                     mostRecentRound.teams.forEach(team => {
                         const player = team.players.find(pl => pl.id === p.playerId);
                         if (player && player.scores) {
-                            let currentStreak = 0;
-                            let maxStreak = 0;
-                            
                             player.scores.forEach((score, idx) => {
                                 if (score && mostRecentRound.pars[idx]) {
                                     const par = mostRecentRound.pars[idx];
                                     const holeHandicap = mostRecentRound.handicaps[idx];
                                     const strokes = player.handicap >= holeHandicap ? 1 : 0;
                                     const net = score - strokes;
-                                    
-                                    if (net === par) {
-                                        currentStreak++;
-                                        maxStreak = Math.max(maxStreak, currentStreak);
-                                    } else {
-                                        currentStreak = 0;
-                                    }
+                                    scores.push(net - par);
                                 }
                             });
-                            
-                            if (maxStreak > maxPars) {
-                                maxPars = maxStreak;
-                                steadyEddieWinner = {
-                                    player: p.playerName,
-                                    team: p.teamName,
-                                    teamColor: p.teamColor,
-                                    streak: maxStreak
-                                };
-                            }
                         }
                     });
+                    
+                    if (scores.length > 0) {
+                        const mean = scores.reduce((sum, s) => sum + s, 0) / scores.length;
+                        const variance = scores.reduce((sum, s) => sum + Math.pow(s - mean, 2), 0) / scores.length;
+                        
+                        if (variance < minVariance) {
+                            minVariance = variance;
+                            steadyEddieWinners.length = 0; // Clear previous winners
+                            steadyEddieWinners.push({
+                                player: p.playerName,
+                                team: p.teamName,
+                                teamColor: p.teamColor,
+                                variance: variance.toFixed(1)
+                            });
+                        } else if (variance === minVariance && minVariance < Infinity) {
+                            // Tie - add to winners
+                            steadyEddieWinners.push({
+                                player: p.playerName,
+                                team: p.teamName,
+                                teamColor: p.teamColor,
+                                variance: variance.toFixed(1)
+                            });
+                        }
+                    }
                 });
                 
-                presentationAnalytics.awards.steadyEddie = steadyEddieWinner;
+                presentationAnalytics.awards.steadyEddie = steadyEddieWinners.length > 0 ? steadyEddieWinners : null;
                 
-                // On Fire Award - most consecutive better than par
+                // On Fire Award - longest streak of par or better
                 let maxBetter = 0;
-                let onFireWinner = null;
+                const onFireWinners = [];
                 
                 allPlayerPerformances.forEach(p => {
                     mostRecentRound.teams.forEach(team => {
@@ -6780,7 +6947,7 @@
                                     const strokes = player.handicap >= holeHandicap ? 1 : 0;
                                     const net = score - strokes;
                                     
-                                    if (net < par) {
+                                    if (net <= par) { // Par or better
                                         currentStreak++;
                                         maxStreak = Math.max(maxStreak, currentStreak);
                                     } else {
@@ -6791,28 +6958,37 @@
                             
                             if (maxStreak > maxBetter) {
                                 maxBetter = maxStreak;
-                                onFireWinner = {
+                                onFireWinners.length = 0; // Clear previous winners
+                                onFireWinners.push({
                                     player: p.playerName,
                                     team: p.teamName,
                                     teamColor: p.teamColor,
                                     streak: maxStreak
-                                };
+                                });
+                            } else if (maxStreak === maxBetter && maxStreak > 0) {
+                                // Tie - add to winners
+                                onFireWinners.push({
+                                    player: p.playerName,
+                                    team: p.teamName,
+                                    teamColor: p.teamColor,
+                                    streak: maxStreak
+                                });
                             }
                         }
                     });
                 });
                 
-                presentationAnalytics.awards.onFire = onFireWinner;
+                presentationAnalytics.awards.onFire = onFireWinners.length > 0 ? onFireWinners : null;
                 
-                // The Grind Award - most scramble pars (par after being in bogey position)
-                let maxScrambles = 0;
-                let grindWinner = null;
+                // The Grind Award - fewest bogeys or worse
+                let minBogeys = Infinity;
+                const grindWinners = [];
                 
                 allPlayerPerformances.forEach(p => {
                     mostRecentRound.teams.forEach(team => {
                         const player = team.players.find(pl => pl.id === p.playerId);
                         if (player && player.scores) {
-                            let scrambles = 0;
+                            let bogeyCount = 0;
                             
                             player.scores.forEach((score, idx) => {
                                 if (score && mostRecentRound.pars[idx]) {
@@ -6821,27 +6997,36 @@
                                     const strokes = player.handicap >= holeHandicap ? 1 : 0;
                                     const net = score - strokes;
                                     
-                                    // Simplified: if score is par and it's a par 4 or 5 (likely scramble)
-                                    if (net === par && par >= 4) {
-                                        scrambles++;
+                                    // Count bogeys or worse (net score > par)
+                                    if (net > par) {
+                                        bogeyCount++;
                                     }
                                 }
                             });
                             
-                            if (scrambles > maxScrambles) {
-                                maxScrambles = scrambles;
-                                grindWinner = {
+                            if (bogeyCount < minBogeys) {
+                                minBogeys = bogeyCount;
+                                grindWinners.length = 0; // Clear previous winners
+                                grindWinners.push({
                                     player: p.playerName,
                                     team: p.teamName,
                                     teamColor: p.teamColor,
-                                    count: scrambles
-                                };
+                                    count: bogeyCount
+                                });
+                            } else if (bogeyCount === minBogeys && minBogeys < Infinity) {
+                                // Tie - add to winners
+                                grindWinners.push({
+                                    player: p.playerName,
+                                    team: p.teamName,
+                                    teamColor: p.teamColor,
+                                    count: bogeyCount
+                                });
                             }
                         }
                     });
                 });
                 
-                presentationAnalytics.awards.grind = grindWinner;
+                presentationAnalytics.awards.grind = grindWinners.length > 0 ? grindWinners : null;
                 
                 // 8. MILESTONES
                 presentationAnalytics.milestones = [];
@@ -6975,7 +7160,7 @@
                         team.players.forEach(player => {
                             if (player.scores && round.pars && round.handicaps) {
                                 // Calculate gross score
-                                const grossScore = player.scores.reduce((sum, score) => sum + (score || 0), 0);
+                                const grossScore = player.scores.reduce((sum, score) => sum + (parseInt(score) || 0), 0);
                                 
                                 // Calculate net score (gross - handicap strokes based on course rating)
                                 let netScore = grossScore;
@@ -7019,7 +7204,7 @@
                         const stateTeam = state.teams.find(t => t.id === team.teamId);
                         team.players.forEach(player => {
                             if (player.scores && mostRecentRound.pars && mostRecentRound.handicaps) {
-                                const grossScore = player.scores.reduce((sum, score) => sum + (score || 0), 0);
+                                const grossScore = player.scores.reduce((sum, score) => sum + (parseInt(score) || 0), 0);
                                 let netScore = grossScore;
                                 player.scores.forEach((score, holeIdx) => {
                                     if (score && mostRecentRound.handicaps[holeIdx]) {
@@ -7088,7 +7273,7 @@
                         const stateTeam = state.teams.find(t => t.id === team.teamId);
                         team.players.forEach(player => {
                             if (player.scores) {
-                                const grossScore = player.scores.reduce((sum, score) => sum + (score || 0), 0);
+                                const grossScore = player.scores.reduce((sum, score) => sum + (parseInt(score) || 0), 0);
                                 grossScores.push({
                                     playerName: player.name,
                                     teamName: stateTeam ? stateTeam.name : 'Unknown',
@@ -7282,7 +7467,12 @@
                     mostRecentRound: {
                         courseName: mostRecentRound.courseName,
                         date: mostRecentDate.toLocaleDateString('en-US', {weekday: 'long', month: 'long', day: 'numeric'}),
-                        timestamp: mostRecentRound.timestamp || mostRecentRound.id
+                        timestamp: mostRecentRound.timestamp || mostRecentRound.id,
+                        teams: mostRecentRound.teams,
+                        pars: mostRecentRound.pars,
+                        handicaps: mostRecentRound.handicaps,
+                        extra9Winners: mostRecentRound.extra9Winners,
+                        ctpWinners: mostRecentRound.ctpWinners
                     }
                 };
                 
@@ -7458,7 +7648,12 @@
                                         <div style="font-size:48px;">${
                                             story.type === 'close_finish' ? '🎯' :
                                             story.type === 'hot_streak' ? '🔥' :
-                                            story.type === 'comeback' ? '💪' : '⭐'
+                                            story.type === 'comeback' ? '💪' :
+                                            story.type === 'sharpshooter' ? '🎯' :
+                                            story.type === 'high_scoring' ? '⭐' :
+                                            story.type === 'tight_race' ? '⚔️' :
+                                            story.type === 'dominant' ? '👑' :
+                                            story.type === 'individual_brilliance' ? '💎' : '⭐'
                                         }</div>
                                         <h2 style="color:#a78bfa;font-size:32px;font-weight:700;margin:0;">${story.title}</h2>
                                     </div>
@@ -7665,8 +7860,32 @@
                              player.position === totalPlayers - 1 ? '🥈' : 
                              player.position === totalPlayers - 2 ? '🥉' : '';
                 
+                // Check if this is the #1 player (winner)
+                const isWinner = player.position === totalPlayers;
+                
+                // Trigger celebration effects for winner
+                if (isWinner) {
+                    setTimeout(() => {
+                        playWinnerCelebration();
+                        createConfetti();
+                    }, 500); // Slight delay for dramatic effect
+                }
+                
                 html += `
                     <div style="animation:slideUp 0.8s ease-out;max-width:900px;width:100%;">
+                        ${isWinner ? `
+                            <!-- WINNER CELEBRATION BANNER -->
+                            <div style="background:linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);border:4px solid #fbbf24;border-radius:20px;padding:24px;margin-bottom:24px;text-align:center;animation:winnerPulse 2s ease-in-out infinite;box-shadow:0 12px 32px rgba(251,191,36,0.6);">
+                                <div style="font-size:56px;margin-bottom:12px;">🏆 👑 🏆</div>
+                                <div style="color:white;font-size:36px;font-weight:700;text-shadow:0 3px 12px rgba(0,0,0,0.4);margin-bottom:8px;">
+                                    TODAY'S CHAMPION!
+                                </div>
+                                <div style="color:rgba(255,255,255,0.95);font-size:20px;font-weight:600;">
+                                    Congratulations ${player.playerName}! 🎉
+                                </div>
+                            </div>
+                        ` : ''}
+                        
                         <h1 style="color:white;font-size:48px;margin:0 0 16px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
                             ${medal ? medal + ' ' : ''}${playerIndex === 0 ? 'Top Players' : ''}
                         </h1>
@@ -7693,7 +7912,7 @@
                             </div>
                         ` : ''}
                         
-                        <div style="background:linear-gradient(135deg, ${player.teamColor}30 0%, ${player.teamColor}10 100%);border:4px solid ${player.teamColor};border-radius:24px;padding:40px;box-shadow:0 20px 60px rgba(0,0,0,0.4);">
+                        <div style="background:linear-gradient(135deg, ${player.teamColor}30 0%, ${player.teamColor}10 100%);border:4px solid ${player.teamColor};border-radius:24px;padding:40px;box-shadow:0 20px 60px rgba(0,0,0,0.4);${isWinner ? 'animation:winnerPulse 3s ease-in-out infinite;' : ''}">
                             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:30px;">
                                 <div style="flex:1;">
                                     <div style="color:white;font-size:42px;font-weight:700;margin-bottom:12px;">${player.playerName}</div>
@@ -7954,25 +8173,48 @@
                         <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:24px;">
                             <!-- Rollercoaster Award -->
                             ${analytics.awards.rollercoaster ? `
-                                <div style="background:linear-gradient(135deg, rgba(245,158,11,0.2) 0%, rgba(245,158,11,0.1) 100%);border:3px solid #f59e0b;border-radius:16px;padding:30px;">
+                                <div style="background:linear-gradient(135deg, rgba(245,158,11,0.2) 0%, rgba(245,158,11,0.1) 100%);border:3px solid #f59e0b;border-radius:16px;padding:30px;position:relative;">
+                                    <!-- Tooltip -->
+                                    <div style="position:absolute;top:16px;right:16px;cursor:pointer;font-size:20px;color:#f59e0b;width:24px;height:24px;border-radius:50%;background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;" 
+                                         onclick="showAwardTooltip('How Rollercoaster is Calculated', 'Calculated using statistical variance of net scores across all 18 holes. Measures how much a player\\'s scores fluctuate from hole to hole. Higher variance = more ups and downs throughout the round. Formula: Average of squared differences from mean score.', '#f59e0b')">
+                                        ℹ️
+                                    </div>
                                     <div style="text-align:center;margin-bottom:20px;">
                                         <div style="font-size:64px;margin-bottom:12px;">🎢</div>
                                         <h2 style="color:#f59e0b;font-size:24px;font-weight:700;margin:0;">Rollercoaster Award</h2>
                                         <p style="color:#a5b4fc;font-size:14px;margin:8px 0 0;">Biggest score variance</p>
                                     </div>
                                     <div style="background:rgba(0,0,0,0.2);border-radius:12px;padding:20px;text-align:center;">
-                                        <div style="color:white;font-size:24px;font-weight:700;margin-bottom:8px;cursor:pointer;text-decoration:underline;" 
-                                             onclick="showFunAwardScorecard('${analytics.awards.rollercoaster.player}')"
+                                        <div style="color:white;font-size:24px;font-weight:700;margin-bottom:8px;cursor:pointer;text-decoration:underline;touch-action:manipulation;" 
+                                             onclick="showFunAwardScorecard('${analytics.awards.rollercoaster[0].player}')"
                                              onmouseover="this.style.color='#fbbf24'"
-                                             onmouseout="this.style.color='white'">
-                                            ${analytics.awards.rollercoaster.player}
+                                             onmouseout="this.style.color='white'"
+                                             ontouchstart="this.style.color='#fbbf24'"
+                                             ontouchend="this.style.color='white'">
+                                            ${analytics.awards.rollercoaster[0].player}
                                         </div>
                                         <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:12px;">
-                                            <div style="width:8px;height:8px;border-radius:50%;background:${analytics.awards.rollercoaster.teamColor};"></div>
-                                            <div style="color:#a5b4fc;font-size:14px;">${analytics.awards.rollercoaster.team}</div>
+                                            <div style="width:8px;height:8px;border-radius:50%;background:${analytics.awards.rollercoaster[0].teamColor};"></div>
+                                            <div style="color:#a5b4fc;font-size:14px;">${analytics.awards.rollercoaster[0].team}</div>
                                         </div>
+                                        ${analytics.awards.rollercoaster.length > 1 ? `
+                                            <div id="rollercoaster-tie-indicator" style="color:#fbbf24;font-size:14px;margin-bottom:12px;cursor:pointer;text-decoration:underline;" 
+                                                 onclick="this.style.display='none';document.getElementById('rollercoaster-tied-players').style.display='block';">
+                                                +${analytics.awards.rollercoaster.length - 1} more tied
+                                            </div>
+                                            <div id="rollercoaster-tied-players" style="display:none;margin-bottom:12px;">
+                                                ${analytics.awards.rollercoaster.slice(1).map(winner => `
+                                                    <div style="color:white;font-size:16px;margin:8px 0;cursor:pointer;text-decoration:underline;" 
+                                                         onclick="showFunAwardScorecard('${winner.player}')"
+                                                         onmouseover="this.style.color='#fbbf24'"
+                                                         onmouseout="this.style.color='white'">
+                                                        ${winner.player} (${winner.team})
+                                                    </div>
+                                                `).join('')}
+                                            </div>
+                                        ` : ''}
                                         <div style="color:#f59e0b;font-size:20px;font-weight:600;">
-                                            Variance: ${analytics.awards.rollercoaster.variance}
+                                            Variance: ${analytics.awards.rollercoaster[0].variance}
                                         </div>
                                     </div>
                                 </div>
@@ -7980,25 +8222,48 @@
                             
                             <!-- Steady Eddie Award -->
                             ${analytics.awards.steadyEddie ? `
-                                <div style="background:linear-gradient(135deg, rgba(59,130,246,0.2) 0%, rgba(59,130,246,0.1) 100%);border:3px solid #3b82f6;border-radius:16px;padding:30px;">
+                                <div style="background:linear-gradient(135deg, rgba(59,130,246,0.2) 0%, rgba(59,130,246,0.1) 100%);border:3px solid #3b82f6;border-radius:16px;padding:30px;position:relative;">
+                                    <!-- Tooltip -->
+                                    <div style="position:absolute;top:16px;right:16px;cursor:pointer;font-size:20px;color:#3b82f6;width:24px;height:24px;border-radius:50%;background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;" 
+                                         onclick="showAwardTooltip('How Steady Eddie is Calculated', 'The opposite of Rollercoaster - calculated using statistical variance of net scores. Lower variance = more consistent play throughout the round. Award goes to the player with the SMALLEST variance, meaning they had the most steady, predictable scoring pattern.', '#3b82f6')">
+                                        ℹ️
+                                    </div>
                                     <div style="text-align:center;margin-bottom:20px;">
                                         <div style="font-size:64px;margin-bottom:12px;">⚖️</div>
                                         <h2 style="color:#3b82f6;font-size:24px;font-weight:700;margin:0;">Steady Eddie</h2>
-                                        <p style="color:#a5b4fc;font-size:14px;margin:8px 0 0;">Most consecutive pars</p>
+                                        <p style="color:#a5b4fc;font-size:14px;margin:8px 0 0;">Lowest score variance</p>
                                     </div>
                                     <div style="background:rgba(0,0,0,0.2);border-radius:12px;padding:20px;text-align:center;">
-                                        <div style="color:white;font-size:24px;font-weight:700;margin-bottom:8px;cursor:pointer;text-decoration:underline;" 
-                                             onclick="showFunAwardScorecard('${analytics.awards.steadyEddie.player}')"
+                                        <div style="color:white;font-size:24px;font-weight:700;margin-bottom:8px;cursor:pointer;text-decoration:underline;touch-action:manipulation;" 
+                                             onclick="showFunAwardScorecard('${analytics.awards.steadyEddie[0].player}')"
                                              onmouseover="this.style.color='#60a5fa'"
-                                             onmouseout="this.style.color='white'">
-                                            ${analytics.awards.steadyEddie.player}
+                                             onmouseout="this.style.color='white'"
+                                             ontouchstart="this.style.color='#60a5fa'"
+                                             ontouchend="this.style.color='white'">
+                                            ${analytics.awards.steadyEddie[0].player}
                                         </div>
                                         <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:12px;">
-                                            <div style="width:8px;height:8px;border-radius:50%;background:${analytics.awards.steadyEddie.teamColor};"></div>
-                                            <div style="color:#a5b4fc;font-size:14px;">${analytics.awards.steadyEddie.team}</div>
+                                            <div style="width:8px;height:8px;border-radius:50%;background:${analytics.awards.steadyEddie[0].teamColor};"></div>
+                                            <div style="color:#a5b4fc;font-size:14px;">${analytics.awards.steadyEddie[0].team}</div>
                                         </div>
-                                        <div style="color:#3b82f6;font-size:36px;font-weight:700;">
-                                            ${analytics.awards.steadyEddie.streak} in a row
+                                        ${analytics.awards.steadyEddie.length > 1 ? `
+                                            <div id="steadyeddie-tie-indicator" style="color:#60a5fa;font-size:14px;margin-bottom:12px;cursor:pointer;text-decoration:underline;" 
+                                                 onclick="this.style.display='none';document.getElementById('steadyeddie-tied-players').style.display='block';">
+                                                +${analytics.awards.steadyEddie.length - 1} more tied
+                                            </div>
+                                            <div id="steadyeddie-tied-players" style="display:none;margin-bottom:12px;">
+                                                ${analytics.awards.steadyEddie.slice(1).map(winner => `
+                                                    <div style="color:white;font-size:16px;margin:8px 0;cursor:pointer;text-decoration:underline;" 
+                                                         onclick="showFunAwardScorecard('${winner.player}')"
+                                                         onmouseover="this.style.color='#60a5fa'"
+                                                         onmouseout="this.style.color='white'">
+                                                        ${winner.player} (${winner.team})
+                                                    </div>
+                                                `).join('')}
+                                            </div>
+                                        ` : ''}
+                                        <div style="color:#3b82f6;font-size:20px;font-weight:600;">
+                                            Variance: ${analytics.awards.steadyEddie[0].variance}
                                         </div>
                                     </div>
                                 </div>
@@ -8006,25 +8271,48 @@
                             
                             <!-- On Fire Award -->
                             ${analytics.awards.onFire ? `
-                                <div style="background:linear-gradient(135deg, rgba(239,68,68,0.2) 0%, rgba(239,68,68,0.1) 100%);border:3px solid #ef4444;border-radius:16px;padding:30px;">
+                                <div style="background:linear-gradient(135deg, rgba(239,68,68,0.2) 0%, rgba(239,68,68,0.1) 100%);border:3px solid #ef4444;border-radius:16px;padding:30px;position:relative;">
+                                    <!-- Tooltip -->
+                                    <div style="position:absolute;top:16px;right:16px;cursor:pointer;font-size:20px;color:#ef4444;width:24px;height:24px;border-radius:50%;background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;" 
+                                         onclick="showAwardTooltip('How On Fire is Calculated', 'Counts consecutive holes where net score is par or better (pars, birdies, eagles, albatrosses). Net score = gross score minus handicap strokes. Streak resets when player makes bogey or worse. Recognizes sustained quality play and avoiding mistakes.', '#ef4444')">
+                                        ℹ️
+                                    </div>
                                     <div style="text-align:center;margin-bottom:20px;">
                                         <div style="font-size:64px;margin-bottom:12px;">🔥</div>
                                         <h2 style="color:#ef4444;font-size:24px;font-weight:700;margin:0;">On Fire</h2>
-                                        <p style="color:#a5b4fc;font-size:14px;margin:8px 0 0;">Most consecutive better-than-par</p>
+                                        <p style="color:#a5b4fc;font-size:14px;margin:8px 0 0;">Longest streak of par or better</p>
                                     </div>
                                     <div style="background:rgba(0,0,0,0.2);border-radius:12px;padding:20px;text-align:center;">
-                                        <div style="color:white;font-size:24px;font-weight:700;margin-bottom:8px;cursor:pointer;text-decoration:underline;" 
-                                             onclick="showFunAwardScorecard('${analytics.awards.onFire.player}')"
+                                        <div style="color:white;font-size:24px;font-weight:700;margin-bottom:8px;cursor:pointer;text-decoration:underline;touch-action:manipulation;" 
+                                             onclick="showFunAwardScorecard('${analytics.awards.onFire[0].player}')"
                                              onmouseover="this.style.color='#f87171'"
-                                             onmouseout="this.style.color='white'">
-                                            ${analytics.awards.onFire.player}
+                                             onmouseout="this.style.color='white'"
+                                             ontouchstart="this.style.color='#f87171'"
+                                             ontouchend="this.style.color='white'">
+                                            ${analytics.awards.onFire[0].player}
                                         </div>
                                         <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:12px;">
-                                            <div style="width:8px;height:8px;border-radius:50%;background:${analytics.awards.onFire.teamColor};"></div>
-                                            <div style="color:#a5b4fc;font-size:14px;">${analytics.awards.onFire.team}</div>
+                                            <div style="width:8px;height:8px;border-radius:50%;background:${analytics.awards.onFire[0].teamColor};"></div>
+                                            <div style="color:#a5b4fc;font-size:14px;">${analytics.awards.onFire[0].team}</div>
                                         </div>
+                                        ${analytics.awards.onFire.length > 1 ? `
+                                            <div id="onfire-tie-indicator" style="color:#f87171;font-size:14px;margin-bottom:12px;cursor:pointer;text-decoration:underline;" 
+                                                 onclick="this.style.display='none';document.getElementById('onfire-tied-players').style.display='block';">
+                                                +${analytics.awards.onFire.length - 1} more tied
+                                            </div>
+                                            <div id="onfire-tied-players" style="display:none;margin-bottom:12px;">
+                                                ${analytics.awards.onFire.slice(1).map(winner => `
+                                                    <div style="color:white;font-size:16px;margin:8px 0;cursor:pointer;text-decoration:underline;" 
+                                                         onclick="showFunAwardScorecard('${winner.player}')"
+                                                         onmouseover="this.style.color='#f87171'"
+                                                         onmouseout="this.style.color='white'">
+                                                        ${winner.player} (${winner.team})
+                                                    </div>
+                                                `).join('')}
+                                            </div>
+                                        ` : ''}
                                         <div style="color:#ef4444;font-size:36px;font-weight:700;">
-                                            ${analytics.awards.onFire.streak} in a row
+                                            ${analytics.awards.onFire[0].streak} in a row
                                         </div>
                                     </div>
                                 </div>
@@ -8032,25 +8320,48 @@
                             
                             <!-- The Grind Award -->
                             ${analytics.awards.grind ? `
-                                <div style="background:linear-gradient(135deg, rgba(16,185,129,0.2) 0%, rgba(16,185,129,0.1) 100%);border:3px solid #10b981;border-radius:16px;padding:30px;">
+                                <div style="background:linear-gradient(135deg, rgba(16,185,129,0.2) 0%, rgba(16,185,129,0.1) 100%);border:3px solid #10b981;border-radius:16px;padding:30px;position:relative;">
+                                    <!-- Tooltip -->
+                                    <div style="position:absolute;top:16px;right:16px;cursor:pointer;font-size:20px;color:#10b981;width:24px;height:24px;border-radius:50%;background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;" 
+                                         onclick="showAwardTooltip('How The Grind is Calculated', 'Counts total holes where net score was bogey or worse (net score > par). Lower is better! Award goes to the player who avoided mistakes the most. Net score = gross score minus handicap strokes. Highlights discipline, course management, and ability to minimize damage.', '#10b981')">
+                                        ℹ️
+                                    </div>
                                     <div style="text-align:center;margin-bottom:20px;">
                                         <div style="font-size:64px;margin-bottom:12px;">💪</div>
                                         <h2 style="color:#10b981;font-size:24px;font-weight:700;margin:0;">The Grind</h2>
-                                        <p style="color:#a5b4fc;font-size:14px;margin:8px 0 0;">Most scramble pars</p>
+                                        <p style="color:#a5b4fc;font-size:14px;margin:8px 0 0;">Fewest bogeys or worse</p>
                                     </div>
                                     <div style="background:rgba(0,0,0,0.2);border-radius:12px;padding:20px;text-align:center;">
-                                        <div style="color:white;font-size:24px;font-weight:700;margin-bottom:8px;cursor:pointer;text-decoration:underline;" 
-                                             onclick="showFunAwardScorecard('${analytics.awards.grind.player}')"
+                                        <div style="color:white;font-size:24px;font-weight:700;margin-bottom:8px;cursor:pointer;text-decoration:underline;touch-action:manipulation;" 
+                                             onclick="showFunAwardScorecard('${analytics.awards.grind[0].player}')"
                                              onmouseover="this.style.color='#34d399'"
-                                             onmouseout="this.style.color='white'">
-                                            ${analytics.awards.grind.player}
+                                             onmouseout="this.style.color='white'"
+                                             ontouchstart="this.style.color='#34d399'"
+                                             ontouchend="this.style.color='white'">
+                                            ${analytics.awards.grind[0].player}
                                         </div>
                                         <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:12px;">
-                                            <div style="width:8px;height:8px;border-radius:50%;background:${analytics.awards.grind.teamColor};"></div>
-                                            <div style="color:#a5b4fc;font-size:14px;">${analytics.awards.grind.team}</div>
+                                            <div style="width:8px;height:8px;border-radius:50%;background:${analytics.awards.grind[0].teamColor};"></div>
+                                            <div style="color:#a5b4fc;font-size:14px;">${analytics.awards.grind[0].team}</div>
                                         </div>
+                                        ${analytics.awards.grind.length > 1 ? `
+                                            <div id="grind-tie-indicator" style="color:#34d399;font-size:14px;margin-bottom:12px;cursor:pointer;text-decoration:underline;" 
+                                                 onclick="this.style.display='none';document.getElementById('grind-tied-players').style.display='block';">
+                                                +${analytics.awards.grind.length - 1} more tied
+                                            </div>
+                                            <div id="grind-tied-players" style="display:none;margin-bottom:12px;">
+                                                ${analytics.awards.grind.slice(1).map(winner => `
+                                                    <div style="color:white;font-size:16px;margin:8px 0;cursor:pointer;text-decoration:underline;" 
+                                                         onclick="showFunAwardScorecard('${winner.player}')"
+                                                         onmouseover="this.style.color='#34d399'"
+                                                         onmouseout="this.style.color='white'">
+                                                        ${winner.player} (${winner.team})
+                                                    </div>
+                                                `).join('')}
+                                            </div>
+                                        ` : ''}
                                         <div style="color:#10b981;font-size:36px;font-weight:700;">
-                                            ${analytics.awards.grind.count} scrambles
+                                            ${analytics.awards.grind[0].count} bogey${analytics.awards.grind[0].count === 1 ? '' : 's'}
                                         </div>
                                     </div>
                                 </div>
@@ -8385,35 +8696,38 @@
                                     <!-- Stats Grid -->
                                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
                                         
-                                        <!-- Today's Performance -->
-                                        ${todaysScores[team.id] && roundIndex >= 0 ? `
+                                        <!-- Today's Totals -->
+                                        ${todaysScores[team.id] ? `
                                             <div style="background:rgba(16,185,129,0.2);border:3px solid rgba(16,185,129,0.4);border-radius:12px;padding:20px;cursor:pointer;transition:all 0.3s;" 
-                                                 onclick="closePresentationMode(); viewRoundDetails(${roundIndex});"
+                                                 ${roundIndex >= 0 ? `onclick="closePresentationMode(); viewRoundDetails(${roundIndex});"` : ''}
                                                  onmouseover="this.style.background='rgba(16,185,129,0.3)'; this.style.transform='scale(1.02)';"
                                                  onmouseout="this.style.background='rgba(16,185,129,0.2)'; this.style.transform='scale(1)';"
-                                                 title="Click to view team scorecard">
-                                                <h3 style="color:#10b981;font-size:20px;font-weight:700;margin:0 0 16px;">📊 Today's Performance</h3>
-                                                <div style="font-size:40px;color:#10b981;font-weight:700;margin-bottom:16px;">+${todaysScores[team.id].total} pts</div>
-                                                <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;">
+                                                 ${roundIndex >= 0 ? `title="Click to view team scorecard"` : ''}>
+                                                <h3 style="color:#10b981;font-size:20px;font-weight:700;margin:0 0 16px;">📊 Today's Totals</h3>
+                                                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
                                                     <div style="background:rgba(255,255,255,0.15);padding:10px;border-radius:8px;text-align:center;">
                                                         <div style="color:#a5b4fc;font-size:12px;font-weight:600;">Stroke</div>
-                                                        <div style="color:white;font-size:24px;font-weight:700;">${todaysScores[team.id].strokePoints || 0}</div>
+                                                        <div style="color:white;font-size:20px;font-weight:700;">${todaysScores[team.id].strokePoints || 0}</div>
                                                     </div>
                                                     <div style="background:rgba(255,255,255,0.15);padding:10px;border-radius:8px;text-align:center;">
                                                         <div style="color:#a5b4fc;font-size:12px;font-weight:600;">BBB</div>
-                                                        <div style="color:white;font-size:24px;font-weight:700;">${todaysScores[team.id].bbbPoints || 0}</div>
+                                                        <div style="color:white;font-size:20px;font-weight:700;">${todaysScores[team.id].bbbPoints || 0}</div>
                                                     </div>
                                                     <div style="background:rgba(255,255,255,0.15);padding:10px;border-radius:8px;text-align:center;">
-                                                        <div style="color:#a5b4fc;font-size:12px;font-weight:600;">Ball</div>
-                                                        <div style="color:white;font-size:24px;font-weight:700;">${todaysScores[team.id].ballPoints || 0}</div>
+                                                        <div style="color:#a5b4fc;font-size:12px;font-weight:600;">Balls</div>
+                                                        <div style="color:white;font-size:20px;font-weight:700;">${todaysScores[team.id].ballPoints || 0}</div>
                                                     </div>
                                                     <div style="background:rgba(255,255,255,0.15);padding:10px;border-radius:8px;text-align:center;">
                                                         <div style="color:#a5b4fc;font-size:12px;font-weight:600;">CTP</div>
-                                                        <div style="color:white;font-size:24px;font-weight:700;">${todaysScores[team.id].ctpPoints || 0}</div>
+                                                        <div style="color:white;font-size:20px;font-weight:700;">${todaysScores[team.id].ctpPoints || 0}</div>
                                                     </div>
                                                     <div style="background:rgba(255,255,255,0.15);padding:10px;border-radius:8px;text-align:center;">
                                                         <div style="color:#a5b4fc;font-size:12px;font-weight:600;">Ex9</div>
-                                                        <div style="color:white;font-size:24px;font-weight:700;">${todaysScores[team.id].extra9Points || 0}</div>
+                                                        <div style="color:white;font-size:20px;font-weight:700;">${todaysScores[team.id].extra9Points || 0}</div>
+                                                    </div>
+                                                    <div style="background:rgba(255,255,255,0.15);padding:10px;border-radius:8px;text-align:center;">
+                                                        <div style="color:#a5b4fc;font-size:12px;font-weight:600;">Total</div>
+                                                        <div style="color:#10b981;font-size:20px;font-weight:700;">+${todaysScores[team.id].total}</div>
                                                     </div>
                                                 </div>
                                             </div>
@@ -8453,7 +8767,7 @@
                                 </div>
                                 
                                 <!-- Today's Totals (Individual Players) -->
-                                ${todaysScores[team.id] && roundIndex >= 0 ? `
+                                ${todaysScores[team.id] ? `
                                     <div style="background:rgba(16,185,129,0.15);border:3px solid rgba(16,185,129,0.3);border-radius:12px;padding:20px;margin-top:20px;">
                                         <h3 style="color:#10b981;font-size:20px;font-weight:700;margin:0 0 16px;">📊 Today's Totals</h3>
                                         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;">
@@ -8684,7 +8998,7 @@
                             🔮 Path to Championship
                         </h1>
                         <p style="color:#a5b4fc;font-size:20px;margin:0 0 30px;">
-                            ${scheduledRounds.length} round${scheduledRounds.length === 1 ? '' : 's'} remaining
+                            ${scheduledRoundsCount} round${scheduledRoundsCount === 1 ? '' : 's'} remaining
                         </p>
                         
                         <div style="display:grid;gap:20px;">
@@ -9093,19 +9407,178 @@
         };
 
         window.nextPresentationSlide = () => {
+            const previousSlide = presentationState.currentSlide;
             presentationState.currentSlide++;
+            
             if (presentationState.currentSlide >= presentationState.totalSlides) {
                 closePresentationMode();
             } else {
+                // Play transition sound and effect when moving from Story of the Day
+                if (previousSlide === 1) { // Story slide is typically index 1
+                    playSlideTransition();
+                }
                 renderPresentation();
             }
         };
         
         window.previousPresentationSlide = () => {
             if (presentationState.currentSlide > 0) {
+                const previousSlide = presentationState.currentSlide;
                 presentationState.currentSlide--;
+                
+                // Play transition sound when moving back to Story of the Day
+                if (presentationState.currentSlide === 1) {
+                    playSlideTransition();
+                }
                 renderPresentation();
             }
+        };
+        
+        // Slide transition with sound effect
+        window.playSlideTransition = () => {
+            try {
+                // Create Web Audio API context
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                const audioContext = new AudioContext();
+                
+                // Create a short "whoosh" sound effect
+                const duration = 0.3;
+                const sampleRate = audioContext.sampleRate;
+                const buffer = audioContext.createBuffer(1, duration * sampleRate, sampleRate);
+                const data = buffer.getChannelData(0);
+                
+                // Generate whoosh sound (descending frequency sweep with noise)
+                for (let i = 0; i < buffer.length; i++) {
+                    const t = i / sampleRate;
+                    const frequency = 800 - (t / duration) * 600; // Sweep from 800Hz to 200Hz
+                    const envelope = Math.exp(-t * 8); // Quick decay
+                    const noise = (Math.random() * 2 - 1) * 0.3; // Add noise
+                    const tone = Math.sin(2 * Math.PI * frequency * t);
+                    data[i] = (tone * 0.7 + noise * 0.3) * envelope * 0.3; // Mix and reduce volume
+                }
+                
+                // Play the sound
+                const source = audioContext.createBufferSource();
+                source.buffer = buffer;
+                source.connect(audioContext.destination);
+                source.start();
+                
+                // Add visual whoosh effect
+                const presentationDiv = document.getElementById('presentationMode');
+                if (presentationDiv) {
+                    const whoosh = document.createElement('div');
+                    whoosh.style.cssText = `
+                        position: fixed;
+                        top: 0;
+                        left: -100%;
+                        width: 100%;
+                        height: 100%;
+                        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+                        pointer-events: none;
+                        z-index: 9999;
+                        animation: whoosh 0.5s ease-out;
+                    `;
+                    presentationDiv.appendChild(whoosh);
+                    
+                    // Remove whoosh after animation
+                    setTimeout(() => whoosh.remove(), 500);
+                }
+            } catch (err) {
+                console.log('Audio not supported or blocked:', err);
+                // Silently fail - not critical
+            }
+        };
+
+        window.playWinnerCelebration = () => {
+            try {
+                // Create Web Audio API context
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                const audioContext = new AudioContext();
+                
+                // Create a triumphant fanfare sound
+                const duration = 1.5;
+                const sampleRate = audioContext.sampleRate;
+                const buffer = audioContext.createBuffer(2, duration * sampleRate, sampleRate);
+                
+                // Generate fanfare with multiple harmonics
+                for (let channel = 0; channel < 2; channel++) {
+                    const data = buffer.getChannelData(channel);
+                    
+                    for (let i = 0; i < buffer.length; i++) {
+                        const t = i / sampleRate;
+                        const envelope = Math.min(1, t * 4) * Math.exp(-t * 1.5); // Attack and decay
+                        
+                        // Triumphant chord progression (C major triad)
+                        const freq1 = 523.25; // C5
+                        const freq2 = 659.25; // E5
+                        const freq3 = 783.99; // G5
+                        
+                        // Create rich harmonic sound
+                        const tone1 = Math.sin(2 * Math.PI * freq1 * t);
+                        const tone2 = Math.sin(2 * Math.PI * freq2 * t);
+                        const tone3 = Math.sin(2 * Math.PI * freq3 * t);
+                        
+                        // Add slight detune for richness
+                        const detune = channel === 0 ? 1.002 : 0.998;
+                        data[i] = ((tone1 + tone2 + tone3) / 3) * envelope * 0.3 * detune;
+                    }
+                }
+                
+                // Play the fanfare
+                const source = audioContext.createBufferSource();
+                source.buffer = buffer;
+                source.connect(audioContext.destination);
+                source.start();
+                
+            } catch (err) {
+                console.log('Audio not supported:', err);
+            }
+        };
+
+        window.createConfetti = () => {
+            const presentationDiv = document.getElementById('presentationMode');
+            if (!presentationDiv) return;
+            
+            // Create confetti container
+            const container = document.createElement('div');
+            container.className = 'confetti-container';
+            presentationDiv.appendChild(container);
+            
+            // Confetti colors (gold, silver, team colors)
+            const colors = ['#fbbf24', '#fcd34d', '#fef3c7', '#e5e7eb', '#f3f4f6', 
+                           '#ef4444', '#3b82f6', '#10b981', '#8b5cf6', '#ec4899'];
+            
+            // Create 100 confetti pieces
+            for (let i = 0; i < 100; i++) {
+                const confetti = document.createElement('div');
+                confetti.className = 'confetti';
+                
+                // Random properties
+                const color = colors[Math.floor(Math.random() * colors.length)];
+                const left = Math.random() * 100;
+                const animationDuration = 3 + Math.random() * 2; // 3-5 seconds
+                const delay = Math.random() * 0.5; // Stagger start
+                const size = 8 + Math.random() * 6; // 8-14px
+                
+                // Random shape (square or rectangle)
+                const width = size;
+                const height = Math.random() > 0.5 ? size : size * 1.5;
+                
+                confetti.style.cssText = `
+                    left: ${left}%;
+                    background: ${color};
+                    width: ${width}px;
+                    height: ${height}px;
+                    animation-duration: ${animationDuration}s;
+                    animation-delay: ${delay}s;
+                    border-radius: ${Math.random() > 0.7 ? '50%' : '2px'};
+                `;
+                
+                container.appendChild(confetti);
+            }
+            
+            // Remove container after animation completes
+            setTimeout(() => container.remove(), 6000);
         };
 
         window.navigateToPresentationSlide = (slideNumber) => {
@@ -9168,16 +9641,18 @@
             
             // Build scorecard HTML
             let scorecardHTML = `
-                <div id="scorecardModal" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:3000;display:flex;align-items:center;justify-content:center;padding:20px;">
-                    <div style="background:linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);border-radius:20px;max-width:1000px;width:100%;max-height:90vh;overflow-y:auto;padding:40px;box-shadow:0 20px 60px rgba(0,0,0,0.5);">
+                <div id="scorecardModal" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:4000;display:flex;align-items:center;justify-content:center;padding:20px;" 
+                     onclick="document.getElementById('scorecardModal').remove()">
+                    <div style="background:linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);border-radius:20px;max-width:1000px;width:100%;max-height:90vh;overflow-y:auto;padding:40px;box-shadow:0 20px 60px rgba(0,0,0,0.5);" 
+                         onclick="event.stopPropagation()">
                         <!-- Header -->
-                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:30px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:30px;flex-wrap:wrap;gap:16px;">
                             <div>
                                 <h2 style="color:white;font-size:32px;margin:0 0 8px;">${playerData.name}</h2>
                                 <p style="color:#a5b4fc;font-size:18px;margin:0;">${mostRecentRound.courseName} - ${mostRecentRound.date}</p>
                             </div>
                             <button onclick="document.getElementById('scorecardModal').remove()" 
-                                    style="background:rgba(239,68,68,0.9);color:white;border:none;padding:12px 24px;border-radius:8px;cursor:pointer;font-weight:600;font-size:16px;">
+                                    style="background:rgba(239,68,68,0.9);color:white;border:none;padding:14px 28px;border-radius:8px;cursor:pointer;font-weight:600;font-size:16px;min-height:48px;min-width:100px;touch-action:manipulation;">
                                 ✕ Close
                             </button>
                         </div>
@@ -9208,7 +9683,10 @@
                                         <td style="padding:12px;color:#a5b4fc;font-size:14px;">Score</td>
                                         ${playerData.scores.slice(0, 9).map((score, idx) => {
                                             const par = mostRecentRound.pars[idx];
-                                            const toPar = score - par;
+                                            const holeHandicap = mostRecentRound.handicaps[idx];
+                                            const strokes = playerData.handicap >= holeHandicap ? 1 : 0;
+                                            const netScore = score - strokes;
+                                            const toPar = netScore - par;
                                             const color = toPar < 0 ? '#10b981' : toPar === 0 ? 'white' : toPar === 1 ? '#f59e0b' : '#ef4444';
                                             return `
                                                 <td style="padding:12px;color:${color};font-size:16px;font-weight:700;text-align:center;">
@@ -9251,7 +9729,10 @@
                                         <td style="padding:12px;color:#a5b4fc;font-size:14px;">Score</td>
                                         ${playerData.scores.slice(9, 18).map((score, idx) => {
                                             const par = mostRecentRound.pars[idx + 9];
-                                            const toPar = score - par;
+                                            const holeHandicap = mostRecentRound.handicaps[idx + 9];
+                                            const strokes = playerData.handicap >= holeHandicap ? 1 : 0;
+                                            const netScore = score - strokes;
+                                            const toPar = netScore - par;
                                             const color = toPar < 0 ? '#10b981' : toPar === 0 ? 'white' : toPar === 1 ? '#f59e0b' : '#ef4444';
                                             return `
                                                 <td style="padding:12px;color:${color};font-size:16px;font-weight:700;text-align:center;">
@@ -9290,6 +9771,36 @@
             `;
             
             document.body.insertAdjacentHTML('beforeend', scorecardHTML);
+        };
+        
+        window.showAwardTooltip = (awardName, text, color) => {
+            // Remove any existing tooltips
+            const existing = document.getElementById('awardTooltipModal');
+            if (existing) {
+                existing.remove();
+                return; // Toggle off if clicking same tooltip
+            }
+            
+            const tooltipHTML = `
+                <div id="awardTooltipModal" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:3500;display:flex;align-items:center;justify-content:center;padding:20px;" 
+                     onclick="document.getElementById('awardTooltipModal').remove()">
+                    <div style="background:linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);border:3px solid ${color};border-radius:16px;max-width:500px;width:100%;padding:30px;box-shadow:0 20px 60px rgba(0,0,0,0.5);" 
+                         onclick="event.stopPropagation()">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+                            <h3 style="color:${color};font-size:24px;margin:0;font-weight:700;">${awardName}</h3>
+                            <button onclick="document.getElementById('awardTooltipModal').remove()" 
+                                    style="background:rgba(239,68,68,0.9);color:white;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-weight:600;font-size:14px;">
+                                ✕ Close
+                            </button>
+                        </div>
+                        <p style="color:#e0e7ff;font-size:16px;line-height:1.6;margin:0;">
+                            ${text}
+                        </p>
+                    </div>
+                </div>
+            `;
+            
+            document.body.insertAdjacentHTML('beforeend', tooltipHTML);
         };
 
         window.activateRound = (roundIndex) => {
@@ -11347,21 +11858,49 @@
                     });
                     
                     // Add eventId and timestamp to new rounds
-                    round.id = Date.now();
+                    round.id = round.id || Date.now();
                     round.eventId = state.currentEventId;
                     round.active = true; // Mark as active (not scheduled)
-                    // Create full timestamp from date and current time
-                    if (round.date) {
-                        // Parse date in local timezone (not UTC)
-                        const [year, month, day] = round.date.split('-').map(Number);
-                        const now = new Date();
-                        const dateObj = new Date(year, month - 1, day, now.getHours(), now.getMinutes(), now.getSeconds());
-                        round.timestamp = dateObj.getTime();
-                        console.log(`Created timestamp from date ${round.date}: ${round.timestamp} (${dateObj.toLocaleString()})`);
+                    
+                    // Check if this was a scheduled round that's being completed
+                    // If so, preserve its original timestamp instead of creating a new one
+                    const originalScheduledRound = state.rounds.find(r => 
+                        r.courseId === round.courseId && 
+                        r.active === false && 
+                        r.eventId === state.currentEventId &&
+                        r.date === round.date &&
+                        JSON.stringify(r.teams.map(t => t.teamId).sort()) === JSON.stringify(round.teams.map(t => t.teamId).sort())
+                    );
+                    
+                    if (originalScheduledRound && originalScheduledRound.timestamp) {
+                        // Preserve the original scheduled timestamp
+                        round.timestamp = originalScheduledRound.timestamp;
+                        console.log(`Preserved original scheduled timestamp: ${round.timestamp} (${new Date(round.timestamp).toLocaleString()})`);
+                        
+                        // Remove the scheduled round since we're replacing it with the completed version
+                        const scheduleIndex = state.rounds.indexOf(originalScheduledRound);
+                        if (scheduleIndex >= 0) {
+                            const updatedRounds = [...state.rounds];
+                            updatedRounds.splice(scheduleIndex, 1);
+                            updatedRounds.push(round);
+                            save('rounds', updatedRounds);
+                        } else {
+                            save('rounds', [...state.rounds, round]);
+                        }
                     } else {
-                        round.timestamp = round.id;
+                        // Create full timestamp from date and current time
+                        if (round.date) {
+                            // Parse date in local timezone (not UTC)
+                            const [year, month, day] = round.date.split('-').map(Number);
+                            const now = new Date();
+                            const dateObj = new Date(year, month - 1, day, now.getHours(), now.getMinutes(), now.getSeconds());
+                            round.timestamp = dateObj.getTime();
+                            console.log(`Created timestamp from date ${round.date}: ${round.timestamp} (${dateObj.toLocaleString()})`);
+                        } else {
+                            round.timestamp = round.id;
+                        }
+                        save('rounds', [...state.rounds, round]);
                     }
-                    save('rounds', [...state.rounds, round]);
                     
                     // Use the timestamp we just created (not reparse the date string)
                     const roundTimestamp = round.timestamp || round.id;
