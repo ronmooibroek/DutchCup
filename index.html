@@ -7394,7 +7394,7 @@
                 const hasTrendsSlide = presentationAnalytics.trends.length > 0;
                 const hasFunAwardsSlide = true; // Always show fun awards
                 const hasMilestonesSlide = presentationAnalytics.milestones.length > 0;
-                const hasWhatIfSlide = presentationAnalytics.whatIf.length > 0;
+                const hasWhatIfSlide = false; // DISABLED - presentationAnalytics.whatIf.length > 0;
                 
                 if (hasStorySlide) totalSlides++;
                 if (hasBiggestMomentsSlide) totalSlides++;
@@ -7865,9 +7865,13 @@
                 
                 // Check if this is the #1 player (winner)
                 const isWinner = player.position === totalPlayers;
+                console.log(`Player ${player.playerName} - Position: ${player.position}/${totalPlayers} - IsWinner: ${isWinner}`);
                 
                 // Set flag so celebration triggers after rendering
                 presentationState.isWinnerSlide = isWinner;
+                if (isWinner) {
+                    console.log('🏆 WINNER FLAG SET for', player.playerName);
+                }
                 
                 html += `
                     <div style="animation:slideUp 0.8s ease-out;max-width:900px;width:100%;">
@@ -8988,63 +8992,6 @@
                         </div>
                     </div>
                 `;
-            } else if (currentSlide === whatIfSlideIndex) {
-                // WHAT-IF SCENARIOS SLIDE
-                html += `
-                    <div style="animation:slideUp 0.8s ease-out;max-width:1100px;width:100%;">
-                        <h1 style="color:white;font-size:48px;margin:0 0 20px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
-                            🔮 Path to Championship
-                        </h1>
-                        <p style="color:#a5b4fc;font-size:20px;margin:0 0 30px;">
-                            ${scheduledRoundsCount} round${scheduledRoundsCount === 1 ? '' : 's'} remaining
-                        </p>
-                        
-                        <div style="display:grid;gap:20px;">
-                            ${analytics.whatIf.map((scenario, idx) => `
-                                <div style="background:linear-gradient(135deg, rgba(139,92,246,0.2) 0%, rgba(139,92,246,0.1) 100%);border:3px solid rgba(139,92,246,0.4);border-radius:16px;padding:30px;">
-                                    <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:20px;">
-                                        <div style="flex:1;">
-                                            <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
-                                                <div style="background:${scenario.teamColor};width:20px;height:20px;border-radius:50%;"></div>
-                                                <h2 style="color:white;font-size:28px;font-weight:700;margin:0;">${scenario.team}</h2>
-                                            </div>
-                                            <div style="color:#a5b4fc;font-size:16px;margin-bottom:8px;">
-                                                Currently ${scenario.currentPosition}${scenario.currentPosition === 1 ? 'st' : scenario.currentPosition === 2 ? 'nd' : scenario.currentPosition === 3 ? 'rd' : 'th'} place
-                                            </div>
-                                            <div style="color:#ef4444;font-size:20px;font-weight:600;">
-                                                ${scenario.gap} points behind leader
-                                            </div>
-                                        </div>
-                                        <div style="text-align:right;">
-                                            <div style="color:#818cf8;font-size:14px;margin-bottom:4px;">Win Probability</div>
-                                            <div style="color:#a78bfa;font-size:48px;font-weight:700;">${scenario.probability}%</div>
-                                        </div>
-                                    </div>
-                                    
-                                    <div style="background:rgba(0,0,0,0.2);border-radius:12px;padding:20px;">
-                                        <div style="color:#a5b4fc;font-size:14px;margin-bottom:8px;">What They Need:</div>
-                                        <div style="color:white;font-size:18px;font-weight:600;margin-bottom:16px;">
-                                            ${scenario.scenario}
-                                        </div>
-                                        
-                                        <!-- Probability Bar -->
-                                        <div style="background:#1e293b;border-radius:8px;height:24px;position:relative;overflow:hidden;">
-                                            <div style="background:linear-gradient(90deg, #a78bfa 0%, #8b5cf6 100%);height:100%;width:${scenario.probability}%;transition:width 1s ease-out;"></div>
-                                        </div>
-                                    </div>
-                                </div>
-                            `).join('')}
-                            
-                            ${analytics.whatIf.length === 0 ? `
-                                <div style="background:rgba(255,255,255,0.05);border:2px solid rgba(255,255,255,0.1);border-radius:16px;padding:40px;text-align:center;">
-                                    <p style="color:#818cf8;font-size:20px;margin:0;">
-                                        Event complete - champion crowned!
-                                    </p>
-                                </div>
-                            ` : ''}
-                        </div>
-                    </div>
-                `;
             } else if (currentSlide === handicapSlideIndex) {
                 // HANDICAP CHANGES SLIDE
                 const actualChanges = handicapChanges.filter(ch => ch.beforeHandicap !== ch.afterHandicap);
@@ -9399,10 +9346,22 @@
             document.body.insertAdjacentHTML('beforeend', html);
             
             // Trigger celebration effects if showing the winner
+            console.log('Checking for winner slide:', presentationState.isWinnerSlide);
             if (presentationState.isWinnerSlide) {
+                console.log('🎉 WINNER SLIDE DETECTED! Triggering celebration...');
                 setTimeout(() => {
-                    playWinnerCelebration();
-                    createConfetti();
+                    console.log('🎺 Playing fanfare...');
+                    if (typeof playWinnerCelebration === 'function') {
+                        playWinnerCelebration();
+                    } else {
+                        console.error('playWinnerCelebration not found!');
+                    }
+                    console.log('🎊 Creating confetti...');
+                    if (typeof createConfetti === 'function') {
+                        createConfetti();
+                    } else {
+                        console.error('createConfetti not found!');
+                    }
                 }, 500); // Slight delay for dramatic effect
             }
             } catch (error) {
@@ -9496,10 +9455,12 @@
         };
 
         window.playWinnerCelebration = () => {
+            console.log('🎺 playWinnerCelebration() called!');
             try {
                 // Create Web Audio API context
                 const AudioContext = window.AudioContext || window.webkitAudioContext;
                 const audioContext = new AudioContext();
+                console.log('Audio context created:', audioContext);
                 
                 // Create a triumphant fanfare sound
                 const duration = 1.5;
@@ -9535,20 +9496,27 @@
                 source.buffer = buffer;
                 source.connect(audioContext.destination);
                 source.start();
+                console.log('✅ Fanfare playing!');
                 
             } catch (err) {
-                console.log('Audio not supported:', err);
+                console.error('❌ Audio error:', err);
             }
         };
 
         window.createConfetti = () => {
+            console.log('🎊 createConfetti() called!');
             const presentationDiv = document.getElementById('presentationMode');
-            if (!presentationDiv) return;
+            if (!presentationDiv) {
+                console.error('❌ presentationMode div not found!');
+                return;
+            }
+            console.log('✅ presentationMode div found:', presentationDiv);
             
             // Create confetti container
             const container = document.createElement('div');
             container.className = 'confetti-container';
             presentationDiv.appendChild(container);
+            console.log('✅ Confetti container created');
             
             // Confetti colors (gold, silver, team colors)
             const colors = ['#fbbf24', '#fcd34d', '#fef3c7', '#e5e7eb', '#f3f4f6', 
@@ -9582,9 +9550,13 @@
                 
                 container.appendChild(confetti);
             }
+            console.log('✅ Created 100 confetti pieces!');
             
             // Remove container after animation completes
-            setTimeout(() => container.remove(), 6000);
+            setTimeout(() => {
+                container.remove();
+                console.log('🧹 Confetti cleaned up');
+            }, 6000);
         };
 
         window.navigateToPresentationSlide = (slideNumber) => {
@@ -13131,7 +13103,7 @@
                 }, 500);
             } else {
                 const dbType = useFirebase ? '☁️ Firebase' : '💾 LocalStorage';
-                notify(`✅ v9.9 Ready! (${dbType})`);
+                notify(`✅ v9.5 Ready! (${dbType})`);
             }
         });
     </script>
