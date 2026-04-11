@@ -2844,9 +2844,13 @@
                 eventRounds.forEach((r, rIdx) => {
                     r.teams.forEach(t => {
                         if (!stats[t.teamId]) {
+                            // Get current team name from state.teams (not the old name from round data)
+                            const currentTeam = state.teams.find(team => team.id === t.teamId);
+                            const teamName = currentTeam ? currentTeam.name : t.teamName;
+                            
                             stats[t.teamId] = { 
                                 id: t.teamId, 
-                                name: t.teamName, 
+                                name: teamName, 
                                 points: 0, 
                                 rounds: 0, 
                                 wins: 0,
@@ -7125,6 +7129,73 @@
                     ]
                 };
                 
+                // 11. EXTRA 9 TEAMS - Snake draft for next round's Extra 9
+                presentationAnalytics.extra9Teams = [];
+                
+                if (mostRecentRound) {
+                    // Get all players from most recent round with their scores
+                    const playersForDraft = [];
+                    mostRecentRound.teams.forEach((team, teamIdx) => {
+                        const stateTeam = state.teams.find(t => t.id === team.teamId);
+                        team.players.forEach((player, playerIdx) => {
+                            // Calculate gross score
+                            const grossScore = player.scores ? player.scores.reduce((sum, score) => sum + (parseInt(score) || 0), 0) : 999;
+                            
+                            // Calculate net score for tiebreaker
+                            const netScore = grossScore - (player.handicap || 0);
+                            
+                            playersForDraft.push({
+                                id: player.id,
+                                name: player.name,
+                                teamName: stateTeam ? stateTeam.name : team.teamName,
+                                teamColor: stateTeam ? stateTeam.color : '#3b82f6',
+                                handicap: player.handicap || 0,
+                                grossScore: grossScore,
+                                netScore: netScore
+                            });
+                        });
+                    });
+                    
+                    // Sort by gross score (ascending = low first), then by net score for ties
+                    playersForDraft.sort((a, b) => {
+                        if (a.grossScore !== b.grossScore) {
+                            return a.grossScore - b.grossScore; // Lower gross is better
+                        }
+                        return a.netScore - b.netScore; // Lower net breaks ties
+                    });
+                    
+                    // Snake draft into 3 teams
+                    // Team 1: picks 1, 6, 7, 12, 13, 18...
+                    // Team 2: picks 2, 5, 8, 11, 14, 17...
+                    // Team 3: picks 3, 4, 9, 10, 15, 16...
+                    const team1 = [];
+                    const team2 = [];
+                    const team3 = [];
+                    
+                    playersForDraft.forEach((player, index) => {
+                        const pickNumber = index + 1;
+                        const round = Math.floor(index / 3);
+                        const posInRound = index % 3;
+                        
+                        if (round % 2 === 0) {
+                            // Even rounds: 1, 2, 3
+                            if (posInRound === 0) team1.push(player);
+                            else if (posInRound === 1) team2.push(player);
+                            else team3.push(player);
+                        } else {
+                            // Odd rounds: 3, 2, 1 (snake)
+                            if (posInRound === 0) team3.push(player);
+                            else if (posInRound === 1) team2.push(player);
+                            else team1.push(player);
+                        }
+                    });
+                    
+                    // Store teams for presentation
+                    if (team1.length > 0) presentationAnalytics.extra9Teams.push({ name: 'Team 1', players: team1, color: '#ef4444' });
+                    if (team2.length > 0) presentationAnalytics.extra9Teams.push({ name: 'Team 2', players: team2, color: '#3b82f6' });
+                    if (team3.length > 0) presentationAnalytics.extra9Teams.push({ name: 'Team 3', players: team3, color: '#10b981' });
+                }
+                
                 // ═══════════════════════════════════════════════════════════
                 // END ENHANCED ANALYTICS ENGINE
                 // ═══════════════════════════════════════════════════════════
@@ -7394,6 +7465,7 @@
                 const hasTrendsSlide = presentationAnalytics.trends.length > 0;
                 const hasFunAwardsSlide = true; // Always show fun awards
                 const hasMilestonesSlide = presentationAnalytics.milestones.length > 0;
+                const hasExtra9TeamsSlide = presentationAnalytics.extra9Teams.length > 0;
                 const hasWhatIfSlide = false; // DISABLED - presentationAnalytics.whatIf.length > 0;
                 
                 if (hasStorySlide) totalSlides++;
@@ -7411,6 +7483,7 @@
                 totalSlides += leaderboard.length; // Team slides
                 if (hasEventNetSlide) totalSlides++; // Event net scores (only when complete)
                 if (hasMilestonesSlide) totalSlides++;
+                if (hasExtra9TeamsSlide) totalSlides++;
                 if (hasWhatIfSlide) totalSlides++;
                 if (hasHandicapSlide) totalSlides++;
                 if (hasNextRoundSlide) totalSlides++;
@@ -7457,6 +7530,7 @@
                     hasTrendsSlide: hasTrendsSlide,
                     hasFunAwardsSlide: hasFunAwardsSlide,
                     hasMilestonesSlide: hasMilestonesSlide,
+                    hasExtra9TeamsSlide: hasExtra9TeamsSlide,
                     hasWhatIfSlide: hasWhatIfSlide,
                     // Next round
                     nextRound: nextRound,
@@ -7520,7 +7594,7 @@
                     analytics,
                     hasStorySlide, hasBiggestMomentsSlide, hasBeatComparisonSlide, hasGuessWhoSlide,
                     hasHoleAnalysisSlide, hasScoringDistSlide, hasTrendsSlide, hasFunAwardsSlide,
-                    hasMilestonesSlide, hasWhatIfSlide
+                    hasMilestonesSlide, hasExtra9TeamsSlide, hasWhatIfSlide
                 } = presentationState;
                 
                 // Reset celebration flag
@@ -7550,6 +7624,7 @@
             const milestonesSlideIndex = hasMilestonesSlide ? slideIndex++ : -1;
             const whatIfSlideIndex = hasWhatIfSlide ? slideIndex++ : -1;
             const handicapSlideIndex = hasHandicapSlide ? slideIndex++ : -1;
+            const extra9TeamsSlideIndex = hasExtra9TeamsSlide ? slideIndex++ : -1;
             const nextRoundSlideIndex = hasNextRoundSlide ? slideIndex++ : -1;
             
             // Build presentation HTML
@@ -9220,6 +9295,60 @@
                                 </div>
                             </div>
                         ` : ''}
+                    </div>
+                `;
+            } else if (currentSlide === extra9TeamsSlideIndex) {
+                // EXTRA 9 TEAMS SLIDE - Snake draft based on gross scores
+                html += `
+                    <div style="animation:slideUp 0.8s ease-out;max-width:1100px;width:100%;">
+                        <h1 style="color:white;font-size:48px;margin:0 0 16px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
+                            🎯 Extra 9 Teams
+                        </h1>
+                        <p style="color:#a5b4fc;font-size:20px;margin:0 0 12px;">
+                            Snake draft based on today's gross scores
+                        </p>
+                        <p style="color:#818cf8;font-size:16px;margin:0 0 30px;font-style:italic;">
+                            Low gross picks first • Net score breaks ties
+                        </p>
+                        
+                        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:24px;">
+                            ${analytics.extra9Teams.map((team, teamIdx) => `
+                                <div style="background:linear-gradient(135deg, ${team.color}30 0%, ${team.color}10 100%);border:4px solid ${team.color};border-radius:20px;padding:24px;box-shadow:0 12px 32px rgba(0,0,0,0.3);">
+                                    <div style="text-align:center;margin-bottom:20px;">
+                                        <div style="background:${team.color};color:white;font-size:24px;font-weight:700;padding:12px;border-radius:12px;margin-bottom:8px;">
+                                            ${team.name}
+                                        </div>
+                                    </div>
+                                    
+                                    <div style="display:grid;gap:12px;">
+                                        ${team.players.map((player, idx) => `
+                                            <div style="background:rgba(255,255,255,0.1);border:2px solid rgba(255,255,255,0.2);border-radius:10px;padding:12px;">
+                                                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                                                    <div style="color:white;font-size:16px;font-weight:700;">${player.name}</div>
+                                                    <div style="background:${team.color};color:white;font-size:12px;font-weight:600;padding:4px 8px;border-radius:6px;">
+                                                        #${idx + 1}
+                                                    </div>
+                                                </div>
+                                                <div style="display:flex;justify-content:space-between;align-items:center;">
+                                                    <div style="color:#a5b4fc;font-size:13px;">
+                                                        <span style="color:#818cf8;">HCP:</span> ${player.handicap}
+                                                    </div>
+                                                    <div style="color:#a5b4fc;font-size:13px;">
+                                                        <span style="color:#818cf8;">Gross:</span> ${player.grossScore}
+                                                    </div>
+                                                    <div style="color:#a5b4fc;font-size:13px;">
+                                                        <span style="color:#818cf8;">Net:</span> ${player.netScore}
+                                                    </div>
+                                                </div>
+                                                <div style="color:#64748b;font-size:11px;margin-top:4px;">
+                                                    From ${player.teamName}
+                                                </div>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
                     </div>
                 `;
             } else if (currentSlide === nextRoundSlideIndex) {
