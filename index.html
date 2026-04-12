@@ -9511,10 +9511,10 @@
                 html += `
                     <div style="animation:slideUp 0.8s ease-out;max-width:900px;width:100%;">
                         <h1 style="color:white;font-size:48px;margin:0 0 16px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
-                            🔥 BBB Leaderboard
+                            🔥 Bingo Bango Bongo Leaderboard
                         </h1>
                         <p style="color:#a5b4fc;font-size:18px;margin:0 0 8px;">
-                            Birdie or Better Bonuses • All Rounds
+                            Total BBBs Across All Rounds
                         </p>
                         
                         <div style="background:linear-gradient(135deg, rgba(239,68,68,0.2) 0%, rgba(239,68,68,0.1) 100%);border:4px solid rgba(239,68,68,0.4);border-radius:20px;padding:20px;box-shadow:0 20px 60px rgba(0,0,0,0.4);">
@@ -9665,125 +9665,29 @@
                             </div>
                         </div>
                         
-                        <!-- Weather Forecast -->
+                        <!-- Course Details -->
                         <div style="background:rgba(139,92,246,0.2);border:3px solid rgba(139,92,246,0.4);border-radius:16px;padding:24px;margin-bottom:30px;">
                             <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
-                                <div style="font-size:40px;">🌤️</div>
+                                <div style="font-size:40px;">⛳</div>
                                 <div>
-                                    <h2 style="color:#a78bfa;font-size:24px;font-weight:700;margin:0;">Weather Forecast</h2>
+                                    <h2 style="color:#a78bfa;font-size:24px;font-weight:700;margin:0;">Course Info</h2>
                                     <p style="color:#a5b4fc;font-size:14px;margin:4px 0 0;">${dateStr}</p>
                                 </div>
                             </div>
-                            <div id="weather-forecast-${nextRound.timestamp}" style="min-height:120px;display:flex;align-items:center;justify-content:center;">
-                                <div style="color:#a5b4fc;font-size:16px;">Loading weather data...</div>
+                            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px;">
+                                <div style="background:rgba(255,255,255,0.1);border-radius:12px;padding:20px;text-align:center;">
+                                    <div style="font-size:48px;margin-bottom:8px;">🏌️</div>
+                                    <div style="color:white;font-size:18px;font-weight:600;">${nextRound.courseName}</div>
+                                    <div style="color:#a5b4fc;font-size:14px;margin-top:4px;">Course</div>
+                                </div>
+                                ${nextRound.courseAddress ? 
+                                    '<div style="background:rgba(255,255,255,0.1);border-radius:12px;padding:20px;text-align:center;">' +
+                                        '<div style="font-size:48px;margin-bottom:8px;">📍</div>' +
+                                        '<div style="color:white;font-size:16px;font-weight:600;">' + nextRound.courseAddress + '</div>' +
+                                        '<div style="color:#a5b4fc;font-size:14px;margin-top:4px;">Location</div>' +
+                                    '</div>'
+                                : ''}
                             </div>
-                            <script type="text/javascript">
-                                setTimeout(function() {
-                                    try {
-                                        const location = "${nextRound.courseAddress || nextRound.courseName}";
-                                        const roundDate = new Date(${nextRound.timestamp});
-                                        const weatherContainer = document.getElementById("weather-forecast-${nextRound.timestamp}");
-                                        
-                                        if (!weatherContainer) {
-                                            console.error('Weather container not found');
-                                            return;
-                                        }
-                                        
-                                        // Use geocoding to get coordinates, then fetch weather
-                                        fetch('https://geocoding-api.open-meteo.com/v1/search?name=' + encodeURIComponent(location) + '&count=1&language=en&format=json')
-                                            .then(response => response.json())
-                                            .then(geoData => {
-                                            if (geoData.results && geoData.results.length > 0) {
-                                                const { latitude, longitude, name, admin1 } = geoData.results[0];
-                                                
-                                                // Format date for API (YYYY-MM-DD)
-                                                const dateStr = roundDate.toISOString().split('T')[0];
-                                                
-                                                // Fetch weather forecast
-                                                return fetch('https://api.open-meteo.com/v1/forecast?latitude=' + latitude + '&longitude=' + longitude + '&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,windspeed_10m_max,weathercode&timezone=auto&start_date=' + dateStr + '&end_date=' + dateStr + '&temperature_unit=fahrenheit&windspeed_unit=mph')
-                                                    .then(response => response.json())
-                                                    .then(weatherData => ({ weatherData, locationName: name + (admin1 ? ', ' + admin1 : '') }));
-                                            } else {
-                                                throw new Error('Location not found');
-                                            }
-                                        })
-                                        .then(({ weatherData, locationName }) => {
-                                            if (weatherData.daily) {
-                                                const { temperature_2m_max, temperature_2m_min, precipitation_probability_max, windspeed_10m_max, weathercode } = weatherData.daily;
-                                                
-                                                // Weather code to emoji/description mapping
-                                                const weatherCodes = {
-                                                    0: { emoji: '☀️', desc: 'Clear' },
-                                                    1: { emoji: '🌤️', desc: 'Mainly Clear' },
-                                                    2: { emoji: '⛅', desc: 'Partly Cloudy' },
-                                                    3: { emoji: '☁️', desc: 'Overcast' },
-                                                    45: { emoji: '🌫️', desc: 'Foggy' },
-                                                    48: { emoji: '🌫️', desc: 'Foggy' },
-                                                    51: { emoji: '🌦️', desc: 'Light Drizzle' },
-                                                    53: { emoji: '🌦️', desc: 'Drizzle' },
-                                                    55: { emoji: '🌧️', desc: 'Heavy Drizzle' },
-                                                    61: { emoji: '🌧️', desc: 'Light Rain' },
-                                                    63: { emoji: '🌧️', desc: 'Rain' },
-                                                    65: { emoji: '🌧️', desc: 'Heavy Rain' },
-                                                    71: { emoji: '🌨️', desc: 'Light Snow' },
-                                                    73: { emoji: '🌨️', desc: 'Snow' },
-                                                    75: { emoji: '🌨️', desc: 'Heavy Snow' },
-                                                    80: { emoji: '🌦️', desc: 'Rain Showers' },
-                                                    81: { emoji: '🌧️', desc: 'Rain Showers' },
-                                                    82: { emoji: '⛈️', desc: 'Heavy Showers' },
-                                                    95: { emoji: '⛈️', desc: 'Thunderstorm' },
-                                                    96: { emoji: '⛈️', desc: 'Thunderstorm' },
-                                                    99: { emoji: '⛈️', desc: 'Severe Thunderstorm' }
-                                                };
-                                                
-                                                const weather = weatherCodes[weathercode[0]] || { emoji: '🌤️', desc: 'Partly Cloudy' };
-                                                const tempHigh = Math.round(temperature_2m_max[0]);
-                                                const tempLow = Math.round(temperature_2m_min[0]);
-                                                const precipChance = precipitation_probability_max[0];
-                                                const windSpeed = Math.round(windspeed_10m_max[0]);
-                                                
-                                                weatherContainer.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:20px;width:100%;">' +
-                                                    '<div style="background:rgba(255,255,255,0.1);border-radius:12px;padding:20px;text-align:center;">' +
-                                                        '<div style="font-size:56px;margin-bottom:8px;">' + weather.emoji + '</div>' +
-                                                        '<div style="color:white;font-size:18px;font-weight:600;">' + weather.desc + '</div>' +
-                                                    '</div>' +
-                                                    '<div style="background:rgba(255,255,255,0.1);border-radius:12px;padding:20px;text-align:center;">' +
-                                                        '<div style="color:#a5b4fc;font-size:14px;margin-bottom:8px;">Temperature</div>' +
-                                                        '<div style="color:#fbbf24;font-size:32px;font-weight:700;">' + tempHigh + '°</div>' +
-                                                        '<div style="color:#818cf8;font-size:16px;">Low: ' + tempLow + '°F</div>' +
-                                                    '</div>' +
-                                                    '<div style="background:rgba(255,255,255,0.1);border-radius:12px;padding:20px;text-align:center;">' +
-                                                        '<div style="color:#a5b4fc;font-size:14px;margin-bottom:8px;">Precipitation</div>' +
-                                                        '<div style="color:#3b82f6;font-size:32px;font-weight:700;">' + precipChance + '%</div>' +
-                                                        '<div style="color:#818cf8;font-size:16px;">Chance of rain</div>' +
-                                                    '</div>' +
-                                                    '<div style="background:rgba(255,255,255,0.1);border-radius:12px;padding:20px;text-align:center;">' +
-                                                        '<div style="color:#a5b4fc;font-size:14px;margin-bottom:8px;">Wind</div>' +
-                                                        '<div style="color:#10b981;font-size:32px;font-weight:700;">' + windSpeed + '</div>' +
-                                                        '<div style="color:#818cf8;font-size:16px;">mph max</div>' +
-                                                    '</div>' +
-                                                '</div>' +
-                                                '<div style="text-align:center;margin-top:16px;color:#64748b;font-size:12px;">' +
-                                                    '📍 ' + locationName +
-                                                '</div>';
-                                            } else {
-                                                throw new Error('No weather data available');
-                                            }
-                                        })
-                                        .catch(error => {
-                                            console.error('Weather fetch error:', error);
-                                            weatherContainer.innerHTML = '<div style="text-align:center;padding:20px;">' +
-                                                '<div style="font-size:48px;margin-bottom:12px;">🌤️</div>' +
-                                                '<div style="color:#818cf8;font-size:16px;">Weather forecast unavailable</div>' +
-                                                '<div style="color:#64748b;font-size:14px;margin-top:8px;">Check local forecast for ' + location + '</div>' +
-                                            '</div>';
-                                        });
-                                    } catch (error) {
-                                        console.error('Weather forecast initialization error:', error);
-                                        // Silently fail - don't crash the page
-                                    }
-                                }, 100);
-                            </scr' + 'ipt>
                         </div>
                         
                         <!-- Groups -->
