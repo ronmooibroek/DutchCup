@@ -7250,31 +7250,47 @@
                     if (team3.length > 0) presentationAnalytics.extra9Teams.push({ name: 'Team 3', players: team3, color: '#10b981' });
                 }
                 
-                // 12. BBB LEADERBOARD - Total BBBs for the week/round
+                // 12. BBB LEADERBOARD - Total BBBs across ALL rounds
                 presentationAnalytics.bbbLeaderboard = [];
                 
-                if (mostRecentRound) {
-                    const bbbPlayers = [];
-                    mostRecentRound.teams.forEach((team, teamIdx) => {
-                        const stateTeam = state.teams.find(t => t.id === team.teamId);
-                        team.players.forEach(player => {
-                            if (player.bbbTotal && player.bbbTotal > 0) {
-                                bbbPlayers.push({
-                                    name: player.name,
-                                    teamName: stateTeam ? stateTeam.name : team.teamName,
-                                    teamColor: stateTeam ? stateTeam.color : '#3b82f6',
-                                    bbbCount: player.bbbTotal,
-                                    bbbPoints: player.bbbTotal * state.settings.bbbPoints
-                                });
-                            }
+                // Aggregate BBB counts across all rounds
+                const playerBBBTotals = new Map(); // playerId -> {name, teamName, teamColor, bbbCount}
+                
+                state.rounds.forEach(round => {
+                    if (round.teams) {
+                        round.teams.forEach((team, teamIdx) => {
+                            const stateTeam = state.teams.find(t => t.id === team.teamId);
+                            team.players.forEach(player => {
+                                if (player.bbbTotal && player.bbbTotal > 0) {
+                                    const existingPlayer = playerBBBTotals.get(player.id);
+                                    if (existingPlayer) {
+                                        // Add to existing total
+                                        existingPlayer.bbbCount += player.bbbTotal;
+                                    } else {
+                                        // Create new entry
+                                        playerBBBTotals.set(player.id, {
+                                            name: player.name,
+                                            teamName: stateTeam ? stateTeam.name : team.teamName,
+                                            teamColor: stateTeam ? stateTeam.color : '#3b82f6',
+                                            bbbCount: player.bbbTotal
+                                        });
+                                    }
+                                }
+                            });
                         });
-                    });
-                    
-                    // Sort by BBB count (descending)
-                    bbbPlayers.sort((a, b) => b.bbbCount - a.bbbCount);
-                    
-                    presentationAnalytics.bbbLeaderboard = bbbPlayers;
-                }
+                    }
+                });
+                
+                // Convert map to array and calculate points
+                const bbbPlayers = Array.from(playerBBBTotals.values()).map(player => ({
+                    ...player,
+                    bbbPoints: player.bbbCount * state.settings.bbbPoints
+                }));
+                
+                // Sort by BBB count (descending)
+                bbbPlayers.sort((a, b) => b.bbbCount - a.bbbCount);
+                
+                presentationAnalytics.bbbLeaderboard = bbbPlayers;
                 
                 // ═══════════════════════════════════════════════════════════
                 // END ENHANCED ANALYTICS ENGINE
@@ -9498,7 +9514,7 @@
                             🔥 BBB Leaderboard
                         </h1>
                         <p style="color:#a5b4fc;font-size:18px;margin:0 0 8px;">
-                            Birdie or Better Bonuses • ${mostRecentRound.courseName}
+                            Birdie or Better Bonuses • All Rounds
                         </p>
                         
                         <div style="background:linear-gradient(135deg, rgba(239,68,68,0.2) 0%, rgba(239,68,68,0.1) 100%);border:4px solid rgba(239,68,68,0.4);border-radius:20px;padding:20px;box-shadow:0 20px 60px rgba(0,0,0,0.4);">
