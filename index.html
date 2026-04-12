@@ -496,6 +496,10 @@
     
     <script>
         // =====================================================================
+        // VERSION: v9.9-SYNTAX-FIXED-2026-04-12 | Hash: 18bf02e6
+        // All nested template literals removed - JavaScript syntax is VALID
+        // If you see ${round.date} as literal text, CLEAR YOUR BROWSER CACHE!
+        // =====================================================================
         // FIREBASE CONFIGURATION
         // =====================================================================
         // TO SET UP FIREBASE:
@@ -535,6 +539,7 @@
         // Change this to create different leagues
         // Example: "spring-2024", "summer-league", "mooibroek-golf", etc.
         const LEAGUE_ID = "dutch-cup-2024";
+        console.log('🎯 Golf League v9.9-SYNTAX-FIXED loading... | Hash: 18bf02e6');
         
         // Initialize Firebase (if config is valid)
         let firebaseApp = null;
@@ -9578,6 +9583,40 @@
                 
                 const sortedGroups = Object.keys(groupsMap).sort((a, b) => parseInt(a) - parseInt(b));
                 
+                // Build groups HTML separately to avoid nested template literals
+                let groupsHTML = '';
+                if (sortedGroups.length > 0) {
+                    groupsHTML = '<div style="background:rgba(255,255,255,0.1);border:3px solid rgba(255,255,255,0.2);border-radius:16px;padding:24px;max-height:400px;overflow-y:auto;">' +
+                        '<h2 style="color:white;font-size:28px;margin:0 0 20px;">👥 Groups</h2>' +
+                        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px;">';
+                    
+                    sortedGroups.forEach(groupNum => {
+                        const players = groupsMap[groupNum];
+                        groupsHTML += '<div style="background:rgba(255,255,255,0.1);border-radius:12px;padding:16px;">' +
+                            '<h3 style="color:#a5b4fc;font-size:18px;margin:0 0 12px;">Group ' + groupNum + '</h3>';
+                        
+                        players.forEach(player => {
+                            groupsHTML += '<div style="display:flex;align-items:center;gap:8px;padding:8px;background:rgba(255,255,255,0.05);border-radius:6px;margin-bottom:6px;">' +
+                                '<div style="width:8px;height:8px;border-radius:50%;background:' + player.teamColor + ';"></div>' +
+                                '<div style="flex:1;">' +
+                                    '<div style="color:white;font-size:14px;font-weight:600;">' + player.name + '</div>' +
+                                    '<div style="color:#a5b4fc;font-size:11px;">' + player.teamName + '</div>' +
+                                '</div>' +
+                                '<div style="color:#a5b4fc;font-size:11px;">HCP: ' + (player.handicap || 0) + '</div>' +
+                            '</div>';
+                        });
+                        
+                        groupsHTML += '</div>';
+                    });
+                    
+                    groupsHTML += '</div></div>';
+                } else {
+                    groupsHTML = '<div style="background:rgba(239,68,68,0.2);border:3px solid rgba(239,68,68,0.4);border-radius:16px;padding:24px;text-align:center;">' +
+                        '<div style="font-size:48px;margin-bottom:12px;">⚠️</div>' +
+                        '<div style="color:white;font-size:20px;">Groups not yet assigned</div>' +
+                    '</div>';
+                }
+                
                 html += `
                     <div style="animation:slideUp 0.8s ease-out;max-width:1000px;width:100%;">
                         <h1 style="color:white;font-size:48px;margin:0 0 16px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
@@ -9600,13 +9639,13 @@
                                     <div style="color:#a5b4fc;font-size:16px;margin-bottom:4px;">Tee Time</div>
                                     <div style="color:white;font-size:28px;font-weight:700;">${timeStr}</div>
                                 </div>
-                                ${nextRound.courseAddress ? `
-                                    <div style="text-align:center;min-width:200px;">
-                                        <div style="font-size:48px;margin-bottom:8px;">📍</div>
-                                        <div style="color:#a5b4fc;font-size:16px;margin-bottom:4px;">Location</div>
-                                        <div style="color:white;font-size:18px;font-weight:600;">${nextRound.courseAddress}</div>
-                                    </div>
-                                ` : ''}
+                                ${nextRound.courseAddress ? 
+                                    '<div style="text-align:center;min-width:200px;">' +
+                                        '<div style="font-size:48px;margin-bottom:8px;">📍</div>' +
+                                        '<div style="color:#a5b4fc;font-size:16px;margin-bottom:4px;">Location</div>' +
+                                        '<div style="color:white;font-size:18px;font-weight:600;">' + nextRound.courseAddress + '</div>' +
+                                    '</div>'
+                                : ''}
                             </div>
                         </div>
                         
@@ -9622,8 +9661,8 @@
                             <div id="weather-forecast-${nextRound.timestamp}" style="min-height:120px;display:flex;align-items:center;justify-content:center;">
                                 <div style="color:#a5b4fc;font-size:16px;">Loading weather data...</div>
                             </div>
-                            <script>
-                                (function() {
+                            <script type="text/javascript">
+                                setTimeout(function() {
                                     try {
                                         const location = "${nextRound.courseAddress || nextRound.courseName}";
                                         const roundDate = new Date(${nextRound.timestamp});
@@ -9727,41 +9766,12 @@
                                         console.error('Weather forecast initialization error:', error);
                                         // Silently fail - don't crash the page
                                     }
-                                })();
-                            </script>
+                                }, 100);
+                            </scr' + 'ipt>
                         </div>
                         
                         <!-- Groups -->
-                        ${sortedGroups.length > 0 ? `
-                            <div style="background:rgba(255,255,255,0.1);border:3px solid rgba(255,255,255,0.2);border-radius:16px;padding:24px;max-height:400px;overflow-y:auto;">
-                                <h2 style="color:white;font-size:28px;margin:0 0 20px;">👥 Groups</h2>
-                                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px;">
-                                    ${sortedGroups.map(groupNum => {
-                                        const players = groupsMap[groupNum];
-                                        return `
-                                            <div style="background:rgba(255,255,255,0.1);border-radius:12px;padding:16px;">
-                                                <h3 style="color:#a5b4fc;font-size:18px;margin:0 0 12px;">Group ${groupNum}</h3>
-                                                ${players.map(player => `
-                                                    <div style="display:flex;align-items:center;gap:8px;padding:8px;background:rgba(255,255,255,0.05);border-radius:6px;margin-bottom:6px;">
-                                                        <div style="width:8px;height:8px;border-radius:50%;background:${player.teamColor};"></div>
-                                                        <div style="flex:1;">
-                                                            <div style="color:white;font-size:14px;font-weight:600;">${player.name}</div>
-                                                            <div style="color:#a5b4fc;font-size:11px;">${player.teamName}</div>
-                                                        </div>
-                                                        <div style="color:#a5b4fc;font-size:11px;">HCP: ${player.handicap || 0}</div>
-                                                    </div>
-                                                `).join('')}
-                                            </div>
-                                        `;
-                                    }).join('')}
-                                </div>
-                            </div>
-                        ` : `
-                            <div style="background:rgba(239,68,68,0.2);border:3px solid rgba(239,68,68,0.4);border-radius:16px;padding:24px;text-align:center;">
-                                <div style="font-size:48px;margin-bottom:12px;">⚠️</div>
-                                <div style="color:white;font-size:20px;">Groups not yet assigned</div>
-                            </div>
-                        `}
+                        ${groupsHTML}
                     </div>
                 `;
             }
@@ -13121,6 +13131,164 @@
                     return { bg: '#6b21a8', text: 'white', fontWeight: '700' }; // Double bogey+
                 };
                 
+                // Helper to render a single hole score
+                const renderHoleScore = (score, holeIdx, par, handicap, playerHandicap) => {
+                    const getsStroke = playerHandicap >= handicap;
+                    const colors = getScoreColor(score, par, getsStroke);
+                    let points = 0;
+                    if (score !== '' && score !== null && score !== undefined) {
+                        const netScore = parseInt(score) - (getsStroke ? 1 : 0);
+                        const netToPar = netScore - par;
+                        points = getPoints(netToPar);
+                    }
+                    const borderStyle = getsStroke ? 'border:3px solid #3b82f6;' : 'border:2px solid #d1d5db;';
+                    
+                    return '<div style="text-align:center;">' +
+                        '<div style="font-size:10px;color:#6b7280;font-weight:600;margin-bottom:2px;">' + (holeIdx + 1) + '</div>' +
+                        '<div style="' + borderStyle + 'background:' + colors.bg + ';color:' + colors.text + ';padding:8px 4px;border-radius:4px;font-weight:' + colors.fontWeight + ';font-size:14px;">' +
+                            (score || '-') +
+                        '</div>' +
+                        '<div style="font-size:9px;color:#9ca3af;margin-top:2px;">' + par + '</div>' +
+                        '<div style="font-size:9px;color:' + (points > 0 ? '#059669' : '#dc2626') + ';font-weight:600;min-height:12px;">' +
+                            (points !== 0 ? (points > 0 ? '+' : '') + points : '') +
+                        '</div>' +
+                    '</div>';
+                };
+                
+                // Helper to build complete player card HTML
+                const buildPlayerCard = (player, playerIdx) => {
+                    const playerStrokePoints = calcPlayerTotal(player.scores, round.pars, round.handicaps, player.handicap);
+                    const grossScore = player.scores.reduce((sum, s) => sum + (parseInt(s) || 0), 0);
+                    const coursePar = round.pars.reduce((sum, p) => sum + p, 0);
+                    const overPar = grossScore - coursePar;
+                    const bbbPoints = (player.bbbTotal || 0) * state.settings.bbbPoints;
+                    const ballPoints = (player.ballsRemaining || 0) * state.settings.ballPoints;
+                    
+                    let extra9Points = 0;
+                    if (round.extra9Winners && round.extra9Winners.length > 0) {
+                        const teamIndex = round.teams.findIndex(t => t.players.some(p => p.id === player.id));
+                        if (teamIndex >= 0) {
+                            const playerPosition = teamIndex + '-' + playerIdx;
+                            extra9Points = round.extra9Winners.filter(w => w === playerPosition).length * state.settings.extra9Points;
+                        }
+                    }
+                    
+                    let ctpPoints = 0;
+                    if (round.ctpWinners && round.ctpWinners.length > 0) {
+                        const teamIndex = round.teams.findIndex(t => t.players.some(p => p.id === player.id));
+                        if (teamIndex >= 0) {
+                            const playerPosition = teamIndex + '-' + playerIdx;
+                            ctpPoints = round.ctpWinners.filter(w => w === playerPosition).length * state.settings.ctpPoints;
+                        }
+                    }
+                    
+                    const totalPoints = playerStrokePoints + bbbPoints + ballPoints + extra9Points + ctpPoints;
+                    
+                    const front9 = player.scores.slice(0, 9).map((score, holeIdx) => 
+                        renderHoleScore(score, holeIdx, round.pars[holeIdx], round.handicaps[holeIdx], player.handicap)
+                    ).join('');
+                    
+                    const back9 = player.scores.slice(9, 18).map((score, holeIdx) => 
+                        renderHoleScore(score, holeIdx + 9, round.pars[holeIdx + 9], round.handicaps[holeIdx + 9], player.handicap)
+                    ).join('');
+                    
+                    return '<div style="background:#f9fafb;border-radius:12px;padding:16px;margin-bottom:16px;">' +
+                        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
+                            '<div><strong style="font-size:18px;">' + player.name + '</strong>' +
+                            '<span style="color:#6b7280;margin-left:8px;font-size:14px;">HC: ' + player.handicap + ' • Gross: ' + grossScore + ' (' + (overPar > 0 ? '+' : '') + overPar + ')</span></div>' +
+                            '<div style="text-align:right;"><div style="font-size:28px;font-weight:700;color:#FF9A00;">' + totalPoints.toFixed(1) + '</div>' +
+                            '<div style="font-size:11px;color:#6b7280;">' + playerStrokePoints + ' stroke • ' + bbbPoints.toFixed(1) + ' BBB • ' + ballPoints + ' balls' + 
+                            (extra9Points > 0 ? ' • ' + extra9Points + ' extra9' : '') + (ctpPoints > 0 ? ' • ' + ctpPoints + ' CTP' : '') + '</div></div>' +
+                        '</div>' +
+                        '<div style="display:grid;grid-template-columns:repeat(9,1fr);gap:4px;margin-bottom:8px;">' + front9 + '</div>' +
+                        '<div style="display:grid;grid-template-columns:repeat(9,1fr);gap:4px;">' + back9 + '</div>' +
+                        '<div style="background:white;border-radius:8px;padding:12px;margin-top:12px;">' +
+                            '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;">' +
+                                '<div style="text-align:center;padding:8px;background:#f0fdf4;border-radius:6px;">' +
+                                    '<div style="font-size:10px;color:#065f46;font-weight:600;margin-bottom:4px;">⛳ STROKES</div>' +
+                                    '<div style="font-size:20px;font-weight:700;color:#059669;">' + playerStrokePoints + '</div>' +
+                                    '<div style="font-size:9px;color:#6b7280;">points</div>' +
+                                '</div>' +
+                                '<div style="text-align:center;padding:8px;background:#faf5ff;border-radius:6px;">' +
+                                    '<div style="font-size:10px;color:#6b21a8;font-weight:600;margin-bottom:4px;">🎯 BBB</div>' +
+                                    '<div style="font-size:20px;font-weight:700;color:#8b5cf6;">' + bbbPoints.toFixed(1) + '</div>' +
+                                    '<div style="font-size:9px;color:#6b7280;">' + (player.bbbTotal || 0) + ' × ' + state.settings.bbbPoints + '</div>' +
+                                '</div>' +
+                                '<div style="text-align:center;padding:8px;background:#fffbeb;border-radius:6px;">' +
+                                    '<div style="font-size:10px;color:#92400e;font-weight:600;margin-bottom:4px;">⚪ BALLS</div>' +
+                                    '<div style="font-size:20px;font-weight:700;color:#d97706;">' + ballPoints + '</div>' +
+                                    '<div style="font-size:9px;color:#6b7280;">' + (player.ballsRemaining || 0) + ' × ' + state.settings.ballPoints + '</div>' +
+                                '</div>' +
+                                '<div style="text-align:center;padding:8px;background:#eff6ff;border-radius:6px;">' +
+                                    '<div style="font-size:10px;color:#1e40af;font-weight:600;margin-bottom:4px;">🎯 CTP</div>' +
+                                    '<div style="font-size:20px;font-weight:700;color:#3b82f6;">' + ctpPoints + '</div>' +
+                                    '<div style="font-size:9px;color:#6b7280;">' + (ctpPoints > 0 ? (ctpPoints / state.settings.ctpPoints) + ' wins' : 'none') + '</div>' +
+                                '</div>' +
+                                '<div style="text-align:center;padding:8px;background:#fef2f2;border-radius:6px;">' +
+                                    '<div style="font-size:10px;color:#991b1b;font-weight:600;margin-bottom:4px;">🏆 EXTRA 9</div>' +
+                                    '<div style="font-size:20px;font-weight:700;color:#dc2626;">' + extra9Points + '</div>' +
+                                    '<div style="font-size:9px;color:#6b7280;">' + (extra9Points > 0 ? (extra9Points / state.settings.extra9Points) + ' wins' : 'none') + '</div>' +
+                                '</div>' +
+                            '</div>' +
+                        '</div>' +
+                    '</div>';
+                };
+                
+                // Helper to build team summary
+                const buildTeamSummary = () => {
+                    const teamStrokePoints = team.players.reduce((sum, p) => {
+                        return sum + calcPlayerTotal(p.scores, round.pars, round.handicaps, p.handicap);
+                    }, 0);
+                    
+                    const teamBBBPoints = team.players.reduce((sum, p) => {
+                        return sum + ((p.bbbTotal || 0) * state.settings.bbbPoints);
+                    }, 0);
+                    
+                    const teamBallPoints = team.players.reduce((sum, p) => {
+                        return sum + ((p.ballsRemaining || 0) * state.settings.ballPoints);
+                    }, 0);
+                    
+                    let teamCTPPoints = 0;
+                    if (round.ctpWinners && round.ctpWinners.length > 0) {
+                        const teamIndex = round.teams.indexOf(team);
+                        teamCTPPoints = round.ctpWinners.filter(w => w.startsWith(teamIndex + '-')).length * state.settings.ctpPoints;
+                    }
+                    
+                    let teamExtra9Points = 0;
+                    if (round.extra9Winners && round.extra9Winners.length > 0) {
+                        const teamIndex = round.teams.indexOf(team);
+                        teamExtra9Points = round.extra9Winners.filter(w => w.startsWith(teamIndex + '-')).length * state.settings.extra9Points;
+                    }
+                    
+                    const correctTeamTotal = teamStrokePoints + teamBBBPoints + teamBallPoints + teamCTPPoints + teamExtra9Points;
+                    
+                    return '<div style="background:linear-gradient(135deg,#FF9A00,#ea580c);color:white;border-radius:12px;padding:20px;margin-top:20px;">' +
+                        '<h3 style="margin:0 0 16px 0;font-size:20px;">Team Total: ' + correctTeamTotal.toFixed(1) + ' Points</h3>' +
+                        '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;">' +
+                            '<div style="background:rgba(255,255,255,0.2);padding:12px;border-radius:8px;text-align:center;">' +
+                                '<div style="font-size:11px;opacity:0.9;margin-bottom:4px;">⛳ Strokes</div>' +
+                                '<div style="font-size:24px;font-weight:700;">' + teamStrokePoints + '</div>' +
+                            '</div>' +
+                            '<div style="background:rgba(255,255,255,0.2);padding:12px;border-radius:8px;text-align:center;">' +
+                                '<div style="font-size:11px;opacity:0.9;margin-bottom:4px;">🎯 BBB</div>' +
+                                '<div style="font-size:24px;font-weight:700;">' + teamBBBPoints.toFixed(1) + '</div>' +
+                            '</div>' +
+                            '<div style="background:rgba(255,255,255,0.2);padding:12px;border-radius:8px;text-align:center;">' +
+                                '<div style="font-size:11px;opacity:0.9;margin-bottom:4px;">⚪ Balls</div>' +
+                                '<div style="font-size:24px;font-weight:700;">' + teamBallPoints + '</div>' +
+                            '</div>' +
+                            '<div style="background:rgba(255,255,255,0.2);padding:12px;border-radius:8px;text-align:center;">' +
+                                '<div style="font-size:11px;opacity:0.9;margin-bottom:4px;">🎯 CTP</div>' +
+                                '<div style="font-size:24px;font-weight:700;">' + teamCTPPoints + '</div>' +
+                            '</div>' +
+                            '<div style="background:rgba(255,255,255,0.2);padding:12px;border-radius:8px;text-align:center;">' +
+                                '<div style="font-size:11px;opacity:0.9;margin-bottom:4px;">🏆 Extra 9</div>' +
+                                '<div style="font-size:24px;font-weight:700;">' + teamExtra9Points + '</div>' +
+                            '</div>' +
+                        '</div>' +
+                    '</div>';
+                };
+                
                 let html = `
                     <div style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.9);z-index:9999;overflow-y:auto;padding:20px;">
                         <div style="max-width:1200px;margin:0 auto;background:white;border-radius:12px;box-shadow:0 20px 25px -5px rgba(0,0,0,0.3);">
@@ -13137,215 +13305,10 @@
                             </div>
                             
                             <div style="padding:20px;">
-                                ${team.players.map((player, playerIdx) => {
-                                    const playerStrokePoints = calcPlayerTotal(player.scores, round.pars, round.handicaps, player.handicap);
-                                    const grossScore = player.scores.reduce((sum, s) => sum + (parseInt(s) || 0), 0);
-                                    const coursePar = round.pars.reduce((sum, p) => sum + p, 0);
-                                    const overPar = grossScore - coursePar;
-                                    
-                                    // Calculate all scoring categories
-                                    const bbbPoints = (player.bbbTotal || 0) * state.settings.bbbPoints;
-                                    const ballPoints = (player.ballsRemaining || 0) * state.settings.ballPoints;
-                                    
-                                    // Calculate Extra 9 points
-                                    let extra9Points = 0;
-                                    if (round.extra9Winners && round.extra9Winners.length > 0) {
-                                        const teamIndex = round.teams.findIndex(t => t.players.some(p => p.id === player.id));
-                                        if (teamIndex >= 0) {
-                                            const playerPosition = `${teamIndex}-${playerIdx}`;
-                                            extra9Points = round.extra9Winners.filter(w => w === playerPosition).length * state.settings.extra9Points;
-                                        }
-                                    }
-                                    
-                                    // Calculate CTP points
-                                    let ctpPoints = 0;
-                                    if (round.ctpWinners && round.ctpWinners.length > 0) {
-                                        const teamIndex = round.teams.findIndex(t => t.players.some(p => p.id === player.id));
-                                        if (teamIndex >= 0) {
-                                            const playerPosition = `${teamIndex}-${playerIdx}`;
-                                            ctpPoints = round.ctpWinners.filter(w => w === playerPosition).length * state.settings.ctpPoints;
-                                        }
-                                    }
-                                    
-                                    const totalPoints = playerStrokePoints + bbbPoints + ballPoints + extra9Points + ctpPoints;
-                                    
-                                    return `
-                                        <div style="background:#f9fafb;border-radius:12px;padding:16px;margin-bottom:16px;">
-                                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-                                                <div>
-                                                    <strong style="font-size:18px;">${player.name}</strong>
-                                                    <span style="color:#6b7280;margin-left:8px;font-size:14px;">HC: ${player.handicap} • Gross: ${grossScore} (${overPar > 0 ? '+' : ''}${overPar})</span>
-                                                </div>
-                                                <div style="text-align:right;">
-                                                    <div style="font-size:28px;font-weight:700;color:#FF9A00;">${totalPoints.toFixed(1)}</div>
-                                                    <div style="font-size:11px;color:#6b7280;">${playerStrokePoints} stroke • ${bbbPoints.toFixed(1)} BBB • ${ballPoints} balls${extra9Points > 0 ? ` • ${extra9Points} extra9` : ''}${ctpPoints > 0 ? ` • ${ctpPoints} CTP` : ''}</div>
-                                                </div>
-                                            </div>
-                                            
-                                            <!-- Score Grid -->
-                                            <div style="display:grid;grid-template-columns:repeat(9,1fr);gap:4px;margin-bottom:8px;">
-                                                ${player.scores.slice(0, 9).map((score, holeIdx) => {
-                                                    const par = round.pars[holeIdx];
-                                                    const holeHandicap = round.handicaps[holeIdx];
-                                                    const getsStroke = player.handicap >= holeHandicap;
-                                                    const colors = getScoreColor(score, par, getsStroke);
-                                                    
-                                                    // Calculate points
-                                                    let points = 0;
-                                                    if (score !== '' && score !== null && score !== undefined) {
-                                                        const netScore = parseInt(score) - (getsStroke ? 1 : 0);
-                                                        const netToPar = netScore - par;
-                                                        points = getPoints(netToPar);
-                                                    }
-                                                    
-                                                    const borderStyle = getsStroke ? 'border:3px solid #3b82f6;' : 'border:2px solid #d1d5db;';
-                                                    
-                                                    return `
-                                                        <div style="text-align:center;">
-                                                            <div style="font-size:10px;color:#6b7280;font-weight:600;margin-bottom:2px;">${holeIdx + 1}</div>
-                                                            <div style="${borderStyle}background:${colors.bg};color:${colors.text};padding:8px 4px;border-radius:4px;font-weight:${colors.fontWeight};font-size:14px;">
-                                                                ${score || '-'}
-                                                            </div>
-                                                            <div style="font-size:9px;color:#9ca3af;margin-top:2px;">${par}</div>
-                                                            <div style="font-size:9px;color:${points > 0 ? '#059669' : '#dc2626'};font-weight:600;min-height:12px;">
-                                                                ${points !== 0 ? (points > 0 ? '+' : '') + points : ''}
-                                                            </div>
-                                                        </div>
-                                                    `;
-                                                }).join('')}
-                                            </div>
-                                            
-                                            <div style="display:grid;grid-template-columns:repeat(9,1fr);gap:4px;">
-                                                ${player.scores.slice(9, 18).map((score, holeIdx) => {
-                                                    const actualHoleIdx = holeIdx + 9;
-                                                    const par = round.pars[actualHoleIdx];
-                                                    const holeHandicap = round.handicaps[actualHoleIdx];
-                                                    const getsStroke = player.handicap >= holeHandicap;
-                                                    const colors = getScoreColor(score, par, getsStroke);
-                                                    
-                                                    // Calculate points
-                                                    let points = 0;
-                                                    if (score !== '' && score !== null && score !== undefined) {
-                                                        const netScore = parseInt(score) - (getsStroke ? 1 : 0);
-                                                        const netToPar = netScore - par;
-                                                        points = getPoints(netToPar);
-                                                    }
-                                                    
-                                                    const borderStyle = getsStroke ? 'border:3px solid #3b82f6;' : 'border:2px solid #d1d5db;';
-                                                    
-                                                    return `
-                                                        <div style="text-align:center;">
-                                                            <div style="font-size:10px;color:#6b7280;font-weight:600;margin-bottom:2px;">${actualHoleIdx + 1}</div>
-                                                            <div style="${borderStyle}background:${colors.bg};color:${colors.text};padding:8px 4px;border-radius:4px;font-weight:${colors.fontWeight};font-size:14px;">
-                                                                ${score || '-'}
-                                                            </div>
-                                                            <div style="font-size:9px;color:#9ca3af;margin-top:2px;">${par}</div>
-                                                            <div style="font-size:9px;color:${points > 0 ? '#059669' : '#dc2626'};font-weight:600;min-height:12px;">
-                                                                ${points !== 0 ? (points > 0 ? '+' : '') + points : ''}
-                                                            </div>
-                                                        </div>
-                                                    `;
-                                                }).join('')}
-                                            </div>
-                                            
-                                            <!-- Player Stats Breakdown -->
-                                            <div style="background:white;border-radius:8px;padding:12px;margin-top:12px;">
-                                                <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;">
-                                                    <div style="text-align:center;padding:8px;background:#f0fdf4;border-radius:6px;">
-                                                        <div style="font-size:10px;color:#065f46;font-weight:600;margin-bottom:4px;">⛳ STROKES</div>
-                                                        <div style="font-size:20px;font-weight:700;color:#059669;">${playerStrokePoints}</div>
-                                                        <div style="font-size:9px;color:#6b7280;">points</div>
-                                                    </div>
-                                                    
-                                                    <div style="text-align:center;padding:8px;background:#faf5ff;border-radius:6px;">
-                                                        <div style="font-size:10px;color:#6b21a8;font-weight:600;margin-bottom:4px;">🎯 BBB</div>
-                                                        <div style="font-size:20px;font-weight:700;color:#8b5cf6;">${bbbPoints.toFixed(1)}</div>
-                                                        <div style="font-size:9px;color:#6b7280;">${player.bbbTotal || 0} × ${state.settings.bbbPoints}</div>
-                                                    </div>
-                                                    
-                                                    <div style="text-align:center;padding:8px;background:#fffbeb;border-radius:6px;">
-                                                        <div style="font-size:10px;color:#92400e;font-weight:600;margin-bottom:4px;">⚪ BALLS</div>
-                                                        <div style="font-size:20px;font-weight:700;color:#d97706;">${ballPoints}</div>
-                                                        <div style="font-size:9px;color:#6b7280;">${player.ballsRemaining || 0} × ${state.settings.ballPoints}</div>
-                                                    </div>
-                                                    
-                                                    <div style="text-align:center;padding:8px;background:#eff6ff;border-radius:6px;">
-                                                        <div style="font-size:10px;color:#1e40af;font-weight:600;margin-bottom:4px;">🎯 CTP</div>
-                                                        <div style="font-size:20px;font-weight:700;color:#3b82f6;">${ctpPoints}</div>
-                                                        <div style="font-size:9px;color:#6b7280;">${ctpPoints > 0 ? (ctpPoints / state.settings.ctpPoints) + ' wins' : 'none'}</div>
-                                                    </div>
-                                                    
-                                                    <div style="text-align:center;padding:8px;background:#fef2f2;border-radius:6px;">
-                                                        <div style="font-size:10px;color:#991b1b;font-weight:600;margin-bottom:4px;">🏆 EXTRA 9</div>
-                                                        <div style="font-size:20px;font-weight:700;color:#dc2626;">${extra9Points}</div>
-                                                        <div style="font-size:9px;color:#6b7280;">${extra9Points > 0 ? (extra9Points / state.settings.extra9Points) + ' wins' : 'none'}</div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    `;
-                                }).join('')}
+                                ${team.players.map((player, playerIdx) => buildPlayerCard(player, playerIdx)).join('')}
                                 
                                 <!-- Team Summary -->
-                                ${(() => {
-                                    // Calculate team totals for each category
-                                    const teamStrokePoints = team.players.reduce((sum, p) => {
-                                        return sum + calcPlayerTotal(p.scores, round.pars, round.handicaps, p.handicap);
-                                    }, 0);
-                                    
-                                    const teamBBBPoints = team.players.reduce((sum, p) => {
-                                        return sum + ((p.bbbTotal || 0) * state.settings.bbbPoints);
-                                    }, 0);
-                                    
-                                    const teamBallPoints = team.players.reduce((sum, p) => {
-                                        return sum + ((p.ballsRemaining || 0) * state.settings.ballPoints);
-                                    }, 0);
-                                    
-                                    // Calculate team CTP points
-                                    let teamCTPPoints = 0;
-                                    if (round.ctpWinners && round.ctpWinners.length > 0) {
-                                        const teamIndex = round.teams.indexOf(team);
-                                        teamCTPPoints = round.ctpWinners.filter(w => w.startsWith(`${teamIndex}-`)).length * state.settings.ctpPoints;
-                                    }
-                                    
-                                    // Calculate team Extra 9 points
-                                    let teamExtra9Points = 0;
-                                    if (round.extra9Winners && round.extra9Winners.length > 0) {
-                                        const teamIndex = round.teams.indexOf(team);
-                                        teamExtra9Points = round.extra9Winners.filter(w => w.startsWith(`${teamIndex}-`)).length * state.settings.extra9Points;
-                                    }
-                                    
-                                    // Calculate correct team total from categories
-                                    const correctTeamTotal = teamStrokePoints + teamBBBPoints + teamBallPoints + teamCTPPoints + teamExtra9Points;
-                                    
-                                    return `
-                                        <div style="background:linear-gradient(135deg,#FF9A00,#ea580c);color:white;border-radius:12px;padding:20px;margin-top:20px;">
-                                            <h3 style="margin:0 0 16px 0;font-size:20px;">Team Total: ${correctTeamTotal.toFixed(1)} Points</h3>
-                                            <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;">
-                                                <div style="background:rgba(255,255,255,0.2);padding:12px;border-radius:8px;text-align:center;">
-                                                    <div style="font-size:11px;opacity:0.9;margin-bottom:4px;">⛳ Strokes</div>
-                                                    <div style="font-size:24px;font-weight:700;">${teamStrokePoints}</div>
-                                                </div>
-                                                <div style="background:rgba(255,255,255,0.2);padding:12px;border-radius:8px;text-align:center;">
-                                                    <div style="font-size:11px;opacity:0.9;margin-bottom:4px;">🎯 BBB</div>
-                                                    <div style="font-size:24px;font-weight:700;">${teamBBBPoints.toFixed(1)}</div>
-                                                </div>
-                                                <div style="background:rgba(255,255,255,0.2);padding:12px;border-radius:8px;text-align:center;">
-                                                    <div style="font-size:11px;opacity:0.9;margin-bottom:4px;">⚪ Balls</div>
-                                                    <div style="font-size:24px;font-weight:700;">${teamBallPoints}</div>
-                                                </div>
-                                                <div style="background:rgba(255,255,255,0.2);padding:12px;border-radius:8px;text-align:center;">
-                                                    <div style="font-size:11px;opacity:0.9;margin-bottom:4px;">🎯 CTP</div>
-                                                    <div style="font-size:24px;font-weight:700;">${teamCTPPoints}</div>
-                                                </div>
-                                                <div style="background:rgba(255,255,255,0.2);padding:12px;border-radius:8px;text-align:center;">
-                                                    <div style="font-size:11px;opacity:0.9;margin-bottom:4px;">🏆 Extra 9</div>
-                                                    <div style="font-size:24px;font-weight:700;">${teamExtra9Points}</div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    `;
-                                })()}
+                                ${buildTeamSummary()}
                                 
                                 <div style="text-align:center;margin-top:20px;">
                                     <button onclick="navigate('leaderboard')" class="btn-primary" style="background:#6b7280;padding:12px 24px;">
