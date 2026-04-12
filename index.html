@@ -1231,6 +1231,23 @@
             }
         };
 
+        // Core navigation functions - defined early (after render)
+        window.navigate = (view) => {
+            state.view = view;
+            render();
+        };
+        
+        window.navigateToTeamStats = (teamId) => {
+            state.selectedTeamFilter = teamId;
+            state.view = 'stats';
+            render();
+        };
+        
+        window.clearTeamFilter = () => {
+            state.selectedTeamFilter = null;
+            render();
+        };
+
         const renderHome = () => {
             const app = document.getElementById('app');
             const currentEvent = state.events.find(e => e.id === state.currentEventId);
@@ -5256,22 +5273,7 @@
             }
         };
 
-        // Actions
-        window.navigate = (view) => {
-            state.view = view;
-            render();
-        };
-        
-        window.navigateToTeamStats = (teamId) => {
-            state.selectedTeamFilter = teamId;
-            state.view = 'stats';
-            render();
-        };
-        
-        window.clearTeamFilter = () => {
-            state.selectedTeamFilter = null;
-            render();
-        };
+        // Actions (other functions)
 
         window.toggleAdminMode = () => {
             // If already in admin mode, log out
@@ -7032,6 +7034,53 @@
                 
                 presentationAnalytics.awards.grind = grindWinners.length > 0 ? grindWinners : null;
                 
+                // Closest to Handicap Award - shot closest to their expected score
+                let closestDiff = Infinity;
+                const closestToHandicapWinners = [];
+                
+                allPlayerPerformances.forEach(p => {
+                    mostRecentRound.teams.forEach(team => {
+                        const player = team.players.find(pl => pl.id === p.playerId);
+                        if (player && player.scores) {
+                            // Calculate gross score
+                            const grossScore = player.scores.reduce((sum, score) => sum + (parseInt(score) || 0), 0);
+                            const coursePar = mostRecentRound.pars.reduce((sum, par) => sum + par, 0);
+                            
+                            // Expected score = Course Par + Handicap
+                            const expectedScore = coursePar + player.handicap;
+                            
+                            // Difference from expected
+                            const diff = Math.abs(grossScore - expectedScore);
+                            
+                            if (diff < closestDiff) {
+                                closestDiff = diff;
+                                closestToHandicapWinners.length = 0;
+                                closestToHandicapWinners.push({
+                                    player: p.playerName,
+                                    team: p.teamName,
+                                    teamColor: p.teamColor,
+                                    grossScore: grossScore,
+                                    expectedScore: expectedScore,
+                                    diff: diff,
+                                    handicap: player.handicap
+                                });
+                            } else if (diff === closestDiff && closestDiff < Infinity) {
+                                closestToHandicapWinners.push({
+                                    player: p.playerName,
+                                    team: p.teamName,
+                                    teamColor: p.teamColor,
+                                    grossScore: grossScore,
+                                    expectedScore: expectedScore,
+                                    diff: diff,
+                                    handicap: player.handicap
+                                });
+                            }
+                        }
+                    });
+                });
+                
+                presentationAnalytics.awards.closestToHandicap = closestToHandicapWinners.length > 0 ? closestToHandicapWinners : null;
+                
                 // 8. MILESTONES
                 presentationAnalytics.milestones = [];
                 
@@ -7194,6 +7243,32 @@
                     if (team1.length > 0) presentationAnalytics.extra9Teams.push({ name: 'Team 1', players: team1, color: '#ef4444' });
                     if (team2.length > 0) presentationAnalytics.extra9Teams.push({ name: 'Team 2', players: team2, color: '#3b82f6' });
                     if (team3.length > 0) presentationAnalytics.extra9Teams.push({ name: 'Team 3', players: team3, color: '#10b981' });
+                }
+                
+                // 12. BBB LEADERBOARD - Total BBBs for the week/round
+                presentationAnalytics.bbbLeaderboard = [];
+                
+                if (mostRecentRound) {
+                    const bbbPlayers = [];
+                    mostRecentRound.teams.forEach((team, teamIdx) => {
+                        const stateTeam = state.teams.find(t => t.id === team.teamId);
+                        team.players.forEach(player => {
+                            if (player.bbbTotal && player.bbbTotal > 0) {
+                                bbbPlayers.push({
+                                    name: player.name,
+                                    teamName: stateTeam ? stateTeam.name : team.teamName,
+                                    teamColor: stateTeam ? stateTeam.color : '#3b82f6',
+                                    bbbCount: player.bbbTotal,
+                                    bbbPoints: player.bbbTotal * state.settings.bbbPoints
+                                });
+                            }
+                        });
+                    });
+                    
+                    // Sort by BBB count (descending)
+                    bbbPlayers.sort((a, b) => b.bbbCount - a.bbbCount);
+                    
+                    presentationAnalytics.bbbLeaderboard = bbbPlayers;
                 }
                 
                 // ═══════════════════════════════════════════════════════════
@@ -7466,6 +7541,7 @@
                 const hasFunAwardsSlide = true; // Always show fun awards
                 const hasMilestonesSlide = presentationAnalytics.milestones.length > 0;
                 const hasExtra9TeamsSlide = presentationAnalytics.extra9Teams.length > 0;
+                const hasBBBLeaderboardSlide = presentationAnalytics.bbbLeaderboard.length > 0;
                 const hasWhatIfSlide = false; // DISABLED - presentationAnalytics.whatIf.length > 0;
                 
                 if (hasStorySlide) totalSlides++;
@@ -7484,6 +7560,7 @@
                 if (hasEventNetSlide) totalSlides++; // Event net scores (only when complete)
                 if (hasMilestonesSlide) totalSlides++;
                 if (hasExtra9TeamsSlide) totalSlides++;
+                if (hasBBBLeaderboardSlide) totalSlides++;
                 if (hasWhatIfSlide) totalSlides++;
                 if (hasHandicapSlide) totalSlides++;
                 if (hasNextRoundSlide) totalSlides++;
@@ -7531,6 +7608,7 @@
                     hasFunAwardsSlide: hasFunAwardsSlide,
                     hasMilestonesSlide: hasMilestonesSlide,
                     hasExtra9TeamsSlide: hasExtra9TeamsSlide,
+                    hasBBBLeaderboardSlide: hasBBBLeaderboardSlide,
                     hasWhatIfSlide: hasWhatIfSlide,
                     // Next round
                     nextRound: nextRound,
@@ -7594,7 +7672,7 @@
                     analytics,
                     hasStorySlide, hasBiggestMomentsSlide, hasBeatComparisonSlide, hasGuessWhoSlide,
                     hasHoleAnalysisSlide, hasScoringDistSlide, hasTrendsSlide, hasFunAwardsSlide,
-                    hasMilestonesSlide, hasExtra9TeamsSlide, hasWhatIfSlide
+                    hasMilestonesSlide, hasExtra9TeamsSlide, hasBBBLeaderboardSlide, hasWhatIfSlide
                 } = presentationState;
                 
                 // Reset celebration flag
@@ -7625,6 +7703,7 @@
             const whatIfSlideIndex = hasWhatIfSlide ? slideIndex++ : -1;
             const handicapSlideIndex = hasHandicapSlide ? slideIndex++ : -1;
             const extra9TeamsSlideIndex = hasExtra9TeamsSlide ? slideIndex++ : -1;
+            const bbbLeaderboardSlideIndex = hasBBBLeaderboardSlide ? slideIndex++ : -1;
             const nextRoundSlideIndex = hasNextRoundSlide ? slideIndex++ : -1;
             
             // Build presentation HTML
@@ -8439,6 +8518,61 @@
                                         ` : ''}
                                         <div style="color:#10b981;font-size:36px;font-weight:700;">
                                             ${analytics.awards.grind[0].count} bogey${analytics.awards.grind[0].count === 1 ? '' : 's'}
+                                        </div>
+                                    </div>
+                                </div>
+                            ` : ''}
+                            
+                            <!-- Closest to Handicap Award -->
+                            ${analytics.awards.closestToHandicap ? `
+                                <div style="background:linear-gradient(135deg, rgba(168,85,247,0.2) 0%, rgba(168,85,247,0.1) 100%);border:3px solid #a855f7;border-radius:16px;padding:30px;position:relative;">
+                                    <!-- Tooltip -->
+                                    <div style="position:absolute;top:16px;right:16px;cursor:pointer;font-size:20px;color:#a855f7;width:24px;height:24px;border-radius:50%;background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;" 
+                                         onclick="showAwardTooltip('How Closest to Handicap is Calculated', 'Compares each player\\'s gross score to their expected score (Course Par + Handicap). The player with the smallest difference wins! This award celebrates playing exactly to your potential. Perfect handicap = 0 strokes difference.', '#a855f7')">
+                                        ℹ️
+                                    </div>
+                                    <div style="text-align:center;margin-bottom:20px;">
+                                        <div style="font-size:64px;margin-bottom:12px;">🎯</div>
+                                        <h2 style="color:#a855f7;font-size:24px;font-weight:700;margin:0;">Dialed In</h2>
+                                        <p style="color:#a5b4fc;font-size:14px;margin:8px 0 0;">Closest to handicap</p>
+                                    </div>
+                                    <div style="background:rgba(0,0,0,0.2);border-radius:12px;padding:20px;text-align:center;">
+                                        <div style="color:white;font-size:24px;font-weight:700;margin-bottom:8px;cursor:pointer;text-decoration:underline;touch-action:manipulation;" 
+                                             onclick="showFunAwardScorecard('${analytics.awards.closestToHandicap[0].player}')"
+                                             onmouseover="this.style.color='#c084fc'"
+                                             onmouseout="this.style.color='white'"
+                                             ontouchstart="this.style.color='#c084fc'"
+                                             ontouchend="this.style.color='white'">
+                                            ${analytics.awards.closestToHandicap[0].player}
+                                        </div>
+                                        <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:12px;">
+                                            <div style="width:8px;height:8px;border-radius:50%;background:${analytics.awards.closestToHandicap[0].teamColor};"></div>
+                                            <div style="color:#a5b4fc;font-size:14px;">${analytics.awards.closestToHandicap[0].team}</div>
+                                        </div>
+                                        ${analytics.awards.closestToHandicap.length > 1 ? `
+                                            <div id="closest-tie-indicator" style="color:#c084fc;font-size:14px;margin-bottom:12px;cursor:pointer;text-decoration:underline;" 
+                                                 onclick="this.style.display='none';document.getElementById('closest-tied-players').style.display='block';">
+                                                +${analytics.awards.closestToHandicap.length - 1} more tied
+                                            </div>
+                                            <div id="closest-tied-players" style="display:none;margin-bottom:12px;">
+                                                ${analytics.awards.closestToHandicap.slice(1).map(winner => `
+                                                    <div style="color:white;font-size:16px;margin:8px 0;cursor:pointer;text-decoration:underline;" 
+                                                         onclick="showFunAwardScorecard('${winner.player}')"
+                                                         onmouseover="this.style.color='#c084fc'"
+                                                         onmouseout="this.style.color='white'">
+                                                        ${winner.player} (${winner.team})
+                                                    </div>
+                                                `).join('')}
+                                            </div>
+                                        ` : ''}
+                                        <div style="color:#64748b;font-size:14px;margin-bottom:8px;">
+                                            Expected: ${analytics.awards.closestToHandicap[0].expectedScore} (Par ${mostRecentRound.pars.reduce((sum, par) => sum + par, 0)} + ${analytics.awards.closestToHandicap[0].handicap} HCP)
+                                        </div>
+                                        <div style="color:#a855f7;font-size:36px;font-weight:700;">
+                                            ${analytics.awards.closestToHandicap[0].diff === 0 ? 'Perfect!' : `${analytics.awards.closestToHandicap[0].diff} stroke${analytics.awards.closestToHandicap[0].diff === 1 ? '' : 's'} off`}
+                                        </div>
+                                        <div style="color:#a5b4fc;font-size:14px;margin-top:8px;">
+                                            Shot ${analytics.awards.closestToHandicap[0].grossScore}
                                         </div>
                                     </div>
                                 </div>
@@ -9351,6 +9485,70 @@
                         </div>
                     </div>
                 `;
+            } else if (currentSlide === bbbLeaderboardSlideIndex) {
+                // BBB LEADERBOARD SLIDE - Total BBB scores
+                html += `
+                    <div style="animation:slideUp 0.8s ease-out;max-width:900px;width:100%;">
+                        <h1 style="color:white;font-size:48px;margin:0 0 16px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
+                            🔥 BBB Leaderboard
+                        </h1>
+                        <p style="color:#a5b4fc;font-size:18px;margin:0 0 8px;">
+                            Birdie or Better Bonuses • ${mostRecentRound.courseName}
+                        </p>
+                        
+                        <div style="background:linear-gradient(135deg, rgba(239,68,68,0.2) 0%, rgba(239,68,68,0.1) 100%);border:4px solid rgba(239,68,68,0.4);border-radius:20px;padding:20px;box-shadow:0 20px 60px rgba(0,0,0,0.4);">
+                            ${analytics.bbbLeaderboard.length > 0 ? `
+                                <div style="display:grid;grid-template-columns:${analytics.bbbLeaderboard.length > 4 ? 'repeat(2, 1fr)' : '1fr'};gap:10px;">
+                                    ${analytics.bbbLeaderboard.map((player, idx) => {
+                                        const isFirst = idx === 0;
+                                        const isSecond = idx === 1;
+                                        const isThird = idx === 2;
+                                        const medal = isFirst ? '🥇' : isSecond ? '🥈' : isThird ? '🥉' : '';
+                                        const rankBg = isFirst ? 'rgba(251,191,36,0.3)' : isSecond ? 'rgba(192,192,192,0.3)' : isThird ? 'rgba(205,127,50,0.3)' : 'rgba(255,255,255,0.05)';
+                                        const rankBorder = isFirst ? '#fbbf24' : isSecond ? '#d4d4d4' : isThird ? '#cd7f32' : 'rgba(255,255,255,0.1)';
+                                        
+                                        return `
+                                            <div style="background:${rankBg};border:2px solid ${rankBorder};border-radius:12px;padding:12px;">
+                                                <div style="display:flex;justify-content:space-between;align-items:center;">
+                                                    <div style="display:flex;align-items:center;gap:10px;flex:1;">
+                                                        ${medal ? `<div style="font-size:28px;">${medal}</div>` : `<div style="color:#64748b;font-size:18px;font-weight:700;min-width:24px;">#${idx + 1}</div>`}
+                                                        <div style="flex:1;">
+                                                            <div style="color:white;font-size:${isFirst ? '22px' : '18px'};font-weight:700;margin-bottom:2px;">
+                                                                ${player.name}
+                                                            </div>
+                                                            <div style="display:flex;align-items:center;gap:6px;">
+                                                                <div style="width:8px;height:8px;border-radius:50%;background:${player.teamColor};"></div>
+                                                                <div style="color:#a5b4fc;font-size:12px;">${player.teamName}</div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div style="text-align:right;">
+                                                        <div style="color:#fbbf24;font-size:${isFirst ? '36px' : '32px'};font-weight:700;line-height:1;">
+                                                            ${player.bbbCount}
+                                                        </div>
+                                                        <div style="color:#a5b4fc;font-size:11px;">
+                                                            ${player.bbbCount === 1 ? 'BBB' : 'BBBs'}
+                                                        </div>
+                                                        <div style="color:#10b981;font-size:13px;font-weight:600;margin-top:2px;">
+                                                            +${player.bbbPoints}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        `;
+                                    }).join('')}
+                                </div>
+                            ` : `
+                                <div style="text-align:center;padding:30px;">
+                                    <div style="font-size:40px;margin-bottom:12px;">😔</div>
+                                    <p style="color:#818cf8;font-size:18px;margin:0;">
+                                        No BBBs this round
+                                    </p>
+                                </div>
+                            `}
+                        </div>
+                    </div>
+                `;
             } else if (currentSlide === nextRoundSlideIndex) {
                 // NEXT ROUND DETAILS SLIDE
                 const roundDate = new Date(nextRound.timestamp);
@@ -9410,6 +9608,127 @@
                                     </div>
                                 ` : ''}
                             </div>
+                        </div>
+                        
+                        <!-- Weather Forecast -->
+                        <div style="background:rgba(139,92,246,0.2);border:3px solid rgba(139,92,246,0.4);border-radius:16px;padding:24px;margin-bottom:30px;">
+                            <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
+                                <div style="font-size:40px;">🌤️</div>
+                                <div>
+                                    <h2 style="color:#a78bfa;font-size:24px;font-weight:700;margin:0;">Weather Forecast</h2>
+                                    <p style="color:#a5b4fc;font-size:14px;margin:4px 0 0;">${dateStr}</p>
+                                </div>
+                            </div>
+                            <div id="weather-forecast-${nextRound.timestamp}" style="min-height:120px;display:flex;align-items:center;justify-content:center;">
+                                <div style="color:#a5b4fc;font-size:16px;">Loading weather data...</div>
+                            </div>
+                            <script>
+                                (function() {
+                                    try {
+                                        const location = "${nextRound.courseAddress || nextRound.courseName}";
+                                        const roundDate = new Date(${nextRound.timestamp});
+                                        const weatherContainer = document.getElementById("weather-forecast-${nextRound.timestamp}");
+                                        
+                                        if (!weatherContainer) {
+                                            console.error('Weather container not found');
+                                            return;
+                                        }
+                                        
+                                        // Use geocoding to get coordinates, then fetch weather
+                                        fetch('https://geocoding-api.open-meteo.com/v1/search?name=' + encodeURIComponent(location) + '&count=1&language=en&format=json')
+                                            .then(response => response.json())
+                                            .then(geoData => {
+                                            if (geoData.results && geoData.results.length > 0) {
+                                                const { latitude, longitude, name, admin1 } = geoData.results[0];
+                                                
+                                                // Format date for API (YYYY-MM-DD)
+                                                const dateStr = roundDate.toISOString().split('T')[0];
+                                                
+                                                // Fetch weather forecast
+                                                return fetch('https://api.open-meteo.com/v1/forecast?latitude=' + latitude + '&longitude=' + longitude + '&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,windspeed_10m_max,weathercode&timezone=auto&start_date=' + dateStr + '&end_date=' + dateStr + '&temperature_unit=fahrenheit&windspeed_unit=mph')
+                                                    .then(response => response.json())
+                                                    .then(weatherData => ({ weatherData, locationName: name + (admin1 ? ', ' + admin1 : '') }));
+                                            } else {
+                                                throw new Error('Location not found');
+                                            }
+                                        })
+                                        .then(({ weatherData, locationName }) => {
+                                            if (weatherData.daily) {
+                                                const { temperature_2m_max, temperature_2m_min, precipitation_probability_max, windspeed_10m_max, weathercode } = weatherData.daily;
+                                                
+                                                // Weather code to emoji/description mapping
+                                                const weatherCodes = {
+                                                    0: { emoji: '☀️', desc: 'Clear' },
+                                                    1: { emoji: '🌤️', desc: 'Mainly Clear' },
+                                                    2: { emoji: '⛅', desc: 'Partly Cloudy' },
+                                                    3: { emoji: '☁️', desc: 'Overcast' },
+                                                    45: { emoji: '🌫️', desc: 'Foggy' },
+                                                    48: { emoji: '🌫️', desc: 'Foggy' },
+                                                    51: { emoji: '🌦️', desc: 'Light Drizzle' },
+                                                    53: { emoji: '🌦️', desc: 'Drizzle' },
+                                                    55: { emoji: '🌧️', desc: 'Heavy Drizzle' },
+                                                    61: { emoji: '🌧️', desc: 'Light Rain' },
+                                                    63: { emoji: '🌧️', desc: 'Rain' },
+                                                    65: { emoji: '🌧️', desc: 'Heavy Rain' },
+                                                    71: { emoji: '🌨️', desc: 'Light Snow' },
+                                                    73: { emoji: '🌨️', desc: 'Snow' },
+                                                    75: { emoji: '🌨️', desc: 'Heavy Snow' },
+                                                    80: { emoji: '🌦️', desc: 'Rain Showers' },
+                                                    81: { emoji: '🌧️', desc: 'Rain Showers' },
+                                                    82: { emoji: '⛈️', desc: 'Heavy Showers' },
+                                                    95: { emoji: '⛈️', desc: 'Thunderstorm' },
+                                                    96: { emoji: '⛈️', desc: 'Thunderstorm' },
+                                                    99: { emoji: '⛈️', desc: 'Severe Thunderstorm' }
+                                                };
+                                                
+                                                const weather = weatherCodes[weathercode[0]] || { emoji: '🌤️', desc: 'Partly Cloudy' };
+                                                const tempHigh = Math.round(temperature_2m_max[0]);
+                                                const tempLow = Math.round(temperature_2m_min[0]);
+                                                const precipChance = precipitation_probability_max[0];
+                                                const windSpeed = Math.round(windspeed_10m_max[0]);
+                                                
+                                                weatherContainer.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:20px;width:100%;">' +
+                                                    '<div style="background:rgba(255,255,255,0.1);border-radius:12px;padding:20px;text-align:center;">' +
+                                                        '<div style="font-size:56px;margin-bottom:8px;">' + weather.emoji + '</div>' +
+                                                        '<div style="color:white;font-size:18px;font-weight:600;">' + weather.desc + '</div>' +
+                                                    '</div>' +
+                                                    '<div style="background:rgba(255,255,255,0.1);border-radius:12px;padding:20px;text-align:center;">' +
+                                                        '<div style="color:#a5b4fc;font-size:14px;margin-bottom:8px;">Temperature</div>' +
+                                                        '<div style="color:#fbbf24;font-size:32px;font-weight:700;">' + tempHigh + '°</div>' +
+                                                        '<div style="color:#818cf8;font-size:16px;">Low: ' + tempLow + '°F</div>' +
+                                                    '</div>' +
+                                                    '<div style="background:rgba(255,255,255,0.1);border-radius:12px;padding:20px;text-align:center;">' +
+                                                        '<div style="color:#a5b4fc;font-size:14px;margin-bottom:8px;">Precipitation</div>' +
+                                                        '<div style="color:#3b82f6;font-size:32px;font-weight:700;">' + precipChance + '%</div>' +
+                                                        '<div style="color:#818cf8;font-size:16px;">Chance of rain</div>' +
+                                                    '</div>' +
+                                                    '<div style="background:rgba(255,255,255,0.1);border-radius:12px;padding:20px;text-align:center;">' +
+                                                        '<div style="color:#a5b4fc;font-size:14px;margin-bottom:8px;">Wind</div>' +
+                                                        '<div style="color:#10b981;font-size:32px;font-weight:700;">' + windSpeed + '</div>' +
+                                                        '<div style="color:#818cf8;font-size:16px;">mph max</div>' +
+                                                    '</div>' +
+                                                '</div>' +
+                                                '<div style="text-align:center;margin-top:16px;color:#64748b;font-size:12px;">' +
+                                                    '📍 ' + locationName +
+                                                '</div>';
+                                            } else {
+                                                throw new Error('No weather data available');
+                                            }
+                                        })
+                                        .catch(error => {
+                                            console.error('Weather fetch error:', error);
+                                            weatherContainer.innerHTML = '<div style="text-align:center;padding:20px;">' +
+                                                '<div style="font-size:48px;margin-bottom:12px;">🌤️</div>' +
+                                                '<div style="color:#818cf8;font-size:16px;">Weather forecast unavailable</div>' +
+                                                '<div style="color:#64748b;font-size:14px;margin-top:8px;">Check local forecast for ' + location + '</div>' +
+                                            '</div>';
+                                        });
+                                    } catch (error) {
+                                        console.error('Weather forecast initialization error:', error);
+                                        // Silently fail - don't crash the page
+                                    }
+                                })();
+                            </script>
                         </div>
                         
                         <!-- Groups -->
@@ -13212,6 +13531,20 @@
                 showError('Failed to recalculate rounds: ' + err.message);
             }
         };
+
+        // Global error handler to catch unhandled errors
+        window.addEventListener('error', function(event) {
+            console.error('Global error caught:', event.error || event.message);
+            // Prevent generic "Script error" from showing
+            event.preventDefault();
+            return true;
+        });
+        
+        // Handle unhandled promise rejections
+        window.addEventListener('unhandledrejection', function(event) {
+            console.error('Unhandled promise rejection:', event.reason);
+            event.preventDefault();
+        });
 
         // Initialize
         console.log('========================================');
