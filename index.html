@@ -4288,6 +4288,7 @@
                                         <div><strong>timestamp:</strong> ${r.timestamp || '(not set)'}</div>
                                         <div><strong>ctpWinners:</strong> ${JSON.stringify(r.ctpWinners || '(not set)')}</div>
                                         <div><strong>extra9Winners:</strong> ${JSON.stringify(r.extra9Winners || '(not set)')}</div>
+                                        <div><strong>netWinners:</strong> ${JSON.stringify(r.netWinners || '(not set)')}</div>
                                         <div><strong>teams:</strong> ${r.teams ? r.teams.length + ' teams' : '(not set)'}</div>
                                     </div>
                                 </div>
@@ -4315,6 +4316,7 @@
                                 <div><strong>timestamp:</strong> ${r.timestamp || '(not set)'}</div>
                                 <div><strong>ctpWinners:</strong> ${JSON.stringify(r.ctpWinners || '(not set)')}</div>
                                 <div><strong>extra9Winners:</strong> ${JSON.stringify(r.extra9Winners || '(not set)')}</div>
+                                <div><strong>netWinners:</strong> ${JSON.stringify(r.netWinners || '(not set)')}</div>
                                 <div><strong>teams:</strong> ${r.teams ? r.teams.length + ' teams' : '(not set)'}</div>
                             </div>
                         </div>
@@ -4419,7 +4421,8 @@
                     handicaps: JSON.stringify(r.handicaps),
                     teams: JSON.stringify(r.teams),
                     ctpWinners: JSON.stringify(r.ctpWinners || []),
-                    extra9Winners: JSON.stringify(r.extra9Winners || [])
+                    extra9Winners: JSON.stringify(r.extra9Winners || []),
+                    netWinners: JSON.stringify(r.netWinners || [])
                 }));
                 const csv = arrayToCSV(flatRounds);
                 downloadCSV('golf-league-rounds.csv', csv);
@@ -4481,7 +4484,8 @@
                     handicaps: JSON.stringify(r.handicaps),
                     teams: JSON.stringify(r.teams),
                     ctpWinners: JSON.stringify(r.ctpWinners || []),
-                    extra9Winners: JSON.stringify(r.extra9Winners || [])
+                    extra9Winners: JSON.stringify(r.extra9Winners || []),
+                    netWinners: JSON.stringify(r.netWinners || [])
                 }));
                 console.log('EXPORT DEBUG - Total rounds:', state.rounds.length);
                 console.log('EXPORT DEBUG - Flattened rounds:', flatRounds);
@@ -4722,7 +4726,8 @@
                     handicaps: JSON.stringify(r.handicaps),
                     teams: JSON.stringify(r.teams),
                     ctpWinners: JSON.stringify(r.ctpWinners || []),
-                    extra9Winners: JSON.stringify(r.extra9Winners || [])
+                    extra9Winners: JSON.stringify(r.extra9Winners || []),
+                    netWinners: JSON.stringify(r.netWinners || [])
                 }));
                 csvData += arrayToCSV(flatRounds) + '\n\n';
                 
@@ -5079,6 +5084,9 @@
                                 }
                                 if (r.extra9Winners !== undefined && r.extra9Winners !== '') {
                                     round.extra9Winners = JSON.parse(r.extra9Winners || '[]');
+                                }
+                                if (r.netWinners !== undefined && r.netWinners !== '') {
+                                    round.netWinners = JSON.parse(r.netWinners || '[]');
                                 }
                                 
                                 return round;
@@ -12241,6 +12249,43 @@
                     const updatedRounds = [...state.rounds];
                     const originalRound = updatedRounds[round.originalIndex];
                     
+                    // Calculate and save net score winner (excluding previous winners)
+                    const previousNetWinners = new Set();
+                    state.rounds.forEach((r, idx) => {
+                        // Don't count the round we're editing as a "previous" winner
+                        if (idx !== round.originalIndex && r.eventId === state.currentEventId && r.netWinners && r.netWinners.length > 0) {
+                            r.netWinners.forEach(winnerId => {
+                                previousNetWinners.add(winnerId);
+                            });
+                        }
+                    });
+                    
+                    // Calculate eligible net scores for this round
+                    const eligibleNetScores = [];
+                    round.teams.forEach(team => {
+                        team.players.forEach(player => {
+                            if (!previousNetWinners.has(player.id)) {
+                                const grossScore = player.scores ? player.scores.reduce((sum, s) => sum + (parseInt(s) || 0), 0) : 0;
+                                const netScore = grossScore - (player.handicap || 0);
+                                eligibleNetScores.push({
+                                    playerId: player.id,
+                                    playerName: player.name,
+                                    netScore: netScore
+                                });
+                            }
+                        });
+                    });
+                    
+                    // Sort and pick winner (lowest net score)
+                    eligibleNetScores.sort((a, b) => a.netScore - b.netScore);
+                    if (eligibleNetScores.length > 0) {
+                        round.netWinners = [eligibleNetScores[0].playerId];
+                        console.log(`Net score winner (edited): ${eligibleNetScores[0].playerName} (${eligibleNetScores[0].netScore})`);
+                    } else {
+                        round.netWinners = [];
+                        console.log('No eligible net score winners (edited)');
+                    }
+                    
                     // Set or preserve previousHandicap on each player for handicap changes display
                     const preservedRound = {
                         ...round,
@@ -12376,6 +12421,42 @@
                     round.id = round.id || Date.now();
                     round.eventId = state.currentEventId;
                     round.active = true; // Mark as active (not scheduled)
+                    
+                    // Calculate and save net score winner (excluding previous winners)
+                    const previousNetWinners = new Set();
+                    state.rounds.forEach(r => {
+                        if (r.eventId === state.currentEventId && r.netWinners && r.netWinners.length > 0) {
+                            r.netWinners.forEach(winnerId => {
+                                previousNetWinners.add(winnerId);
+                            });
+                        }
+                    });
+                    
+                    // Calculate eligible net scores for this round
+                    const eligibleNetScores = [];
+                    round.teams.forEach(team => {
+                        team.players.forEach(player => {
+                            if (!previousNetWinners.has(player.id)) {
+                                const grossScore = player.scores ? player.scores.reduce((sum, s) => sum + (parseInt(s) || 0), 0) : 0;
+                                const netScore = grossScore - (player.handicap || 0);
+                                eligibleNetScores.push({
+                                    playerId: player.id,
+                                    playerName: player.name,
+                                    netScore: netScore
+                                });
+                            }
+                        });
+                    });
+                    
+                    // Sort and pick winner (lowest net score)
+                    eligibleNetScores.sort((a, b) => a.netScore - b.netScore);
+                    if (eligibleNetScores.length > 0) {
+                        round.netWinners = [eligibleNetScores[0].playerId];
+                        console.log(`Net score winner: ${eligibleNetScores[0].playerName} (${eligibleNetScores[0].netScore})`);
+                    } else {
+                        round.netWinners = [];
+                        console.log('No eligible net score winners');
+                    }
                     
                     // Check if this was a scheduled round that's being completed
                     // If so, preserve its original timestamp instead of creating a new one
