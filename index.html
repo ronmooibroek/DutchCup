@@ -6208,6 +6208,92 @@
                     });
                 });
                 
+                // Enhance player performance data with full details
+                allPlayerPerformances.forEach(p => {
+                    const statePlayer = state.players.find(sp => sp.id === p.playerId);
+                    
+                    // Get player's data from most recent round
+                    let playerRoundData = null;
+                    mostRecentRound.teams.forEach(team => {
+                        const found = team.players.find(pl => pl.id === p.playerId);
+                        if (found) playerRoundData = found;
+                    });
+                    
+                    // Event scores (all gross scores from this event)
+                    p.eventScores = [];
+                    if (statePlayer) {
+                        eventRounds.forEach(round => {
+                            round.teams.forEach(team => {
+                                const playerInRound = team.players.find(pl => pl.id === p.playerId);
+                                if (playerInRound && playerInRound.scores) {
+                                    const gross = playerInRound.scores.reduce((sum, s) => sum + (parseInt(s) || 0), 0);
+                                    p.eventScores.push(gross);
+                                }
+                            });
+                        });
+                    }
+                    
+                    // Scorecard from today
+                    p.scorecard = playerRoundData ? playerRoundData.scores || [] : [];
+                    p.bbbCount = playerRoundData ? (playerRoundData.bbbTotal || 0) : 0;
+                    p.ballsRemaining = playerRoundData ? (playerRoundData.ballsRemaining || 0) : 0;
+                    
+                    // Event totals (cumulative across all rounds in event)
+                    p.eventStrokePoints = 0;
+                    p.eventBBBPoints = 0;
+                    p.eventBallPoints = 0;
+                    p.eventExtra9Points = 0;
+                    p.eventCTPPoints = 0;
+                    p.eventTotalPoints = 0;
+                    
+                    eventRounds.forEach((round, roundIdx) => {
+                        round.teams.forEach((team, teamIdx) => {
+                            const playerInRound = team.players.find(pl => pl.id === p.playerId);
+                            if (playerInRound) {
+                                // Stroke points
+                                const strokePts = playerInRound.strokePoints !== undefined 
+                                    ? playerInRound.strokePoints 
+                                    : calcPlayerTotal(playerInRound.scores, round.pars, round.handicaps, playerInRound.handicap);
+                                p.eventStrokePoints += strokePts;
+                                
+                                // BBB points
+                                const bbbPts = playerInRound.bbbPoints !== undefined 
+                                    ? playerInRound.bbbPoints 
+                                    : (playerInRound.bbbTotal || 0) * state.settings.bbbPoints;
+                                p.eventBBBPoints += bbbPts;
+                                
+                                // Ball points
+                                const ballPts = playerInRound.ballPoints !== undefined 
+                                    ? playerInRound.ballPoints 
+                                    : (playerInRound.ballsRemaining || 0) * state.settings.ballPoints;
+                                p.eventBallPoints += ballPts;
+                                
+                                // Extra 9 points
+                                if (round.extra9Winners && round.extra9Winners.length > 0) {
+                                    const playerPosition = teamIdx + '-' + team.players.findIndex(pl => pl.id === p.playerId);
+                                    const extra9Count = round.extra9Winners.filter(w => w === playerPosition).length;
+                                    p.eventExtra9Points += extra9Count * state.settings.extra9Points;
+                                }
+                                
+                                // CTP points
+                                if (round.ctpWinners && round.ctpWinners.length > 0) {
+                                    const playerPosition = teamIdx + '-' + team.players.findIndex(pl => pl.id === p.playerId);
+                                    const ctpCount = round.ctpWinners.filter(w => w === playerPosition).length;
+                                    p.eventCTPPoints += ctpCount * state.settings.ctpPoints;
+                                }
+                            }
+                        });
+                    });
+                    
+                    p.eventTotalPoints = p.eventStrokePoints + p.eventBBBPoints + p.eventBallPoints + p.eventExtra9Points + p.eventCTPPoints;
+                    
+                    // Historical scores (last 20 gross scores from all time)
+                    p.historicalScores = [];
+                    if (statePlayer && statePlayer.historicScores && statePlayer.historicScores.length > 0) {
+                        p.historicalScores = statePlayer.historicScores.slice(-20).map(hs => hs.grossScore || 0);
+                    }
+                });
+                
                 // Sort by total points (lowest to highest for reveal order)
                 allPlayerPerformances.sort((a, b) => a.totalPoints - b.totalPoints);
                 
@@ -6311,14 +6397,8 @@
                 });
                 
                 // Group players: top 3 get individual slides, rest in groups of 3
-                const top3Players = totalPlayers >= 3 ? allPlayerPerformances.slice(-3) : allPlayerPerformances; // Last 3 = highest positions
-                const remainingPlayers = totalPlayers >= 3 ? allPlayerPerformances.slice(0, -3) : []; // Everyone else
-                
-                // Group remaining players into sets of 3 (from lowest to highest)
-                const playerGroups = [];
-                for (let i = 0; i < remainingPlayers.length; i += 3) {
-                    playerGroups.push(remainingPlayers.slice(i, i + 3));
-                }
+                // All players get individual slides, ordered last to first (lowest points to highest)
+                const individualPlayerSlides = allPlayerPerformances; // Already sorted lowest to highest
                 
                 // Calculate individual awards from today's round
                 
@@ -6748,10 +6828,23 @@
                     doublePlus: 0
                 };
                 
+                // Track detailed scoring info for modals
+                const scoreDetails = {
+                    albatross: [],
+                    eagle: [],
+                    birdie: [],
+                    par: [],
+                    bogey: [],
+                    doublePlus: []
+                };
+                
                 let totalStrokes = 0;
                 let totalHoles = 0;
                 
                 mostRecentRound.teams.forEach(team => {
+                    const stateTeam = state.teams.find(t => t.id === team.teamId);
+                    const teamName = stateTeam ? stateTeam.name : 'Unknown';
+                    
                     team.players.forEach(player => {
                         if (player.scores) {
                             player.scores.forEach((score, holeIdx) => {
@@ -6765,12 +6858,35 @@
                                     totalStrokes += net;
                                     totalHoles++;
                                     
-                                    if (toPar <= -3) scoreTypes.albatross++;
-                                    else if (toPar === -2) scoreTypes.eagle++;
-                                    else if (toPar === -1) scoreTypes.birdie++;
-                                    else if (toPar === 0) scoreTypes.par++;
-                                    else if (toPar === 1) scoreTypes.bogey++;
-                                    else scoreTypes.doublePlus++;
+                                    const detail = {
+                                        player: player.name,
+                                        team: teamName,
+                                        hole: holeIdx + 1,
+                                        gross: score,
+                                        net: net,
+                                        par: par,
+                                        strokes: strokes
+                                    };
+                                    
+                                    if (toPar <= -3) {
+                                        scoreTypes.albatross++;
+                                        scoreDetails.albatross.push(detail);
+                                    } else if (toPar === -2) {
+                                        scoreTypes.eagle++;
+                                        scoreDetails.eagle.push(detail);
+                                    } else if (toPar === -1) {
+                                        scoreTypes.birdie++;
+                                        scoreDetails.birdie.push(detail);
+                                    } else if (toPar === 0) {
+                                        scoreTypes.par++;
+                                        scoreDetails.par.push(detail);
+                                    } else if (toPar === 1) {
+                                        scoreTypes.bogey++;
+                                        scoreDetails.bogey.push(detail);
+                                    } else {
+                                        scoreTypes.doublePlus++;
+                                        scoreDetails.doublePlus.push(detail);
+                                    }
                                 }
                             });
                         }
@@ -6778,6 +6894,7 @@
                 });
                 
                 presentationAnalytics.scoringDistribution = scoreTypes;
+                presentationAnalytics.scoreDetails = scoreDetails;
                 presentationAnalytics.averageScore = totalHoles > 0 ? (totalStrokes / totalHoles).toFixed(2) : 0;
                 presentationAnalytics.coursePar = mostRecentRound.pars.reduce((sum, p) => sum + p, 0) / 18;
                 
@@ -7542,10 +7659,9 @@
                 const nextRound = upcomingRounds.length > 0 ? upcomingRounds[0] : null;
                 
                 // Calculate total slides
-                // Title + Player Groups (3 per slide) + Top 3 Individual + Awards + Teams + Handicaps + Next Round
+                // Title + Individual Players (one per player) + Awards + Teams + Handicaps + Next Round
                 let totalSlides = 1; // Title
-                totalSlides += playerGroups.length; // Groups of 3 players
-                totalSlides += top3Players.length; // Top 3 players (one by one)
+                totalSlides += individualPlayerSlides.length; // One slide per player
                 const hasNetSlide = hasScheduledRounds && netWinner !== null;
                 const hasExtra9Slide = hasScheduledRounds && extra9Winners.length > 0;
                 const hasCtpSlide = hasScheduledRounds && ctpWinners.length > 0;
@@ -7592,8 +7708,8 @@
                     currentSlide: 0,
                     totalSlides: totalSlides,
                     // Player performances
-                    playerGroups: playerGroups,
-                    top3Players: top3Players,
+                    individualPlayerSlides: individualPlayerSlides,
+                    totalPlayers: totalPlayers,
                     teamStandings: leaderboard,
                     previousStandings: previousStandings,
                     todaysScores: todaysScores,
@@ -7681,7 +7797,8 @@
             try {
                 const { 
                     currentSlide, 
-                    playerGroups, top3Players,
+                    individualPlayerSlides,
+                    totalPlayers,
                     teamStandings, previousStandings, todaysScores, hasScheduledRounds, scheduledRoundsCount,
                     eventName, totalRounds, mostRecentRound,
                     netWinner, netTop3, previousNetWinners, extra9Winners, ctpWinners,
@@ -7703,11 +7820,9 @@
             let slideIndex = 1; // Start after title (0)
             const storySlideIndex = hasStorySlide ? slideIndex++ : -1;
             const biggestMomentsSlideIndex = hasBiggestMomentsSlide ? slideIndex++ : -1;
-            const playerGroupSlidesStart = slideIndex;
-            slideIndex += playerGroups.length;
             const guessWhoSlideIndex = hasGuessWhoSlide ? slideIndex++ : -1;
-            const top3SlidesStart = slideIndex;
-            slideIndex += top3Players.length;
+            const individualPlayerSlidesStart = slideIndex;
+            slideIndex += individualPlayerSlides.length; // One slide per player
             const holeAnalysisSlideIndex = hasHoleAnalysisSlide ? slideIndex++ : -1;
             const beatComparisonSlideIndex = hasBeatComparisonSlide ? slideIndex++ : -1;
             const scoringDistSlideIndex = hasScoringDistSlide ? slideIndex++ : -1;
@@ -7892,101 +8007,256 @@
                         </div>
                     </div>
                 `;
-            } else if (currentSlide >= playerGroupSlidesStart && currentSlide < playerGroupSlidesStart + playerGroups.length) {
-                // PLAYER GROUP SLIDES - 3 PLAYERS PER SLIDE
-                const groupIndex = currentSlide - playerGroupSlidesStart;
-                const group = playerGroups[groupIndex];
-                const isFirstGroup = groupIndex === 0;
-                const isLastGroup = groupIndex === playerGroups.length - 1;
+            } else if (currentSlide >= individualPlayerSlidesStart && currentSlide < individualPlayerSlidesStart + individualPlayerSlides.length) {
+                // INDIVIDUAL PLAYER PERFORMANCE - FULL PAGE PER PLAYER (LAST TO FIRST)
+                const playerIndex = currentSlide - individualPlayerSlidesStart;
+                const player = individualPlayerSlides[playerIndex];
                 
-                // Reverse group so lowest position is at bottom
-                const groupReversed = [...group].reverse();
+                // Helper functions for scorecard formatting (matching modal)
+                const getPoints = (netToPar) => {
+                    if (netToPar <= -3) return state.settings.albatrossPoints;
+                    if (netToPar === -2) return state.settings.eaglePoints;
+                    if (netToPar === -1) return state.settings.birdiePoints;
+                    if (netToPar === 0) return state.settings.parPoints;
+                    if (netToPar === 1) return state.settings.bogeyPoints;
+                    return state.settings.doubleBogeyPoints;
+                };
                 
-                // Calculate total players for display
-                const totalGroupPlayers = playerGroups.reduce((sum, group) => sum + group.length, 0);
-                const totalPlayers = totalGroupPlayers + top3Players.length;
+                const getScoreColor = (score, par, getsStroke) => {
+                    if (!score || score === '') return { bg: 'rgba(255,255,255,0.1)', text: '#9ca3af', fontWeight: '400' };
+                    const netScore = parseInt(score) - (getsStroke ? 1 : 0);
+                    const netToPar = netScore - par;
+                    if (netToPar <= -3) return { bg: '#000000', text: 'white', fontWeight: '700' };
+                    if (netToPar === -2) return { bg: '#065f46', text: 'white', fontWeight: '700' };
+                    if (netToPar === -1) return { bg: '#86efac', text: '#065f46', fontWeight: '700' };
+                    if (netToPar === 0) return { bg: '#e5e7eb', text: '#1f2937', fontWeight: '700' };
+                    if (netToPar === 1) return { bg: '#fca5a5', text: '#7f1d1d', fontWeight: '700' };
+                    return { bg: '#6b21a8', text: 'white', fontWeight: '700' };
+                };
                 
-                // Determine group nickname based on position
-                const groupNicknames = [
-                    "Room to improve",
-                    "Ok, but need to pick it up", 
-                    "Making an impact"
-                ];
-                const groupNickname = groupNicknames[groupIndex] || "Rising stars";
+                // Calculate net score
+                const netScore = player.grossScore - player.handicap;
+                const coursePar = mostRecentRound.pars.reduce((sum, p) => sum + p, 0);
+                const netToPar = netScore - coursePar;
+                
+                // Build scorecard HTML with proper formatting
+                let scorecardHTML = '';
+                if (player.scorecard && player.scorecard.length > 0) {
+                    scorecardHTML = '<div style="background:rgba(255,255,255,0.05);border-radius:12px;padding:16px;">' +
+                        '<div style="color:white;font-size:16px;font-weight:700;margin-bottom:12px;">📊 Today\'s Scorecard</div>' +
+                        '<div style="display:grid;grid-template-columns:repeat(9,1fr);gap:3px;margin-bottom:6px;">';
+                    
+                    for (let i = 0; i < 9; i++) {
+                        const score = player.scorecard[i];
+                        const par = mostRecentRound.pars[i];
+                        const handicap = mostRecentRound.handicaps[i];
+                        const getsStroke = player.handicap >= handicap;
+                        const colors = getScoreColor(score, par, getsStroke);
+                        let points = 0;
+                        if (score !== '' && score !== null && score !== undefined) {
+                            const netScoreHole = parseInt(score) - (getsStroke ? 1 : 0);
+                            const netToParHole = netScoreHole - par;
+                            points = getPoints(netToParHole);
+                        }
+                        const borderStyle = getsStroke ? 'border:2px solid #3b82f6;' : 'border:1px solid rgba(255,255,255,0.2);';
+                        
+                        scorecardHTML += '<div style="text-align:center;">' +
+                            '<div style="font-size:9px;color:#9ca3af;font-weight:600;margin-bottom:2px;">' + (i + 1) + '</div>' +
+                            '<div style="' + borderStyle + 'background:' + colors.bg + ';color:' + colors.text + ';padding:6px 2px;border-radius:4px;font-weight:' + colors.fontWeight + ';font-size:13px;">' +
+                                (score || '-') +
+                            '</div>' +
+                            '<div style="font-size:8px;color:#64748b;margin-top:1px;">' + par + '</div>' +
+                            '<div style="font-size:8px;color:' + (points > 0 ? '#10b981' : points < 0 ? '#ef4444' : '#64748b') + ';font-weight:600;min-height:10px;">' +
+                                (points !== 0 ? (points > 0 ? '+' : '') + points : '') +
+                            '</div>' +
+                        '</div>';
+                    }
+                    
+                    scorecardHTML += '</div><div style="display:grid;grid-template-columns:repeat(9,1fr);gap:3px;">';
+                    
+                    for (let i = 9; i < 18; i++) {
+                        const score = player.scorecard[i];
+                        const par = mostRecentRound.pars[i];
+                        const handicap = mostRecentRound.handicaps[i];
+                        const getsStroke = player.handicap >= handicap;
+                        const colors = getScoreColor(score, par, getsStroke);
+                        let points = 0;
+                        if (score !== '' && score !== null && score !== undefined) {
+                            const netScoreHole = parseInt(score) - (getsStroke ? 1 : 0);
+                            const netToParHole = netScoreHole - par;
+                            points = getPoints(netToParHole);
+                        }
+                        const borderStyle = getsStroke ? 'border:2px solid #3b82f6;' : 'border:1px solid rgba(255,255,255,0.2);';
+                        
+                        scorecardHTML += '<div style="text-align:center;">' +
+                            '<div style="font-size:9px;color:#9ca3af;font-weight:600;margin-bottom:2px;">' + (i + 1) + '</div>' +
+                            '<div style="' + borderStyle + 'background:' + colors.bg + ';color:' + colors.text + ';padding:6px 2px;border-radius:4px;font-weight:' + colors.fontWeight + ';font-size:13px;">' +
+                                (score || '-') +
+                            '</div>' +
+                            '<div style="font-size:8px;color:#64748b;margin-top:1px;">' + par + '</div>' +
+                            '<div style="font-size:8px;color:' + (points > 0 ? '#10b981' : points < 0 ? '#ef4444' : '#64748b') + ';font-weight:600;min-height:10px;">' +
+                                (points !== 0 ? (points > 0 ? '+' : '') + points : '') +
+                            '</div>' +
+                        '</div>';
+                    }
+                    
+                    scorecardHTML += '</div></div>';
+                }
+                
+                // Build event scores (compact inline)
+                let eventScoresHTML = '';
+                if (player.eventScores && player.eventScores.length > 1) {
+                    eventScoresHTML = '<div style="display:flex;gap:8px;margin-top:12px;">';
+                    player.eventScores.forEach((score, idx) => {
+                        eventScoresHTML += '<div style="background:rgba(255,255,255,0.05);border-radius:6px;padding:6px 10px;text-align:center;">' +
+                            '<div style="color:white;font-size:10px;">R' + (idx + 1) + '</div>' +
+                            '<div style="color:white;font-size:14px;font-weight:700;">' + score + '</div>' +
+                        '</div>';
+                    });
+                    eventScoresHTML += '</div>';
+                }
+                
+                // Build history graph (compact)
+                let historyGraphHTML = '';
+                if (player.historicalScores && player.historicalScores.length > 0) {
+                    const maxScore = Math.max(...player.historicalScores);
+                    const minScore = Math.min(...player.historicalScores);
+                    const range = maxScore - minScore || 1;
+                    const avgScore = Math.round(player.historicalScores.reduce((a,b) => a+b, 0) / player.historicalScores.length);
+                    
+                    historyGraphHTML = '<div style="background:rgba(255,255,255,0.05);border-radius:8px;padding:10px;margin-top:12px;">' +
+                        '<div style="color:white;font-size:12px;font-weight:600;margin-bottom:6px;">📈 Last ' + player.historicalScores.length + ' Rounds</div>' +
+                        '<div style="display:flex;align-items:flex-end;gap:2px;height:50px;margin-bottom:6px;">';
+                    
+                    player.historicalScores.forEach((score, idx) => {
+                        const height = ((score - minScore) / range) * 40 + 10;
+                        const isLatest = idx === player.historicalScores.length - 1;
+                        historyGraphHTML += '<div style="flex:1;background:' + (isLatest ? '#10b981' : 'rgba(59,130,246,0.6)') + ';height:' + height + '%;border-radius:2px 2px 0 0;"></div>';
+                    });
+                    
+                    historyGraphHTML += '</div>' +
+                        '<div style="display:flex;justify-content:space-between;color:white;font-size:10px;">' +
+                            '<div>Low: ' + minScore + '</div>' +
+                            '<div>Avg: ' + avgScore + '</div>' +
+                            '<div>High: ' + maxScore + '</div>' +
+                        '</div>' +
+                    '</div>';
+                }
                 
                 html += `
-                    <div style="animation:slideUp 0.8s ease-out;max-width:900px;width:100%;">
-                        <h1 style="color:white;font-size:48px;margin:0 0 16px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
-                            🎯 Today's Player Performance
-                        </h1>
-                        <p style="color:#a5b4fc;font-size:24px;margin:0 0 12px;">
-                            ${mostRecentRound.courseName}
-                        </p>
-                        <p style="color:#fbbf24;font-size:22px;font-weight:700;margin:0 0 30px;text-shadow:0 2px 10px rgba(0,0,0,0.3);">
-                            "${groupNickname}"
-                        </p>
-                        
-                        <div style="background:rgba(255,255,255,0.1);border:3px solid rgba(255,255,255,0.2);border-radius:20px;padding:30px;">
-                            ${groupReversed.map(player => {
-                                const medal = player.position === totalPlayers ? '🥇' : 
-                                             player.position === totalPlayers - 1 ? '🥈' : 
-                                             player.position === totalPlayers - 2 ? '🥉' : 
-                                             player.position === totalPlayers - 3 ? '🏅' : '';
-                                return `
-                                <div style="background:rgba(255,255,255,0.08);border:2px solid ${player.teamColor}40;border-radius:12px;padding:16px;margin-bottom:16px;">
-                                    ${player.isPersonalRecord ? `
-                                        <div style="background:linear-gradient(135deg, #10b981 0%, #059669 100%);border:2px solid #10b981;border-radius:8px;padding:12px;margin-bottom:12px;text-align:center;">
-                                            <div style="color:white;font-size:16px;font-weight:700;">
-                                                🎉 New Personal Record!
+                    <div style="animation:slideUp 0.8s ease-out;width:100%;height:100%;padding:16px;box-sizing:border-box;overflow:hidden;">
+                        <div style="display:grid;grid-template-columns:300px 1fr;gap:16px;height:100%;">
+                            
+                            <!-- LEFT COLUMN -->
+                            <div style="display:flex;flex-direction:column;gap:12px;">
+                                <!-- Player Header -->
+                                <div style="background:rgba(255,255,255,0.05);border-radius:12px;padding:16px;">
+                                    <div style="color:white;font-size:28px;font-weight:700;margin-bottom:8px;">${player.playerName}</div>
+                                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+                                        <div style="width:10px;height:10px;border-radius:50%;background:${player.teamColor};"></div>
+                                        <div style="color:white;font-size:15px;">${player.teamName}</div>
+                                    </div>
+                                    <div style="text-align:center;padding:12px;background:rgba(255,255,255,0.05);border-radius:8px;">
+                                        <div style="color:white;font-size:12px;margin-bottom:4px;">Position</div>
+                                        <div style="color:white;font-size:36px;font-weight:700;line-height:1;">#${player.position}</div>
+                                        <div style="color:white;font-size:12px;">of ${totalPlayers}</div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Score Box -->
+                                <div style="background:linear-gradient(135deg,${player.teamColor}40,${player.teamColor}20);border:2px solid ${player.teamColor};border-radius:12px;padding:16px;flex:1;">
+                                    <div style="text-align:center;">
+                                        <div style="color:white;font-size:13px;margin-bottom:4px;">Gross Score</div>
+                                        <div style="color:white;font-size:52px;font-weight:700;line-height:1;margin-bottom:12px;">${player.grossScore}</div>
+                                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+                                            <div style="background:rgba(0,0,0,0.3);border-radius:6px;padding:8px;">
+                                                <div style="color:white;font-size:11px;">Net</div>
+                                                <div style="color:white;font-size:22px;font-weight:700;">${netScore}</div>
+                                                <div style="color:white;font-size:10px;">${netToPar > 0 ? '+' : ''}${netToPar}</div>
+                                            </div>
+                                            <div style="background:rgba(0,0,0,0.3);border-radius:6px;padding:8px;">
+                                                <div style="color:white;font-size:11px;">Handicap</div>
+                                                <div style="color:white;font-size:22px;font-weight:700;">${player.handicap}</div>
                                             </div>
                                         </div>
-                                    ` : ''}
-                                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-                                        <div style="display:flex;align-items:center;gap:12px;flex:1;">
-                                            ${medal ? `<div style="font-size:32px;">${medal}</div>` : ''}
-                                            <div style="text-align:center;min-width:50px;">
-                                                <div style="color:#a5b4fc;font-size:12px;margin-bottom:2px;">Position</div>
-                                                <div style="color:white;font-size:24px;font-weight:700;">#${player.position}</div>
+                                        <div style="color:white;font-size:12px;">${mostRecentRound.courseName}</div>
+                                        ${eventScoresHTML}
+                                    </div>
+                                </div>
+                                
+                                ${historyGraphHTML}
+                            </div>
+                            
+                            <!-- RIGHT COLUMN -->
+                            <div style="display:flex;flex-direction:column;gap:12px;height:100%;">
+                                <!-- Scorecard -->
+                                ${scorecardHTML}
+                                
+                                <!-- Points Breakdown - HORIZONTAL -->
+                                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                                    <!-- Today's Points -->
+                                    <div style="background:rgba(255,255,255,0.05);border-radius:12px;padding:14px;">
+                                        <div style="color:#fbbf24;font-size:15px;font-weight:700;margin-bottom:10px;">⚡ Today's Points</div>
+                                        <div style="display:grid;gap:8px;">
+                                            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:rgba(255,255,255,0.03);border-radius:6px;">
+                                                <div style="color:white;font-size:14px;">Strokes</div>
+                                                <div style="color:white;font-size:20px;font-weight:700;">${player.strokePoints}</div>
                                             </div>
-                                            <div style="flex:1;">
-                                                <div style="color:white;font-size:18px;font-weight:700;margin-bottom:4px;">${player.playerName}</div>
-                                                <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
-                                                    <div style="width:8px;height:8px;border-radius:50%;background:${player.teamColor};"></div>
-                                                    <div style="color:#a5b4fc;font-size:13px;">${player.teamName}</div>
-                                                </div>
-                                                <div style="color:#818cf8;font-size:12px;">Gross: ${player.grossScore || 0}</div>
+                                            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:rgba(255,255,255,0.03);border-radius:6px;">
+                                                <div style="color:white;font-size:14px;">BBB (${player.bbbCount})</div>
+                                                <div style="color:white;font-size:20px;font-weight:700;">${player.bbbPoints}</div>
                                             </div>
-                                        </div>
-                                        <div style="background:${player.teamColor}20;border:2px solid ${player.teamColor};border-radius:10px;padding:10px;min-width:70px;text-align:center;">
-                                            <div style="color:#a5b4fc;font-size:11px;margin-bottom:2px;">Total</div>
-                                            <div style="color:white;font-size:26px;font-weight:700;">${player.totalPoints}</div>
+                                            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:rgba(255,255,255,0.03);border-radius:6px;">
+                                                <div style="color:white;font-size:14px;">Balls (${player.ballsRemaining})</div>
+                                                <div style="color:white;font-size:20px;font-weight:700;">${player.ballPoints}</div>
+                                            </div>
+                                            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:rgba(255,255,255,0.03);border-radius:6px;">
+                                                <div style="color:white;font-size:14px;">Extra 9</div>
+                                                <div style="color:white;font-size:20px;font-weight:700;">${player.extra9Points}</div>
+                                            </div>
+                                            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:rgba(255,255,255,0.03);border-radius:6px;">
+                                                <div style="color:white;font-size:14px;">CTP</div>
+                                                <div style="color:white;font-size:20px;font-weight:700;">${player.ctpPoints}</div>
+                                            </div>
+                                            <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:linear-gradient(135deg,rgba(16,185,129,0.25),rgba(16,185,129,0.15));border:2px solid #10b981;border-radius:6px;margin-top:4px;">
+                                                <div style="color:white;font-size:15px;font-weight:700;">TODAY</div>
+                                                <div style="color:white;font-size:26px;font-weight:700;">${player.totalPoints}</div>
+                                            </div>
                                         </div>
                                     </div>
                                     
-                                    <div style="display:flex;gap:8px;justify-content:space-between;">
-                                        <div style="background:rgba(255,255,255,0.05);border-radius:6px;padding:8px;flex:1;text-align:center;">
-                                            <div style="color:#a5b4fc;font-size:10px;margin-bottom:2px;">Stroke</div>
-                                            <div style="color:white;font-size:16px;font-weight:600;">${player.strokePoints || 0}</div>
-                                        </div>
-                                        <div style="background:rgba(255,255,255,0.05);border-radius:6px;padding:8px;flex:1;text-align:center;">
-                                            <div style="color:#a5b4fc;font-size:10px;margin-bottom:2px;">BBB</div>
-                                            <div style="color:white;font-size:16px;font-weight:600;">${player.bbbPoints || 0}</div>
-                                        </div>
-                                        <div style="background:rgba(255,255,255,0.05);border-radius:6px;padding:8px;flex:1;text-align:center;">
-                                            <div style="color:#a5b4fc;font-size:10px;margin-bottom:2px;">Balls</div>
-                                            <div style="color:white;font-size:16px;font-weight:600;">${player.ballPoints || 0}</div>
-                                        </div>
-                                        <div style="background:rgba(255,255,255,0.05);border-radius:6px;padding:8px;flex:1;text-align:center;">
-                                            <div style="color:#a5b4fc;font-size:10px;margin-bottom:2px;">Extra 9</div>
-                                            <div style="color:white;font-size:16px;font-weight:600;">${player.extra9Points || 0}</div>
-                                        </div>
-                                        <div style="background:rgba(255,255,255,0.05);border-radius:6px;padding:8px;flex:1;text-align:center;">
-                                            <div style="color:#a5b4fc;font-size:10px;margin-bottom:2px;">CTP</div>
-                                            <div style="color:white;font-size:16px;font-weight:600;">${player.ctpPoints || 0}</div>
+                                    <!-- Event Total -->
+                                    <div style="background:rgba(255,255,255,0.05);border-radius:12px;padding:14px;">
+                                        <div style="color:#8b5cf6;font-size:15px;font-weight:700;margin-bottom:10px;">🏆 Event Total</div>
+                                        <div style="display:grid;gap:8px;">
+                                            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:rgba(255,255,255,0.03);border-radius:6px;">
+                                                <div style="color:white;font-size:14px;">Strokes</div>
+                                                <div style="color:white;font-size:20px;font-weight:700;">${player.eventStrokePoints}</div>
+                                            </div>
+                                            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:rgba(255,255,255,0.03);border-radius:6px;">
+                                                <div style="color:white;font-size:14px;">BBB</div>
+                                                <div style="color:white;font-size:20px;font-weight:700;">${player.eventBBBPoints}</div>
+                                            </div>
+                                            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:rgba(255,255,255,0.03);border-radius:6px;">
+                                                <div style="color:white;font-size:14px;">Balls</div>
+                                                <div style="color:white;font-size:20px;font-weight:700;">${player.eventBallPoints}</div>
+                                            </div>
+                                            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:rgba(255,255,255,0.03);border-radius:6px;">
+                                                <div style="color:white;font-size:14px;">Extra 9</div>
+                                                <div style="color:white;font-size:20px;font-weight:700;">${player.eventExtra9Points}</div>
+                                            </div>
+                                            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:rgba(255,255,255,0.03);border-radius:6px;">
+                                                <div style="color:white;font-size:14px;">CTP</div>
+                                                <div style="color:white;font-size:20px;font-weight:700;">${player.eventCTPPoints}</div>
+                                            </div>
+                                            <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:linear-gradient(135deg,rgba(139,92,246,0.25),rgba(139,92,246,0.15));border:2px solid #8b5cf6;border-radius:6px;margin-top:4px;">
+                                                <div style="color:white;font-size:15px;font-weight:700;">TOTAL</div>
+                                                <div style="color:white;font-size:26px;font-weight:700;">${player.eventTotalPoints}</div>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
-                            `}).join('')}
+                            </div>
                         </div>
                     </div>
                 `;
@@ -8020,121 +8290,6 @@
                                 </p>
                                 <div style="color:#818cf8;font-size:14px;font-style:italic;">
                                     Next slide reveals the top 3! →
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            } else if (currentSlide >= top3SlidesStart && currentSlide < top3SlidesStart + top3Players.length) {
-                // TOP 3 PLAYERS - INDIVIDUAL CARDS
-                const playerIndex = currentSlide - top3SlidesStart;
-                const player = top3Players[playerIndex];
-                const isFirstTop = playerIndex === 0;
-                const isLastTop = playerIndex === top3Players.length - 1;
-                const previousSlideIndex = isFirstTop ? (playerGroupSlidesStart + playerGroups.length - 1) : (currentSlide - 1);
-                const totalGroupPlayers = playerGroups.reduce((sum, group) => sum + group.length, 0);
-                const totalPlayers = totalGroupPlayers + top3Players.length;
-                const medal = player.position === totalPlayers ? '🥇' : 
-                             player.position === totalPlayers - 1 ? '🥈' : 
-                             player.position === totalPlayers - 2 ? '🥉' : '';
-                
-                // Check if this is the #1 player (winner)
-                const isWinner = player.position === totalPlayers;
-                console.log(`Player ${player.playerName} - Position: ${player.position}/${totalPlayers} - IsWinner: ${isWinner}`);
-                
-                // Set flag so celebration triggers after rendering
-                presentationState.isWinnerSlide = isWinner;
-                if (isWinner) {
-                    console.log('🏆 WINNER FLAG SET for', player.playerName);
-                }
-                
-                html += `
-                    <div style="animation:slideUp 0.8s ease-out;max-width:900px;width:100%;">
-                        ${isWinner ? `
-                            <!-- WINNER CELEBRATION BANNER -->
-                            <div style="background:linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);border:4px solid #fbbf24;border-radius:20px;padding:24px;margin-bottom:24px;text-align:center;animation:winnerPulse 2s ease-in-out infinite;box-shadow:0 12px 32px rgba(251,191,36,0.6);">
-                                <div style="font-size:56px;margin-bottom:12px;">🏆 👑 🏆</div>
-                                <div style="color:white;font-size:36px;font-weight:700;text-shadow:0 3px 12px rgba(0,0,0,0.4);margin-bottom:8px;">
-                                    TODAY'S CHAMPION!
-                                </div>
-                                <div style="color:rgba(255,255,255,0.95);font-size:20px;font-weight:600;">
-                                    Congratulations ${player.playerName}! 🎉
-                                </div>
-                            </div>
-                        ` : ''}
-                        
-                        <h1 style="color:white;font-size:48px;margin:0 0 16px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
-                            ${medal ? medal + ' ' : ''}${playerIndex === 0 ? 'Top Players' : ''}
-                        </h1>
-                        <p style="color:#a5b4fc;font-size:20px;margin:0 0 20px;">
-                            Position #${player.position} • Top ${top3Players.length - playerIndex} Player
-                        </p>
-                        
-                        ${player.isHighScore && player.isPersonalRecord ? `
-                            <div style="background:linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);border:3px solid #fbbf24;border-radius:16px;padding:20px;margin-bottom:20px;text-align:center;animation:pulse 2s ease-in-out infinite;box-shadow:0 8px 24px rgba(251,191,36,0.6);">
-                                <div style="font-size:40px;margin-bottom:8px;">🏆🎉🏆</div>
-                                <div style="color:white;font-size:28px;font-weight:700;text-shadow:0 2px 8px rgba(0,0,0,0.3);">
-                                    NEW HIGH SCORE!!!
-                                </div>
-                                <div style="color:rgba(255,255,255,0.9);font-size:16px;margin-top:8px;">
-                                    Highest score of the day!
-                                </div>
-                            </div>
-                        ` : player.isPersonalRecord ? `
-                            <div style="background:linear-gradient(135deg, #10b981 0%, #059669 100%);border:3px solid #10b981;border-radius:16px;padding:20px;margin-bottom:20px;text-align:center;box-shadow:0 8px 24px rgba(16,185,129,0.4);">
-                                <div style="font-size:36px;margin-bottom:8px;">🎉</div>
-                                <div style="color:white;font-size:24px;font-weight:700;">
-                                    New record for ${player.playerName}!!
-                                </div>
-                            </div>
-                        ` : ''}
-                        
-                        <div style="background:linear-gradient(135deg, ${player.teamColor}30 0%, ${player.teamColor}10 100%);border:4px solid ${player.teamColor};border-radius:24px;padding:40px;box-shadow:0 20px 60px rgba(0,0,0,0.4);${isWinner ? 'animation:winnerPulse 3s ease-in-out infinite;' : ''}">
-                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:30px;">
-                                <div style="flex:1;">
-                                    <div style="color:white;font-size:42px;font-weight:700;margin-bottom:12px;">${player.playerName}</div>
-                                    <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
-                                        <div style="width:16px;height:16px;border-radius:50%;background:${player.teamColor};"></div>
-                                        <div style="color:#a5b4fc;font-size:24px;">${player.teamName}</div>
-                                    </div>
-                                    <div style="color:#818cf8;font-size:18px;margin-bottom:12px;">Gross Score: ${player.grossScore || 0}</div>
-                                    ${player.averagePoints !== undefined && player.comparisonToAverage !== 0 ? `
-                                        <div style="background:rgba(255,255,255,0.1);border-radius:10px;padding:12px;margin-top:12px;">
-                                            <div style="color:${player.comparisonToAverage > 0 ? '#10b981' : '#ef4444'};font-size:18px;font-weight:600;">
-                                                ${Math.abs(player.comparisonToAverage)}% ${player.comparisonToAverage > 0 ? 'better' : 'worse'} than average
-                                            </div>
-                                            <div style="color:#a5b4fc;font-size:14px;margin-top:4px;">
-                                                Average: ${player.averagePoints} pts
-                                            </div>
-                                        </div>
-                                    ` : ''}
-                                </div>
-                                <div style="background:${player.teamColor};border-radius:20px;padding:24px;min-width:140px;text-align:center;box-shadow:0 8px 24px ${player.teamColor}60;">
-                                    <div style="color:white;font-size:20px;margin-bottom:4px;opacity:0.9;">Total</div>
-                                    <div style="color:white;font-size:56px;font-weight:700;">${player.totalPoints}</div>
-                                </div>
-                            </div>
-                            
-                            <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-top:30px;">
-                                <div style="background:rgba(255,255,255,0.15);border-radius:12px;padding:20px;text-align:center;">
-                                    <div style="color:#a5b4fc;font-size:16px;margin-bottom:8px;font-weight:600;">Stroke Play</div>
-                                    <div style="color:white;font-size:36px;font-weight:700;">${player.strokePoints || 0}</div>
-                                </div>
-                                <div style="background:rgba(255,255,255,0.15);border-radius:12px;padding:20px;text-align:center;">
-                                    <div style="color:#a5b4fc;font-size:16px;margin-bottom:8px;font-weight:600;">BBB</div>
-                                    <div style="color:white;font-size:36px;font-weight:700;">${player.bbbPoints || 0}</div>
-                                </div>
-                                <div style="background:rgba(255,255,255,0.15);border-radius:12px;padding:20px;text-align:center;">
-                                    <div style="color:#a5b4fc;font-size:16px;margin-bottom:8px;font-weight:600;">Balls</div>
-                                    <div style="color:white;font-size:36px;font-weight:700;">${player.ballPoints || 0}</div>
-                                </div>
-                                <div style="background:rgba(255,255,255,0.15);border-radius:12px;padding:20px;text-align:center;">
-                                    <div style="color:#a5b4fc;font-size:16px;margin-bottom:8px;font-weight:600;">Extra 9</div>
-                                    <div style="color:white;font-size:36px;font-weight:700;">${player.extra9Points || 0}</div>
-                                </div>
-                                <div style="background:rgba(255,255,255,0.15);border-radius:12px;padding:20px;text-align:center;">
-                                    <div style="color:#a5b4fc;font-size:16px;margin-bottom:8px;font-weight:600;">🎯 CTP</div>
-                                    <div style="color:white;font-size:36px;font-weight:700;">${player.ctpPoints || 0}</div>
                                 </div>
                             </div>
                         </div>
@@ -8300,19 +8455,22 @@
                             <!-- Scoring Bars -->
                             <div style="display:grid;gap:20px;margin-bottom:40px;">
                                 ${[
-                                    {label: 'Albatross/Eagle', count: analytics.scoringDistribution.albatross + analytics.scoringDistribution.eagle, color: '#10b981', icon: '🦅'},
-                                    {label: 'Birdies', count: analytics.scoringDistribution.birdie, color: '#3b82f6', icon: '🐦'},
-                                    {label: 'Pars', count: analytics.scoringDistribution.par, color: '#a78bfa', icon: '➖'},
-                                    {label: 'Bogeys', count: analytics.scoringDistribution.bogey, color: '#f59e0b', icon: '⚠️'},
-                                    {label: 'Double+', count: analytics.scoringDistribution.doublePlus, color: '#ef4444', icon: '❌'}
-                                ].map(item => {
+                                    {label: 'Albatross/Eagle', count: analytics.scoringDistribution.albatross + analytics.scoringDistribution.eagle, color: '#10b981', icon: '🦅', category: 'albatross_eagle', details: [...(analytics.scoreDetails.albatross || []), ...(analytics.scoreDetails.eagle || [])]},
+                                    {label: 'Birdies', count: analytics.scoringDistribution.birdie, color: '#3b82f6', icon: '🐦', category: 'birdie', details: analytics.scoreDetails.birdie || []},
+                                    {label: 'Pars', count: analytics.scoringDistribution.par, color: '#a78bfa', icon: '➖', category: 'par', details: analytics.scoreDetails.par || []},
+                                    {label: 'Bogeys', count: analytics.scoringDistribution.bogey, color: '#f59e0b', icon: '⚠️', category: 'bogey', details: analytics.scoreDetails.bogey || []},
+                                    {label: 'Double+', count: analytics.scoringDistribution.doublePlus, color: '#ef4444', icon: '❌', category: 'doublePlus', details: analytics.scoreDetails.doublePlus || []}
+                                ].map((item, idx) => {
                                     const percentage = maxScore > 0 ? (item.count / maxScore * 100) : 0;
+                                    const detailsJson = JSON.stringify(item.details).replace(/"/g, '&quot;');
                                     return `
-                                        <div>
+                                        <div style="${item.count > 0 ? 'cursor:pointer;' : ''}" 
+                                             ${item.count > 0 ? `onclick="showScoringDetails('${item.category}', JSON.parse('${detailsJson}'), '${item.color}', '${item.label}')"` : ''}>
                                             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
                                                 <div style="display:flex;align-items:center;gap:12px;">
                                                     <span style="font-size:24px;">${item.icon}</span>
                                                     <span style="color:white;font-size:18px;font-weight:600;">${item.label}</span>
+                                                    ${item.count > 0 ? '<span style="color:#64748b;font-size:14px;margin-left:8px;">(click for details)</span>' : ''}
                                                 </div>
                                                 <span style="color:${item.color};font-size:24px;font-weight:700;">${item.count}</span>
                                             </div>
@@ -8340,261 +8498,216 @@
                     </div>
                 `;
             } else if (currentSlide === funAwardsSlideIndex) {
-                // FUN AWARDS SLIDE
+                // FUN AWARDS SLIDE - LANDSCAPE OPTIMIZED
                 html += `
-                    <div style="animation:slideUp 0.8s ease-out;max-width:1200px;width:100%;">
-                        <h1 style="color:white;font-size:48px;margin:0 0 30px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
+                    <div style="animation:slideUp 0.8s ease-out;width:100%;height:100%;padding:12px;box-sizing:border-box;overflow:hidden;">
+                        <h1 style="color:white;font-size:36px;margin:0 0 16px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
                             🏅 Fun Awards
                         </h1>
                         
-                        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:24px;">
+                        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;height:calc(100% - 60px);">
                             <!-- Rollercoaster Award -->
                             ${analytics.awards.rollercoaster ? `
-                                <div style="background:linear-gradient(135deg, rgba(245,158,11,0.2) 0%, rgba(245,158,11,0.1) 100%);border:3px solid #f59e0b;border-radius:16px;padding:30px;position:relative;">
-                                    <!-- Tooltip -->
-                                    <div style="position:absolute;top:16px;right:16px;cursor:pointer;font-size:20px;color:#f59e0b;width:24px;height:24px;border-radius:50%;background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;" 
-                                         onclick="showAwardTooltip('How Rollercoaster is Calculated', 'Calculated using statistical variance of net scores across all 18 holes. Measures how much a player\\'s scores fluctuate from hole to hole. Higher variance = more ups and downs throughout the round. Formula: Average of squared differences from mean score.', '#f59e0b')">
-                                        ℹ️
-                                    </div>
-                                    <div style="text-align:center;margin-bottom:20px;">
-                                        <div style="font-size:64px;margin-bottom:12px;">🎢</div>
-                                        <h2 style="color:#f59e0b;font-size:24px;font-weight:700;margin:0;">Rollercoaster Award</h2>
-                                        <p style="color:#a5b4fc;font-size:14px;margin:8px 0 0;">Biggest score variance</p>
-                                    </div>
-                                    <div style="background:rgba(0,0,0,0.2);border-radius:12px;padding:20px;text-align:center;">
-                                        <div style="color:white;font-size:24px;font-weight:700;margin-bottom:8px;cursor:pointer;text-decoration:underline;touch-action:manipulation;" 
-                                             onclick="showFunAwardScorecard('${analytics.awards.rollercoaster[0].player}')"
-                                             onmouseover="this.style.color='#fbbf24'"
-                                             onmouseout="this.style.color='white'"
-                                             ontouchstart="this.style.color='#fbbf24'"
-                                             ontouchend="this.style.color='white'">
-                                            ${analytics.awards.rollercoaster[0].player}
+                                <div style="background:linear-gradient(135deg, rgba(245,158,11,0.2) 0%, rgba(245,158,11,0.1) 100%);border:2px solid #f59e0b;border-radius:12px;padding:10px;position:relative;display:flex;flex-direction:column;">
+                                    <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
+                                        <div style="font-size:40px;">🎢</div>
+                                        <div style="flex:1;">
+                                            <h2 style="color:#f59e0b;font-size:18px;font-weight:700;margin:0;">Rollercoaster</h2>
+                                            <p style="color:white;font-size:11px;margin:2px 0 0;">Biggest variance</p>
                                         </div>
-                                        <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:12px;">
-                                            <div style="width:8px;height:8px;border-radius:50%;background:${analytics.awards.rollercoaster[0].teamColor};"></div>
-                                            <div style="color:#a5b4fc;font-size:14px;">${analytics.awards.rollercoaster[0].team}</div>
+                                        <div style="cursor:pointer;font-size:16px;color:#f59e0b;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;" 
+                                             onclick="showAwardTooltip('Rollercoaster Award', 'Statistical variance of net scores. Higher = more ups and downs.', '#f59e0b')">ℹ️</div>
+                                    </div>
+                                    <div style="background:rgba(0,0,0,0.2);border-radius:8px;padding:10px;flex:1;display:flex;flex-direction:column;justify-content:center;">
+                                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                                            <div style="flex:1;">
+                                                <div style="color:white;font-size:18px;font-weight:700;cursor:pointer;text-decoration:underline;" 
+                                                     onclick="showFunAwardScorecard('${analytics.awards.rollercoaster[0].player}')"
+                                                     onmouseover="this.style.color='#fbbf24'"
+                                                     onmouseout="this.style.color='white'">
+                                                    ${analytics.awards.rollercoaster[0].player}
+                                                </div>
+                                                <div style="display:flex;align-items:center;gap:4px;margin-top:2px;">
+                                                    <div style="width:6px;height:6px;border-radius:50%;background:${analytics.awards.rollercoaster[0].teamColor};"></div>
+                                                    <div style="color:white;font-size:10px;">${analytics.awards.rollercoaster[0].team}</div>
+                                                </div>
+                                            </div>
+                                            <div style="color:#f59e0b;font-size:24px;font-weight:700;">
+                                                ${analytics.awards.rollercoaster[0].variance}
+                                            </div>
                                         </div>
                                         ${analytics.awards.rollercoaster.length > 1 ? `
-                                            <div id="rollercoaster-tie-indicator" style="color:#fbbf24;font-size:14px;margin-bottom:12px;cursor:pointer;text-decoration:underline;" 
-                                                 onclick="this.style.display='none';document.getElementById('rollercoaster-tied-players').style.display='block';">
-                                                +${analytics.awards.rollercoaster.length - 1} more tied
-                                            </div>
-                                            <div id="rollercoaster-tied-players" style="display:none;margin-bottom:12px;">
-                                                ${analytics.awards.rollercoaster.slice(1).map(winner => `
-                                                    <div style="color:white;font-size:16px;margin:8px 0;cursor:pointer;text-decoration:underline;" 
-                                                         onclick="showFunAwardScorecard('${winner.player}')"
-                                                         onmouseover="this.style.color='#fbbf24'"
-                                                         onmouseout="this.style.color='white'">
-                                                        ${winner.player} (${winner.team})
-                                                    </div>
-                                                `).join('')}
+                                            <div style="color:#fbbf24;font-size:11px;cursor:pointer;text-align:center;" 
+                                                 onclick="alert('Also tied: ${analytics.awards.rollercoaster.slice(1).map(w => w.player).join(', ')}')">
+                                                +${analytics.awards.rollercoaster.length - 1} tied
                                             </div>
                                         ` : ''}
-                                        <div style="color:#f59e0b;font-size:20px;font-weight:600;">
-                                            Variance: ${analytics.awards.rollercoaster[0].variance}
-                                        </div>
                                     </div>
                                 </div>
                             ` : ''}
                             
                             <!-- Steady Eddie Award -->
                             ${analytics.awards.steadyEddie ? `
-                                <div style="background:linear-gradient(135deg, rgba(59,130,246,0.2) 0%, rgba(59,130,246,0.1) 100%);border:3px solid #3b82f6;border-radius:16px;padding:30px;position:relative;">
-                                    <!-- Tooltip -->
-                                    <div style="position:absolute;top:16px;right:16px;cursor:pointer;font-size:20px;color:#3b82f6;width:24px;height:24px;border-radius:50%;background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;" 
-                                         onclick="showAwardTooltip('How Steady Eddie is Calculated', 'The opposite of Rollercoaster - calculated using statistical variance of net scores. Lower variance = more consistent play throughout the round. Award goes to the player with the SMALLEST variance, meaning they had the most steady, predictable scoring pattern.', '#3b82f6')">
-                                        ℹ️
-                                    </div>
-                                    <div style="text-align:center;margin-bottom:20px;">
-                                        <div style="font-size:64px;margin-bottom:12px;">⚖️</div>
-                                        <h2 style="color:#3b82f6;font-size:24px;font-weight:700;margin:0;">Steady Eddie</h2>
-                                        <p style="color:#a5b4fc;font-size:14px;margin:8px 0 0;">Lowest score variance</p>
-                                    </div>
-                                    <div style="background:rgba(0,0,0,0.2);border-radius:12px;padding:20px;text-align:center;">
-                                        <div style="color:white;font-size:24px;font-weight:700;margin-bottom:8px;cursor:pointer;text-decoration:underline;touch-action:manipulation;" 
-                                             onclick="showFunAwardScorecard('${analytics.awards.steadyEddie[0].player}')"
-                                             onmouseover="this.style.color='#60a5fa'"
-                                             onmouseout="this.style.color='white'"
-                                             ontouchstart="this.style.color='#60a5fa'"
-                                             ontouchend="this.style.color='white'">
-                                            ${analytics.awards.steadyEddie[0].player}
+                                <div style="background:linear-gradient(135deg, rgba(59,130,246,0.2) 0%, rgba(59,130,246,0.1) 100%);border:2px solid #3b82f6;border-radius:12px;padding:10px;position:relative;display:flex;flex-direction:column;">
+                                    <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
+                                        <div style="font-size:40px;">⚖️</div>
+                                        <div style="flex:1;">
+                                            <h2 style="color:#3b82f6;font-size:18px;font-weight:700;margin:0;">Steady Eddie</h2>
+                                            <p style="color:white;font-size:11px;margin:2px 0 0;">Lowest variance</p>
                                         </div>
-                                        <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:12px;">
-                                            <div style="width:8px;height:8px;border-radius:50%;background:${analytics.awards.steadyEddie[0].teamColor};"></div>
-                                            <div style="color:#a5b4fc;font-size:14px;">${analytics.awards.steadyEddie[0].team}</div>
+                                        <div style="cursor:pointer;font-size:16px;color:#3b82f6;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;" 
+                                             onclick="showAwardTooltip('Steady Eddie Award', 'Lowest variance = most consistent play.', '#3b82f6')">ℹ️</div>
+                                    </div>
+                                    <div style="background:rgba(0,0,0,0.2);border-radius:8px;padding:10px;flex:1;display:flex;flex-direction:column;justify-content:center;">
+                                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                                            <div style="flex:1;">
+                                                <div style="color:white;font-size:18px;font-weight:700;cursor:pointer;text-decoration:underline;" 
+                                                     onclick="showFunAwardScorecard('${analytics.awards.steadyEddie[0].player}')"
+                                                     onmouseover="this.style.color='#60a5fa'"
+                                                     onmouseout="this.style.color='white'">
+                                                    ${analytics.awards.steadyEddie[0].player}
+                                                </div>
+                                                <div style="display:flex;align-items:center;gap:4px;margin-top:2px;">
+                                                    <div style="width:6px;height:6px;border-radius:50%;background:${analytics.awards.steadyEddie[0].teamColor};"></div>
+                                                    <div style="color:white;font-size:10px;">${analytics.awards.steadyEddie[0].team}</div>
+                                                </div>
+                                            </div>
+                                            <div style="color:#3b82f6;font-size:24px;font-weight:700;">
+                                                ${analytics.awards.steadyEddie[0].variance}
+                                            </div>
                                         </div>
                                         ${analytics.awards.steadyEddie.length > 1 ? `
-                                            <div id="steadyeddie-tie-indicator" style="color:#60a5fa;font-size:14px;margin-bottom:12px;cursor:pointer;text-decoration:underline;" 
-                                                 onclick="this.style.display='none';document.getElementById('steadyeddie-tied-players').style.display='block';">
-                                                +${analytics.awards.steadyEddie.length - 1} more tied
-                                            </div>
-                                            <div id="steadyeddie-tied-players" style="display:none;margin-bottom:12px;">
-                                                ${analytics.awards.steadyEddie.slice(1).map(winner => `
-                                                    <div style="color:white;font-size:16px;margin:8px 0;cursor:pointer;text-decoration:underline;" 
-                                                         onclick="showFunAwardScorecard('${winner.player}')"
-                                                         onmouseover="this.style.color='#60a5fa'"
-                                                         onmouseout="this.style.color='white'">
-                                                        ${winner.player} (${winner.team})
-                                                    </div>
-                                                `).join('')}
+                                            <div style="color:#60a5fa;font-size:11px;cursor:pointer;text-align:center;" 
+                                                 onclick="alert('Also tied: ${analytics.awards.steadyEddie.slice(1).map(w => w.player).join(', ')}')">
+                                                +${analytics.awards.steadyEddie.length - 1} tied
                                             </div>
                                         ` : ''}
-                                        <div style="color:#3b82f6;font-size:20px;font-weight:600;">
-                                            Variance: ${analytics.awards.steadyEddie[0].variance}
-                                        </div>
                                     </div>
                                 </div>
                             ` : ''}
                             
                             <!-- On Fire Award -->
                             ${analytics.awards.onFire ? `
-                                <div style="background:linear-gradient(135deg, rgba(239,68,68,0.2) 0%, rgba(239,68,68,0.1) 100%);border:3px solid #ef4444;border-radius:16px;padding:30px;position:relative;">
-                                    <!-- Tooltip -->
-                                    <div style="position:absolute;top:16px;right:16px;cursor:pointer;font-size:20px;color:#ef4444;width:24px;height:24px;border-radius:50%;background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;" 
-                                         onclick="showAwardTooltip('How On Fire is Calculated', 'Counts consecutive holes where net score is par or better (pars, birdies, eagles, albatrosses). Net score = gross score minus handicap strokes. Streak resets when player makes bogey or worse. Recognizes sustained quality play and avoiding mistakes.', '#ef4444')">
-                                        ℹ️
-                                    </div>
-                                    <div style="text-align:center;margin-bottom:20px;">
-                                        <div style="font-size:64px;margin-bottom:12px;">🔥</div>
-                                        <h2 style="color:#ef4444;font-size:24px;font-weight:700;margin:0;">On Fire</h2>
-                                        <p style="color:#a5b4fc;font-size:14px;margin:8px 0 0;">Longest streak of par or better</p>
-                                    </div>
-                                    <div style="background:rgba(0,0,0,0.2);border-radius:12px;padding:20px;text-align:center;">
-                                        <div style="color:white;font-size:24px;font-weight:700;margin-bottom:8px;cursor:pointer;text-decoration:underline;touch-action:manipulation;" 
-                                             onclick="showFunAwardScorecard('${analytics.awards.onFire[0].player}')"
-                                             onmouseover="this.style.color='#f87171'"
-                                             onmouseout="this.style.color='white'"
-                                             ontouchstart="this.style.color='#f87171'"
-                                             ontouchend="this.style.color='white'">
-                                            ${analytics.awards.onFire[0].player}
+                                <div style="background:linear-gradient(135deg, rgba(239,68,68,0.2) 0%, rgba(239,68,68,0.1) 100%);border:2px solid #ef4444;border-radius:12px;padding:10px;position:relative;display:flex;flex-direction:column;">
+                                    <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
+                                        <div style="font-size:40px;">🔥</div>
+                                        <div style="flex:1;">
+                                            <h2 style="color:#ef4444;font-size:18px;font-weight:700;margin:0;">On Fire</h2>
+                                            <p style="color:white;font-size:11px;margin:2px 0 0;">Best streak</p>
                                         </div>
-                                        <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:12px;">
-                                            <div style="width:8px;height:8px;border-radius:50%;background:${analytics.awards.onFire[0].teamColor};"></div>
-                                            <div style="color:#a5b4fc;font-size:14px;">${analytics.awards.onFire[0].team}</div>
+                                        <div style="cursor:pointer;font-size:16px;color:#ef4444;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;" 
+                                             onclick="showAwardTooltip('On Fire Award', 'Longest streak of par or better.', '#ef4444')">ℹ️</div>
+                                    </div>
+                                    <div style="background:rgba(0,0,0,0.2);border-radius:8px;padding:10px;flex:1;display:flex;flex-direction:column;justify-content:center;">
+                                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                                            <div style="flex:1;">
+                                                <div style="color:white;font-size:18px;font-weight:700;cursor:pointer;text-decoration:underline;" 
+                                                     onclick="showFunAwardScorecard('${analytics.awards.onFire[0].player}')"
+                                                     onmouseover="this.style.color='#f87171'"
+                                                     onmouseout="this.style.color='white'">
+                                                    ${analytics.awards.onFire[0].player}
+                                                </div>
+                                                <div style="display:flex;align-items:center;gap:4px;margin-top:2px;">
+                                                    <div style="width:6px;height:6px;border-radius:50%;background:${analytics.awards.onFire[0].teamColor};"></div>
+                                                    <div style="color:white;font-size:10px;">${analytics.awards.onFire[0].team}</div>
+                                                </div>
+                                            </div>
+                                            <div style="text-align:right;">
+                                                <div style="color:#ef4444;font-size:28px;font-weight:700;line-height:1;">${analytics.awards.onFire[0].streak}</div>
+                                                <div style="color:white;font-size:10px;">in a row</div>
+                                            </div>
                                         </div>
                                         ${analytics.awards.onFire.length > 1 ? `
-                                            <div id="onfire-tie-indicator" style="color:#f87171;font-size:14px;margin-bottom:12px;cursor:pointer;text-decoration:underline;" 
-                                                 onclick="this.style.display='none';document.getElementById('onfire-tied-players').style.display='block';">
-                                                +${analytics.awards.onFire.length - 1} more tied
-                                            </div>
-                                            <div id="onfire-tied-players" style="display:none;margin-bottom:12px;">
-                                                ${analytics.awards.onFire.slice(1).map(winner => `
-                                                    <div style="color:white;font-size:16px;margin:8px 0;cursor:pointer;text-decoration:underline;" 
-                                                         onclick="showFunAwardScorecard('${winner.player}')"
-                                                         onmouseover="this.style.color='#f87171'"
-                                                         onmouseout="this.style.color='white'">
-                                                        ${winner.player} (${winner.team})
-                                                    </div>
-                                                `).join('')}
+                                            <div style="color:#f87171;font-size:11px;cursor:pointer;text-align:center;" 
+                                                 onclick="alert('Also tied: ${analytics.awards.onFire.slice(1).map(w => w.player).join(', ')}')">
+                                                +${analytics.awards.onFire.length - 1} tied
                                             </div>
                                         ` : ''}
-                                        <div style="color:#ef4444;font-size:36px;font-weight:700;">
-                                            ${analytics.awards.onFire[0].streak} in a row
-                                        </div>
                                     </div>
                                 </div>
                             ` : ''}
                             
                             <!-- The Grind Award -->
                             ${analytics.awards.grind ? `
-                                <div style="background:linear-gradient(135deg, rgba(16,185,129,0.2) 0%, rgba(16,185,129,0.1) 100%);border:3px solid #10b981;border-radius:16px;padding:30px;position:relative;">
-                                    <!-- Tooltip -->
-                                    <div style="position:absolute;top:16px;right:16px;cursor:pointer;font-size:20px;color:#10b981;width:24px;height:24px;border-radius:50%;background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;" 
-                                         onclick="showAwardTooltip('How The Grind is Calculated', 'Counts total holes where net score was bogey or worse (net score > par). Lower is better! Award goes to the player who avoided mistakes the most. Net score = gross score minus handicap strokes. Highlights discipline, course management, and ability to minimize damage.', '#10b981')">
-                                        ℹ️
-                                    </div>
-                                    <div style="text-align:center;margin-bottom:20px;">
-                                        <div style="font-size:64px;margin-bottom:12px;">💪</div>
-                                        <h2 style="color:#10b981;font-size:24px;font-weight:700;margin:0;">The Grind</h2>
-                                        <p style="color:#a5b4fc;font-size:14px;margin:8px 0 0;">Fewest bogeys or worse</p>
-                                    </div>
-                                    <div style="background:rgba(0,0,0,0.2);border-radius:12px;padding:20px;text-align:center;">
-                                        <div style="color:white;font-size:24px;font-weight:700;margin-bottom:8px;cursor:pointer;text-decoration:underline;touch-action:manipulation;" 
-                                             onclick="showFunAwardScorecard('${analytics.awards.grind[0].player}')"
-                                             onmouseover="this.style.color='#34d399'"
-                                             onmouseout="this.style.color='white'"
-                                             ontouchstart="this.style.color='#34d399'"
-                                             ontouchend="this.style.color='white'">
-                                            ${analytics.awards.grind[0].player}
+                                <div style="background:linear-gradient(135deg, rgba(16,185,129,0.2) 0%, rgba(16,185,129,0.1) 100%);border:2px solid #10b981;border-radius:12px;padding:10px;position:relative;display:flex;flex-direction:column;">
+                                    <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
+                                        <div style="font-size:40px;">💪</div>
+                                        <div style="flex:1;">
+                                            <h2 style="color:#10b981;font-size:18px;font-weight:700;margin:0;">The Grind</h2>
+                                            <p style="color:white;font-size:11px;margin:2px 0 0;">Fewest bogeys</p>
                                         </div>
-                                        <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:12px;">
-                                            <div style="width:8px;height:8px;border-radius:50%;background:${analytics.awards.grind[0].teamColor};"></div>
-                                            <div style="color:#a5b4fc;font-size:14px;">${analytics.awards.grind[0].team}</div>
+                                        <div style="cursor:pointer;font-size:16px;color:#10b981;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;" 
+                                             onclick="showAwardTooltip('The Grind Award', 'Fewest holes with bogey or worse.', '#10b981')">ℹ️</div>
+                                    </div>
+                                    <div style="background:rgba(0,0,0,0.2);border-radius:8px;padding:10px;flex:1;display:flex;flex-direction:column;justify-content:center;">
+                                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                                            <div style="flex:1;">
+                                                <div style="color:white;font-size:18px;font-weight:700;cursor:pointer;text-decoration:underline;" 
+                                                     onclick="showFunAwardScorecard('${analytics.awards.grind[0].player}')"
+                                                     onmouseover="this.style.color='#34d399'"
+                                                     onmouseout="this.style.color='white'">
+                                                    ${analytics.awards.grind[0].player}
+                                                </div>
+                                                <div style="display:flex;align-items:center;gap:4px;margin-top:2px;">
+                                                    <div style="width:6px;height:6px;border-radius:50%;background:${analytics.awards.grind[0].teamColor};"></div>
+                                                    <div style="color:white;font-size:10px;">${analytics.awards.grind[0].team}</div>
+                                                </div>
+                                            </div>
+                                            <div style="text-align:right;">
+                                                <div style="color:#10b981;font-size:28px;font-weight:700;line-height:1;">${analytics.awards.grind[0].count}</div>
+                                                <div style="color:white;font-size:10px;">bogey${analytics.awards.grind[0].count === 1 ? '' : 's'}</div>
+                                            </div>
                                         </div>
                                         ${analytics.awards.grind.length > 1 ? `
-                                            <div id="grind-tie-indicator" style="color:#34d399;font-size:14px;margin-bottom:12px;cursor:pointer;text-decoration:underline;" 
-                                                 onclick="this.style.display='none';document.getElementById('grind-tied-players').style.display='block';">
-                                                +${analytics.awards.grind.length - 1} more tied
-                                            </div>
-                                            <div id="grind-tied-players" style="display:none;margin-bottom:12px;">
-                                                ${analytics.awards.grind.slice(1).map(winner => `
-                                                    <div style="color:white;font-size:16px;margin:8px 0;cursor:pointer;text-decoration:underline;" 
-                                                         onclick="showFunAwardScorecard('${winner.player}')"
-                                                         onmouseover="this.style.color='#34d399'"
-                                                         onmouseout="this.style.color='white'">
-                                                        ${winner.player} (${winner.team})
-                                                    </div>
-                                                `).join('')}
+                                            <div style="color:#34d399;font-size:11px;cursor:pointer;text-align:center;" 
+                                                 onclick="alert('Also tied: ${analytics.awards.grind.slice(1).map(w => w.player).join(', ')}')">
+                                                +${analytics.awards.grind.length - 1} tied
                                             </div>
                                         ` : ''}
-                                        <div style="color:#10b981;font-size:36px;font-weight:700;">
-                                            ${analytics.awards.grind[0].count} bogey${analytics.awards.grind[0].count === 1 ? '' : 's'}
-                                        </div>
                                     </div>
                                 </div>
                             ` : ''}
                             
                             <!-- Closest to Handicap Award -->
                             ${analytics.awards.closestToHandicap ? `
-                                <div style="background:linear-gradient(135deg, rgba(168,85,247,0.2) 0%, rgba(168,85,247,0.1) 100%);border:3px solid #a855f7;border-radius:16px;padding:30px;position:relative;">
-                                    <!-- Tooltip -->
-                                    <div style="position:absolute;top:16px;right:16px;cursor:pointer;font-size:20px;color:#a855f7;width:24px;height:24px;border-radius:50%;background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;" 
-                                         onclick="showAwardTooltip('How Closest to Handicap is Calculated', 'Compares each player\\'s gross score to their expected score (Course Par + Handicap). The player with the smallest difference wins! This award celebrates playing exactly to your potential. Perfect handicap = 0 strokes difference.', '#a855f7')">
-                                        ℹ️
-                                    </div>
-                                    <div style="text-align:center;margin-bottom:20px;">
-                                        <div style="font-size:64px;margin-bottom:12px;">🎯</div>
-                                        <h2 style="color:#a855f7;font-size:24px;font-weight:700;margin:0;">Dialed In</h2>
-                                        <p style="color:#a5b4fc;font-size:14px;margin:8px 0 0;">Closest to handicap</p>
-                                    </div>
-                                    <div style="background:rgba(0,0,0,0.2);border-radius:12px;padding:20px;text-align:center;">
-                                        <div style="color:white;font-size:24px;font-weight:700;margin-bottom:8px;cursor:pointer;text-decoration:underline;touch-action:manipulation;" 
-                                             onclick="showFunAwardScorecard('${analytics.awards.closestToHandicap[0].player}')"
-                                             onmouseover="this.style.color='#c084fc'"
-                                             onmouseout="this.style.color='white'"
-                                             ontouchstart="this.style.color='#c084fc'"
-                                             ontouchend="this.style.color='white'">
-                                            ${analytics.awards.closestToHandicap[0].player}
+                                <div style="background:linear-gradient(135deg, rgba(168,85,247,0.2) 0%, rgba(168,85,247,0.1) 100%);border:2px solid #a855f7;border-radius:12px;padding:10px;position:relative;display:flex;flex-direction:column;">
+                                    <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
+                                        <div style="font-size:40px;">🎯</div>
+                                        <div style="flex:1;">
+                                            <h2 style="color:#a855f7;font-size:18px;font-weight:700;margin:0;">Dialed In</h2>
+                                            <p style="color:white;font-size:11px;margin:2px 0 0;">Closest to HCP</p>
                                         </div>
-                                        <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:12px;">
-                                            <div style="width:8px;height:8px;border-radius:50%;background:${analytics.awards.closestToHandicap[0].teamColor};"></div>
-                                            <div style="color:#a5b4fc;font-size:14px;">${analytics.awards.closestToHandicap[0].team}</div>
+                                        <div style="cursor:pointer;font-size:16px;color:#a855f7;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;" 
+                                             onclick="showAwardTooltip('Dialed In Award', 'Closest to expected score (Par + Handicap).', '#a855f7')">ℹ️</div>
+                                    </div>
+                                    <div style="background:rgba(0,0,0,0.2);border-radius:8px;padding:10px;flex:1;display:flex;flex-direction:column;justify-content:center;">
+                                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                                            <div style="flex:1;">
+                                                <div style="color:white;font-size:18px;font-weight:700;cursor:pointer;text-decoration:underline;" 
+                                                     onclick="showFunAwardScorecard('${analytics.awards.closestToHandicap[0].player}')"
+                                                     onmouseover="this.style.color='#c084fc'"
+                                                     onmouseout="this.style.color='white'">
+                                                    ${analytics.awards.closestToHandicap[0].player}
+                                                </div>
+                                                <div style="display:flex;align-items:center;gap:4px;margin-top:2px;">
+                                                    <div style="width:6px;height:6px;border-radius:50%;background:${analytics.awards.closestToHandicap[0].teamColor};"></div>
+                                                    <div style="color:white;font-size:10px;">${analytics.awards.closestToHandicap[0].team}</div>
+                                                </div>
+                                            </div>
+                                            <div style="text-align:right;">
+                                                <div style="color:#a855f7;font-size:24px;font-weight:700;line-height:1;">
+                                                    ${analytics.awards.closestToHandicap[0].diff === 0 ? 'Perfect!' : `${analytics.awards.closestToHandicap[0].diff}`}
+                                                </div>
+                                                <div style="color:white;font-size:10px;">${analytics.awards.closestToHandicap[0].diff === 0 ? '' : 'strokes off'}</div>
+                                                <div style="color:white;font-size:9px;margin-top:2px;">Shot ${analytics.awards.closestToHandicap[0].grossScore}</div>
+                                            </div>
                                         </div>
                                         ${analytics.awards.closestToHandicap.length > 1 ? `
-                                            <div id="closest-tie-indicator" style="color:#c084fc;font-size:14px;margin-bottom:12px;cursor:pointer;text-decoration:underline;" 
-                                                 onclick="this.style.display='none';document.getElementById('closest-tied-players').style.display='block';">
-                                                +${analytics.awards.closestToHandicap.length - 1} more tied
-                                            </div>
-                                            <div id="closest-tied-players" style="display:none;margin-bottom:12px;">
-                                                ${analytics.awards.closestToHandicap.slice(1).map(winner => `
-                                                    <div style="color:white;font-size:16px;margin:8px 0;cursor:pointer;text-decoration:underline;" 
-                                                         onclick="showFunAwardScorecard('${winner.player}')"
-                                                         onmouseover="this.style.color='#c084fc'"
-                                                         onmouseout="this.style.color='white'">
-                                                        ${winner.player} (${winner.team})
-                                                    </div>
-                                                `).join('')}
+                                            <div style="color:#c084fc;font-size:11px;cursor:pointer;text-align:center;" 
+                                                 onclick="alert('Also tied: ${analytics.awards.closestToHandicap.slice(1).map(w => w.player).join(', ')}')">
+                                                +${analytics.awards.closestToHandicap.length - 1} tied
                                             </div>
                                         ` : ''}
-                                        <div style="color:#64748b;font-size:14px;margin-bottom:8px;">
-                                            Expected: ${analytics.awards.closestToHandicap[0].expectedScore} (Par ${mostRecentRound.pars.reduce((sum, par) => sum + par, 0)} + ${analytics.awards.closestToHandicap[0].handicap} HCP)
-                                        </div>
-                                        <div style="color:#a855f7;font-size:36px;font-weight:700;">
-                                            ${analytics.awards.closestToHandicap[0].diff === 0 ? 'Perfect!' : `${analytics.awards.closestToHandicap[0].diff} stroke${analytics.awards.closestToHandicap[0].diff === 1 ? '' : 's'} off`}
-                                        </div>
-                                        <div style="color:#a5b4fc;font-size:14px;margin-top:8px;">
-                                            Shot ${analytics.awards.closestToHandicap[0].grossScore}
-                                        </div>
                                     </div>
                                 </div>
                             ` : ''}
@@ -8851,7 +8964,7 @@
                     </div>
                 `;
             } else if (currentSlide >= teamSlidesStartIndex && currentSlide < teamSlidesStartIndex + teamStandings.length) {
-                // TEAM REVEAL SLIDES - 75/25 SPLIT LAYOUT
+                // TEAM REVEAL SLIDES - LANDSCAPE OPTIMIZED
                 // Show teams in reverse order (last to first) for dramatic reveal
                 const reverseIndex = teamStandings.length - 1 - (currentSlide - teamSlidesStartIndex);
                 const team = teamStandings[reverseIndex];
@@ -8883,126 +8996,147 @@
                     );
                     
                     html += `
-                        <div style="display:flex;gap:20px;width:100%;max-width:1920px;margin:0 auto;animation:slideUp 0.8s ease-out;">
+                        <div style="display:flex;gap:16px;width:100%;height:100%;padding:12px;box-sizing:border-box;animation:slideUp 0.8s ease-out;overflow:hidden;">
                             
-                            <!-- LEFT COLUMN: Current Team (75%) -->
-                            <div style="flex:0 0 75%;display:flex;flex-direction:column;gap:20px;">
+                            <!-- MAIN CONTENT (Center/Left) -->
+                            <div style="flex:1;display:flex;flex-direction:column;gap:12px;min-width:0;">
                                 
-                                <!-- TEAM CARD -->
-                                <div style="background:linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 100%);border:4px solid ${team.color};border-radius:20px;padding:40px;box-shadow:0 20px 60px rgba(0,0,0,0.5);">
+                                <!-- TEAM HEADER - Horizontal Layout -->
+                                <div style="background:linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 100%);border:3px solid ${team.color};border-radius:12px;padding:16px;">
                                     
-                                    <!-- Header Row -->
-                                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:30px;">
-                                        <div style="display:flex;align-items:center;gap:30px;">
-                                            <div style="text-align:center;">
-                                                <div style="font-size:80px;line-height:1;">${isFirst ? '🥇' : isLast ? '🎯' : position === 2 ? '🥈' : position === 3 ? '🥉' : '🏅'}</div>
-                                                <div style="color:#e0e7ff;font-size:32px;font-weight:700;margin-top:8px;">#${position}</div>
-                                                ${positionChange !== 0 ? `
-                                                    <div style="color:${positionChange > 0 ? '#10b981' : '#ef4444'};font-size:20px;font-weight:700;margin-top:6px;">
-                                                        ${positionChange > 0 ? '↗' : '↘'} ${Math.abs(positionChange)}
-                                                    </div>
-                                                ` : ''}
-                                            </div>
-                                            <div>
-                                                <div style="color:white;font-size:48px;font-weight:700;line-height:1.2;margin-bottom:10px;">${team.name}</div>
-                                                <div style="color:${team.color};font-size:56px;font-weight:700;line-height:1;cursor:pointer;" 
+                                    <div style="display:flex;align-items:center;gap:20px;margin-bottom:${hasScheduledRounds && team.winProbability !== undefined ? '12px' : '0'};">
+                                        <!-- Position Badge -->
+                                        <div style="text-align:center;flex-shrink:0;">
+                                            <div style="font-size:48px;line-height:1;">${isFirst ? '🥇' : isLast ? '🎯' : position === 2 ? '🥈' : position === 3 ? '🥉' : '🏅'}</div>
+                                            <div style="color:white;font-size:24px;font-weight:700;margin-top:4px;">#${position}</div>
+                                            ${positionChange !== 0 ? `
+                                                <div style="color:${positionChange > 0 ? '#10b981' : '#ef4444'};font-size:16px;font-weight:700;margin-top:2px;">
+                                                    ${positionChange > 0 ? '↗' : '↘'} ${Math.abs(positionChange)}
+                                                </div>
+                                            ` : ''}
+                                        </div>
+                                        
+                                        <!-- Team Name & Points -->
+                                        <div style="flex:1;min-width:0;">
+                                            <div style="color:white;font-size:36px;font-weight:700;line-height:1.1;margin-bottom:6px;">${team.name}</div>
+                                            <div style="display:flex;align-items:center;gap:12px;">
+                                                <div style="color:${team.color};font-size:42px;font-weight:700;line-height:1;cursor:pointer;" 
                                                      onclick="closePresentationMode(); navigate('stats');" 
                                                      title="Click to view player statistics">
                                                     ${team.points} pts
                                                 </div>
                                                 ${todaysScores[team.id] ? `
-                                                    <div style="color:#10b981;font-size:24px;font-weight:700;margin-top:8px;">
+                                                    <div style="color:#10b981;font-size:20px;font-weight:700;">
                                                         +${todaysScores[team.id].total} today
                                                     </div>
                                                 ` : ''}
                                             </div>
                                         </div>
+                                        
                                         ${isFirst && !hasScheduledRounds ? `
-                                            <div style="text-align:center;">
-                                                <div style="font-size:64px;">🏆</div>
-                                                <div style="color:#fbbf24;font-size:24px;font-weight:700;text-shadow:0 2px 10px rgba(0,0,0,0.5);">CHAMPION!</div>
+                                            <div style="text-align:center;flex-shrink:0;">
+                                                <div style="font-size:48px;">🏆</div>
+                                                <div style="color:#fbbf24;font-size:18px;font-weight:700;">CHAMPION!</div>
                                             </div>
                                         ` : ''}
                                     </div>
                                     
-                                    <!-- Stats Grid -->
-                                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
-                                        
-                                        <!-- Today's Totals -->
-                                        ${todaysScores[team.id] ? `
-                                            <div style="background:rgba(16,185,129,0.2);border:3px solid rgba(16,185,129,0.4);border-radius:12px;padding:20px;cursor:pointer;transition:all 0.3s;" 
-                                                 ${roundIndex >= 0 ? `onclick="closePresentationMode(); viewRoundDetails(${roundIndex});"` : ''}
-                                                 onmouseover="this.style.background='rgba(16,185,129,0.3)'; this.style.transform='scale(1.02)';"
-                                                 onmouseout="this.style.background='rgba(16,185,129,0.2)'; this.style.transform='scale(1)';"
-                                                 ${roundIndex >= 0 ? `title="Click to view team scorecard"` : ''}>
-                                                <h3 style="color:#10b981;font-size:20px;font-weight:700;margin:0 0 16px;">📊 Today's Totals</h3>
-                                                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
-                                                    <div style="background:rgba(255,255,255,0.15);padding:10px;border-radius:8px;text-align:center;">
-                                                        <div style="color:#a5b4fc;font-size:12px;font-weight:600;">Stroke</div>
-                                                        <div style="color:white;font-size:20px;font-weight:700;">${todaysScores[team.id].strokePoints || 0}</div>
-                                                    </div>
-                                                    <div style="background:rgba(255,255,255,0.15);padding:10px;border-radius:8px;text-align:center;">
-                                                        <div style="color:#a5b4fc;font-size:12px;font-weight:600;">BBB</div>
-                                                        <div style="color:white;font-size:20px;font-weight:700;">${todaysScores[team.id].bbbPoints || 0}</div>
-                                                    </div>
-                                                    <div style="background:rgba(255,255,255,0.15);padding:10px;border-radius:8px;text-align:center;">
-                                                        <div style="color:#a5b4fc;font-size:12px;font-weight:600;">Balls</div>
-                                                        <div style="color:white;font-size:20px;font-weight:700;">${todaysScores[team.id].ballPoints || 0}</div>
-                                                    </div>
-                                                    <div style="background:rgba(255,255,255,0.15);padding:10px;border-radius:8px;text-align:center;">
-                                                        <div style="color:#a5b4fc;font-size:12px;font-weight:600;">CTP</div>
-                                                        <div style="color:white;font-size:20px;font-weight:700;">${todaysScores[team.id].ctpPoints || 0}</div>
-                                                    </div>
-                                                    <div style="background:rgba(255,255,255,0.15);padding:10px;border-radius:8px;text-align:center;">
-                                                        <div style="color:#a5b4fc;font-size:12px;font-weight:600;">Ex9</div>
-                                                        <div style="color:white;font-size:20px;font-weight:700;">${todaysScores[team.id].extra9Points || 0}</div>
-                                                    </div>
-                                                    <div style="background:rgba(255,255,255,0.15);padding:10px;border-radius:8px;text-align:center;">
-                                                        <div style="color:#a5b4fc;font-size:12px;font-weight:600;">Total</div>
-                                                        <div style="color:#10b981;font-size:20px;font-weight:700;">+${todaysScores[team.id].total}</div>
-                                                    </div>
+                                    <!-- WIN PROBABILITY BAR (horizontal, under team score) -->
+                                    ${hasScheduledRounds && team.winProbability !== undefined ? `
+                                        <div style="background:rgba(139,92,246,0.15);border:2px solid rgba(139,92,246,0.3);border-radius:8px;padding:10px;">
+                                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                                                <div style="color:#a78bfa;font-size:14px;font-weight:700;">🎲 Win Chance</div>
+                                                <div style="display:flex;align-items:center;gap:8px;">
+                                                    ${team.probabilityChange !== 0 ? `
+                                                        <span style="font-size:14px;color:${team.probabilityChange > 0 ? '#10b981' : '#ef4444'};font-weight:700;">
+                                                            ${team.probabilityChange > 0 ? '↗' : '↘'} ${Math.abs(team.probabilityChange)}%
+                                                        </span>
+                                                    ` : ''}
+                                                    <strong style="font-size:24px;color:#a78bfa;">${team.winProbability}%</strong>
                                                 </div>
                                             </div>
-                                        ` : '<div></div>'}
-                                        
-                                        <!-- Event Totals -->
-                                        <div style="background:rgba(59,130,246,0.2);border:3px solid rgba(59,130,246,0.4);border-radius:12px;padding:20px;">
-                                            <h3 style="color:#60a5fa;font-size:20px;font-weight:700;margin:0 0 16px;">🏆 Event Totals</h3>
-                                            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
-                                                <div style="background:rgba(255,255,255,0.15);padding:10px;border-radius:8px;text-align:center;">
-                                                    <div style="color:#a5b4fc;font-size:12px;font-weight:600;">Stroke</div>
-                                                    <div style="color:white;font-size:20px;font-weight:700;">${team.strokePoints || 0}</div>
+                                            <div style="background:#1e293b;border-radius:8px;height:24px;position:relative;overflow:hidden;box-shadow:inset 0 2px 8px rgba(0,0,0,0.3);">
+                                                <div style="background:linear-gradient(90deg, #8b5cf6 0%, #a78bfa 100%);height:100%;width:${team.winProbability}%;transition:width 1s ease-out;box-shadow:0 0 20px rgba(139,92,246,0.5);"></div>
+                                            </div>
+                                            <div style="color:#a5b4fc;font-size:10px;text-align:right;margin-top:4px;">${scheduledRoundsCount} round${scheduledRoundsCount === 1 ? '' : 's'} remaining</div>
+                                        </div>
+                                    ` : ''}
+                                </div>
+                                
+                                <!-- STATS ROW - Horizontal 2-box layout -->
+                                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                                    
+                                    <!-- Today's Totals -->
+                                    ${todaysScores[team.id] ? `
+                                        <div style="background:rgba(16,185,129,0.2);border:2px solid rgba(16,185,129,0.4);border-radius:10px;padding:12px;cursor:pointer;" 
+                                             ${roundIndex >= 0 ? `onclick="closePresentationMode(); viewRoundDetails(${roundIndex});" title="Click to view team scorecard"` : ''}>
+                                            <h3 style="color:#10b981;font-size:16px;font-weight:700;margin:0 0 10px;">📊 Today's Totals</h3>
+                                            <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:6px;">
+                                                <div style="background:rgba(255,255,255,0.15);padding:6px;border-radius:6px;text-align:center;">
+                                                    <div style="color:#a5b4fc;font-size:10px;font-weight:600;">Stroke</div>
+                                                    <div style="color:white;font-size:18px;font-weight:700;">${todaysScores[team.id].strokePoints || 0}</div>
                                                 </div>
-                                                <div style="background:rgba(255,255,255,0.15);padding:10px;border-radius:8px;text-align:center;">
-                                                    <div style="color:#a5b4fc;font-size:12px;font-weight:600;">BBB</div>
-                                                    <div style="color:white;font-size:20px;font-weight:700;">${team.bbbPoints || 0}</div>
+                                                <div style="background:rgba(255,255,255,0.15);padding:6px;border-radius:6px;text-align:center;">
+                                                    <div style="color:#a5b4fc;font-size:10px;font-weight:600;">BBB</div>
+                                                    <div style="color:white;font-size:18px;font-weight:700;">${todaysScores[team.id].bbbPoints || 0}</div>
                                                 </div>
-                                                <div style="background:rgba(255,255,255,0.15);padding:10px;border-radius:8px;text-align:center;">
-                                                    <div style="color:#a5b4fc;font-size:12px;font-weight:600;">Balls</div>
-                                                    <div style="color:white;font-size:20px;font-weight:700;">${team.ballPoints || 0}</div>
+                                                <div style="background:rgba(255,255,255,0.15);padding:6px;border-radius:6px;text-align:center;">
+                                                    <div style="color:#a5b4fc;font-size:10px;font-weight:600;">Balls</div>
+                                                    <div style="color:white;font-size:18px;font-weight:700;">${todaysScores[team.id].ballPoints || 0}</div>
                                                 </div>
-                                                <div style="background:rgba(255,255,255,0.15);padding:10px;border-radius:8px;text-align:center;">
-                                                    <div style="color:#a5b4fc;font-size:12px;font-weight:600;">CTP</div>
-                                                    <div style="color:white;font-size:20px;font-weight:700;">${team.ctpPoints || 0}</div>
+                                                <div style="background:rgba(255,255,255,0.15);padding:6px;border-radius:6px;text-align:center;">
+                                                    <div style="color:#a5b4fc;font-size:10px;font-weight:600;">CTP</div>
+                                                    <div style="color:white;font-size:18px;font-weight:700;">${todaysScores[team.id].ctpPoints || 0}</div>
                                                 </div>
-                                                <div style="background:rgba(255,255,255,0.15);padding:10px;border-radius:8px;text-align:center;">
-                                                    <div style="color:#a5b4fc;font-size:12px;font-weight:600;">Ex9</div>
-                                                    <div style="color:white;font-size:20px;font-weight:700;">${team.extra9Points || 0}</div>
+                                                <div style="background:rgba(255,255,255,0.15);padding:6px;border-radius:6px;text-align:center;">
+                                                    <div style="color:#a5b4fc;font-size:10px;font-weight:600;">Ex9</div>
+                                                    <div style="color:white;font-size:18px;font-weight:700;">${todaysScores[team.id].extra9Points || 0}</div>
                                                 </div>
-                                                <div style="background:rgba(255,255,255,0.15);padding:10px;border-radius:8px;text-align:center;">
-                                                    <div style="color:#a5b4fc;font-size:12px;font-weight:600;">Wins</div>
-                                                    <div style="color:white;font-size:20px;font-weight:700;">${team.wins || 0}</div>
+                                                <div style="background:rgba(16,185,129,0.3);padding:6px;border-radius:6px;text-align:center;">
+                                                    <div style="color:#a5b4fc;font-size:10px;font-weight:600;">Total</div>
+                                                    <div style="color:#10b981;font-size:18px;font-weight:700;">+${todaysScores[team.id].total}</div>
                                                 </div>
+                                            </div>
+                                        </div>
+                                    ` : '<div></div>'}
+                                    
+                                    <!-- Event Totals -->
+                                    <div style="background:rgba(59,130,246,0.2);border:2px solid rgba(59,130,246,0.4);border-radius:10px;padding:12px;">
+                                        <h3 style="color:#60a5fa;font-size:16px;font-weight:700;margin:0 0 10px;">🏆 Event Totals</h3>
+                                        <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:6px;">
+                                            <div style="background:rgba(255,255,255,0.15);padding:6px;border-radius:6px;text-align:center;">
+                                                <div style="color:#a5b4fc;font-size:10px;font-weight:600;">Stroke</div>
+                                                <div style="color:white;font-size:18px;font-weight:700;">${team.strokePoints || 0}</div>
+                                            </div>
+                                            <div style="background:rgba(255,255,255,0.15);padding:6px;border-radius:6px;text-align:center;">
+                                                <div style="color:#a5b4fc;font-size:10px;font-weight:600;">BBB</div>
+                                                <div style="color:white;font-size:18px;font-weight:700;">${team.bbbPoints || 0}</div>
+                                            </div>
+                                            <div style="background:rgba(255,255,255,0.15);padding:6px;border-radius:6px;text-align:center;">
+                                                <div style="color:#a5b4fc;font-size:10px;font-weight:600;">Balls</div>
+                                                <div style="color:white;font-size:18px;font-weight:700;">${team.ballPoints || 0}</div>
+                                            </div>
+                                            <div style="background:rgba(255,255,255,0.15);padding:6px;border-radius:6px;text-align:center;">
+                                                <div style="color:#a5b4fc;font-size:10px;font-weight:600;">CTP</div>
+                                                <div style="color:white;font-size:18px;font-weight:700;">${team.ctpPoints || 0}</div>
+                                            </div>
+                                            <div style="background:rgba(255,255,255,0.15);padding:6px;border-radius:6px;text-align:center;">
+                                                <div style="color:#a5b4fc;font-size:10px;font-weight:600;">Ex9</div>
+                                                <div style="color:white;font-size:18px;font-weight:700;">${team.extra9Points || 0}</div>
+                                            </div>
+                                            <div style="background:rgba(255,255,255,0.15);padding:6px;border-radius:6px;text-align:center;">
+                                                <div style="color:#a5b4fc;font-size:10px;font-weight:600;">Wins</div>
+                                                <div style="color:white;font-size:18px;font-weight:700;">${team.wins || 0}</div>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
                                 
-                                <!-- Today's Totals (Individual Players) -->
+                                <!-- Today's Player Breakdown - Compact Horizontal -->
                                 ${todaysScores[team.id] ? `
-                                    <div style="background:rgba(16,185,129,0.15);border:3px solid rgba(16,185,129,0.3);border-radius:12px;padding:20px;margin-top:20px;">
-                                        <h3 style="color:#10b981;font-size:20px;font-weight:700;margin:0 0 16px;">📊 Today's Totals</h3>
-                                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;">
+                                    <div style="background:rgba(16,185,129,0.15);border:2px solid rgba(16,185,129,0.3);border-radius:10px;padding:12px;">
+                                        <h3 style="color:#10b981;font-size:16px;font-weight:700;margin:0 0 10px;">👥 Player Breakdown</h3>
+                                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;">
                                             ${mostRecentRound.teams.find(t => t.teamId === team.id)?.players.map(player => {
                                                 const strokePoints = calcPlayerTotal(player.scores, mostRecentRound.pars, mostRecentRound.handicaps, player.handicap);
                                                 const bbbPoints = (player.bbbTotal || 0) * state.settings.bbbPoints;
@@ -9010,7 +9144,7 @@
                                                 
                                                 const teamIdx = mostRecentRound.teams.findIndex(t => t.teamId === team.id);
                                                 const playerIdx = mostRecentRound.teams[teamIdx]?.players.findIndex(p => p.id === player.id);
-                                                const playerPosition = `${teamIdx}-${playerIdx}`;
+                                                const playerPosition = teamIdx + '-' + playerIdx;
                                                 
                                                 let extra9Points = 0;
                                                 if (mostRecentRound.extra9Winners) {
@@ -9024,105 +9158,73 @@
                                                 
                                                 const playerTotal = strokePoints + bbbPoints + ballPoints + extra9Points + ctpPoints;
                                                 
-                                                return `
-                                                    <div style="background:rgba(255,255,255,0.1);border-radius:8px;padding:12px;">
-                                                        <div style="color:white;font-size:16px;font-weight:700;margin-bottom:8px;">${player.name}</div>
-                                                        <div style="color:#10b981;font-size:24px;font-weight:700;margin-bottom:8px;">${playerTotal} pts</div>
-                                                        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;">
-                                                            <div style="text-align:center;">
-                                                                <div style="color:#a5b4fc;font-size:10px;">⛳</div>
-                                                                <div style="color:white;font-size:14px;font-weight:600;">${strokePoints}</div>
-                                                            </div>
-                                                            <div style="text-align:center;">
-                                                                <div style="color:#a5b4fc;font-size:10px;">🎯</div>
-                                                                <div style="color:white;font-size:14px;font-weight:600;">${bbbPoints}</div>
-                                                            </div>
-                                                            <div style="text-align:center;">
-                                                                <div style="color:#a5b4fc;font-size:10px;">⚪</div>
-                                                                <div style="color:white;font-size:14px;font-weight:600;">${ballPoints}</div>
-                                                            </div>
-                                                            <div style="text-align:center;">
-                                                                <div style="color:#a5b4fc;font-size:10px;">🎯</div>
-                                                                <div style="color:white;font-size:14px;font-weight:600;">${ctpPoints}</div>
-                                                            </div>
-                                                            <div style="text-align:center;">
-                                                                <div style="color:#a5b4fc;font-size:10px;">🏆</div>
-                                                                <div style="color:white;font-size:14px;font-weight:600;">${extra9Points}</div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                `;
+                                                return '<div style="background:rgba(255,255,255,0.1);border-radius:6px;padding:8px;">' +
+                                                    '<div style="color:white;font-size:13px;font-weight:700;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + player.name + '</div>' +
+                                                    '<div style="color:#10b981;font-size:20px;font-weight:700;margin-bottom:4px;">' + playerTotal + ' pts</div>' +
+                                                    '<div style="display:flex;gap:4px;justify-content:space-between;">' +
+                                                        '<div style="text-align:center;flex:1;">' +
+                                                            '<div style="color:#a5b4fc;font-size:9px;">⛳</div>' +
+                                                            '<div style="color:white;font-size:12px;font-weight:600;">' + strokePoints + '</div>' +
+                                                        '</div>' +
+                                                        '<div style="text-align:center;flex:1;">' +
+                                                            '<div style="color:#a5b4fc;font-size:9px;">🎯</div>' +
+                                                            '<div style="color:white;font-size:12px;font-weight:600;">' + bbbPoints + '</div>' +
+                                                        '</div>' +
+                                                        '<div style="text-align:center;flex:1;">' +
+                                                            '<div style="color:#a5b4fc;font-size:9px;">⚪</div>' +
+                                                            '<div style="color:white;font-size:12px;font-weight:600;">' + ballPoints + '</div>' +
+                                                        '</div>' +
+                                                    '</div>' +
+                                                '</div>';
                                             }).join('') || ''}
-                                        </div>
-                                    </div>
-                                ` : ''}
-                                
-                                <!-- WIN PROBABILITY GRAPH (show current team's bar) -->
-                                ${hasScheduledRounds && team.winProbability !== undefined ? `
-                                    <div style="background:rgba(139,92,246,0.2);border:3px solid rgba(139,92,246,0.4);border-radius:16px;padding:30px;">
-                                        <h3 style="color:#a78bfa;font-size:24px;font-weight:700;margin:0 0 8px;">🎲 Chance to Win Event</h3>
-                                        <p style="color:#a5b4fc;font-size:14px;margin:0 0 24px;">Based on ${scheduledRoundsCount} scheduled round${scheduledRoundsCount === 1 ? '' : 's'} remaining</p>
-                                        
-                                        <!-- Current Team's Probability Bar -->
-                                        <div style="margin-bottom:12px;">
-                                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                                                <div style="display:flex;align-items:center;gap:12px;">
-                                                    <div style="width:16px;height:16px;background:${team.color};border-radius:3px;"></div>
-                                                    <strong style="font-size:20px;color:white;">${team.name}</strong>
-                                                </div>
-                                                <div style="display:flex;align-items:center;gap:12px;">
-                                                    ${team.probabilityChange !== 0 ? `
-                                                        <span style="font-size:18px;color:${team.probabilityChange > 0 ? '#10b981' : '#ef4444'};font-weight:700;">
-                                                            ${team.probabilityChange > 0 ? '↗' : '↘'} ${Math.abs(team.probabilityChange)}%
-                                                        </span>
-                                                    ` : ''}
-                                                    <strong style="font-size:32px;color:#a78bfa;">${team.winProbability}%</strong>
-                                                </div>
-                                            </div>
-                                            
-                                            <div style="background:#1e293b;border-radius:12px;height:40px;position:relative;overflow:hidden;box-shadow:inset 0 2px 8px rgba(0,0,0,0.3);">
-                                                <div style="background:linear-gradient(90deg, #8b5cf6 0%, #a78bfa 100%);height:100%;width:${team.winProbability}%;transition:width 1s ease-out;box-shadow:0 0 20px rgba(139,92,246,0.5);"></div>
-                                            </div>
                                         </div>
                                     </div>
                                 ` : ''}
                             </div>
                             
-                            <!-- RIGHT COLUMN: Revealed Team Standings (25%) -->
-                            <div style="flex:0 0 25%;background:rgba(255,255,255,0.1);border:3px solid rgba(255,255,255,0.2);border-radius:16px;padding:20px;max-height:90vh;overflow-y:auto;">
-                                <h3 style="color:white;font-size:20px;font-weight:700;margin:0 0 16px;text-align:center;">📊 Standings</h3>
-                                <p style="color:#a5b4fc;font-size:12px;text-align:center;margin:0 0 16px;">
-                                    Revealed: ${sortedRevealed.length} of ${teamStandings.length}
+                            <!-- RIGHT SIDEBAR - Standings (Full Height) -->
+                            <div style="flex:0 0 220px;background:rgba(255,255,255,0.1);border:2px solid rgba(255,255,255,0.2);border-radius:10px;padding:12px;display:flex;flex-direction:column;overflow:hidden;">
+                                <h3 style="color:white;font-size:16px;font-weight:700;margin:0 0 8px;text-align:center;">📊 Standings</h3>
+                                <p style="color:#a5b4fc;font-size:10px;text-align:center;margin:0 0 10px;">
+                                    ${sortedRevealed.length} of ${teamStandings.length} revealed
                                 </p>
                                 
-                                ${sortedRevealed.map((t, idx) => {
-                                    const isCurrentTeam = t.id === team.id;
-                                    const standingPosition = finalPositions[t.id]; // Use actual final position
-                                    const teamSlideIndex = teamStandings.findIndex(st => st.id === t.id);
-                                    const slideNumber = teamSlidesStartIndex + teamSlideIndex;
-                                    
-                                    return `
-                                        <div style="background:${isCurrentTeam ? `linear-gradient(135deg, ${t.color}40 0%, ${t.color}20 100%)` : 'rgba(255,255,255,0.05)'};border:${isCurrentTeam ? `3px solid ${t.color}` : '2px solid rgba(255,255,255,0.1)'};border-radius:12px;padding:12px;margin-bottom:10px;cursor:pointer;transition:all 0.3s;${isCurrentTeam ? 'box-shadow:0 0 20px ' + t.color + '60;animation:pulse 2s ease-in-out infinite;' : ''}"
-                                             onclick="navigateToPresentationSlide(${slideNumber})"
-                                             onmouseover="if (!${isCurrentTeam}) this.style.background='rgba(255,255,255,0.15)'"
-                                             onmouseout="if (!${isCurrentTeam}) this.style.background='rgba(255,255,255,0.05)'"
-                                             title="Click to view this team">
-                                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-                                                <div style="display:flex;align-items:center;gap:8px;">
-                                                    <span style="font-size:${isCurrentTeam ? '24px' : '18px'};line-height:1;">${standingPosition === 1 ? '🥇' : standingPosition === 2 ? '🥈' : standingPosition === 3 ? '🥉' : '🏅'}</span>
-                                                    <strong style="color:white;font-size:${isCurrentTeam ? '18px' : '14px'};font-weight:${isCurrentTeam ? '700' : '600'};">#${standingPosition}</strong>
-                                                </div>
-                                                <strong style="color:${t.color};font-size:${isCurrentTeam ? '24px' : '18px'};font-weight:700;">${t.points}</strong>
-                                            </div>
-                                            <div style="color:white;font-size:${isCurrentTeam ? '16px' : '13px'};font-weight:${isCurrentTeam ? '600' : '500'};margin-bottom:4px;">${t.name}</div>
-                                            ${hasScheduledRounds && t.winProbability !== undefined ? `
-                                                <div style="color:#a78bfa;font-size:11px;font-weight:600;">
-                                                    Win: ${t.winProbability}%
-                                                </div>
-                                            ` : ''}
-                                        </div>
-                                    `;
-                                }).join('')}
+                                <div style="flex:1;overflow-y:auto;min-height:0;">
+                                    ${sortedRevealed.map((t, idx) => {
+                                        const isCurrentTeam = t.id === team.id;
+                                        const standingPosition = finalPositions[t.id];
+                                        const teamSlideIndex = teamStandings.findIndex(st => st.id === t.id);
+                                        const slideNumber = teamSlidesStartIndex + teamSlideIndex;
+                                        
+                                        const bgStyle = isCurrentTeam ? 
+                                            'linear-gradient(135deg, ' + t.color + '40 0%, ' + t.color + '20 100%)' : 
+                                            'rgba(255,255,255,0.05)';
+                                        const borderStyle = isCurrentTeam ? 
+                                            '2px solid ' + t.color : 
+                                            '1px solid rgba(255,255,255,0.1)';
+                                        const extraStyle = isCurrentTeam ? 
+                                            'box-shadow:0 0 15px ' + t.color + '60;' : '';
+                                        
+                                        return '<div style="background:' + bgStyle + ';border:' + borderStyle + ';border-radius:8px;padding:8px;margin-bottom:6px;cursor:pointer;transition:all 0.3s;' + extraStyle + '"' +
+                                                 ' onclick="navigateToPresentationSlide(' + slideNumber + ')"' +
+                                                 ' onmouseover="if (!' + isCurrentTeam + ') this.style.background=\'rgba(255,255,255,0.15)\'"' +
+                                                 ' onmouseout="if (!' + isCurrentTeam + ') this.style.background=\'rgba(255,255,255,0.05)\'"' +
+                                                 ' title="Click to view this team">' +
+                                                '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;">' +
+                                                    '<div style="display:flex;align-items:center;gap:6px;">' +
+                                                        '<span style="font-size:' + (isCurrentTeam ? '18px' : '14px') + ';line-height:1;">' + (standingPosition === 1 ? '🥇' : standingPosition === 2 ? '🥈' : standingPosition === 3 ? '🥉' : '🏅') + '</span>' +
+                                                        '<strong style="color:white;font-size:' + (isCurrentTeam ? '14px' : '12px') + ';">#' + standingPosition + '</strong>' +
+                                                    '</div>' +
+                                                    '<strong style="color:' + t.color + ';font-size:' + (isCurrentTeam ? '18px' : '14px') + ';font-weight:700;">' + t.points + '</strong>' +
+                                                '</div>' +
+                                                '<div style="color:white;font-size:' + (isCurrentTeam ? '13px' : '11px') + ';font-weight:' + (isCurrentTeam ? '600' : '500') + ';margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + t.name + '</div>' +
+                                                (hasScheduledRounds && t.winProbability !== undefined ? 
+                                                    '<div style="color:#a78bfa;font-size:9px;font-weight:600;">' +
+                                                        'Win: ' + t.winProbability + '%' +
+                                                    '</div>' : '') +
+                                            '</div>';
+                                    }).join('')}
+                                </div>
                             </div>
                         </div>
                     `;
@@ -10157,6 +10259,63 @@
             `;
             
             document.body.insertAdjacentHTML('beforeend', tooltipHTML);
+        };
+        
+        window.showScoringDetails = (category, details, color, label) => {
+            // Remove any existing modal
+            const existing = document.getElementById('scoringDetailsModal');
+            if (existing) {
+                existing.remove();
+            }
+            
+            if (!details || details.length === 0) {
+                return;
+            }
+            
+            // Sort details by hole number
+            const sortedDetails = [...details].sort((a, b) => a.hole - b.hole);
+            
+            const modalHTML = `
+                <div id="scoringDetailsModal" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.8);z-index:3500;display:flex;align-items:center;justify-content:center;padding:20px;" 
+                     onclick="document.getElementById('scoringDetailsModal').remove()">
+                    <div style="background:linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);border:3px solid ${color};border-radius:16px;max-width:700px;width:100%;max-height:80vh;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.5);" 
+                         onclick="event.stopPropagation()">
+                        <div style="display:flex;justify-content:space-between;align-items:center;padding:20px;border-bottom:2px solid rgba(255,255,255,0.1);">
+                            <h3 style="color:${color};font-size:24px;margin:0;font-weight:700;">${label} Details (${details.length})</h3>
+                            <button onclick="document.getElementById('scoringDetailsModal').remove()" 
+                                    style="background:rgba(239,68,68,0.9);color:white;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-weight:600;font-size:14px;">
+                                ✕ Close
+                            </button>
+                        </div>
+                        <div style="padding:20px;max-height:calc(80vh - 80px);overflow-y:auto;">
+                            <div style="display:grid;gap:10px;">
+                                ${sortedDetails.map(detail => `
+                                    <div style="background:rgba(255,255,255,0.05);border-left:4px solid ${color};border-radius:8px;padding:12px;display:grid;grid-template-columns:60px 1fr 100px 80px;gap:12px;align-items:center;">
+                                        <div style="text-align:center;">
+                                            <div style="color:#64748b;font-size:11px;">Hole</div>
+                                            <div style="color:white;font-size:20px;font-weight:700;">${detail.hole}</div>
+                                        </div>
+                                        <div>
+                                            <div style="color:white;font-size:15px;font-weight:600;">${detail.player}</div>
+                                            <div style="color:#a5b4fc;font-size:12px;">${detail.team}</div>
+                                        </div>
+                                        <div style="text-align:center;">
+                                            <div style="color:#64748b;font-size:11px;">Gross / Net</div>
+                                            <div style="color:white;font-size:16px;font-weight:700;">${detail.gross} / ${detail.net}</div>
+                                        </div>
+                                        <div style="text-align:center;">
+                                            <div style="color:#64748b;font-size:11px;">Par ${detail.par}${detail.strokes ? ' (-1)' : ''}</div>
+                                            <div style="color:${color};font-size:16px;font-weight:700;">${detail.net - detail.par > 0 ? '+' : ''}${detail.net - detail.par}</div>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.body.insertAdjacentHTML('beforeend', modalHTML);
         };
 
         window.activateRound = (roundIndex) => {
