@@ -6414,10 +6414,32 @@
                 // Find previous net winners (not eligible for today)
                 const previousNetWinners = new Set();
                 previousRounds.forEach(r => {
+                    // If netWinners is already saved, use it
                     if (r.netWinners && r.netWinners.length > 0) {
                         r.netWinners.forEach(winnerId => {
                             previousNetWinners.add(winnerId);
                         });
+                    } else {
+                        // For older rounds without netWinners, calculate the winner
+                        const roundNetScores = [];
+                        r.teams.forEach(team => {
+                            team.players.forEach(player => {
+                                const grossScore = player.scores ? player.scores.reduce((sum, s) => sum + (parseInt(s) || 0), 0) : 0;
+                                const netScore = grossScore - (player.handicap || 0);
+                                roundNetScores.push({
+                                    playerId: player.id,
+                                    netScore: netScore
+                                });
+                            });
+                        });
+                        // Sort and get the winner (lowest net score)
+                        roundNetScores.sort((a, b) => a.netScore - b.netScore);
+                        if (roundNetScores.length > 0) {
+                            // Check if this player already won a previous round
+                            if (!previousNetWinners.has(roundNetScores[0].playerId)) {
+                                previousNetWinners.add(roundNetScores[0].playerId);
+                            }
+                        }
                     }
                 });
                 
@@ -6484,8 +6506,10 @@
                 
                 // Get previous winners info for display
                 const previousNetWinnersInfo = [];
+                const alreadyWonSet = new Set(); // Track who has already won to maintain no-repeat rule
                 previousRounds.forEach(r => {
                     if (r.netWinners && r.netWinners.length > 0) {
+                        // Use saved netWinners
                         r.netWinners.forEach(winnerId => {
                             // Find player in the round
                             r.teams.forEach(team => {
@@ -6497,9 +6521,40 @@
                                         playerName: player.name,
                                         teamName: stateTeam ? stateTeam.name : 'Unknown'
                                     });
+                                    alreadyWonSet.add(winnerId);
                                 }
                             });
                         });
+                    } else {
+                        // Calculate winner for old rounds without netWinners
+                        const roundNetScores = [];
+                        r.teams.forEach(team => {
+                            team.players.forEach(player => {
+                                // Only include players who haven't already won
+                                if (!alreadyWonSet.has(player.id)) {
+                                    const grossScore = player.scores ? player.scores.reduce((sum, s) => sum + (parseInt(s) || 0), 0) : 0;
+                                    const netScore = grossScore - (player.handicap || 0);
+                                    const stateTeam = state.teams.find(t => t.id === team.teamId);
+                                    roundNetScores.push({
+                                        playerId: player.id,
+                                        playerName: player.name,
+                                        teamName: stateTeam ? stateTeam.name : 'Unknown',
+                                        netScore: netScore
+                                    });
+                                }
+                            });
+                        });
+                        // Sort and get winner
+                        roundNetScores.sort((a, b) => a.netScore - b.netScore);
+                        if (roundNetScores.length > 0) {
+                            const winner = roundNetScores[0];
+                            previousNetWinnersInfo.push({
+                                playerId: winner.playerId,
+                                playerName: winner.playerName,
+                                teamName: winner.teamName
+                            });
+                            alreadyWonSet.add(winner.playerId);
+                        }
                     }
                 });
                 
@@ -7210,6 +7265,70 @@
                 });
                 
                 presentationAnalytics.awards.closestToHandicap = closestToHandicapWinners.length > 0 ? closestToHandicapWinners : null;
+                
+                // Par 3 Specialist Award - best average net score on par 3 holes
+                let bestPar3Avg = Infinity;
+                const par3SpecialistWinners = [];
+                
+                // Find which holes are par 3s
+                const par3Holes = [];
+                mostRecentRound.pars.forEach((par, idx) => {
+                    if (par === 3) {
+                        par3Holes.push(idx);
+                    }
+                });
+                
+                if (par3Holes.length > 0) {
+                    allPlayerPerformances.forEach(p => {
+                        mostRecentRound.teams.forEach(team => {
+                            const player = team.players.find(pl => pl.id === p.playerId);
+                            if (player && player.scores) {
+                                let par3NetTotal = 0;
+                                let par3Count = 0;
+                                
+                                par3Holes.forEach(holeIdx => {
+                                    const score = player.scores[holeIdx];
+                                    if (score) {
+                                        const par = mostRecentRound.pars[holeIdx];
+                                        const holeHandicap = mostRecentRound.handicaps[holeIdx];
+                                        const strokes = player.handicap >= holeHandicap ? 1 : 0;
+                                        const net = score - strokes;
+                                        
+                                        par3NetTotal += net;
+                                        par3Count++;
+                                    }
+                                });
+                                
+                                if (par3Count > 0) {
+                                    const avgPar3 = par3NetTotal / par3Count;
+                                    
+                                    if (avgPar3 < bestPar3Avg) {
+                                        bestPar3Avg = avgPar3;
+                                        par3SpecialistWinners.length = 0;
+                                        par3SpecialistWinners.push({
+                                            player: p.playerName,
+                                            team: p.teamName,
+                                            teamColor: p.teamColor,
+                                            average: avgPar3.toFixed(2),
+                                            count: par3Count
+                                        });
+                                    } else if (Math.abs(avgPar3 - bestPar3Avg) < 0.01 && bestPar3Avg < Infinity) {
+                                        // Tie - add to winners (using small threshold for floating point comparison)
+                                        par3SpecialistWinners.push({
+                                            player: p.playerName,
+                                            team: p.teamName,
+                                            teamColor: p.teamColor,
+                                            average: avgPar3.toFixed(2),
+                                            count: par3Count
+                                        });
+                                    }
+                                }
+                            }
+                        });
+                    });
+                }
+                
+                presentationAnalytics.awards.par3Specialist = par3SpecialistWinners.length > 0 ? par3SpecialistWinners : null;
                 
                 // 8. MILESTONES
                 presentationAnalytics.milestones = [];
@@ -8714,6 +8833,48 @@
                                             <div style="color:#c084fc;font-size:11px;cursor:pointer;text-align:center;" 
                                                  onclick="alert('Also tied: ${analytics.awards.closestToHandicap.slice(1).map(w => w.player).join(', ')}')">
                                                 +${analytics.awards.closestToHandicap.length - 1} tied
+                                            </div>
+                                        ` : ''}
+                                    </div>
+                                </div>
+                            ` : ''}
+                            
+                            <!-- Par 3 Specialist Award -->
+                            ${analytics.awards.par3Specialist ? `
+                                <div style="background:linear-gradient(135deg, rgba(34,211,238,0.2) 0%, rgba(34,211,238,0.1) 100%);border:2px solid #22d3ee;border-radius:12px;padding:10px;position:relative;display:flex;flex-direction:column;">
+                                    <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
+                                        <div style="font-size:40px;">3️⃣</div>
+                                        <div style="flex:1;">
+                                            <h2 style="color:#22d3ee;font-size:18px;font-weight:700;margin:0;">Par 3 Specialist</h2>
+                                            <p style="color:white;font-size:11px;margin:2px 0 0;">Best on par 3s</p>
+                                        </div>
+                                        <div style="cursor:pointer;font-size:16px;color:#22d3ee;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;" 
+                                             onclick="showAwardTooltip('Par 3 Specialist', 'Best average net score on par 3 holes.', '#22d3ee')">ℹ️</div>
+                                    </div>
+                                    <div style="background:rgba(0,0,0,0.2);border-radius:8px;padding:10px;flex:1;display:flex;flex-direction:column;justify-content:center;">
+                                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                                            <div style="flex:1;">
+                                                <div style="color:white;font-size:18px;font-weight:700;cursor:pointer;text-decoration:underline;" 
+                                                     onclick="showFunAwardScorecard('${analytics.awards.par3Specialist[0].player}')"
+                                                     onmouseover="this.style.color='#67e8f9'"
+                                                     onmouseout="this.style.color='white'">
+                                                    ${analytics.awards.par3Specialist[0].player}
+                                                </div>
+                                                <div style="display:flex;align-items:center;gap:4px;margin-top:2px;">
+                                                    <div style="width:6px;height:6px;border-radius:50%;background:${analytics.awards.par3Specialist[0].teamColor};"></div>
+                                                    <div style="color:white;font-size:10px;">${analytics.awards.par3Specialist[0].team}</div>
+                                                </div>
+                                            </div>
+                                            <div style="text-align:right;">
+                                                <div style="color:#22d3ee;font-size:28px;font-weight:700;line-height:1;">${analytics.awards.par3Specialist[0].average}</div>
+                                                <div style="color:white;font-size:10px;">avg net score</div>
+                                                <div style="color:white;font-size:9px;margin-top:2px;">${analytics.awards.par3Specialist[0].count} hole${analytics.awards.par3Specialist[0].count === 1 ? '' : 's'}</div>
+                                            </div>
+                                        </div>
+                                        ${analytics.awards.par3Specialist.length > 1 ? `
+                                            <div style="color:#67e8f9;font-size:11px;cursor:pointer;text-align:center;" 
+                                                 onclick="alert('Also tied: ${analytics.awards.par3Specialist.slice(1).map(w => w.player).join(', ')}')">
+                                                +${analytics.awards.par3Specialist.length - 1} tied
                                             </div>
                                         ` : ''}
                                     </div>
@@ -12251,14 +12412,56 @@
                     
                     // Calculate and save net score winner (excluding previous winners)
                     const previousNetWinners = new Set();
+                    
+                    console.log(`=== NET WINNER CALCULATION (Edit Round) ===`);
+                    console.log(`Current Event ID: ${state.currentEventId}`);
+                    console.log(`Editing round index: ${round.originalIndex}`);
+                    console.log(`Total rounds in state: ${state.rounds.length}`);
+                    
+                    // Build set of previous winners from all event rounds (excluding this one being edited)
                     state.rounds.forEach((r, idx) => {
                         // Don't count the round we're editing as a "previous" winner
-                        if (idx !== round.originalIndex && r.eventId === state.currentEventId && r.netWinners && r.netWinners.length > 0) {
-                            r.netWinners.forEach(winnerId => {
-                                previousNetWinners.add(winnerId);
-                            });
+                        if (idx !== round.originalIndex && r.eventId === state.currentEventId) {
+                            console.log(`Checking round ${idx}: ${r.courseName} (${r.date})`);
+                            
+                            // If round has netWinners saved, use it
+                            if (r.netWinners && r.netWinners.length > 0) {
+                                console.log(`  Has netWinners saved:`, r.netWinners);
+                                r.netWinners.forEach(winnerId => {
+                                    previousNetWinners.add(winnerId);
+                                });
+                            } else if (r.active !== false) {
+                                console.log(`  No netWinners saved, backfilling...`);
+                                // Backfill: calculate winner for old rounds that don't have netWinners
+                                // (only for completed rounds, not scheduled)
+                                let lowestNet = Infinity;
+                                let winnerId = null;
+                                let winnerName = null;
+                                
+                                r.teams.forEach(team => {
+                                    team.players.forEach(player => {
+                                        const grossScore = player.scores ? player.scores.reduce((sum, s) => sum + (parseInt(s) || 0), 0) : 0;
+                                        const netScore = grossScore - (player.handicap || 0);
+                                        
+                                        if (netScore < lowestNet) {
+                                            lowestNet = netScore;
+                                            winnerId = player.id;
+                                            winnerName = player.name;
+                                        }
+                                    });
+                                });
+                                
+                                if (winnerId) {
+                                    console.log(`  Backfilled winner: ${winnerName} (${winnerId}) with net ${lowestNet}`);
+                                    previousNetWinners.add(winnerId);
+                                }
+                            } else {
+                                console.log(`  Skipping (scheduled round, active=false)`);
+                            }
                         }
                     });
+                    
+                    console.log(`Previous winners (excluded):`, Array.from(previousNetWinners));
                     
                     // Calculate eligible net scores for this round
                     const eligibleNetScores = [];
@@ -12278,12 +12481,14 @@
                     
                     // Sort and pick winner (lowest net score)
                     eligibleNetScores.sort((a, b) => a.netScore - b.netScore);
+                    console.log(`Eligible players for net winner:`, eligibleNetScores.map(p => `${p.playerName} (${p.netScore})`));
+                    
                     if (eligibleNetScores.length > 0) {
                         round.netWinners = [eligibleNetScores[0].playerId];
-                        console.log(`Net score winner (edited): ${eligibleNetScores[0].playerName} (${eligibleNetScores[0].netScore})`);
+                        console.log(`✅ Net score winner (edited): ${eligibleNetScores[0].playerName} (ID: ${eligibleNetScores[0].playerId}, Net: ${eligibleNetScores[0].netScore})`);
                     } else {
                         round.netWinners = [];
-                        console.log('No eligible net score winners (edited)');
+                        console.log('❌ No eligible net score winners (edited) - all players excluded');
                     }
                     
                     // Set or preserve previousHandicap on each player for handicap changes display
@@ -12424,13 +12629,54 @@
                     
                     // Calculate and save net score winner (excluding previous winners)
                     const previousNetWinners = new Set();
+                    
+                    console.log(`=== NET WINNER CALCULATION (New Round) ===`);
+                    console.log(`Current Event ID: ${state.currentEventId}`);
+                    console.log(`Total rounds in state: ${state.rounds.length}`);
+                    
+                    // Build set of previous winners from all event rounds
                     state.rounds.forEach(r => {
-                        if (r.eventId === state.currentEventId && r.netWinners && r.netWinners.length > 0) {
-                            r.netWinners.forEach(winnerId => {
-                                previousNetWinners.add(winnerId);
-                            });
+                        if (r.eventId === state.currentEventId) {
+                            console.log(`Checking round: ${r.courseName} (${r.date})`);
+                            
+                            // If round has netWinners saved, use it
+                            if (r.netWinners && r.netWinners.length > 0) {
+                                console.log(`  Has netWinners saved:`, r.netWinners);
+                                r.netWinners.forEach(winnerId => {
+                                    previousNetWinners.add(winnerId);
+                                });
+                            } else if (r.active !== false) {
+                                console.log(`  No netWinners saved, backfilling...`);
+                                // Backfill: calculate winner for old rounds that don't have netWinners
+                                // (only for completed rounds, not scheduled)
+                                let lowestNet = Infinity;
+                                let winnerId = null;
+                                let winnerName = null;
+                                
+                                r.teams.forEach(team => {
+                                    team.players.forEach(player => {
+                                        const grossScore = player.scores ? player.scores.reduce((sum, s) => sum + (parseInt(s) || 0), 0) : 0;
+                                        const netScore = grossScore - (player.handicap || 0);
+                                        
+                                        if (netScore < lowestNet) {
+                                            lowestNet = netScore;
+                                            winnerId = player.id;
+                                            winnerName = player.name;
+                                        }
+                                    });
+                                });
+                                
+                                if (winnerId) {
+                                    console.log(`  Backfilled winner: ${winnerName} (${winnerId}) with net ${lowestNet}`);
+                                    previousNetWinners.add(winnerId);
+                                }
+                            } else {
+                                console.log(`  Skipping (scheduled round, active=false)`);
+                            }
                         }
                     });
+                    
+                    console.log(`Previous winners (excluded):`, Array.from(previousNetWinners));
                     
                     // Calculate eligible net scores for this round
                     const eligibleNetScores = [];
@@ -12450,12 +12696,14 @@
                     
                     // Sort and pick winner (lowest net score)
                     eligibleNetScores.sort((a, b) => a.netScore - b.netScore);
+                    console.log(`Eligible players for net winner:`, eligibleNetScores.map(p => `${p.playerName} (${p.netScore})`));
+                    
                     if (eligibleNetScores.length > 0) {
                         round.netWinners = [eligibleNetScores[0].playerId];
-                        console.log(`Net score winner: ${eligibleNetScores[0].playerName} (${eligibleNetScores[0].netScore})`);
+                        console.log(`✅ Net score winner: ${eligibleNetScores[0].playerName} (ID: ${eligibleNetScores[0].playerId}, Net: ${eligibleNetScores[0].netScore})`);
                     } else {
                         round.netWinners = [];
-                        console.log('No eligible net score winners');
+                        console.log('❌ No eligible net score winners - all players excluded');
                     }
                     
                     // Check if this was a scheduled round that's being completed
@@ -13688,7 +13936,7 @@
                 }, 500);
             } else {
                 const dbType = useFirebase ? '☁️ Firebase' : '💾 LocalStorage';
-                notify(`✅ v9.5 Ready! (${dbType})`);
+                notify(`✅ v10.5 Ready! (${dbType})`);
             }
         });
     </script>
