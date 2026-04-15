@@ -2835,6 +2835,33 @@
                     </div>
                 `;
                 
+                // Add photo upload section
+                html += `
+                    <div style="background:#f0f9ff;border:2px solid #3b82f6;border-radius:12px;padding:20px;margin-top:24px;">
+                        <h3 style="margin:0 0 16px;color:#1e40af;display:flex;align-items:center;gap:8px;">
+                            📸 Photos from Today
+                        </h3>
+                        <div id="photoPreviewContainer" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:12px;margin-bottom:16px;">
+                            ${(round.photos || []).map((photo, idx) => `
+                                <div style="position:relative;aspect-ratio:1;border-radius:8px;overflow:hidden;background:#e5e7eb;">
+                                    <img src="${photo}" style="width:100%;height:100%;object-fit:cover;" />
+                                    <button onclick="removePhoto(${idx})" 
+                                            style="position:absolute;top:4px;right:4px;background:rgba(239,68,68,0.9);color:white;border:none;width:24px;height:24px;border-radius:50%;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;">
+                                        ✕
+                                    </button>
+                                </div>
+                            `).join('')}
+                        </div>
+                        <input type="file" id="photoUpload" accept="image/*" multiple style="display:none;" onchange="handlePhotoUpload(event)">
+                        <button onclick="document.getElementById('photoUpload').click()" class="btn-secondary" style="width:100%;padding:12px;">
+                            📷 Add Photos
+                        </button>
+                        <div style="color:#64748b;font-size:12px;margin-top:8px;text-align:center;">
+                            Upload photos from today's round
+                        </div>
+                    </div>
+                `;
+                
                 // Add action buttons at bottom
                 html += `
                     <div style="display:flex;gap:12px;margin-top:24px;">
@@ -3013,37 +3040,55 @@
                                     const stateTeam = state.teams.find(t => t.id === team.id);
                                     const teamColor = stateTeam && stateTeam.color ? stateTeam.color : '#3b82f6';
                                     
+                                    // Helper function to check if a color is dark
+                                    const isColorDark = (hexColor) => {
+                                        // Remove # if present
+                                        const hex = hexColor.replace('#', '');
+                                        // Convert to RGB
+                                        const r = parseInt(hex.substr(0, 2), 16);
+                                        const g = parseInt(hex.substr(2, 2), 16);
+                                        const b = parseInt(hex.substr(4, 2), 16);
+                                        // Calculate brightness (perceived luminance)
+                                        const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+                                        return brightness < 128; // Dark if brightness < 128
+                                    };
+                                    
+                                    const isDark = isColorDark(teamColor);
+                                    const cardBorder = isDark ? `2px solid ${teamColor}` : '2px solid #000000';
+                                    const textColor = isDark ? '#ffffff' : '#000000';
+                                    const labelOpacity = isDark ? '0.8' : '0.6';
+                                    
                                     return `
-                                    <div class="list-item" onclick="navigateToTeamStats(${team.id})" style="background:${teamColor}20;border-left:4px solid ${teamColor};display:block;padding:8px;margin-bottom:6px;cursor:pointer;">
+                                    <div class="list-item" onclick="navigateToTeamStats(${team.id})" style="background:${teamColor}20;border:${cardBorder};border-left:4px solid ${teamColor};display:block;padding:8px;margin-bottom:6px;cursor:pointer;">
                                         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
                                             <div style="flex:1;">
-                                                <strong style="font-size:22px;">#${idx + 1} ${team.name}</strong>
+                                                <strong style="font-size:22px;color:#000000;">#${idx + 1} ${team.name}</strong>
                                                 <small style="color:#6b7280;font-size:15px;margin-left:8px;">${team.rounds}R • ${team.wins}W • ${team.avg.toFixed(1)}avg</small>
                                             </div>
-                                            <strong style="font-size:33px;color:white;background:${teamColor};padding:8px 16px;border-radius:8px;">${team.points}</strong>
+                                            <strong style="font-size:33px;color:${textColor};background:${teamColor};padding:8px 16px;border-radius:8px;">${team.points}</strong>
                                         </div>
                                         
                                         <div style="background:rgba(255,255,255,0.5);padding:6px;border-radius:4px;">
                                             <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;">
                                                 <div style="background:${teamColor};padding:4px;border-radius:3px;text-align:center;">
-                                                    <div style="font-size:12px;color:rgba(255,255,255,0.8);font-weight:600;">⛳</div>
-                                                    <div style="font-size:20px;font-weight:700;color:white;">${team.strokePoints.toFixed(1)}</div>
+                                                    <div style="font-size:12px;color:rgba(${isDark ? '255,255,255' : '0,0,0'},${labelOpacity});font-weight:600;">⛳</div>
+                                                    <div style="font-size:20px;font-weight:700;color:${textColor};">${team.strokePoints.toFixed(1)}</div>
                                                 </div>
                                                 <div style="background:${teamColor};padding:4px;border-radius:3px;text-align:center;">
-                                                    <div style="font-size:12px;color:rgba(255,255,255,0.8);font-weight:600;">🎯 BBB</div>
-                                                    <div style="font-size:20px;font-weight:700;color:white;">${team.bbbPoints.toFixed(1)}</div>
+                                                    <div style="font-size:12px;color:rgba(${isDark ? '255,255,255' : '0,0,0'},${labelOpacity});font-weight:600;">🎯 BBB</div>
+                                                    <div style="font-size:20px;font-weight:700;color:${textColor};">${team.bbbPoints.toFixed(1)}</div>
                                                 </div>
                                                 <div style="background:${teamColor};padding:4px;border-radius:3px;text-align:center;">
-                                                    <div style="font-size:12px;color:rgba(255,255,255,0.8);font-weight:600;">⚪</div>
-                                                    <div style="font-size:20px;font-weight:700;color:white;">${team.ballPoints.toFixed(1)}</div>
+                                                    <div style="font-size:12px;color:rgba(${isDark ? '255,255,255' : '0,0,0'},${labelOpacity});font-weight:600;">⚪</div>
+                                                    <div style="font-size:20px;font-weight:700;color:${textColor};">${team.ballPoints.toFixed(1)}</div>
                                                 </div>
                                                 <div style="background:${teamColor};padding:4px;border-radius:3px;text-align:center;">
-                                                    <div style="font-size:12px;color:rgba(255,255,255,0.8);font-weight:600;">🎯</div>
-                                                    <div style="font-size:20px;font-weight:700;color:white;">${team.ctpPoints.toFixed(1)}</div>
+                                                    <div style="font-size:12px;color:rgba(${isDark ? '255,255,255' : '0,0,0'},${labelOpacity});font-weight:600;">🎯</div>
+                                                    <div style="font-size:20px;font-weight:700;color:${textColor};">${team.ctpPoints.toFixed(1)}</div>
                                                 </div>
                                                 <div style="background:${teamColor};padding:4px;border-radius:3px;text-align:center;">
-                                                    <div style="font-size:12px;color:rgba(255,255,255,0.8);font-weight:600;">🏆</div>
-                                                    <div style="font-size:20px;font-weight:700;color:white;">${team.extra9Points.toFixed(1)}</div>
+                                                    <div style="font-size:12px;color:rgba(${isDark ? '255,255,255' : '0,0,0'},${labelOpacity});font-weight:600;">🏆</div>
+                                                    <div style="font-size:20px;font-weight:700;color:${textColor};">${team.extra9Points.toFixed(1)}</div>
                                                 </div>
                                             </div>
                                         </div>
@@ -6136,8 +6181,8 @@
                     
                     return standings.map(team => ({
                         teamId: team.id,
-                        probability: Math.round(currentProbs[team.id] || 0),
-                        previousProbability: Math.round(previousProbs[team.id] || 0)
+                        probability: Math.round((currentProbs[team.id] || 0) * 100) / 100,  // Round to 2 decimals
+                        previousProbability: Math.round((previousProbs[team.id] || 0) * 100) / 100  // Round to 2 decimals
                     }));
                 };
                 
@@ -6311,6 +6356,87 @@
                 allPlayerPerformances.forEach((p, idx) => {
                     p.position = totalPlayers - idx; // First in sorted array (lowest) = last position, last in array (highest) = position 1
                 });
+                
+                // Calculate overall position based on cumulative event points
+                const overallStandings = [...allPlayerPerformances].sort((a, b) => b.eventTotalPoints - a.eventTotalPoints);
+                overallStandings.forEach((p, idx) => {
+                    const player = allPlayerPerformances.find(perf => perf.playerId === p.playerId);
+                    if (player) {
+                        player.overallPosition = idx + 1; // 1 = highest cumulative points
+                    }
+                });
+                
+                // Calculate position change from previous round
+                if (eventRounds.length > 1) {
+                    // Get previous round (second to last)
+                    const previousRound = eventRounds[eventRounds.length - 2];
+                    
+                    // Calculate cumulative points BEFORE today's round
+                    const previousStandings = [];
+                    allPlayerPerformances.forEach(p => {
+                        let cumulativePoints = 0;
+                        
+                        // Sum points from all rounds EXCEPT the most recent
+                        eventRounds.forEach((round, roundIdx) => {
+                            if (roundIdx < eventRounds.length - 1) { // Skip last round
+                                round.teams.forEach((team, teamIdx) => {
+                                    const playerInRound = team.players.find(pl => pl.id === p.playerId);
+                                    if (playerInRound) {
+                                        const strokePts = playerInRound.strokePoints !== undefined 
+                                            ? playerInRound.strokePoints 
+                                            : calcPlayerTotal(playerInRound.scores, round.pars, round.handicaps, playerInRound.handicap);
+                                        const bbbPts = playerInRound.bbbPoints !== undefined 
+                                            ? playerInRound.bbbPoints 
+                                            : (playerInRound.bbbTotal || 0) * state.settings.bbbPoints;
+                                        const ballPts = playerInRound.ballPoints !== undefined 
+                                            ? playerInRound.ballPoints 
+                                            : (playerInRound.ballsRemaining || 0) * state.settings.ballPoints;
+                                        
+                                        let e9p = 0;
+                                        if (round.extra9Winners && round.extra9Winners.length > 0) {
+                                            const playerPosition = teamIdx + '-' + team.players.findIndex(pl => pl.id === p.playerId);
+                                            e9p = round.extra9Winners.filter(w => w === playerPosition).length * state.settings.extra9Points;
+                                        }
+                                        
+                                        let ctpp = 0;
+                                        if (round.ctpWinners && round.ctpWinners.length > 0) {
+                                            const playerPosition = teamIdx + '-' + team.players.findIndex(pl => pl.id === p.playerId);
+                                            ctpp = round.ctpWinners.filter(w => w === playerPosition).length * state.settings.ctpPoints;
+                                        }
+                                        
+                                        cumulativePoints += strokePts + bbbPts + ballPts + e9p + ctpp;
+                                    }
+                                });
+                            }
+                        });
+                        
+                        previousStandings.push({
+                            playerId: p.playerId,
+                            cumulativePoints: cumulativePoints
+                        });
+                    });
+                    
+                    // Sort to get previous positions
+                    previousStandings.sort((a, b) => b.cumulativePoints - a.cumulativePoints);
+                    
+                    // Set previous position and calculate change
+                    allPlayerPerformances.forEach(p => {
+                        const prevIdx = previousStandings.findIndex(ps => ps.playerId === p.playerId);
+                        if (prevIdx !== -1) {
+                            p.previousPosition = prevIdx + 1;
+                            p.positionChange = p.previousPosition - p.overallPosition; // Positive = moved up, negative = moved down
+                        } else {
+                            p.previousPosition = null;
+                            p.positionChange = 0;
+                        }
+                    });
+                } else {
+                    // First round - no previous position
+                    allPlayerPerformances.forEach(p => {
+                        p.previousPosition = null;
+                        p.positionChange = 0;
+                    });
+                }
                 
                 // Calculate averages and record detection for each player
                 allPlayerPerformances.forEach(p => {
@@ -6558,7 +6684,347 @@
                     }
                 });
                 
-                // 2. EXTRA 9 WINNERS
+                // 2. BBB WINNERS (with no-repeat logic)
+                // Find previous BBB winners (not eligible for today)
+                const previousBBBWinners = new Set();
+                previousRounds.forEach(r => {
+                    // If bbbWinners is already saved, use it
+                    if (r.bbbWinners && r.bbbWinners.length > 0) {
+                        r.bbbWinners.forEach(winnerId => {
+                            previousBBBWinners.add(winnerId);
+                        });
+                    } else {
+                        // For older rounds without bbbWinners, calculate the winner
+                        const roundBBBCounts = [];
+                        r.teams.forEach(team => {
+                            team.players.forEach(player => {
+                                const bbbCount = player.bbbTotal || 0;
+                                roundBBBCounts.push({
+                                    playerId: player.id,
+                                    bbbCount: bbbCount
+                                });
+                            });
+                        });
+                        // Sort and get the winner (most BBBs)
+                        roundBBBCounts.sort((a, b) => b.bbbCount - a.bbbCount);
+                        if (roundBBBCounts.length > 0 && roundBBBCounts[0].bbbCount > 0) {
+                            // Check if this player already won a previous round
+                            if (!previousBBBWinners.has(roundBBBCounts[0].playerId)) {
+                                previousBBBWinners.add(roundBBBCounts[0].playerId);
+                            }
+                        }
+                    }
+                });
+                
+                // Calculate BBB counts for today's round
+                const todaysBBBCounts = [];
+                mostRecentRound.teams.forEach(team => {
+                    const stateTeam = state.teams.find(t => t.id === team.teamId);
+                    const teamName = stateTeam ? stateTeam.name : 'Unknown';
+                    const teamColor = stateTeam ? (stateTeam.color || '#3b82f6') : '#3b82f6';
+                    
+                    team.players.forEach(player => {
+                        if (!previousBBBWinners.has(player.id)) {
+                            const bbbCount = player.bbbTotal || 0;
+                            
+                            todaysBBBCounts.push({
+                                playerId: player.id,
+                                playerName: player.name,
+                                teamName: teamName,
+                                teamColor: teamColor,
+                                bbbCount: bbbCount
+                            });
+                        }
+                    });
+                });
+                
+                // Sort by BBB count (most wins)
+                todaysBBBCounts.sort((a, b) => b.bbbCount - a.bbbCount);
+                
+                // Get ONLY ONE WINNER (most BBBs, must have at least 1)
+                const bbbWinner = todaysBBBCounts.length > 0 && todaysBBBCounts[0].bbbCount > 0 ? todaysBBBCounts[0] : null;
+                
+                // Get top 3 for display
+                const bbbTop3 = [];
+                if (todaysBBBCounts.length > 0 && todaysBBBCounts[0].bbbCount > 0) {
+                    let currentPlace = 1;
+                    let previousCount = null;
+                    let playersAtCurrentPlace = 0;
+                    
+                    for (let i = 0; i < todaysBBBCounts.length && bbbTop3.length < 10; i++) {
+                        const player = todaysBBBCounts[i];
+                        
+                        if (player.bbbCount === 0) break; // Stop if no BBBs
+                        
+                        if (previousCount !== null && player.bbbCount !== previousCount) {
+                            currentPlace += playersAtCurrentPlace;
+                            playersAtCurrentPlace = 0;
+                        }
+                        
+                        if (currentPlace <= 3) {
+                            bbbTop3.push({
+                                ...player,
+                                place: currentPlace
+                            });
+                            playersAtCurrentPlace++;
+                            previousCount = player.bbbCount;
+                        } else {
+                            break;
+                        }
+                    }
+                }
+                
+                // Get previous BBB winners info for display
+                const previousBBBWinnersInfo = [];
+                const alreadyWonBBBSet = new Set();
+                previousRounds.forEach(r => {
+                    if (r.bbbWinners && r.bbbWinners.length > 0) {
+                        r.bbbWinners.forEach(winnerId => {
+                            r.teams.forEach(team => {
+                                const player = team.players.find(p => p.id === winnerId);
+                                if (player && !previousBBBWinnersInfo.find(p => p.playerId === winnerId)) {
+                                    const stateTeam = state.teams.find(t => t.id === team.teamId);
+                                    previousBBBWinnersInfo.push({
+                                        playerId: player.id,
+                                        playerName: player.name,
+                                        teamName: stateTeam ? stateTeam.name : 'Unknown'
+                                    });
+                                    alreadyWonBBBSet.add(winnerId);
+                                }
+                            });
+                        });
+                    } else {
+                        // Calculate winner for old rounds without bbbWinners
+                        const roundBBBCounts = [];
+                        r.teams.forEach(team => {
+                            team.players.forEach(player => {
+                                if (!alreadyWonBBBSet.has(player.id)) {
+                                    const bbbCount = player.bbbTotal || 0;
+                                    const stateTeam = state.teams.find(t => t.id === team.teamId);
+                                    roundBBBCounts.push({
+                                        playerId: player.id,
+                                        playerName: player.name,
+                                        teamName: stateTeam ? stateTeam.name : 'Unknown',
+                                        bbbCount: bbbCount
+                                    });
+                                }
+                            });
+                        });
+                        // Sort and get winner
+                        roundBBBCounts.sort((a, b) => b.bbbCount - a.bbbCount);
+                        if (roundBBBCounts.length > 0 && roundBBBCounts[0].bbbCount > 0) {
+                            const winner = roundBBBCounts[0];
+                            previousBBBWinnersInfo.push({
+                                playerId: winner.playerId,
+                                playerName: winner.playerName,
+                                teamName: winner.teamName
+                            });
+                            alreadyWonBBBSet.add(winner.playerId);
+                        }
+                    }
+                });
+                
+                // 3. BOUNCE BACK AWARD (with no-repeat logic)
+                // Most pars or better immediately after a bogey or worse
+                const previousBounceBackWinners = new Set();
+                previousRounds.forEach(r => {
+                    if (r.bounceBackWinners && r.bounceBackWinners.length > 0) {
+                        r.bounceBackWinners.forEach(winnerId => previousBounceBackWinners.add(winnerId));
+                    } else {
+                        // Calculate for older rounds
+                        const roundBouncebacks = [];
+                        r.teams.forEach(team => {
+                            team.players.forEach(player => {
+                                let bounceBackCount = 0;
+                                for (let i = 1; i < player.scores.length; i++) {
+                                    const prevScore = parseInt(player.scores[i-1]);
+                                    const currScore = parseInt(player.scores[i]);
+                                    const prevPar = r.pars[i-1];
+                                    const currPar = r.pars[i];
+                                    const prevHandicap = r.handicaps[i-1];
+                                    const currHandicap = r.handicaps[i];
+                                    
+                                    // Calculate net scores
+                                    const prevNet = prevScore - (player.handicap >= prevHandicap ? 1 : 0);
+                                    const currNet = currScore - (player.handicap >= currHandicap ? 1 : 0);
+                                    
+                                    // Check if previous was bogey+ and current is par or better
+                                    if ((prevNet - prevPar >= 1) && (currNet - currPar <= 0)) {
+                                        bounceBackCount++;
+                                    }
+                                }
+                                if (bounceBackCount > 0 && !previousBounceBackWinners.has(player.id)) {
+                                    roundBouncebacks.push({ playerId: player.id, count: bounceBackCount });
+                                }
+                            });
+                        });
+                        roundBouncebacks.sort((a, b) => b.count - a.count);
+                        if (roundBouncebacks.length > 0) {
+                            previousBounceBackWinners.add(roundBouncebacks[0].playerId);
+                        }
+                    }
+                });
+                
+                const todaysBouncebacks = [];
+                mostRecentRound.teams.forEach(team => {
+                    const stateTeam = state.teams.find(t => t.id === team.teamId);
+                    const teamName = stateTeam ? stateTeam.name : 'Unknown';
+                    const teamColor = stateTeam ? (stateTeam.color || '#3b82f6') : '#3b82f6';
+                    
+                    team.players.forEach(player => {
+                        if (!previousBounceBackWinners.has(player.id)) {
+                            let bounceBackCount = 0;
+                            for (let i = 1; i < player.scores.length; i++) {
+                                const prevScore = parseInt(player.scores[i-1]);
+                                const currScore = parseInt(player.scores[i]);
+                                const prevPar = mostRecentRound.pars[i-1];
+                                const currPar = mostRecentRound.pars[i];
+                                const prevHandicap = mostRecentRound.handicaps[i-1];
+                                const currHandicap = mostRecentRound.handicaps[i];
+                                
+                                const prevNet = prevScore - (player.handicap >= prevHandicap ? 1 : 0);
+                                const currNet = currScore - (player.handicap >= currHandicap ? 1 : 0);
+                                
+                                if ((prevNet - prevPar >= 1) && (currNet - currPar <= 0)) {
+                                    bounceBackCount++;
+                                }
+                            }
+                            
+                            if (bounceBackCount > 0) {
+                                todaysBouncebacks.push({
+                                    playerId: player.id,
+                                    playerName: player.name,
+                                    teamName: teamName,
+                                    teamColor: teamColor,
+                                    count: bounceBackCount
+                                });
+                            }
+                        }
+                    });
+                });
+                
+                todaysBouncebacks.sort((a, b) => b.count - a.count);
+                const bounceBackWinner = todaysBouncebacks.length > 0 ? todaysBouncebacks[0] : null;
+                const bounceBackTop3 = todaysBouncebacks.slice(0, 3);
+                
+                // 4. CLUTCH PLAYER AWARD (with no-repeat logic)
+                // Best net score on final 3 holes (16, 17, 18)
+                const previousClutchWinners = new Set();
+                previousRounds.forEach(r => {
+                    if (r.clutchWinners && r.clutchWinners.length > 0) {
+                        r.clutchWinners.forEach(winnerId => previousClutchWinners.add(winnerId));
+                    } else {
+                        // Calculate for older rounds
+                        const roundClutch = [];
+                        r.teams.forEach(team => {
+                            team.players.forEach(player => {
+                                let clutchNet = 0;
+                                for (let i = 15; i < 18; i++) { // Holes 16, 17, 18
+                                    const score = parseInt(player.scores[i]);
+                                    const par = r.pars[i];
+                                    const handicap = r.handicaps[i];
+                                    const netScore = score - (player.handicap >= handicap ? 1 : 0);
+                                    clutchNet += (netScore - par);
+                                }
+                                if (!previousClutchWinners.has(player.id)) {
+                                    roundClutch.push({ playerId: player.id, score: clutchNet });
+                                }
+                            });
+                        });
+                        roundClutch.sort((a, b) => a.score - b.score);
+                        if (roundClutch.length > 0) {
+                            previousClutchWinners.add(roundClutch[0].playerId);
+                        }
+                    }
+                });
+                
+                const todaysClutch = [];
+                mostRecentRound.teams.forEach(team => {
+                    const stateTeam = state.teams.find(t => t.id === team.teamId);
+                    const teamName = stateTeam ? stateTeam.name : 'Unknown';
+                    const teamColor = stateTeam ? (stateTeam.color || '#3b82f6') : '#3b82f6';
+                    
+                    team.players.forEach(player => {
+                        if (!previousClutchWinners.has(player.id)) {
+                            let clutchNet = 0;
+                            let clutchGross = 0;
+                            for (let i = 15; i < 18; i++) { // Holes 16, 17, 18
+                                const score = parseInt(player.scores[i]);
+                                const par = mostRecentRound.pars[i];
+                                const handicap = mostRecentRound.handicaps[i];
+                                const netScore = score - (player.handicap >= handicap ? 1 : 0);
+                                clutchNet += (netScore - par);
+                                clutchGross += score;
+                            }
+                            
+                            todaysClutch.push({
+                                playerId: player.id,
+                                playerName: player.name,
+                                teamName: teamName,
+                                teamColor: teamColor,
+                                score: clutchNet,
+                                grossScore: clutchGross
+                            });
+                        }
+                    });
+                });
+                
+                todaysClutch.sort((a, b) => a.score - b.score);
+                const clutchWinner = todaysClutch.length > 0 ? todaysClutch[0] : null;
+                const clutchTop3 = todaysClutch.slice(0, 3);
+                
+                // 5. WILD CARD AWARD (with no-repeat logic)
+                // Most unique scores on scorecard (rewards variety)
+                const previousWildCardWinners = new Set();
+                previousRounds.forEach(r => {
+                    if (r.wildCardWinners && r.wildCardWinners.length > 0) {
+                        r.wildCardWinners.forEach(winnerId => previousWildCardWinners.add(winnerId));
+                    } else {
+                        // Calculate for older rounds
+                        const roundWildCard = [];
+                        r.teams.forEach(team => {
+                            team.players.forEach(player => {
+                                const uniqueScores = new Set(player.scores.map(s => parseInt(s)));
+                                if (!previousWildCardWinners.has(player.id)) {
+                                    roundWildCard.push({ playerId: player.id, count: uniqueScores.size });
+                                }
+                            });
+                        });
+                        roundWildCard.sort((a, b) => b.count - a.count);
+                        if (roundWildCard.length > 0) {
+                            previousWildCardWinners.add(roundWildCard[0].playerId);
+                        }
+                    }
+                });
+                
+                const todaysWildCard = [];
+                mostRecentRound.teams.forEach(team => {
+                    const stateTeam = state.teams.find(t => t.id === team.teamId);
+                    const teamName = stateTeam ? stateTeam.name : 'Unknown';
+                    const teamColor = stateTeam ? (stateTeam.color || '#3b82f6') : '#3b82f6';
+                    
+                    team.players.forEach(player => {
+                        if (!previousWildCardWinners.has(player.id)) {
+                            const uniqueScores = new Set(player.scores.map(s => parseInt(s)));
+                            const scoreList = Array.from(uniqueScores).sort((a, b) => a - b);
+                            
+                            todaysWildCard.push({
+                                playerId: player.id,
+                                playerName: player.name,
+                                teamName: teamName,
+                                teamColor: teamColor,
+                                count: uniqueScores.size,
+                                scoreList: scoreList.join(', ')
+                            });
+                        }
+                    });
+                });
+                
+                todaysWildCard.sort((a, b) => b.count - a.count);
+                const wildCardWinner = todaysWildCard.length > 0 ? todaysWildCard[0] : null;
+                const wildCardTop3 = todaysWildCard.slice(0, 3);
+                
+                // 6. EXTRA 9 WINNERS
                 const extra9Winners = [];
                 if (mostRecentRound.extra9Winners && mostRecentRound.extra9Winners.length > 0) {
                     mostRecentRound.extra9Winners.forEach(winnerPosition => {
@@ -7416,16 +7882,88 @@
                     });
                 }
                 
-                // 10. GUESS WHO WON - Clues for top performer
+                // 10. STATS QUIZ - Multiple questions with answers
+                const statsQuiz = [];
+                
+                // Find player with lowest gross score
+                let lowestGross = Infinity;
+                let lowestGrossPlayer = null;
+                allPlayerPerformances.forEach(p => {
+                    if (p.grossScore < lowestGross) {
+                        lowestGross = p.grossScore;
+                        lowestGrossPlayer = p;
+                    }
+                });
+                if (lowestGrossPlayer) {
+                    statsQuiz.push({
+                        question: "Who shot the lowest gross score?",
+                        answer: lowestGrossPlayer.playerName,
+                        stat: `${lowestGross} strokes`,
+                        emoji: "🎯"
+                    });
+                }
+                
+                // Find player with most birdies/eagles
+                let mostBirdies = 0;
+                let mostBirdiesPlayer = null;
+                allPlayerPerformances.forEach(p => {
+                    mostRecentRound.teams.forEach(team => {
+                        const player = team.players.find(pl => pl.id === p.playerId);
+                        if (player && player.scores) {
+                            let birdieCount = 0;
+                            player.scores.forEach((score, idx) => {
+                                if (score && mostRecentRound.pars[idx]) {
+                                    const par = mostRecentRound.pars[idx];
+                                    const holeHandicap = mostRecentRound.handicaps[idx];
+                                    const strokes = player.handicap >= holeHandicap ? 1 : 0;
+                                    const net = score - strokes;
+                                    if (net < par) birdieCount++;
+                                }
+                            });
+                            if (birdieCount > mostBirdies) {
+                                mostBirdies = birdieCount;
+                                mostBirdiesPlayer = p;
+                            }
+                        }
+                    });
+                });
+                if (mostBirdiesPlayer && mostBirdies > 0) {
+                    statsQuiz.push({
+                        question: "Who had the most net birdies or better?",
+                        answer: mostBirdiesPlayer.playerName,
+                        stat: `${mostBirdies} hole${mostBirdies > 1 ? 's' : ''}`,
+                        emoji: "🦅"
+                    });
+                }
+                
+                // Find player who won the most points
                 const topPerformer = allPlayerPerformances[allPlayerPerformances.length - 1];
-                presentationAnalytics.guessWho = {
-                    player: topPerformer.playerName,
-                    clues: [
-                        `Scored ${topPerformer.totalPoints}+ points`,
-                        topPerformer.bbbPoints > 0 ? `Had ${topPerformer.bbbPoints / state.settings.bbbPoints} BBBs` : 'Kept focus all round',
-                        topPerformer.ctpPoints > 0 ? `Won ${topPerformer.ctpPoints / state.settings.ctpPoints} CTP${topPerformer.ctpPoints / state.settings.ctpPoints > 1 ? 's' : ''}` : 'Consistent ball striking'
-                    ]
-                };
+                statsQuiz.push({
+                    question: "Who scored the most points today?",
+                    answer: topPerformer.playerName,
+                    stat: `${topPerformer.totalPoints} points`,
+                    emoji: "👑"
+                });
+                
+                // Find player with most BBBs
+                let mostBBBs = 0;
+                let mostBBBsPlayer = null;
+                allPlayerPerformances.forEach(p => {
+                    if (p.bbbCount > mostBBBs) {
+                        mostBBBs = p.bbbCount;
+                        mostBBBsPlayer = p;
+                    }
+                });
+                if (mostBBBsPlayer && mostBBBs > 0) {
+                    statsQuiz.push({
+                        question: "Who had the most BBBs?",
+                        answer: mostBBBsPlayer.playerName,
+                        stat: `${mostBBBs} BBB${mostBBBs > 1 ? 's' : ''}`,
+                        emoji: "🎪"
+                    });
+                }
+                
+                presentationAnalytics.statsQuiz = statsQuiz;
                 
                 // 11. EXTRA 9 TEAMS - Snake draft for next round's Extra 9
                 presentationAnalytics.extra9Teams = [];
@@ -7790,6 +8328,10 @@
                 let totalSlides = 1; // Title
                 totalSlides += individualPlayerSlides.length; // One slide per player
                 const hasNetSlide = hasScheduledRounds && netWinner !== null;
+                const hasBBBSlide = hasScheduledRounds && bbbWinner !== null;
+                const hasBounceBackSlide = hasScheduledRounds && bounceBackWinner !== null;
+                const hasClutchSlide = hasScheduledRounds && clutchWinner !== null;
+                const hasWildCardSlide = hasScheduledRounds && wildCardWinner !== null;
                 const hasExtra9Slide = hasScheduledRounds && extra9Winners.length > 0;
                 const hasCtpSlide = hasScheduledRounds && ctpWinners.length > 0;
                 const hasNextRoundSlide = nextRound !== null;
@@ -7798,11 +8340,12 @@
                 const hasStorySlide = presentationAnalytics.stories.length > 0;
                 const hasBiggestMomentsSlide = presentationAnalytics.biggestMoments.length > 0;
                 const hasBeatComparisonSlide = presentationAnalytics.beatComparison.playersBeatTarget.length > 0;
-                const hasGuessWhoSlide = true; // Always show for top 3 reveal
+                const hasGuessWhoSlide = false; // DISABLED - Stats quiz
                 const hasHoleAnalysisSlide = true; // Always show hole performance
                 const hasScoringDistSlide = true; // Always show scoring distribution
-                const hasTrendsSlide = presentationAnalytics.trends.length > 0;
+                const hasTrendsSlide = false; // DISABLED - presentationAnalytics.trends.length > 0;
                 const hasFunAwardsSlide = true; // Always show fun awards
+                const hasPhotosSlide = mostRecentRound.photos && mostRecentRound.photos.length > 0; // Show if photos exist
                 const hasMilestonesSlide = presentationAnalytics.milestones.length > 0;
                 const hasExtra9TeamsSlide = presentationAnalytics.extra9Teams.length > 0;
                 const hasBBBLeaderboardSlide = presentationAnalytics.bbbLeaderboard.length > 0;
@@ -7815,7 +8358,12 @@
                 if (hasHoleAnalysisSlide) totalSlides++;
                 if (hasScoringDistSlide) totalSlides++;
                 if (hasFunAwardsSlide) totalSlides++;
+                if (hasPhotosSlide) totalSlides++;
                 if (hasNetSlide) totalSlides++;
+                if (hasBBBSlide) totalSlides++;
+                if (hasBounceBackSlide) totalSlides++;
+                if (hasClutchSlide) totalSlides++;
+                if (hasWildCardSlide) totalSlides++;
                 if (hasExtra9Slide) totalSlides++;
                 if (hasCtpSlide) totalSlides++;
                 if (hasWeeklyAchievementsSlide) totalSlides++;
@@ -7846,9 +8394,25 @@
                     netWinner: netWinner,
                     netTop3: netTop3,
                     previousNetWinners: previousNetWinnersInfo,
+                    bbbWinner: bbbWinner,
+                    bbbTop3: bbbTop3,
+                    previousBBBWinners: previousBBBWinnersInfo,
+                    bounceBackWinner: bounceBackWinner,
+                    bounceBackTop3: bounceBackTop3,
+                    previousBounceBackWinners: previousBounceBackWinners,
+                    clutchWinner: clutchWinner,
+                    clutchTop3: clutchTop3,
+                    previousClutchWinners: previousClutchWinners,
+                    wildCardWinner: wildCardWinner,
+                    wildCardTop3: wildCardTop3,
+                    previousWildCardWinners: previousWildCardWinners,
                     extra9Winners: extra9Winners,
                     ctpWinners: ctpWinners,
                     hasNetSlide: hasNetSlide,
+                    hasBBBSlide: hasBBBSlide,
+                    hasBounceBackSlide: hasBounceBackSlide,
+                    hasClutchSlide: hasClutchSlide,
+                    hasWildCardSlide: hasWildCardSlide,
                     hasExtra9Slide: hasExtra9Slide,
                     hasCtpSlide: hasCtpSlide,
                     // Event net scores
@@ -7870,6 +8434,7 @@
                     hasScoringDistSlide: hasScoringDistSlide,
                     hasTrendsSlide: hasTrendsSlide,
                     hasFunAwardsSlide: hasFunAwardsSlide,
+                    hasPhotosSlide: hasPhotosSlide,
                     hasMilestonesSlide: hasMilestonesSlide,
                     hasExtra9TeamsSlide: hasExtra9TeamsSlide,
                     hasBBBLeaderboardSlide: hasBBBLeaderboardSlide,
@@ -7928,15 +8493,19 @@
                     totalPlayers,
                     teamStandings, previousStandings, todaysScores, hasScheduledRounds, scheduledRoundsCount,
                     eventName, totalRounds, mostRecentRound,
-                    netWinner, netTop3, previousNetWinners, extra9Winners, ctpWinners,
-                    hasNetSlide, hasExtra9Slide, hasCtpSlide,
+                    netWinner, netTop3, previousNetWinners, bbbWinner, bbbTop3, previousBBBWinners, 
+                    bounceBackWinner, bounceBackTop3, previousBounceBackWinners,
+                    clutchWinner, clutchTop3, previousClutchWinners,
+                    wildCardWinner, wildCardTop3, previousWildCardWinners,
+                    extra9Winners, ctpWinners,
+                    hasNetSlide, hasBBBSlide, hasBounceBackSlide, hasClutchSlide, hasWildCardSlide, hasExtra9Slide, hasCtpSlide,
                     top3EventNetScores, hasEventNetSlide,
                     handicapChanges, hasHandicapSlide,
                     weeklyAchievements, hasWeeklyAchievementsSlide,
                     nextRound, hasNextRoundSlide,
                     analytics,
                     hasStorySlide, hasBiggestMomentsSlide, hasBeatComparisonSlide, hasGuessWhoSlide,
-                    hasHoleAnalysisSlide, hasScoringDistSlide, hasTrendsSlide, hasFunAwardsSlide,
+                    hasHoleAnalysisSlide, hasScoringDistSlide, hasTrendsSlide, hasFunAwardsSlide, hasPhotosSlide,
                     hasMilestonesSlide, hasExtra9TeamsSlide, hasBBBLeaderboardSlide, hasWhatIfSlide
                 } = presentationState;
                 
@@ -7954,7 +8523,12 @@
             const beatComparisonSlideIndex = hasBeatComparisonSlide ? slideIndex++ : -1;
             const scoringDistSlideIndex = hasScoringDistSlide ? slideIndex++ : -1;
             const funAwardsSlideIndex = hasFunAwardsSlide ? slideIndex++ : -1;
+            const photosSlideIndex = hasPhotosSlide ? slideIndex++ : -1;
             const netSlideIndex = hasNetSlide ? slideIndex++ : -1;
+            const bbbSlideIndex = hasBBBSlide ? slideIndex++ : -1;
+            const bounceBackSlideIndex = hasBounceBackSlide ? slideIndex++ : -1;
+            const clutchSlideIndex = hasClutchSlide ? slideIndex++ : -1;
+            const wildCardSlideIndex = hasWildCardSlide ? slideIndex++ : -1;
             const extra9SlideIndex = hasExtra9Slide ? slideIndex++ : -1;
             const ctpSlideIndex = hasCtpSlide ? slideIndex++ : -1;
             const weeklyAchievementsSlideIndex = hasWeeklyAchievementsSlide ? slideIndex++ : -1;
@@ -8283,10 +8857,30 @@
                                         <div style="width:10px;height:10px;border-radius:50%;background:${player.teamColor};"></div>
                                         <div style="color:white;font-size:15px;">${player.teamName}</div>
                                     </div>
-                                    <div style="text-align:center;padding:12px;background:rgba(255,255,255,0.05);border-radius:8px;">
-                                        <div style="color:white;font-size:12px;margin-bottom:4px;">Position</div>
-                                        <div style="color:white;font-size:36px;font-weight:700;line-height:1;">#${player.position}</div>
-                                        <div style="color:white;font-size:12px;">of ${totalPlayers}</div>
+                                    
+                                    <!-- Today's Position -->
+                                    <div style="background:rgba(255,255,255,0.05);border-radius:8px;padding:12px;margin-bottom:8px;">
+                                        <div style="color:#93c5fd;font-size:11px;margin-bottom:4px;">Today's Position</div>
+                                        <div style="color:white;font-size:32px;font-weight:700;line-height:1;">#${player.position}</div>
+                                        <div style="color:#64748b;font-size:11px;">of ${totalPlayers}</div>
+                                    </div>
+                                    
+                                    <!-- Overall Position with Change -->
+                                    <div style="background:rgba(255,255,255,0.05);border-radius:8px;padding:12px;">
+                                        <div style="color:#93c5fd;font-size:11px;margin-bottom:4px;">Overall Position</div>
+                                        <div style="display:flex;align-items:center;justify-content:center;gap:8px;">
+                                            <div style="color:white;font-size:32px;font-weight:700;line-height:1;">#${player.overallPosition}</div>
+                                            ${player.positionChange !== 0 && player.previousPosition ? `
+                                                <div style="display:flex;align-items:center;gap:4px;padding:4px 8px;border-radius:6px;background:${player.positionChange > 0 ? 'rgba(16,185,129,0.2)' : player.positionChange < 0 ? 'rgba(239,68,68,0.2)' : 'rgba(100,116,139,0.2)'};">
+                                                    <span style="color:${player.positionChange > 0 ? '#10b981' : player.positionChange < 0 ? '#ef4444' : '#64748b'};font-size:16px;font-weight:700;">
+                                                        ${player.positionChange > 0 ? '↑' : player.positionChange < 0 ? '↓' : '→'}${Math.abs(player.positionChange)}
+                                                    </span>
+                                                </div>
+                                            ` : ''}
+                                        </div>
+                                        <div style="color:#64748b;font-size:11px;margin-top:2px;">
+                                            ${player.previousPosition ? `was #${player.previousPosition}` : 'first round'}
+                                        </div>
                                     </div>
                                 </div>
                                 
@@ -8388,37 +8982,75 @@
                     </div>
                 `;
             } else if (currentSlide === guessWhoSlideIndex) {
-                // GUESS WHO WON SLIDE
+                // STATS QUIZ SLIDE - Interactive quiz with sequential reveals
+                const quizState = presentationState.quizState || { currentQuestion: 0, revealed: [] };
+                const quiz = analytics.statsQuiz || [];
+                const currentQ = quizState.currentQuestion;
+                
                 html += `
                     <div style="animation:fadeIn 1s ease-in;max-width:900px;width:100%;">
                         <h1 style="color:white;font-size:48px;margin:0 0 30px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
-                            🤔 Can You Guess Who Won?
+                            🎯 Stats Quiz
                         </h1>
                         
-                        <div style="background:linear-gradient(135deg, rgba(139,92,246,0.2) 0%, rgba(139,92,246,0.1) 100%);border:3px solid rgba(139,92,246,0.4);border-radius:20px;padding:40px;">
-                            <h2 style="color:#a78bfa;font-size:28px;margin:0 0 30px;">Here are your clues:</h2>
-                            
-                            <div style="display:grid;gap:20px;margin-bottom:40px;">
-                                ${analytics.guessWho.clues.map((clue, idx) => `
-                                    <div style="background:rgba(255,255,255,0.1);border-radius:12px;padding:20px;display:flex;align-items:center;gap:16px;">
-                                        <div style="background:#8b5cf6;width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:white;">
-                                            ${idx + 1}
-                                        </div>
-                                        <div style="color:white;font-size:20px;">
-                                            ${clue}
-                                        </div>
-                                    </div>
-                                `).join('')}
-                            </div>
-                            
-                            <div style="text-align:center;padding:30px;background:rgba(0,0,0,0.2);border-radius:12px;">
-                                <p style="color:#a5b4fc;font-size:18px;margin:0 0 20px;">
-                                    Think you know who it is?
-                                </p>
-                                <div style="color:#818cf8;font-size:14px;font-style:italic;">
-                                    Next slide reveals the top 3! →
+                        <div style="background:linear-gradient(135deg, rgba(59,130,246,0.2) 0%, rgba(59,130,246,0.1) 100%);border:3px solid rgba(59,130,246,0.4);border-radius:20px;padding:40px;">
+                            ${quiz.length > 0 ? `
+                                <!-- Question Progress -->
+                                <div style="display:flex;gap:8px;justify-content:center;margin-bottom:30px;">
+                                    ${quiz.map((q, idx) => `
+                                        <div style="width:40px;height:4px;border-radius:2px;background:${idx === currentQ ? '#3b82f6' : idx < currentQ ? '#10b981' : 'rgba(255,255,255,0.2)'};"></div>
+                                    `).join('')}
                                 </div>
-                            </div>
+                                
+                                <!-- Current Question -->
+                                <div style="text-align:center;margin-bottom:40px;">
+                                    <div style="color:#93c5fd;font-size:16px;font-weight:600;margin-bottom:12px;">
+                                        Question ${currentQ + 1} of ${quiz.length}
+                                    </div>
+                                    <div style="color:white;font-size:32px;font-weight:700;margin-bottom:30px;">
+                                        ${quiz[currentQ].emoji} ${quiz[currentQ].question}
+                                    </div>
+                                    
+                                    ${quizState.revealed.includes(currentQ) ? `
+                                        <!-- Answer Revealed -->
+                                        <div style="background:linear-gradient(135deg, rgba(16,185,129,0.3) 0%, rgba(16,185,129,0.15) 100%);border:3px solid #10b981;border-radius:16px;padding:30px;margin-top:20px;animation:slideUp 0.6s ease-out;">
+                                            <div style="color:#10b981;font-size:18px;font-weight:600;margin-bottom:12px;">
+                                                ✓ Answer
+                                            </div>
+                                            <div style="color:white;font-size:42px;font-weight:700;margin-bottom:8px;">
+                                                ${quiz[currentQ].answer}
+                                            </div>
+                                            <div style="color:#86efac;font-size:20px;font-weight:600;">
+                                                ${quiz[currentQ].stat}
+                                            </div>
+                                        </div>
+                                        
+                                        ${currentQ < quiz.length - 1 ? `
+                                            <button onclick="nextQuizQuestion()" style="margin-top:30px;padding:16px 32px;background:#3b82f6;color:white;border:none;border-radius:12px;font-size:18px;font-weight:700;cursor:pointer;">
+                                                Next Question →
+                                            </button>
+                                        ` : `
+                                            <div style="color:#93c5fd;font-size:16px;margin-top:30px;font-style:italic;">
+                                                Advance to see the leaderboard! →
+                                            </div>
+                                        `}
+                                    ` : `
+                                        <!-- Reveal Button -->
+                                        <button onclick="revealQuizAnswer()" style="padding:20px 40px;background:linear-gradient(135deg, #8b5cf6, #6366f1);color:white;border:none;border-radius:12px;font-size:20px;font-weight:700;cursor:pointer;box-shadow:0 4px 20px rgba(139,92,246,0.4);">
+                                            🎭 Reveal Answer
+                                        </button>
+                                        <div style="color:#a5b4fc;font-size:14px;margin-top:16px;font-style:italic;">
+                                            Take a guess before revealing!
+                                        </div>
+                                    `}
+                                </div>
+                            ` : `
+                                <div style="text-align:center;padding:40px;">
+                                    <div style="color:#a5b4fc;font-size:20px;">
+                                        No quiz questions available
+                                    </div>
+                                </div>
+                            `}
                         </div>
                     </div>
                 `;
@@ -8883,6 +9515,35 @@
                         </div>
                     </div>
                 `;
+            } else if (currentSlide === photosSlideIndex) {
+                // PHOTOS FROM TODAY SLIDE
+                const photos = mostRecentRound.photos || [];
+                
+                html += `
+                    <div style="animation:fadeIn 1s ease-in;max-width:1200px;width:100%;">
+                        <h1 style="color:white;font-size:48px;margin:0 0 30px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
+                            📸 Photos from Today
+                        </h1>
+                        
+                        <div style="background:linear-gradient(135deg, rgba(59,130,246,0.2) 0%, rgba(59,130,246,0.1) 100%);border:3px solid rgba(59,130,246,0.4);border-radius:20px;padding:30px;">
+                            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:20px;">
+                                ${photos.map((photo, idx) => `
+                                    <div style="background:rgba(0,0,0,0.3);border-radius:12px;overflow:hidden;border:2px solid rgba(255,255,255,0.2);cursor:pointer;transition:transform 0.2s;"
+                                         onclick="window.open('${photo}', '_blank')"
+                                         onmouseover="this.style.transform='scale(1.05)'"
+                                         onmouseout="this.style.transform='scale(1)'">
+                                        <img src="${photo}" 
+                                             style="width:100%;height:300px;object-fit:cover;display:block;" 
+                                             alt="Photo ${idx + 1}">
+                                    </div>
+                                `).join('')}
+                            </div>
+                            <div style="text-align:center;margin-top:24px;color:#93c5fd;font-size:14px;">
+                                ${photos.length} photo${photos.length !== 1 ? 's' : ''} • Click to enlarge
+                            </div>
+                        </div>
+                    </div>
+                `;
             } else if (currentSlide === netSlideIndex) {
                 // NET SCORE WINNERS SLIDE
                 const { netWinner, netTop3, previousNetWinners } = presentationState;
@@ -8976,6 +9637,328 @@
                         <button onclick="nextPresentationSlide()" 
                                 class="btn-primary" 
                                 style="padding:16px 32px;font-size:20px;margin-top:20px;background:linear-gradient(135deg, #10b981 0%, #059669 100%);box-shadow:0 8px 24px rgba(16,185,129,0.4);">
+                            Next Award →
+                        </button>
+                    </div>
+                `;
+            } else if (currentSlide === bbbSlideIndex) {
+                // BBB WINNER SLIDE
+                const { bbbWinner, bbbTop3, previousBBBWinners } = presentationState;
+                
+                // Check if there's a tie for first place
+                const tiedForFirst = bbbTop3 && bbbTop3.length > 0 && bbbTop3.filter(p => p.place === 1).length > 1;
+                
+                html += `
+                    <div style="animation:slideUp 0.8s ease-out;max-width:800px;width:100%;">
+                        <h1 style="color:white;font-size:36px;margin:0 0 12px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
+                            🎪 BBB Champion
+                        </h1>
+                        <p style="color:#a5b4fc;font-size:16px;margin:0 0 20px;">
+                            ${mostRecentRound.courseName} - ${mostRecentRound.date}
+                        </p>
+                        
+                        ${previousBBBWinners.length > 0 ? `
+                            <div style="background:rgba(239,68,68,0.1);border:2px solid rgba(239,68,68,0.3);border-radius:10px;padding:14px;margin-bottom:20px;">
+                                <h3 style="color:#fca5a5;font-size:14px;margin:0 0 8px;">
+                                    🚫 Previous Winners (Not Eligible)
+                                </h3>
+                                <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
+                                    ${previousBBBWinners.map(p => `
+                                        <div style="background:rgba(255,255,255,0.1);padding:6px 12px;border-radius:6px;">
+                                            <span style="color:white;font-size:12px;">${p.playerName}</span>
+                                            <span style="color:#a5b4fc;font-size:10px;margin-left:6px;">${p.teamName}</span>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        ` : ''}
+                        
+                        ${bbbWinner ? `
+                            <div style="background:rgba(245,158,11,0.15);border:3px solid rgba(245,158,11,0.4);border-radius:16px;padding:24px;margin-bottom:16px;box-shadow:0 20px 60px rgba(0,0,0,0.4);">
+                                <h2 style="color:#f59e0b;font-size:24px;margin:0 0 16px;">
+                                    🏆 Winner
+                                </h2>
+                                <div style="background:linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 100%);border-left:6px solid ${bbbWinner.teamColor};border-radius:12px;padding:20px;">
+                                    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;">
+                                        <div style="text-align:left;">
+                                            <div style="font-size:36px;color:white;font-weight:600;margin-bottom:6px;">
+                                                ${bbbWinner.playerName}
+                                            </div>
+                                            <div style="font-size:16px;color:${bbbWinner.teamColor};font-weight:500;">
+                                                ${bbbWinner.teamName}
+                                            </div>
+                                        </div>
+                                        <div style="text-align:right;">
+                                            <div style="font-size:48px;color:#f59e0b;font-weight:700;line-height:1;">
+                                                ${bbbWinner.bbbCount}
+                                            </div>
+                                            <div style="color:#a5b4fc;font-size:12px;margin-top:6px;">
+                                                BBB${bbbWinner.bbbCount !== 1 ? 's' : ''}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div style="background:rgba(255,255,255,0.05);border:2px solid rgba(255,255,255,0.1);border-radius:10px;padding:16px;">
+                                <h3 style="color:#a5b4fc;font-size:16px;margin:0 0 12px;">
+                                    Top 3 Places
+                                </h3>
+                                ${bbbTop3.map((player, idx) => `
+                                    <div style="background:rgba(255,255,255,0.08);border-left:4px solid ${player.teamColor};padding:12px;margin-bottom:8px;border-radius:8px;display:flex;justify-content:space-between;align-items:center;">
+                                        <div style="display:flex;align-items:center;gap:12px;">
+                                            <span style="color:#e0e7ff;font-size:20px;font-weight:600;min-width:32px;">
+                                                ${player.place === 1 ? '🥇' : player.place === 2 ? '🥈' : '🥉'}
+                                            </span>
+                                            <div>
+                                                <div style="color:white;font-size:16px;font-weight:500;">${player.playerName}</div>
+                                                <div style="color:${player.teamColor};font-size:12px;">${player.teamName}</div>
+                                            </div>
+                                        </div>
+                                        <div style="text-align:right;">
+                                            <div style="color:#f59e0b;font-size:22px;font-weight:600;">${player.bbbCount}</div>
+                                            <div style="color:#a5b4fc;font-size:10px;">BBB${player.bbbCount !== 1 ? 's' : ''}</div>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        ` : ''}
+                        
+                        <button onclick="nextPresentationSlide()" 
+                                class="btn-primary" 
+                                style="padding:16px 32px;font-size:20px;margin-top:20px;background:linear-gradient(135deg, #f59e0b 0%, #d97706 100%);box-shadow:0 8px 24px rgba(245,158,11,0.4);">
+                            Next Award →
+                        </button>
+                    </div>
+                `;
+            } else if (currentSlide === bounceBackSlideIndex) {
+                // BOUNCE BACK AWARD SLIDE
+                const { bounceBackWinner, bounceBackTop3 } = presentationState;
+                
+                html += `
+                    <div style="animation:slideUp 0.8s ease-out;max-width:800px;width:100%;">
+                        <h1 style="color:white;font-size:36px;margin:0 0 12px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
+                            🔥 Bounce Back Award
+                        </h1>
+                        <p style="color:#a5b4fc;font-size:16px;margin:0 0 8px;">
+                            ${mostRecentRound.courseName} - ${mostRecentRound.date}
+                        </p>
+                        <p style="color:#818cf8;font-size:14px;margin:0 0 20px;font-style:italic;">
+                            Most pars or better immediately after a bogey+
+                        </p>
+                        
+                        ${bounceBackWinner ? `
+                            <div style="background:rgba(239,68,68,0.15);border:3px solid rgba(239,68,68,0.4);border-radius:16px;padding:24px;margin-bottom:16px;box-shadow:0 20px 60px rgba(0,0,0,0.4);">
+                                <h2 style="color:#ef4444;font-size:24px;margin:0 0 16px;">
+                                    🏆 Mental Toughness Champion
+                                </h2>
+                                <div style="background:linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 100%);border-left:6px solid ${bounceBackWinner.teamColor};border-radius:12px;padding:20px;">
+                                    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;">
+                                        <div style="text-align:left;">
+                                            <div style="font-size:36px;color:white;font-weight:600;margin-bottom:6px;">
+                                                ${bounceBackWinner.playerName}
+                                            </div>
+                                            <div style="font-size:16px;color:${bounceBackWinner.teamColor};font-weight:500;">
+                                                ${bounceBackWinner.teamName}
+                                            </div>
+                                        </div>
+                                        <div style="text-align:right;">
+                                            <div style="font-size:48px;color:#ef4444;font-weight:700;line-height:1;">
+                                                ${bounceBackWinner.count}
+                                            </div>
+                                            <div style="color:#a5b4fc;font-size:12px;margin-top:6px;">
+                                                Bounce Back${bounceBackWinner.count !== 1 ? 's' : ''}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            ${bounceBackTop3.length > 1 ? `
+                                <div style="background:rgba(255,255,255,0.05);border:2px solid rgba(255,255,255,0.1);border-radius:10px;padding:16px;">
+                                    <h3 style="color:#a5b4fc;font-size:16px;margin:0 0 12px;">
+                                        Top 3
+                                    </h3>
+                                    ${bounceBackTop3.map((player, idx) => `
+                                        <div style="background:rgba(255,255,255,0.08);border-left:4px solid ${player.teamColor};padding:12px;margin-bottom:8px;border-radius:8px;display:flex;justify-content:space-between;align-items:center;">
+                                            <div style="display:flex;align-items:center;gap:12px;">
+                                                <span style="color:#e0e7ff;font-size:20px;font-weight:600;min-width:32px;">
+                                                    ${idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉'}
+                                                </span>
+                                                <div>
+                                                    <div style="color:white;font-size:16px;font-weight:500;">${player.playerName}</div>
+                                                    <div style="color:${player.teamColor};font-size:12px;">${player.teamName}</div>
+                                                </div>
+                                            </div>
+                                            <div style="text-align:right;">
+                                                <div style="color:#ef4444;font-size:22px;font-weight:600;">${player.count}</div>
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            ` : ''}
+                        ` : `
+                            <div style="background:rgba(255,255,255,0.05);border:2px solid rgba(255,255,255,0.1);border-radius:12px;padding:30px;text-align:center;">
+                                <p style="color:#a5b4fc;font-size:18px;margin:0;">No bounce backs recorded today</p>
+                            </div>
+                        `}
+                        
+                        <button onclick="nextPresentationSlide()" 
+                                class="btn-primary" 
+                                style="padding:16px 32px;font-size:20px;margin-top:20px;background:linear-gradient(135deg, #ef4444 0%, #dc2626 100%);box-shadow:0 8px 24px rgba(239,68,68,0.4);">
+                            Next Award →
+                        </button>
+                    </div>
+                `;
+            } else if (currentSlide === clutchSlideIndex) {
+                // CLUTCH PLAYER AWARD SLIDE
+                const { clutchWinner, clutchTop3 } = presentationState;
+                
+                html += `
+                    <div style="animation:slideUp 0.8s ease-out;max-width:800px;width:100%;">
+                        <h1 style="color:white;font-size:36px;margin:0 0 12px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
+                            🎯 Clutch Player
+                        </h1>
+                        <p style="color:#a5b4fc;font-size:16px;margin:0 0 8px;">
+                            ${mostRecentRound.courseName} - ${mostRecentRound.date}
+                        </p>
+                        <p style="color:#818cf8;font-size:14px;margin:0 0 20px;font-style:italic;">
+                            Best net score on final 3 holes (16, 17, 18)
+                        </p>
+                        
+                        ${clutchWinner ? `
+                            <div style="background:rgba(59,130,246,0.15);border:3px solid rgba(59,130,246,0.4);border-radius:16px;padding:24px;margin-bottom:16px;box-shadow:0 20px 60px rgba(0,0,0,0.4);">
+                                <h2 style="color:#3b82f6;font-size:24px;margin:0 0 16px;">
+                                    🏆 Finish Strong Champion
+                                </h2>
+                                <div style="background:linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 100%);border-left:6px solid ${clutchWinner.teamColor};border-radius:12px;padding:20px;">
+                                    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;">
+                                        <div style="text-align:left;">
+                                            <div style="font-size:36px;color:white;font-weight:600;margin-bottom:6px;">
+                                                ${clutchWinner.playerName}
+                                            </div>
+                                            <div style="font-size:16px;color:${clutchWinner.teamColor};font-weight:500;">
+                                                ${clutchWinner.teamName}
+                                            </div>
+                                        </div>
+                                        <div style="text-align:right;">
+                                            <div style="font-size:48px;color:#3b82f6;font-weight:700;line-height:1;">
+                                                ${clutchWinner.score > 0 ? '+' : ''}${clutchWinner.score}
+                                            </div>
+                                            <div style="color:#a5b4fc;font-size:12px;margin-top:6px;">
+                                                Net to Par
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            ${clutchTop3.length > 1 ? `
+                                <div style="background:rgba(255,255,255,0.05);border:2px solid rgba(255,255,255,0.1);border-radius:10px;padding:16px;">
+                                    <h3 style="color:#a5b4fc;font-size:16px;margin:0 0 12px;">
+                                        Top 3
+                                    </h3>
+                                    ${clutchTop3.map((player, idx) => `
+                                        <div style="background:rgba(255,255,255,0.08);border-left:4px solid ${player.teamColor};padding:12px;margin-bottom:8px;border-radius:8px;display:flex;justify-content:space-between;align-items:center;">
+                                            <div style="display:flex;align-items:center;gap:12px;">
+                                                <span style="color:#e0e7ff;font-size:20px;font-weight:600;min-width:32px;">
+                                                    ${idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉'}
+                                                </span>
+                                                <div>
+                                                    <div style="color:white;font-size:16px;font-weight:500;">${player.playerName}</div>
+                                                    <div style="color:${player.teamColor};font-size:12px;">${player.teamName}</div>
+                                                </div>
+                                            </div>
+                                            <div style="text-align:right;">
+                                                <div style="color:#3b82f6;font-size:22px;font-weight:600;">${player.score > 0 ? '+' : ''}${player.score}</div>
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            ` : ''}
+                        ` : ''}
+                        
+                        <button onclick="nextPresentationSlide()" 
+                                class="btn-primary" 
+                                style="padding:16px 32px;font-size:20px;margin-top:20px;background:linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);box-shadow:0 8px 24px rgba(59,130,246,0.4);">
+                            Next Award →
+                        </button>
+                    </div>
+                `;
+            } else if (currentSlide === wildCardSlideIndex) {
+                // WILD CARD AWARD SLIDE
+                const { wildCardWinner, wildCardTop3 } = presentationState;
+                
+                html += `
+                    <div style="animation:slideUp 0.8s ease-out;max-width:800px;width:100%;">
+                        <h1 style="color:white;font-size:36px;margin:0 0 12px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
+                            🎲 Wild Card
+                        </h1>
+                        <p style="color:#a5b4fc;font-size:16px;margin:0 0 8px;">
+                            ${mostRecentRound.courseName} - ${mostRecentRound.date}
+                        </p>
+                        <p style="color:#818cf8;font-size:14px;margin:0 0 20px;font-style:italic;">
+                            Most unique scores on scorecard
+                        </p>
+                        
+                        ${wildCardWinner ? `
+                            <div style="background:rgba(168,85,247,0.15);border:3px solid rgba(168,85,247,0.4);border-radius:16px;padding:24px;margin-bottom:16px;box-shadow:0 20px 60px rgba(0,0,0,0.4);">
+                                <h2 style="color:#a855f7;font-size:24px;margin:0 0 16px;">
+                                    🏆 Most Unpredictable
+                                </h2>
+                                <div style="background:linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 100%);border-left:6px solid ${wildCardWinner.teamColor};border-radius:12px;padding:20px;">
+                                    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;">
+                                        <div style="text-align:left;">
+                                            <div style="font-size:36px;color:white;font-weight:600;margin-bottom:6px;">
+                                                ${wildCardWinner.playerName}
+                                            </div>
+                                            <div style="font-size:16px;color:${wildCardWinner.teamColor};font-weight:500;margin-bottom:8px;">
+                                                ${wildCardWinner.teamName}
+                                            </div>
+                                            <div style="font-size:14px;color:#a5b4fc;font-family:monospace;">
+                                                Scores: ${wildCardWinner.scoreList}
+                                            </div>
+                                        </div>
+                                        <div style="text-align:right;">
+                                            <div style="font-size:48px;color:#a855f7;font-weight:700;line-height:1;">
+                                                ${wildCardWinner.count}
+                                            </div>
+                                            <div style="color:#a5b4fc;font-size:12px;margin-top:6px;">
+                                                Unique Scores
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            ${wildCardTop3.length > 1 ? `
+                                <div style="background:rgba(255,255,255,0.05);border:2px solid rgba(255,255,255,0.1);border-radius:10px;padding:16px;">
+                                    <h3 style="color:#a5b4fc;font-size:16px;margin:0 0 12px;">
+                                        Top 3
+                                    </h3>
+                                    ${wildCardTop3.map((player, idx) => `
+                                        <div style="background:rgba(255,255,255,0.08);border-left:4px solid ${player.teamColor};padding:12px;margin-bottom:8px;border-radius:8px;display:flex;justify-content:space-between;align-items:center;">
+                                            <div style="display:flex;align-items:center;gap:12px;">
+                                                <span style="color:#e0e7ff;font-size:20px;font-weight:600;min-width:32px;">
+                                                    ${idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉'}
+                                                </span>
+                                                <div>
+                                                    <div style="color:white;font-size:16px;font-weight:500;">${player.playerName}</div>
+                                                    <div style="color:${player.teamColor};font-size:12px;">${player.teamName}</div>
+                                                </div>
+                                            </div>
+                                            <div style="text-align:right;">
+                                                <div style="color:#a855f7;font-size:22px;font-weight:600;">${player.count}</div>
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            ` : ''}
+                        ` : ''}
+                        
+                        <button onclick="nextPresentationSlide()" 
+                                class="btn-primary" 
+                                style="padding:16px 32px;font-size:20px;margin-top:20px;background:linear-gradient(135deg, #a855f7 0%, #9333ea 100%);box-shadow:0 8px 24px rgba(168,85,247,0.4);">
                             Next Award →
                         </button>
                     </div>
@@ -9218,10 +10201,10 @@
                                                 <div style="display:flex;align-items:center;gap:8px;">
                                                     ${team.probabilityChange !== 0 ? `
                                                         <span style="font-size:14px;color:${team.probabilityChange > 0 ? '#10b981' : '#ef4444'};font-weight:700;">
-                                                            ${team.probabilityChange > 0 ? '↗' : '↘'} ${Math.abs(team.probabilityChange)}%
+                                                            ${team.probabilityChange > 0 ? '↗' : '↘'} ${Math.abs(team.probabilityChange).toFixed(2)}%
                                                         </span>
                                                     ` : ''}
-                                                    <strong style="font-size:24px;color:#a78bfa;">${team.winProbability}%</strong>
+                                                    <strong style="font-size:24px;color:#a78bfa;">${team.winProbability.toFixed(2)}%</strong>
                                                 </div>
                                             </div>
                                             <div style="background:#1e293b;border-radius:8px;height:24px;position:relative;overflow:hidden;box-shadow:inset 0 2px 8px rgba(0,0,0,0.3);">
@@ -9389,7 +10372,7 @@
                                                 '<div style="color:white;font-size:' + (isCurrentTeam ? '13px' : '11px') + ';font-weight:' + (isCurrentTeam ? '600' : '500') + ';margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + t.name + '</div>' +
                                                 (hasScheduledRounds && t.winProbability !== undefined ? 
                                                     '<div style="color:#a78bfa;font-size:9px;font-weight:600;">' +
-                                                        'Win: ' + t.winProbability + '%' +
+                                                        'Win: ' + t.winProbability.toFixed(2) + '%' +
                                                     '</div>' : '') +
                                             '</div>';
                                     }).join('')}
@@ -10322,7 +11305,7 @@
                                             `;
                                         }).join('')}
                                         <td style="padding:12px;color:#fbbf24;font-size:16px;font-weight:700;text-align:center;">
-                                            ${playerData.scores.slice(0, 9).reduce((sum, s) => sum + s, 0)}
+                                            ${playerData.scores.slice(0, 9).reduce((sum, s) => sum + (parseInt(s) || 0), 0)}
                                         </td>
                                     </tr>
                                 </tbody>
@@ -10368,10 +11351,10 @@
                                             `;
                                         }).join('')}
                                         <td style="padding:12px;color:#fbbf24;font-size:16px;font-weight:700;text-align:center;">
-                                            ${playerData.scores.slice(9, 18).reduce((sum, s) => sum + s, 0)}
+                                            ${playerData.scores.slice(9, 18).reduce((sum, s) => sum + (parseInt(s) || 0), 0)}
                                         </td>
                                         <td style="padding:12px;color:#10b981;font-size:18px;font-weight:700;text-align:center;">
-                                            ${playerData.scores.reduce((sum, s) => sum + s, 0)}
+                                            ${playerData.scores.reduce((sum, s) => sum + (parseInt(s) || 0), 0)}
                                         </td>
                                     </tr>
                                 </tbody>
@@ -10428,6 +11411,26 @@
             `;
             
             document.body.insertAdjacentHTML('beforeend', tooltipHTML);
+        };
+        
+        // Quiz control functions
+        window.revealQuizAnswer = () => {
+            const quizState = presentationState.quizState || { currentQuestion: 0, revealed: [] };
+            if (!quizState.revealed.includes(quizState.currentQuestion)) {
+                quizState.revealed.push(quizState.currentQuestion);
+            }
+            presentationState.quizState = quizState;
+            renderPresentationMode();
+        };
+        
+        window.nextQuizQuestion = () => {
+            const quizState = presentationState.quizState || { currentQuestion: 0, revealed: [] };
+            const quiz = presentationAnalytics.statsQuiz || [];
+            if (quizState.currentQuestion < quiz.length - 1) {
+                quizState.currentQuestion++;
+            }
+            presentationState.quizState = quizState;
+            renderPresentationMode();
         };
         
         window.showScoringDetails = (category, details, color, label) => {
@@ -12257,6 +13260,57 @@
                 showError('Failed to delete team: ' + err.message);
             }
         };
+        
+        // Photo handling functions
+        window.handlePhotoUpload = async (event) => {
+            try {
+                const files = event.target.files;
+                if (!files || files.length === 0) return;
+                
+                const round = state.activeRound;
+                if (!round.photos) {
+                    round.photos = [];
+                }
+                
+                // Convert each file to base64
+                for (let i = 0; i < files.length; i++) {
+                    const file = files[i];
+                    
+                    // Limit file size to 2MB
+                    if (file.size > 2 * 1024 * 1024) {
+                        showError(`Photo ${file.name} is too large (max 2MB)`);
+                        continue;
+                    }
+                    
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        round.photos.push(e.target.result);
+                        render(); // Re-render to show new photo
+                    };
+                    reader.readAsDataURL(file);
+                }
+                
+                // Clear the input so same file can be selected again
+                event.target.value = '';
+            } catch (err) {
+                console.error('Photo upload error:', err);
+                showError('Failed to upload photo: ' + err.message);
+            }
+        };
+        
+        window.removePhoto = (index) => {
+            try {
+                const round = state.activeRound;
+                if (!round.photos) return;
+                
+                round.photos.splice(index, 1);
+                render();
+                notify('📸 Photo removed');
+            } catch (err) {
+                console.error('Remove photo error:', err);
+                showError('Failed to remove photo: ' + err.message);
+            }
+        };
 
         window.finishRound = () => {
             try {
@@ -12491,6 +13545,101 @@
                         console.log('❌ No eligible net score winners (edited) - all players excluded');
                     }
                     
+                    // Calculate BBB winner (with no-repeat logic)
+                    console.log(`\n=== BBB WINNER CALCULATION (Edit Round) ===`);
+                    const previousBBBWinners = new Set();
+                    previousRounds.forEach(r => {
+                        if (r.bbbWinners && r.bbbWinners.length > 0) {
+                            r.bbbWinners.forEach(winnerId => previousBBBWinners.add(winnerId));
+                        }
+                    });
+                    console.log(`Previous BBB winners:`, Array.from(previousBBBWinners));
+                    
+                    const eligibleBBBCounts = [];
+                    round.teams.forEach(team => {
+                        team.players.forEach(player => {
+                            if (!previousBBBWinners.has(player.id)) {
+                                eligibleBBBCounts.push({
+                                    playerId: player.id,
+                                    playerName: player.name,
+                                    bbbCount: player.bbbTotal || 0
+                                });
+                            }
+                        });
+                    });
+                    
+                    eligibleBBBCounts.sort((a, b) => b.bbbCount - a.bbbCount);
+                    console.log(`Eligible players for BBB winner:`, eligibleBBBCounts.map(p => `${p.playerName} (${p.bbbCount})`));
+                    
+                    if (eligibleBBBCounts.length > 0 && eligibleBBBCounts[0].bbbCount > 0) {
+                        round.bbbWinners = [eligibleBBBCounts[0].playerId];
+                        console.log(`✅ BBB winner (edited): ${eligibleBBBCounts[0].playerName} (ID: ${eligibleBBBCounts[0].playerId}, BBBs: ${eligibleBBBCounts[0].bbbCount})`);
+                    } else {
+                        round.bbbWinners = [];
+                        console.log('❌ No eligible BBB winners (edited)');
+                    }
+                    
+                    // Calculate Bounce Back winner
+                    const eligibleBounceBack = [];
+                    round.teams.forEach(team => {
+                        team.players.forEach(player => {
+                            if (!previousBounceBackWinners.has(player.id)) {
+                                let bounceBackCount = 0;
+                                for (let i = 1; i < player.scores.length; i++) {
+                                    const prevScore = parseInt(player.scores[i-1]);
+                                    const currScore = parseInt(player.scores[i]);
+                                    const prevPar = round.pars[i-1];
+                                    const currPar = round.pars[i];
+                                    const prevHandicap = round.handicaps[i-1];
+                                    const currHandicap = round.handicaps[i];
+                                    const prevNet = prevScore - (player.handicap >= prevHandicap ? 1 : 0);
+                                    const currNet = currScore - (player.handicap >= currHandicap ? 1 : 0);
+                                    if ((prevNet - prevPar >= 1) && (currNet - currPar <= 0)) {
+                                        bounceBackCount++;
+                                    }
+                                }
+                                if (bounceBackCount > 0) {
+                                    eligibleBounceBack.push({ playerId: player.id, playerName: player.name, count: bounceBackCount });
+                                }
+                            }
+                        });
+                    });
+                    eligibleBounceBack.sort((a, b) => b.count - a.count);
+                    round.bounceBackWinners = eligibleBounceBack.length > 0 ? [eligibleBounceBack[0].playerId] : [];
+                    
+                    // Calculate Clutch Player winner
+                    const eligibleClutch = [];
+                    round.teams.forEach(team => {
+                        team.players.forEach(player => {
+                            if (!previousClutchWinners.has(player.id)) {
+                                let clutchNet = 0;
+                                for (let i = 15; i < 18; i++) {
+                                    const score = parseInt(player.scores[i]);
+                                    const par = round.pars[i];
+                                    const handicap = round.handicaps[i];
+                                    const netScore = score - (player.handicap >= handicap ? 1 : 0);
+                                    clutchNet += (netScore - par);
+                                }
+                                eligibleClutch.push({ playerId: player.id, playerName: player.name, score: clutchNet });
+                            }
+                        });
+                    });
+                    eligibleClutch.sort((a, b) => a.score - b.score);
+                    round.clutchWinners = eligibleClutch.length > 0 ? [eligibleClutch[0].playerId] : [];
+                    
+                    // Calculate Wild Card winner
+                    const eligibleWildCard = [];
+                    round.teams.forEach(team => {
+                        team.players.forEach(player => {
+                            if (!previousWildCardWinners.has(player.id)) {
+                                const uniqueScores = new Set(player.scores.map(s => parseInt(s)));
+                                eligibleWildCard.push({ playerId: player.id, playerName: player.name, count: uniqueScores.size });
+                            }
+                        });
+                    });
+                    eligibleWildCard.sort((a, b) => b.count - a.count);
+                    round.wildCardWinners = eligibleWildCard.length > 0 ? [eligibleWildCard[0].playerId] : [];
+                    
                     // Set or preserve previousHandicap on each player for handicap changes display
                     const preservedRound = {
                         ...round,
@@ -12705,6 +13854,119 @@
                         round.netWinners = [];
                         console.log('❌ No eligible net score winners - all players excluded');
                     }
+                    
+                    // Calculate BBB winner (with no-repeat logic)
+                    console.log(`\n=== BBB WINNER CALCULATION ===`);
+                    const previousBBBWinners = new Set();
+                    previousRounds.forEach(r => {
+                        if (r.bbbWinners && r.bbbWinners.length > 0) {
+                            r.bbbWinners.forEach(winnerId => previousBBBWinners.add(winnerId));
+                        }
+                    });
+                    console.log(`Previous BBB winners:`, Array.from(previousBBBWinners));
+                    
+                    const eligibleBBBCounts = [];
+                    round.teams.forEach(team => {
+                        team.players.forEach(player => {
+                            if (!previousBBBWinners.has(player.id)) {
+                                eligibleBBBCounts.push({
+                                    playerId: player.id,
+                                    playerName: player.name,
+                                    bbbCount: player.bbbTotal || 0
+                                });
+                            }
+                        });
+                    });
+                    
+                    eligibleBBBCounts.sort((a, b) => b.bbbCount - a.bbbCount);
+                    console.log(`Eligible players for BBB winner:`, eligibleBBBCounts.map(p => `${p.playerName} (${p.bbbCount})`));
+                    
+                    if (eligibleBBBCounts.length > 0 && eligibleBBBCounts[0].bbbCount > 0) {
+                        round.bbbWinners = [eligibleBBBCounts[0].playerId];
+                        console.log(`✅ BBB winner: ${eligibleBBBCounts[0].playerName} (ID: ${eligibleBBBCounts[0].playerId}, BBBs: ${eligibleBBBCounts[0].bbbCount})`);
+                    } else {
+                        round.bbbWinners = [];
+                        console.log('❌ No eligible BBB winners');
+                    }
+                    
+                    // Calculate Bounce Back winner (with no-repeat logic)
+                    const previousBounceBackWinners = new Set();
+                    previousRounds.forEach(r => {
+                        if (r.bounceBackWinners && r.bounceBackWinners.length > 0) {
+                            r.bounceBackWinners.forEach(winnerId => previousBounceBackWinners.add(winnerId));
+                        }
+                    });
+                    const eligibleBounceBack = [];
+                    round.teams.forEach(team => {
+                        team.players.forEach(player => {
+                            if (!previousBounceBackWinners.has(player.id)) {
+                                let bounceBackCount = 0;
+                                for (let i = 1; i < player.scores.length; i++) {
+                                    const prevScore = parseInt(player.scores[i-1]);
+                                    const currScore = parseInt(player.scores[i]);
+                                    const prevPar = round.pars[i-1];
+                                    const currPar = round.pars[i];
+                                    const prevHandicap = round.handicaps[i-1];
+                                    const currHandicap = round.handicaps[i];
+                                    const prevNet = prevScore - (player.handicap >= prevHandicap ? 1 : 0);
+                                    const currNet = currScore - (player.handicap >= currHandicap ? 1 : 0);
+                                    if ((prevNet - prevPar >= 1) && (currNet - currPar <= 0)) {
+                                        bounceBackCount++;
+                                    }
+                                }
+                                if (bounceBackCount > 0) {
+                                    eligibleBounceBack.push({ playerId: player.id, count: bounceBackCount });
+                                }
+                            }
+                        });
+                    });
+                    eligibleBounceBack.sort((a, b) => b.count - a.count);
+                    round.bounceBackWinners = eligibleBounceBack.length > 0 ? [eligibleBounceBack[0].playerId] : [];
+                    
+                    // Calculate Clutch Player winner (with no-repeat logic)
+                    const previousClutchWinners = new Set();
+                    previousRounds.forEach(r => {
+                        if (r.clutchWinners && r.clutchWinners.length > 0) {
+                            r.clutchWinners.forEach(winnerId => previousClutchWinners.add(winnerId));
+                        }
+                    });
+                    const eligibleClutch = [];
+                    round.teams.forEach(team => {
+                        team.players.forEach(player => {
+                            if (!previousClutchWinners.has(player.id)) {
+                                let clutchNet = 0;
+                                for (let i = 15; i < 18; i++) {
+                                    const score = parseInt(player.scores[i]);
+                                    const par = round.pars[i];
+                                    const handicap = round.handicaps[i];
+                                    const netScore = score - (player.handicap >= handicap ? 1 : 0);
+                                    clutchNet += (netScore - par);
+                                }
+                                eligibleClutch.push({ playerId: player.id, score: clutchNet });
+                            }
+                        });
+                    });
+                    eligibleClutch.sort((a, b) => a.score - b.score);
+                    round.clutchWinners = eligibleClutch.length > 0 ? [eligibleClutch[0].playerId] : [];
+                    
+                    // Calculate Wild Card winner (with no-repeat logic)
+                    const previousWildCardWinners = new Set();
+                    previousRounds.forEach(r => {
+                        if (r.wildCardWinners && r.wildCardWinners.length > 0) {
+                            r.wildCardWinners.forEach(winnerId => previousWildCardWinners.add(winnerId));
+                        }
+                    });
+                    const eligibleWildCard = [];
+                    round.teams.forEach(team => {
+                        team.players.forEach(player => {
+                            if (!previousWildCardWinners.has(player.id)) {
+                                const uniqueScores = new Set(player.scores.map(s => parseInt(s)));
+                                eligibleWildCard.push({ playerId: player.id, count: uniqueScores.size });
+                            }
+                        });
+                    });
+                    eligibleWildCard.sort((a, b) => b.count - a.count);
+                    round.wildCardWinners = eligibleWildCard.length > 0 ? [eligibleWildCard[0].playerId] : [];
                     
                     // Check if this was a scheduled round that's being completed
                     // If so, preserve its original timestamp instead of creating a new one
@@ -13503,15 +14765,20 @@
             }
         };
 
-        window.showTeamScorecard = (roundIndex, teamIndex) => {
+        window.showTeamScorecard = (roundIndex, teamIndex, showAllPlayers = false) => {
             try {
                 const round = state.rounds[roundIndex];
-                if (!round || !round.teams[teamIndex]) {
-                    showError('Team data not found!');
+                if (!round) {
+                    showError('Round data not found!');
                     return;
                 }
                 
                 const team = round.teams[teamIndex];
+                if (!team && !showAllPlayers) {
+                    showError('Team data not found!');
+                    return;
+                }
+                
                 const app = document.getElementById('app');
                 
                 // Helper function to get points for a net score
@@ -13564,7 +14831,7 @@
                 };
                 
                 // Helper to build complete player card HTML
-                const buildPlayerCard = (player, playerIdx) => {
+                const buildPlayerCard = (player, playerIdx, currentTeam, displayTeamName = false) => {
                     const playerStrokePoints = calcPlayerTotal(player.scores, round.pars, round.handicaps, player.handicap);
                     const grossScore = player.scores.reduce((sum, s) => sum + (parseInt(s) || 0), 0);
                     const coursePar = round.pars.reduce((sum, p) => sum + p, 0);
@@ -13600,9 +14867,18 @@
                         renderHoleScore(score, holeIdx + 9, round.pars[holeIdx + 9], round.handicaps[holeIdx + 9], player.handicap)
                     ).join('');
                     
+                    // Get team color if displaying team name
+                    let teamColorBadge = '';
+                    if (displayTeamName) {
+                        const stateTeam = state.teams.find(t => t.id === currentTeam.teamId);
+                        const teamColor = stateTeam && stateTeam.color ? stateTeam.color : '#3b82f6';
+                        teamColorBadge = '<div style="display:inline-block;background:' + teamColor + ';color:white;padding:4px 8px;border-radius:4px;font-size:12px;margin-left:8px;">' + currentTeam.teamName + '</div>';
+                    }
+                    
                     return '<div style="background:#f9fafb;border-radius:12px;padding:16px;margin-bottom:16px;">' +
                         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
                             '<div><strong style="font-size:18px;">' + player.name + '</strong>' +
+                            teamColorBadge +
                             '<span style="color:#6b7280;margin-left:8px;font-size:14px;">HC: ' + player.handicap + ' • Gross: ' + grossScore + ' (' + (overPar > 0 ? '+' : '') + overPar + ')</span></div>' +
                             '<div style="text-align:right;"><div style="font-size:28px;font-weight:700;color:#FF9A00;">' + totalPoints.toFixed(1) + '</div>' +
                             '<div style="font-size:11px;color:#6b7280;">' + playerStrokePoints + ' stroke • ' + bbbPoints.toFixed(1) + ' BBB • ' + ballPoints + ' balls' + 
@@ -13643,28 +14919,28 @@
                 };
                 
                 // Helper to build team summary
-                const buildTeamSummary = () => {
-                    const teamStrokePoints = team.players.reduce((sum, p) => {
+                const buildTeamSummary = (currentTeam) => {
+                    const teamStrokePoints = currentTeam.players.reduce((sum, p) => {
                         return sum + calcPlayerTotal(p.scores, round.pars, round.handicaps, p.handicap);
                     }, 0);
                     
-                    const teamBBBPoints = team.players.reduce((sum, p) => {
+                    const teamBBBPoints = currentTeam.players.reduce((sum, p) => {
                         return sum + ((p.bbbTotal || 0) * state.settings.bbbPoints);
                     }, 0);
                     
-                    const teamBallPoints = team.players.reduce((sum, p) => {
+                    const teamBallPoints = currentTeam.players.reduce((sum, p) => {
                         return sum + ((p.ballsRemaining || 0) * state.settings.ballPoints);
                     }, 0);
                     
                     let teamCTPPoints = 0;
                     if (round.ctpWinners && round.ctpWinners.length > 0) {
-                        const teamIndex = round.teams.indexOf(team);
+                        const teamIndex = round.teams.indexOf(currentTeam);
                         teamCTPPoints = round.ctpWinners.filter(w => w.startsWith(teamIndex + '-')).length * state.settings.ctpPoints;
                     }
                     
                     let teamExtra9Points = 0;
                     if (round.extra9Winners && round.extra9Winners.length > 0) {
-                        const teamIndex = round.teams.indexOf(team);
+                        const teamIndex = round.teams.indexOf(currentTeam);
                         teamExtra9Points = round.extra9Winners.filter(w => w.startsWith(teamIndex + '-')).length * state.settings.extra9Points;
                     }
                     
@@ -13697,26 +14973,48 @@
                     '</div>';
                 };
                 
+                // Generate content based on view mode
+                let contentHTML = '';
+                let headerTitle = '';
+                
+                if (showAllPlayers) {
+                    // All Players View
+                    headerTitle = '📊 All Players';
+                    round.teams.forEach((currentTeam, teamIdx) => {
+                        currentTeam.players.forEach((player, playerIdx) => {
+                            contentHTML += buildPlayerCard(player, playerIdx, currentTeam, true);
+                        });
+                    });
+                } else {
+                    // Team View
+                    headerTitle = '📊 ' + team.teamName;
+                    contentHTML = team.players.map((player, playerIdx) => buildPlayerCard(player, playerIdx, team, false)).join('');
+                    contentHTML += buildTeamSummary(team);
+                }
+                
                 let html = `
                     <div style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.9);z-index:9999;overflow-y:auto;padding:20px;">
                         <div style="max-width:1200px;margin:0 auto;background:white;border-radius:12px;box-shadow:0 20px 25px -5px rgba(0,0,0,0.3);">
                             <div style="background:linear-gradient(135deg,#FF9A00,#ea580c);color:white;padding:20px;border-radius:12px 12px 0 0;position:sticky;top:0;z-index:10;">
-                                <div style="display:flex;justify-content:space-between;align-items:center;">
+                                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
                                     <div>
-                                        <h2 style="margin:0;font-size:24px;">📊 ${team.teamName}</h2>
+                                        <h2 style="margin:0;font-size:24px;">${headerTitle}</h2>
                                         <p style="margin:4px 0 0;opacity:0.9;font-size:14px;">${round.courseName} • ${round.date}</p>
                                     </div>
-                                    <button onclick="navigate('leaderboard')" style="background:rgba(255,255,255,0.2);color:white;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:16px;">
-                                        ✕ Close
-                                    </button>
+                                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                                        <button onclick="showTeamScorecard(${roundIndex}, ${teamIndex}, ${!showAllPlayers})" 
+                                                style="background:rgba(255,255,255,0.2);color:white;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600;">
+                                            ${showAllPlayers ? '👥 Team View' : '🌍 All Players'}
+                                        </button>
+                                        <button onclick="navigate('leaderboard')" style="background:rgba(255,255,255,0.2);color:white;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:16px;">
+                                            ✕ Close
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                             
                             <div style="padding:20px;">
-                                ${team.players.map((player, playerIdx) => buildPlayerCard(player, playerIdx)).join('')}
-                                
-                                <!-- Team Summary -->
-                                ${buildTeamSummary()}
+                                ${contentHTML}
                                 
                                 <div style="text-align:center;margin-top:20px;">
                                     <button onclick="navigate('leaderboard')" class="btn-primary" style="background:#6b7280;padding:12px 24px;">
@@ -13936,7 +15234,7 @@
                 }, 500);
             } else {
                 const dbType = useFirebase ? '☁️ Firebase' : '💾 LocalStorage';
-                notify(`✅ v10.5 Ready! (${dbType})`);
+                notify(`✅ v9.5 Ready! (${dbType})`);
             }
         });
     </script>
