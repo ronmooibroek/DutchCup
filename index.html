@@ -2665,15 +2665,16 @@
                                 const holeIdx = start + i;
                                 const score = player.scores[holeIdx] || '';
                                 
-                                // Check if player gets a stroke on this hole
+                                // Calculate how many strokes player gets on this hole
                                 const holeHandicap = round.handicaps[holeIdx];
-                                const getsStroke = player.handicap >= holeHandicap;
+                                let strokes = 0;
+                                if (player.handicap >= holeHandicap) strokes = 1;
+                                if (player.handicap >= holeHandicap + 18) strokes = 2;
                                 const par = round.pars[holeIdx];
                                 
                                 // Calculate points for this hole
                                 let points = 0;
                                 if (score !== '' && score !== null && score !== undefined) {
-                                    const strokes = getsStroke ? 1 : 0;
                                     const netScore = parseInt(score) - strokes;
                                     const netToPar = netScore - par;
                                     points = getPoints(netToPar);
@@ -2685,7 +2686,6 @@
                                 let fontWeight = '400';
                                 
                                 if (score) {
-                                    const strokes = getsStroke ? 1 : 0;
                                     const netScore = parseInt(score) - strokes;
                                     const netToPar = netScore - par;
                                     
@@ -2722,8 +2722,10 @@
                                     }
                                 }
                                 
-                                // Wider border for handicap holes
-                                const borderStyle = getsStroke ? 'border:3px solid #3b82f6;' : 'border:2px solid #d1d5db;';
+                                // Border color based on strokes: red for 2, blue for 1, gray for 0
+                                const borderStyle = strokes === 2 ? 'border:3px solid #ef4444;' : 
+                                                   strokes === 1 ? 'border:3px solid #3b82f6;' : 
+                                                   'border:2px solid #d1d5db;';
                                 const holePar = round.pars[holeIdx];
                                 
                                 html += `
@@ -8762,15 +8764,24 @@
                         const score = player.scorecard[i];
                         const par = mostRecentRound.pars[i];
                         const handicap = mostRecentRound.handicaps[i];
-                        const getsStroke = player.handicap >= handicap;
-                        const colors = getScoreColor(score, par, getsStroke);
+                        
+                        // Calculate strokes: 0, 1, or 2
+                        let strokes = 0;
+                        if (player.handicap >= handicap) strokes = 1;
+                        if (player.handicap >= handicap + 18) strokes = 2;
+                        
+                        const colors = getScoreColor(score, par, strokes > 0);
                         let points = 0;
                         if (score !== '' && score !== null && score !== undefined) {
-                            const netScoreHole = parseInt(score) - (getsStroke ? 1 : 0);
+                            const netScoreHole = parseInt(score) - strokes;
                             const netToParHole = netScoreHole - par;
                             points = getPoints(netToParHole);
                         }
-                        const borderStyle = getsStroke ? 'border:2px solid #3b82f6;' : 'border:1px solid rgba(255,255,255,0.2);';
+                        
+                        // Border: red for 2 strokes, blue for 1 stroke, translucent for 0
+                        const borderStyle = strokes === 2 ? 'border:2px solid #ef4444;' : 
+                                           strokes === 1 ? 'border:2px solid #3b82f6;' : 
+                                           'border:1px solid rgba(255,255,255,0.2);';
                         
                         scorecardHTML += '<div style="text-align:center;">' +
                             '<div style="font-size:9px;color:#9ca3af;font-weight:600;margin-bottom:2px;">' + (i + 1) + '</div>' +
@@ -8790,15 +8801,24 @@
                         const score = player.scorecard[i];
                         const par = mostRecentRound.pars[i];
                         const handicap = mostRecentRound.handicaps[i];
-                        const getsStroke = player.handicap >= handicap;
-                        const colors = getScoreColor(score, par, getsStroke);
+                        
+                        // Calculate strokes: 0, 1, or 2
+                        let strokes = 0;
+                        if (player.handicap >= handicap) strokes = 1;
+                        if (player.handicap >= handicap + 18) strokes = 2;
+                        
+                        const colors = getScoreColor(score, par, strokes > 0);
                         let points = 0;
                         if (score !== '' && score !== null && score !== undefined) {
-                            const netScoreHole = parseInt(score) - (getsStroke ? 1 : 0);
+                            const netScoreHole = parseInt(score) - strokes;
                             const netToParHole = netScoreHole - par;
                             points = getPoints(netToParHole);
                         }
-                        const borderStyle = getsStroke ? 'border:2px solid #3b82f6;' : 'border:1px solid rgba(255,255,255,0.2);';
+                        
+                        // Border: red for 2 strokes, blue for 1 stroke, translucent for 0
+                        const borderStyle = strokes === 2 ? 'border:2px solid #ef4444;' : 
+                                           strokes === 1 ? 'border:2px solid #3b82f6;' : 
+                                           'border:1px solid rgba(255,255,255,0.2);';
                         
                         scorecardHTML += '<div style="text-align:center;">' +
                             '<div style="font-size:9px;color:#9ca3af;font-weight:600;margin-bottom:2px;">' + (i + 1) + '</div>' +
@@ -14825,15 +14845,23 @@
                 
                 // Helper to render a single hole score
                 const renderHoleScore = (score, holeIdx, par, handicap, playerHandicap) => {
-                    const getsStroke = playerHandicap >= handicap;
-                    const colors = getScoreColor(score, par, getsStroke);
+                    // Calculate strokes: 0, 1, or 2
+                    let strokes = 0;
+                    if (playerHandicap >= handicap) strokes = 1;
+                    if (playerHandicap >= handicap + 18) strokes = 2;
+                    
+                    const colors = getScoreColor(score, par, strokes > 0);
                     let points = 0;
                     if (score !== '' && score !== null && score !== undefined) {
-                        const netScore = parseInt(score) - (getsStroke ? 1 : 0);
+                        const netScore = parseInt(score) - strokes;
                         const netToPar = netScore - par;
                         points = getPoints(netToPar);
                     }
-                    const borderStyle = getsStroke ? 'border:3px solid #3b82f6;' : 'border:2px solid #d1d5db;';
+                    
+                    // Border color: red for 2 strokes, blue for 1 stroke, gray for 0
+                    const borderStyle = strokes === 2 ? 'border:3px solid #ef4444;' : 
+                                       strokes === 1 ? 'border:3px solid #3b82f6;' : 
+                                       'border:2px solid #d1d5db;';
                     
                     return '<div style="text-align:center;">' +
                         '<div style="font-size:10px;color:#6b7280;font-weight:600;margin-bottom:2px;">' + (holeIdx + 1) + '</div>' +
