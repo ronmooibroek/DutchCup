@@ -13610,6 +13610,9 @@
                         console.log('❌ No eligible BBB winners (edited)');
                     }
                     
+                    // Get all previous rounds in this event (excluding the one being edited) for award calculations
+                    const previousRounds = state.rounds.filter((r, idx) => idx !== round.originalIndex && r.eventId === state.currentEventId);
+                    
                     // Calculate Bounce Back winner
                     const eligibleBounceBack = [];
                     round.teams.forEach(team => {
@@ -13922,6 +13925,9 @@
                         round.bbbWinners = [];
                         console.log('❌ No eligible BBB winners');
                     }
+                    
+                    // Get all previous rounds in this event for award calculations
+                    const previousRounds = state.rounds.filter(r => r.eventId === state.currentEventId);
                     
                     // Calculate Bounce Back winner (with no-repeat logic)
                     const previousBounceBackWinners = new Set();
@@ -15279,7 +15285,7 @@
                 }, 500);
             } else {
                 const dbType = useFirebase ? '☁️ Firebase' : '💾 LocalStorage';
-                notify(`✅ v9.5 Ready! (${dbType})`);
+                notify(`✅ vApr15 Ready! (${dbType})`);
             }
         });
     </script>
