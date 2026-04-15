@@ -13614,6 +13614,13 @@
                     }
                     
                     // Calculate Bounce Back winner
+                    const previousBounceBackWinners = new Set();
+                    previousRounds.forEach(r => {
+                        if (r.bounceBackWinners && r.bounceBackWinners.length > 0) {
+                            r.bounceBackWinners.forEach(winnerId => previousBounceBackWinners.add(winnerId));
+                        }
+                    });
+                    
                     const eligibleBounceBack = [];
                     round.teams.forEach(team => {
                         team.players.forEach(player => {
@@ -13642,6 +13649,13 @@
                     round.bounceBackWinners = eligibleBounceBack.length > 0 ? [eligibleBounceBack[0].playerId] : [];
                     
                     // Calculate Clutch Player winner
+                    const previousClutchWinners = new Set();
+                    previousRounds.forEach(r => {
+                        if (r.clutchWinners && r.clutchWinners.length > 0) {
+                            r.clutchWinners.forEach(winnerId => previousClutchWinners.add(winnerId));
+                        }
+                    });
+                    
                     const eligibleClutch = [];
                     round.teams.forEach(team => {
                         team.players.forEach(player => {
@@ -13665,6 +13679,13 @@
                     round.clutchWinners = eligibleClutch.length > 0 ? [eligibleClutch[0].playerId] : [];
                     
                     // Calculate Wild Card winner
+                    const previousWildCardWinners = new Set();
+                    previousRounds.forEach(r => {
+                        if (r.wildCardWinners && r.wildCardWinners.length > 0) {
+                            r.wildCardWinners.forEach(winnerId => previousWildCardWinners.add(winnerId));
+                        }
+                    });
+                    
                     const eligibleWildCard = [];
                     round.teams.forEach(team => {
                         team.players.forEach(player => {
@@ -15285,7 +15306,7 @@
                 }, 500);
             } else {
                 const dbType = useFirebase ? '☁️ Firebase' : '💾 LocalStorage';
-                notify(`✅ vApr15.2Ready! (${dbType})`);
+                notify(`✅ vApr15.3 Ready! (${dbType})`);
             }
         });
     </script>
