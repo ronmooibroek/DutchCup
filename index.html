@@ -1151,7 +1151,12 @@
                 
                 const par = pars[i];
                 const holeHandicap = handicaps[i];
-                const strokes = playerHandicap >= holeHandicap ? 1 : 0;
+                
+                // Calculate strokes: 1 stroke if handicap >= hole handicap, 2 strokes if handicap >= hole handicap + 18
+                let strokes = 0;
+                if (playerHandicap >= holeHandicap) strokes = 1;
+                if (playerHandicap >= holeHandicap + 18) strokes = 2;
+                
                 const netScore = score - strokes;
                 const netToPar = netScore - par;
                 
@@ -3731,7 +3736,7 @@
                                 if (score) {
                                     const par = round.pars[holeIdx];
                                     const holeHandicap = round.handicaps[holeIdx];
-                                    const strokes = player.handicap >= holeHandicap ? 1 : 0;
+                                    let strokes = 0; if (player.handicap >= holeHandicap) strokes = 1; if (player.handicap >= holeHandicap + 18) strokes = 2;
                                     const netScore = parseInt(score) - strokes;
                                     const netToPar = netScore - par;
                                     
@@ -6845,8 +6850,8 @@
                                     const currHandicap = r.handicaps[i];
                                     
                                     // Calculate net scores
-                                    const prevNet = prevScore - (player.handicap >= prevHandicap ? 1 : 0);
-                                    const currNet = currScore - (player.handicap >= currHandicap ? 1 : 0);
+                                    let prevStrokes = 0; if (player.handicap >= prevHandicap) prevStrokes = 1; if (player.handicap >= prevHandicap + 18) prevStrokes = 2; const prevNet = prevScore - prevStrokes;
+                                    let currStrokes = 0; if (player.handicap >= currHandicap) currStrokes = 1; if (player.handicap >= currHandicap + 18) currStrokes = 2; const currNet = currScore - currStrokes;
                                     
                                     // Check if previous was bogey+ and current is par or better
                                     if ((prevNet - prevPar >= 1) && (currNet - currPar <= 0)) {
@@ -6882,8 +6887,8 @@
                                 const prevHandicap = mostRecentRound.handicaps[i-1];
                                 const currHandicap = mostRecentRound.handicaps[i];
                                 
-                                const prevNet = prevScore - (player.handicap >= prevHandicap ? 1 : 0);
-                                const currNet = currScore - (player.handicap >= currHandicap ? 1 : 0);
+                                let prevStrokes = 0; if (player.handicap >= prevHandicap) prevStrokes = 1; if (player.handicap >= prevHandicap + 18) prevStrokes = 2; const prevNet = prevScore - prevStrokes;
+                                let currStrokes = 0; if (player.handicap >= currHandicap) currStrokes = 1; if (player.handicap >= currHandicap + 18) currStrokes = 2; const currNet = currScore - currStrokes;
                                 
                                 if ((prevNet - prevPar >= 1) && (currNet - currPar <= 0)) {
                                     bounceBackCount++;
@@ -6923,7 +6928,10 @@
                                     const score = parseInt(player.scores[i]);
                                     const par = r.pars[i];
                                     const handicap = r.handicaps[i];
-                                    const netScore = score - (player.handicap >= handicap ? 1 : 0);
+                                    let strokes = 0;
+                                    if (player.handicap >= handicap) strokes = 1;
+                                    if (player.handicap >= handicap + 18) strokes = 2;
+                                    const netScore = score - strokes;
                                     clutchNet += (netScore - par);
                                 }
                                 if (!previousClutchWinners.has(player.id)) {
@@ -6952,7 +6960,10 @@
                                 const score = parseInt(player.scores[i]);
                                 const par = mostRecentRound.pars[i];
                                 const handicap = mostRecentRound.handicaps[i];
-                                const netScore = score - (player.handicap >= handicap ? 1 : 0);
+                                let strokes = 0;
+                                if (player.handicap >= handicap) strokes = 1;
+                                if (player.handicap >= handicap + 18) strokes = 2;
+                                const netScore = score - strokes;
                                 clutchNet += (netScore - par);
                                 clutchGross += score;
                             }
@@ -7294,7 +7305,7 @@
                                 const gross = player.scores[holeIdx];
                                 const par = mostRecentRound.pars[holeIdx];
                                 const holeHandicap = mostRecentRound.handicaps[holeIdx];
-                                const strokes = player.handicap >= holeHandicap ? 1 : 0;
+                                let strokes = 0; if (player.handicap >= holeHandicap) strokes = 1; if (player.handicap >= holeHandicap + 18) strokes = 2;
                                 const net = gross - strokes;
                                 
                                 totalNet += net;
@@ -7380,7 +7391,7 @@
                                 if (score && mostRecentRound.pars[holeIdx]) {
                                     const par = mostRecentRound.pars[holeIdx];
                                     const holeHandicap = mostRecentRound.handicaps[holeIdx];
-                                    const strokes = player.handicap >= holeHandicap ? 1 : 0;
+                                    let strokes = 0; if (player.handicap >= holeHandicap) strokes = 1; if (player.handicap >= holeHandicap + 18) strokes = 2;
                                     const net = score - strokes;
                                     const toPar = net - par;
                                     
@@ -7503,7 +7514,7 @@
                                 if (score && mostRecentRound.pars[idx]) {
                                     const par = mostRecentRound.pars[idx];
                                     const holeHandicap = mostRecentRound.handicaps[idx];
-                                    const strokes = player.handicap >= holeHandicap ? 1 : 0;
+                                    let strokes = 0; if (player.handicap >= holeHandicap) strokes = 1; if (player.handicap >= holeHandicap + 18) strokes = 2;
                                     const net = score - strokes;
                                     scores.push(net - par);
                                 }
@@ -7551,7 +7562,7 @@
                                 if (score && mostRecentRound.pars[idx]) {
                                     const par = mostRecentRound.pars[idx];
                                     const holeHandicap = mostRecentRound.handicaps[idx];
-                                    const strokes = player.handicap >= holeHandicap ? 1 : 0;
+                                    let strokes = 0; if (player.handicap >= holeHandicap) strokes = 1; if (player.handicap >= holeHandicap + 18) strokes = 2;
                                     const net = score - strokes;
                                     scores.push(net - par);
                                 }
@@ -7601,7 +7612,7 @@
                                 if (score && mostRecentRound.pars[idx]) {
                                     const par = mostRecentRound.pars[idx];
                                     const holeHandicap = mostRecentRound.handicaps[idx];
-                                    const strokes = player.handicap >= holeHandicap ? 1 : 0;
+                                    let strokes = 0; if (player.handicap >= holeHandicap) strokes = 1; if (player.handicap >= holeHandicap + 18) strokes = 2;
                                     const net = score - strokes;
                                     
                                     if (net <= par) { // Par or better
@@ -7651,7 +7662,7 @@
                                 if (score && mostRecentRound.pars[idx]) {
                                     const par = mostRecentRound.pars[idx];
                                     const holeHandicap = mostRecentRound.handicaps[idx];
-                                    const strokes = player.handicap >= holeHandicap ? 1 : 0;
+                                    let strokes = 0; if (player.handicap >= holeHandicap) strokes = 1; if (player.handicap >= holeHandicap + 18) strokes = 2;
                                     const net = score - strokes;
                                     
                                     // Count bogeys or worse (net score > par)
@@ -7757,7 +7768,7 @@
                                     if (score) {
                                         const par = mostRecentRound.pars[holeIdx];
                                         const holeHandicap = mostRecentRound.handicaps[holeIdx];
-                                        const strokes = player.handicap >= holeHandicap ? 1 : 0;
+                                        let strokes = 0; if (player.handicap >= holeHandicap) strokes = 1; if (player.handicap >= holeHandicap + 18) strokes = 2;
                                         const net = score - strokes;
                                         
                                         par3NetTotal += net;
@@ -7915,7 +7926,7 @@
                                 if (score && mostRecentRound.pars[idx]) {
                                     const par = mostRecentRound.pars[idx];
                                     const holeHandicap = mostRecentRound.handicaps[idx];
-                                    const strokes = player.handicap >= holeHandicap ? 1 : 0;
+                                    let strokes = 0; if (player.handicap >= holeHandicap) strokes = 1; if (player.handicap >= holeHandicap + 18) strokes = 2;
                                     const net = score - strokes;
                                     if (net < par) birdieCount++;
                                 }
@@ -8116,7 +8127,7 @@
                                 player.scores.forEach((score, holeIdx) => {
                                     if (score && round.handicaps[holeIdx]) {
                                         const holeHandicap = round.handicaps[holeIdx];
-                                        const strokes = player.handicap >= holeHandicap ? 1 : 0;
+                                        let strokes = 0; if (player.handicap >= holeHandicap) strokes = 1; if (player.handicap >= holeHandicap + 18) strokes = 2;
                                         netScore -= strokes;
                                     }
                                 });
@@ -8158,7 +8169,7 @@
                                 player.scores.forEach((score, holeIdx) => {
                                     if (score && mostRecentRound.handicaps[holeIdx]) {
                                         const holeHandicap = mostRecentRound.handicaps[holeIdx];
-                                        const strokes = player.handicap >= holeHandicap ? 1 : 0;
+                                        let strokes = 0; if (player.handicap >= holeHandicap) strokes = 1; if (player.handicap >= holeHandicap + 18) strokes = 2;
                                         netScore -= strokes;
                                     }
                                 });
@@ -12008,7 +12019,7 @@
                     const player = state.activeRound.teams[teamIdx].players[playerIdx];
                     const par = state.activeRound.pars[holeIdx];
                     const holeHandicap = state.activeRound.handicaps[holeIdx];
-                    const strokes = player.handicap >= holeHandicap ? 1 : 0;
+                    let strokes = 0; if (player.handicap >= holeHandicap) strokes = 1; if (player.handicap >= holeHandicap + 18) strokes = 2;
                     const netScore = parseInt(value) - strokes;
                     const netToPar = netScore - par;
                     
@@ -13592,8 +13603,8 @@
                                     const currPar = round.pars[i];
                                     const prevHandicap = round.handicaps[i-1];
                                     const currHandicap = round.handicaps[i];
-                                    const prevNet = prevScore - (player.handicap >= prevHandicap ? 1 : 0);
-                                    const currNet = currScore - (player.handicap >= currHandicap ? 1 : 0);
+                                    let prevStrokes = 0; if (player.handicap >= prevHandicap) prevStrokes = 1; if (player.handicap >= prevHandicap + 18) prevStrokes = 2; const prevNet = prevScore - prevStrokes;
+                                    let currStrokes = 0; if (player.handicap >= currHandicap) currStrokes = 1; if (player.handicap >= currHandicap + 18) currStrokes = 2; const currNet = currScore - currStrokes;
                                     if ((prevNet - prevPar >= 1) && (currNet - currPar <= 0)) {
                                         bounceBackCount++;
                                     }
@@ -13617,7 +13628,10 @@
                                     const score = parseInt(player.scores[i]);
                                     const par = round.pars[i];
                                     const handicap = round.handicaps[i];
-                                    const netScore = score - (player.handicap >= handicap ? 1 : 0);
+                                    let strokes = 0;
+                                    if (player.handicap >= handicap) strokes = 1;
+                                    if (player.handicap >= handicap + 18) strokes = 2;
+                                    const netScore = score - strokes;
                                     clutchNet += (netScore - par);
                                 }
                                 eligibleClutch.push({ playerId: player.id, playerName: player.name, score: clutchNet });
@@ -13908,8 +13922,8 @@
                                     const currPar = round.pars[i];
                                     const prevHandicap = round.handicaps[i-1];
                                     const currHandicap = round.handicaps[i];
-                                    const prevNet = prevScore - (player.handicap >= prevHandicap ? 1 : 0);
-                                    const currNet = currScore - (player.handicap >= currHandicap ? 1 : 0);
+                                    let prevStrokes = 0; if (player.handicap >= prevHandicap) prevStrokes = 1; if (player.handicap >= prevHandicap + 18) prevStrokes = 2; const prevNet = prevScore - prevStrokes;
+                                    let currStrokes = 0; if (player.handicap >= currHandicap) currStrokes = 1; if (player.handicap >= currHandicap + 18) currStrokes = 2; const currNet = currScore - currStrokes;
                                     if ((prevNet - prevPar >= 1) && (currNet - currPar <= 0)) {
                                         bounceBackCount++;
                                     }
@@ -13939,7 +13953,10 @@
                                     const score = parseInt(player.scores[i]);
                                     const par = round.pars[i];
                                     const handicap = round.handicaps[i];
-                                    const netScore = score - (player.handicap >= handicap ? 1 : 0);
+                                    let strokes = 0;
+                                    if (player.handicap >= handicap) strokes = 1;
+                                    if (player.handicap >= handicap + 18) strokes = 2;
+                                    const netScore = score - strokes;
                                     clutchNet += (netScore - par);
                                 }
                                 eligibleClutch.push({ playerId: player.id, score: clutchNet });
