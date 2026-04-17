@@ -2612,6 +2612,11 @@
                                         <small style="display:block;color:#6b7280;">Team: ${teamName} • Handicap: ${player.handicap} • Gross: ${grossTotal}${holesPlayed < 18 ? ` (${holesPlayed} holes)` : ''}</small>
                                     </div>
                                     <div style="text-align:right;display:flex;align-items:center;gap:8px;">
+                                        <button onclick="autoFillFromAverage(${teamIdx}, ${playerIdx})" 
+                                                style="background:#10b981;color:white;border:none;padding:6px 12px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;"
+                                                title="Auto-fill scores based on event averages">
+                                            📊 Auto-fill
+                                        </button>
                                         <button onclick="recalculateScore(${teamIdx}, ${playerIdx})" 
                                                 style="background:#3b82f6;color:white;border:none;padding:6px 12px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;">
                                             🔄 Recalc
@@ -3665,10 +3670,14 @@
                     round.teams.forEach(team => {
                         team.players.forEach(player => {
                             if (!playerStats[player.id]) {
+                                // Look up current handicap from state.players
+                                const statePlayer = state.players.find(p => p.id === player.id);
+                                const currentHandicap = statePlayer ? statePlayer.handicap : (player.handicap || 0);
+                                
                                 playerStats[player.id] = {
                                     id: player.id,
                                     name: player.name,
-                                    handicap: player.handicap,
+                                    handicap: currentHandicap,  // Use current handicap, not historic
                                     rounds: 0,
                                     totalStrokePoints: 0,
                                     totalBBBPoints: 0,
@@ -3826,11 +3835,20 @@
                             return `
                             <div class="list-item" style="background:${teamColor}20;border-left:4px solid ${teamColor};margin-bottom:16px;display:block;">
                                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-                                    <div>
+                                    <div style="flex:1;">
                                         <strong style="font-size:20px;">#${idx + 1} ${player.name}</strong>${playerTeam ? ` <span style="color:${teamColor};font-size:14px;">• ${playerTeam.name}</span>` : ''}<br>
-                                        <small>Handicap: ${player.handicap} • ${player.rounds} round${player.rounds === 1 ? '' : 's'} • ${player.avgPoints.toFixed(1)} avg pts • ${player.totalGrossStrokes} gross strokes</small>
+                                        <small style="color:#6b7280;">${player.rounds} round${player.rounds === 1 ? '' : 's'} • ${player.avgPoints.toFixed(1)} avg pts • ${player.totalGrossStrokes} gross strokes</small>
                                     </div>
-                                    <strong style="font-size:28px;color:white;background:${teamColor};padding:6px 12px;border-radius:6px;">${player.totalPoints}</strong>
+                                    <div style="display:flex;align-items:center;gap:12px;">
+                                        <div onclick="showHandicapModal('${player.id}')" 
+                                             style="cursor:pointer;background:${teamColor};color:white;padding:8px 14px;border-radius:8px;text-align:center;min-width:70px;box-shadow:0 2px 8px rgba(0,0,0,0.2);transition:transform 0.2s,box-shadow 0.2s;"
+                                             onmouseover="this.style.transform='scale(1.05)';this.style.boxShadow='0 4px 12px rgba(0,0,0,0.3)'"
+                                             onmouseout="this.style.transform='scale(1)';this.style.boxShadow='0 2px 8px rgba(0,0,0,0.2)'">
+                                            <div style="font-size:10px;opacity:0.9;font-weight:600;margin-bottom:2px;">HCP</div>
+                                            <div style="font-size:24px;font-weight:700;line-height:1;">${player.handicap}</div>
+                                        </div>
+                                        <strong style="font-size:28px;color:white;background:${teamColor};padding:6px 12px;border-radius:6px;">${player.totalPoints}</strong>
+                                    </div>
                                 </div>
                                 
                                 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(95px,1fr));gap:8px;">
@@ -5782,8 +5800,14 @@
                             if (!groupsMap[player.groupNumber]) {
                                 groupsMap[player.groupNumber] = [];
                             }
+                            
+                            // Look up current handicap from state.players
+                            const statePlayer = state.players.find(p => p.id === player.id);
+                            const currentHandicap = statePlayer ? statePlayer.handicap : (player.handicap || 0);
+                            
                             groupsMap[player.groupNumber].push({
                                 ...player,
+                                handicap: currentHandicap,  // Use current handicap, not historic
                                 teamName: teamName,
                                 teamColor: teamColor
                             });
@@ -5844,6 +5868,300 @@
             } catch (err) {
                 console.error('View scheduled groups error:', err);
                 showError('Failed to view groups: ' + err.message);
+            }
+        };
+
+        window.showHandicapModal = (playerId) => {
+            try {
+                // Parse playerId to number (handles both string and number inputs)
+                const playerIdNum = typeof playerId === 'string' ? parseInt(playerId) : playerId;
+                
+                // Find player in state
+                const player = state.players.find(p => p.id === playerIdNum);
+                if (!player) {
+                    showError('Player not found!');
+                    return;
+                }
+                
+                // Get ALL rounds for this player across ALL events (not just current event)
+                const allRounds = state.rounds.filter(r => r.active !== false);
+                
+                // Find player's team for color
+                const playerTeam = state.teams.find(t => t.players && t.players.includes(player.id));
+                const teamColor = playerTeam ? playerTeam.color : '#3b82f6';
+                
+                // Collect all scores from event rounds
+                const allScores = [];
+                const seenRounds = new Set(); // Track unique rounds to avoid duplicates
+                
+                // Add scores from event rounds
+                allRounds.forEach((round, roundIdx) => {
+                    round.teams.forEach(team => {
+                        const playerInRound = team.players.find(p => p.id === playerIdNum);
+                        if (playerInRound && playerInRound.scores) {
+                            // Parse scores as numbers to avoid string concatenation
+                            const total = playerInRound.scores.reduce((sum, score) => sum + parseInt(score || 0, 10), 0);
+                            const par = round.pars.reduce((sum, p) => sum + parseInt(p, 10), 0);
+                            const differential = total - par;
+                            
+                            // Create unique key to detect duplicates
+                            const timestamp = round.timestamp || round.id;
+                            const roundKey = `${timestamp}-${round.courseName}-${total}`;
+                            
+                            if (!seenRounds.has(roundKey)) {
+                                seenRounds.add(roundKey);
+                                allScores.push({
+                                    courseName: round.courseName,
+                                    date: round.date,
+                                    total: total,
+                                    par: par,
+                                    differential: differential,
+                                    timestamp: timestamp
+                                });
+                            }
+                        }
+                    });
+                });
+                
+                // Add historic scores (entered before event system)
+                if (player.historicScores && player.historicScores.length > 0) {
+                    player.historicScores.forEach(hs => {
+                        const course = state.courses.find(c => c.id === hs.courseId);
+                        const courseName = course ? course.name : 'Generic';
+                        const par = course ? course.pars.reduce((sum, p) => sum + parseInt(p, 10), 0) : 72;
+                        const differential = hs.grossScore - par;
+                        
+                        // Create unique key to detect duplicates
+                        const timestamp = hs.date || 0;
+                        const roundKey = `${timestamp}-${courseName}-${hs.grossScore}`;
+                        
+                        if (!seenRounds.has(roundKey)) {
+                            seenRounds.add(roundKey);
+                            allScores.push({
+                                courseName: courseName,
+                                date: new Date(hs.date).toLocaleDateString('en-US', {month: 'numeric', day: 'numeric', year: 'numeric'}),
+                                total: hs.grossScore,
+                                par: par,
+                                differential: differential,
+                                timestamp: timestamp
+                            });
+                        }
+                    });
+                }
+                
+                // Sort by timestamp (most recent first)
+                allScores.sort((a, b) => b.timestamp - a.timestamp);
+                
+                // Get last 30 scores
+                const last30 = allScores.slice(0, 30);
+                
+                // Get last 20 scores for calculation
+                const last20 = allScores.slice(0, 20);
+                
+                // Calculate handicap: AVERAGE of last 20 rounds × 0.8
+                const avgLast20 = last20.length > 0 
+                    ? last20.reduce((sum, s) => sum + s.differential, 0) / last20.length 
+                    : 0;
+                
+                const calculatedHandicap = Math.max(0, Math.round(avgLast20 * 0.8));
+                
+                // Create modal HTML
+                let modalHTML = `
+                    <div style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;" onclick="this.remove()">
+                        <div class="card" style="max-width:600px;width:100%;max-height:80vh;overflow-y:auto;background:white;" onclick="event.stopPropagation()">
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                                <div>
+                                    <h2 style="margin:0 0 4px;">📊 Handicap Breakdown</h2>
+                                    <div style="font-size:18px;font-weight:600;color:${teamColor};">${player.name}</div>
+                                </div>
+                                <button onclick="this.closest('div[style*=fixed]').remove()" 
+                                        style="background:#ef4444;color:white;border:none;padding:8px 12px;border-radius:8px;cursor:pointer;font-weight:600;">
+                                    ✕ Close
+                                </button>
+                            </div>
+                            
+                            <div style="background:${teamColor}20;border:2px solid ${teamColor};border-radius:12px;padding:16px;margin-bottom:20px;">
+                                <div style="text-align:center;">
+                                    <div style="font-size:14px;color:#6b7280;margin-bottom:4px;font-weight:600;">Current Handicap</div>
+                                    <div style="font-size:48px;font-weight:700;color:${teamColor};line-height:1;">${player.handicap}</div>
+                                </div>
+                                
+                                ${last20.length > 0 ? `
+                                    <div style="border-top:2px solid ${teamColor}40;margin-top:12px;padding-top:12px;">
+                                        <div style="font-size:12px;color:#6b7280;margin-bottom:8px;font-weight:600;">Calculation Method:</div>
+                                        <div style="font-size:13px;color:#374151;line-height:1.6;">
+                                            Average of last ${last20.length} round${last20.length === 1 ? '' : 's'} × 0.8:<br>
+                                            <strong style="color:${teamColor};">${last20.map(s => s.differential >= 0 ? '+' + s.differential : s.differential).join(', ')}</strong><br>
+                                            Average: <strong style="color:${teamColor};">${avgLast20 >= 0 ? '+' : ''}${avgLast20.toFixed(1)}</strong> × 0.8 = <strong style="color:${teamColor};">${(avgLast20 * 0.8).toFixed(1)}</strong> → Rounded to <strong style="color:${teamColor};">${calculatedHandicap}</strong>
+                                        </div>
+                                    </div>
+                                ` : `
+                                    <div style="border-top:2px solid ${teamColor}40;margin-top:12px;padding-top:12px;">
+                                        <div style="font-size:13px;color:#6b7280;">
+                                            No rounds played yet
+                                        </div>
+                                    </div>
+                                `}
+                            </div>
+                            
+                            <h3 style="margin:0 0 12px;color:#1f2937;font-size:16px;">
+                                Last ${last30.length} Round${last30.length === 1 ? '' : 's'}
+                            </h3>
+                            
+                            <div style="display:flex;flex-direction:column;gap:8px;">
+                                ${last30.map((score, idx) => {
+                                    const isInLast20 = idx < 20;
+                                    
+                                    const bgColor = isInLast20 ? `${teamColor}20` : '#f3f4f6';
+                                    const borderColor = isInLast20 ? teamColor : '#e5e7eb';
+                                    const opacity = isInLast20 ? '1' : '0.5';
+                                    const borderWidth = isInLast20 ? '2px' : '2px';
+                                    const fontColor = isInLast20 ? teamColor : '#6b7280';
+                                    
+                                    return `
+                                        <div style="background:${bgColor};border:${borderWidth} solid ${borderColor};border-radius:8px;padding:10px;opacity:${opacity};display:flex;justify-content:space-between;align-items:center;">
+                                            <div style="flex:1;">
+                                                <div style="font-weight:600;font-size:14px;color:#1f2937;margin-bottom:2px;">
+                                                    ${score.courseName}
+                                                </div>
+                                                <div style="font-size:12px;color:#6b7280;">${score.date}</div>
+                                            </div>
+                                            <div style="text-align:right;">
+                                                <div style="font-size:20px;font-weight:700;color:${fontColor};">
+                                                    ${score.differential >= 0 ? '+' : ''}${score.differential}
+                                                </div>
+                                                <div style="font-size:11px;color:#6b7280;">${score.total} (Par ${score.par})</div>
+                                            </div>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                            
+                            <div style="background:#f9fafb;border:2px solid #e5e7eb;border-radius:8px;padding:12px;margin-top:16px;">
+                                <div style="font-size:12px;color:#6b7280;line-height:1.6;">
+                                    <strong style="color:#1f2937;">Legend:</strong><br>
+                                    Highlighted (team color) = Last 20 rounds (used in calculation)<br>
+                                    Greyed out = Rounds 21-30 (not used in calculation)<br>
+                                    Differential = Your score minus par
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                // Add to page
+                document.body.insertAdjacentHTML('beforeend', modalHTML);
+                
+            } catch (err) {
+                console.error('Show handicap modal error:', err);
+                showError('Failed to show handicap details: ' + err.message);
+            }
+        };
+
+        // Utility: Analyze player scores per hole
+        window.analyzePlayerScores = (playerNames, courseNameFilter, maxRounds = 6) => {
+            try {
+                const currentEvent = state.events.find(e => e.id === state.currentEventId);
+                if (!currentEvent) {
+                    console.log('No current event selected');
+                    return;
+                }
+                
+                // Get event rounds (completed only)
+                const eventRounds = state.rounds
+                    .filter(r => r.eventId === state.currentEventId && r.active !== false)
+                    .sort((a, b) => (a.timestamp || a.id) - (b.timestamp || b.id))
+                    .slice(0, maxRounds);
+                
+                console.log(`\n${'='.repeat(80)}`);
+                console.log(`Analysis: Average Score Per Hole`);
+                console.log(`Event: ${currentEvent.name}`);
+                console.log(`Course Filter: ${courseNameFilter || 'All courses'}`);
+                console.log(`Rounds: First ${maxRounds} rounds`);
+                console.log(`Players: ${playerNames.join(', ')}`);
+                console.log(`${'='.repeat(80)}\n`);
+                
+                const results = {};
+                
+                playerNames.forEach(playerName => {
+                    const playerScores = [];
+                    let totalHoles = 0;
+                    let totalScore = 0;
+                    const holeScores = {}; // Track scores per hole number
+                    
+                    eventRounds.forEach(round => {
+                        // Skip if course filter doesn't match
+                        if (courseNameFilter && !round.courseName.toLowerCase().includes(courseNameFilter.toLowerCase())) {
+                            return;
+                        }
+                        
+                        round.teams.forEach(team => {
+                            const player = team.players.find(p => p.name.toLowerCase().includes(playerName.toLowerCase()));
+                            if (player && player.scores) {
+                                player.scores.forEach((score, holeIdx) => {
+                                    const parsedScore = parseInt(score || 0, 10);
+                                    if (parsedScore > 0) {
+                                        totalScore += parsedScore;
+                                        totalHoles++;
+                                        
+                                        // Track per hole
+                                        const holeNum = holeIdx + 1;
+                                        if (!holeScores[holeNum]) {
+                                            holeScores[holeNum] = { total: 0, count: 0 };
+                                        }
+                                        holeScores[holeNum].total += parsedScore;
+                                        holeScores[holeNum].count += 1;
+                                        
+                                        playerScores.push({
+                                            course: round.courseName,
+                                            date: round.date,
+                                            hole: holeNum,
+                                            score: parsedScore,
+                                            par: round.pars[holeIdx]
+                                        });
+                                    }
+                                });
+                            }
+                        });
+                    });
+                    
+                    if (totalHoles > 0) {
+                        const avgPerHole = totalScore / totalHoles;
+                        
+                        results[playerName] = {
+                            totalHoles: totalHoles,
+                            totalScore: totalScore,
+                            avgPerHole: avgPerHole,
+                            holeAverages: holeScores,
+                            rounds: playerScores
+                        };
+                        
+                        console.log(`${playerName}:`);
+                        console.log(`  Total Holes: ${totalHoles}`);
+                        console.log(`  Total Score: ${totalScore}`);
+                        console.log(`  Average per Hole: ${avgPerHole.toFixed(2)}`);
+                        console.log(`  Rounds Analyzed: ${playerScores.length / 18} (${playerScores.length} holes)`);
+                        
+                        // Show per-hole averages
+                        console.log(`\n  Per-Hole Averages:`);
+                        for (let hole = 1; hole <= 18; hole++) {
+                            if (holeScores[hole]) {
+                                const avg = holeScores[hole].total / holeScores[hole].count;
+                                console.log(`    Hole ${hole.toString().padStart(2)}: ${avg.toFixed(2)} (${holeScores[hole].count} times played)`);
+                            }
+                        }
+                        console.log('');
+                    } else {
+                        console.log(`${playerName}: No scores found\n`);
+                    }
+                });
+                
+                console.log(`${'='.repeat(80)}\n`);
+                return results;
+                
+            } catch (err) {
+                console.error('Analysis error:', err);
+                return null;
             }
         };
 
@@ -7083,6 +7401,75 @@
                     });
                 }
                 
+                // 4. CTP CHAMPION (Event-Wide Most CTPs - Display All Players)
+                const todaysCTPCounts = [];
+                const playerEventCTPCounts = new Map();
+                
+                // Sum CTPs across ALL rounds in event for each player
+                eventRounds.forEach(round => {
+                    if (round.ctpWinners && round.ctpWinners.length > 0) {
+                        round.ctpWinners.forEach(winnerPosition => {
+                            const [teamIdx, playerIdx] = winnerPosition.split('-').map(Number);
+                            const team = round.teams[teamIdx];
+                            const player = team ? team.players[playerIdx] : null;
+                            if (player) {
+                                playerEventCTPCounts.set(player.id, (playerEventCTPCounts.get(player.id) || 0) + 1);
+                            }
+                        });
+                    }
+                });
+                
+                // Build array of ALL players (no exclusions for display)
+                playerEventCTPCounts.forEach((ctpCount, playerId) => {
+                    const statePlayer = state.players.find(p => p.id === playerId);
+                    if (statePlayer) {
+                        const playerTeam = state.teams.find(t => t.players.some(p => p.id === playerId));
+                        todaysCTPCounts.push({
+                            playerId: playerId,
+                            playerName: statePlayer.name,
+                            teamName: playerTeam ? playerTeam.name : 'Unknown',
+                            teamColor: playerTeam ? playerTeam.color : '#3b82f6',
+                            ctpCount: ctpCount
+                        });
+                    }
+                });
+                
+                // Sort by CTP count (most CTPs)
+                todaysCTPCounts.sort((a, b) => b.ctpCount - a.ctpCount);
+                
+                // Get leader/winner (most CTPs, must have at least 1)
+                const ctpChampion = todaysCTPCounts.length > 0 && todaysCTPCounts[0].ctpCount > 0 ? todaysCTPCounts[0] : null;
+                
+                // Get top 3 for display
+                const ctpChampionTop3 = [];
+                if (todaysCTPCounts.length > 0 && todaysCTPCounts[0].ctpCount > 0) {
+                    let currentPlace = 1;
+                    let previousCount = null;
+                    let playersAtCurrentPlace = 0;
+                    
+                    for (let i = 0; i < todaysCTPCounts.length && ctpChampionTop3.length < 10; i++) {
+                        const player = todaysCTPCounts[i];
+                        
+                        if (player.ctpCount === 0) break;
+                        
+                        if (previousCount !== null && player.ctpCount !== previousCount) {
+                            currentPlace += playersAtCurrentPlace;
+                            playersAtCurrentPlace = 0;
+                        }
+                        
+                        if (currentPlace <= 3) {
+                            ctpChampionTop3.push({
+                                ...player,
+                                place: currentPlace
+                            });
+                            playersAtCurrentPlace++;
+                            previousCount = player.ctpCount;
+                        } else {
+                            break;
+                        }
+                    }
+                }
+                
                 // ═══════════════════════════════════════════════════════════
                 // ENHANCED PRESENTATION ANALYTICS ENGINE
                 // ═══════════════════════════════════════════════════════════
@@ -8087,6 +8474,52 @@
                 
                 presentationAnalytics.bbbLeaderboard = bbbPlayers;
                 
+                // 13. CTP LEADERBOARD - Total CTPs across ALL rounds
+                presentationAnalytics.ctpLeaderboard = [];
+                
+                // Aggregate CTP counts across all rounds
+                const playerCTPTotals = new Map(); // playerId -> {name, teamName, teamColor, ctpCount}
+                
+                state.rounds.forEach(round => {
+                    if (round.ctpWinners && round.ctpWinners.length > 0) {
+                        round.ctpWinners.forEach(winnerPosition => {
+                            // Parse position "teamIndex-playerIndex"
+                            const [teamIdx, playerIdx] = winnerPosition.split('-').map(Number);
+                            const team = round.teams[teamIdx];
+                            const player = team ? team.players[playerIdx] : null;
+                            
+                            if (player) {
+                                const stateTeam = state.teams.find(t => t.id === team.teamId);
+                                const existingPlayer = playerCTPTotals.get(player.id);
+                                if (existingPlayer) {
+                                    // Add to existing total
+                                    existingPlayer.ctpCount += 1;
+                                } else {
+                                    // Create new entry
+                                    playerCTPTotals.set(player.id, {
+                                        playerId: player.id,
+                                        name: player.name,
+                                        teamName: stateTeam ? stateTeam.name : team.teamName,
+                                        teamColor: stateTeam ? stateTeam.color : '#3b82f6',
+                                        ctpCount: 1
+                                    });
+                                }
+                            }
+                        });
+                    }
+                });
+                
+                // Convert map to array and calculate points
+                const ctpPlayers = Array.from(playerCTPTotals.values()).map(player => ({
+                    ...player,
+                    ctpPoints: player.ctpCount * state.settings.ctpPoints
+                }));
+                
+                // Sort by CTP count (descending)
+                ctpPlayers.sort((a, b) => b.ctpCount - a.ctpCount);
+                
+                presentationAnalytics.ctpLeaderboard = ctpPlayers;
+                
                 // ═══════════════════════════════════════════════════════════
                 // END ENHANCED ANALYTICS ENGINE
                 // ═══════════════════════════════════════════════════════════
@@ -8342,6 +8775,7 @@
                 totalSlides += individualPlayerSlides.length; // One slide per player
                 const hasNetSlide = hasScheduledRounds && netWinner !== null;
                 const hasBBBSlide = hasScheduledRounds && bbbWinner !== null;
+                const hasCTPChampionSlide = hasScheduledRounds && ctpChampion !== null;
                 const hasBounceBackSlide = hasScheduledRounds && bounceBackWinner !== null;
                 const hasClutchSlide = hasScheduledRounds && clutchWinner !== null;
                 const hasWildCardSlide = hasScheduledRounds && wildCardWinner !== null;
@@ -8350,7 +8784,7 @@
                 const hasNextRoundSlide = nextRound !== null;
                 
                 // New enhanced slides
-                const hasStorySlide = presentationAnalytics.stories.length > 0;
+                const hasStorySlide = false; // DISABLED - Story of the Day
                 const hasBiggestMomentsSlide = presentationAnalytics.biggestMoments.length > 0;
                 const hasBeatComparisonSlide = presentationAnalytics.beatComparison.playersBeatTarget.length > 0;
                 const hasGuessWhoSlide = false; // DISABLED - Stats quiz
@@ -8374,6 +8808,7 @@
                 if (hasPhotosSlide) totalSlides++;
                 if (hasNetSlide) totalSlides++;
                 if (hasBBBSlide) totalSlides++;
+                if (hasCTPChampionSlide) totalSlides++;
                 if (hasBounceBackSlide) totalSlides++;
                 if (hasClutchSlide) totalSlides++;
                 if (hasWildCardSlide) totalSlides++;
@@ -8410,6 +8845,8 @@
                     bbbWinner: bbbWinner,
                     bbbTop3: bbbTop3,
                     previousBBBWinners: previousBBBWinnersInfo,
+                    ctpChampion: ctpChampion,
+                    ctpChampionTop3: ctpChampionTop3,
                     bounceBackWinner: bounceBackWinner,
                     bounceBackTop3: bounceBackTop3,
                     previousBounceBackWinners: previousBounceBackWinners,
@@ -8423,6 +8860,7 @@
                     ctpWinners: ctpWinners,
                     hasNetSlide: hasNetSlide,
                     hasBBBSlide: hasBBBSlide,
+                    hasCTPChampionSlide: hasCTPChampionSlide,
                     hasBounceBackSlide: hasBounceBackSlide,
                     hasClutchSlide: hasClutchSlide,
                     hasWildCardSlide: hasWildCardSlide,
@@ -8507,11 +8945,12 @@
                     teamStandings, previousStandings, todaysScores, hasScheduledRounds, scheduledRoundsCount,
                     eventName, totalRounds, mostRecentRound,
                     netWinner, netTop3, previousNetWinners, bbbWinner, bbbTop3, previousBBBWinners, 
+                    ctpChampion, ctpChampionTop3,
                     bounceBackWinner, bounceBackTop3, previousBounceBackWinners,
                     clutchWinner, clutchTop3, previousClutchWinners,
                     wildCardWinner, wildCardTop3, previousWildCardWinners,
                     extra9Winners, ctpWinners,
-                    hasNetSlide, hasBBBSlide, hasBounceBackSlide, hasClutchSlide, hasWildCardSlide, hasExtra9Slide, hasCtpSlide,
+                    hasNetSlide, hasBBBSlide, hasCTPChampionSlide, hasBounceBackSlide, hasClutchSlide, hasWildCardSlide, hasExtra9Slide, hasCtpSlide,
                     top3EventNetScores, hasEventNetSlide,
                     handicapChanges, hasHandicapSlide,
                     weeklyAchievements, hasWeeklyAchievementsSlide,
@@ -8539,6 +8978,7 @@
             const photosSlideIndex = hasPhotosSlide ? slideIndex++ : -1;
             const netSlideIndex = hasNetSlide ? slideIndex++ : -1;
             const bbbSlideIndex = hasBBBSlide ? slideIndex++ : -1;
+            const ctpChampionSlideIndex = hasCTPChampionSlide ? slideIndex++ : -1;
             const bounceBackSlideIndex = hasBounceBackSlide ? slideIndex++ : -1;
             const clutchSlideIndex = hasClutchSlide ? slideIndex++ : -1;
             const wildCardSlideIndex = hasWildCardSlide ? slideIndex++ : -1;
@@ -8632,6 +9072,50 @@
                                 First round of the event!
                             </p>
                         `}
+                        
+                        <div style="background:rgba(255,255,255,0.05);border:2px solid rgba(255,255,255,0.1);border-radius:16px;padding:24px;margin:30px auto;max-width:700px;">
+                            <h3 style="color:#a5b4fc;font-size:20px;margin:0 0 16px;text-align:center;">
+                                📋 Jump to Section
+                            </h3>
+                            <div style="display:grid;grid-template-columns:repeat(2, 1fr);gap:12px;">
+                                ${hasStorySlide ? `
+                                    <button onclick="presentationState.currentSlide = ${storySlideIndex}; renderPresentation();" 
+                                            style="background:rgba(139,92,246,0.2);border:2px solid rgba(139,92,246,0.4);color:white;padding:12px 16px;border-radius:8px;cursor:pointer;font-size:14px;transition:all 0.3s;text-align:left;">
+                                        📖 Story of the Day
+                                    </button>
+                                ` : ''}
+                                ${individualPlayerSlides.length > 0 ? `
+                                    <button onclick="presentationState.currentSlide = ${individualPlayerSlidesStart}; renderPresentation();" 
+                                            style="background:rgba(59,130,246,0.2);border:2px solid rgba(59,130,246,0.4);color:white;padding:12px 16px;border-radius:8px;cursor:pointer;font-size:14px;transition:all 0.3s;text-align:left;">
+                                        👤 Player Performance
+                                    </button>
+                                ` : ''}
+                                ${hasNetSlide ? `
+                                    <button onclick="presentationState.currentSlide = ${netSlideIndex}; renderPresentation();" 
+                                            style="background:rgba(34,197,94,0.2);border:2px solid rgba(34,197,94,0.4);color:white;padding:12px 16px;border-radius:8px;cursor:pointer;font-size:14px;transition:all 0.3s;text-align:left;">
+                                        ⛳ Awards
+                                    </button>
+                                ` : ''}
+                                ${teamStandings.length > 0 ? `
+                                    <button onclick="presentationState.currentSlide = ${teamSlidesStartIndex}; renderPresentation();" 
+                                            style="background:rgba(245,158,11,0.2);border:2px solid rgba(245,158,11,0.4);color:white;padding:12px 16px;border-radius:8px;cursor:pointer;font-size:14px;transition:all 0.3s;text-align:left;">
+                                        🏆 Team Standings
+                                    </button>
+                                ` : ''}
+                                ${hasHoleAnalysisSlide ? `
+                                    <button onclick="presentationState.currentSlide = ${holeAnalysisSlideIndex}; renderPresentation();" 
+                                            style="background:rgba(236,72,153,0.2);border:2px solid rgba(236,72,153,0.4);color:white;padding:12px 16px;border-radius:8px;cursor:pointer;font-size:14px;transition:all 0.3s;text-align:left;">
+                                        📊 Analytics
+                                    </button>
+                                ` : ''}
+                                ${hasBBBLeaderboardSlide ? `
+                                    <button onclick="presentationState.currentSlide = ${bbbLeaderboardSlideIndex}; renderPresentation();" 
+                                            style="background:rgba(245,158,11,0.2);border:2px solid rgba(245,158,11,0.4);color:white;padding:12px 16px;border-radius:8px;cursor:pointer;font-size:14px;transition:all 0.3s;text-align:left;">
+                                        🎪 BBB Leaderboard
+                                    </button>
+                                ` : ''}
+                            </div>
+                        </div>
                         
                         <button onclick="nextPresentationSlide()" 
                                 class="btn-primary" 
@@ -9758,6 +10242,82 @@
                         <button onclick="nextPresentationSlide()" 
                                 class="btn-primary" 
                                 style="padding:16px 32px;font-size:20px;margin-top:20px;background:linear-gradient(135deg, #f59e0b 0%, #d97706 100%);box-shadow:0 8px 24px rgba(245,158,11,0.4);">
+                            Next Award →
+                        </button>
+                    </div>
+                `;
+            } else if (currentSlide === ctpChampionSlideIndex) {
+                // CTP CHAMPION SLIDE (Event-Wide)
+                const { ctpChampion, ctpChampionTop3 } = presentationState;
+                const ctpTitle = hasScheduledRounds ? 'CTP Leader' : 'CTP Champion';
+                const ctpWinnerLabel = hasScheduledRounds ? 'Leader' : 'Champion';
+                
+                html += `
+                    <div style="animation:slideUp 0.8s ease-out;max-width:800px;width:100%;">
+                        <h1 style="color:white;font-size:36px;margin:0 0 12px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
+                            🎯 ${ctpTitle}
+                        </h1>
+                        <p style="color:#a5b4fc;font-size:16px;margin:0 0 8px;">
+                            ${eventName} - ${totalRounds} Round${totalRounds !== 1 ? 's' : ''}${hasScheduledRounds ? ` (${scheduledRoundsCount} more to play)` : ''}
+                        </p>
+                        <p style="color:#818cf8;font-size:14px;margin:0 0 20px;font-style:italic;">
+                            Most Closest to the Pins across entire event
+                        </p>
+                        
+                        ${ctpChampion ? `
+                            <div style="background:rgba(59,130,246,0.15);border:3px solid rgba(59,130,246,0.4);border-radius:16px;padding:24px;margin-bottom:16px;box-shadow:0 20px 60px rgba(0,0,0,0.4);">
+                                <h2 style="color:#3b82f6;font-size:24px;margin:0 0 16px;">
+                                    🏆 ${ctpWinnerLabel}
+                                </h2>
+                                <div style="background:linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 100%);border-left:6px solid ${ctpChampion.teamColor};border-radius:12px;padding:20px;">
+                                    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;">
+                                        <div style="text-align:left;">
+                                            <div style="font-size:36px;color:white;font-weight:600;margin-bottom:6px;">
+                                                ${ctpChampion.playerName}
+                                            </div>
+                                            <div style="font-size:16px;color:${ctpChampion.teamColor};font-weight:500;">
+                                                ${ctpChampion.teamName}
+                                            </div>
+                                        </div>
+                                        <div style="text-align:right;">
+                                            <div style="font-size:48px;color:#3b82f6;font-weight:700;line-height:1;">
+                                                ${ctpChampion.ctpCount}
+                                            </div>
+                                            <div style="color:#a5b4fc;font-size:12px;margin-top:6px;">
+                                                CTP${ctpChampion.ctpCount !== 1 ? 's' : ''}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div style="background:rgba(255,255,255,0.05);border:2px solid rgba(255,255,255,0.1);border-radius:10px;padding:16px;">
+                                <h3 style="color:#a5b4fc;font-size:16px;margin:0 0 12px;">
+                                    Top 3 Places
+                                </h3>
+                                ${ctpChampionTop3.map((player, idx) => `
+                                    <div style="background:rgba(255,255,255,0.08);border-left:4px solid ${player.teamColor};padding:12px;margin-bottom:8px;border-radius:8px;display:flex;justify-content:space-between;align-items:center;">
+                                        <div style="display:flex;align-items:center;gap:12px;">
+                                            <span style="color:#e0e7ff;font-size:20px;font-weight:600;min-width:32px;">
+                                                ${player.place === 1 ? '🥇' : player.place === 2 ? '🥈' : '🥉'}
+                                            </span>
+                                            <div>
+                                                <div style="color:white;font-size:16px;font-weight:500;">${player.playerName}</div>
+                                                <div style="color:${player.teamColor};font-size:12px;">${player.teamName}</div>
+                                            </div>
+                                        </div>
+                                        <div style="text-align:right;">
+                                            <div style="color:#3b82f6;font-size:22px;font-weight:600;">${player.ctpCount}</div>
+                                            <div style="color:#a5b4fc;font-size:10px;">CTP${player.ctpCount !== 1 ? 's' : ''}</div>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        ` : ''}
+                        
+                        <button onclick="nextPresentationSlide()" 
+                                class="btn-primary" 
+                                style="padding:16px 32px;font-size:20px;margin-top:20px;background:linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);box-shadow:0 8px 24px rgba(59,130,246,0.4);">
                             Next Award →
                         </button>
                     </div>
@@ -12169,6 +12729,122 @@
             }
         };
         
+        window.autoFillFromAverage = (teamIdx, playerIdx) => {
+            try {
+                if (!state.activeRound) {
+                    showError('No active round');
+                    return;
+                }
+                
+                const player = state.activeRound.teams[teamIdx].players[playerIdx];
+                const round = state.activeRound;
+                
+                // Get player's event history (excluding current round if editing)
+                const eventRounds = state.rounds.filter(r => 
+                    r.eventId === state.currentEventId && 
+                    r.active !== false &&
+                    r.id !== round.id  // Exclude current round if editing
+                );
+                
+                if (eventRounds.length === 0) {
+                    notify('⚠️ No previous rounds found. Cannot calculate averages.');
+                    return;
+                }
+                
+                // Calculate per-hole averages
+                const holeStats = {};
+                for (let h = 0; h < 18; h++) {
+                    holeStats[h] = { total: 0, count: 0 };
+                }
+                
+                // Collect scores from previous rounds
+                eventRounds.forEach(r => {
+                    r.teams.forEach(team => {
+                        const p = team.players.find(pl => pl.id === player.id);
+                        if (p && p.scores) {
+                            p.scores.forEach((score, holeIdx) => {
+                                const s = parseInt(score);
+                                if (!isNaN(s) && s > 0) {
+                                    holeStats[holeIdx].total += s;
+                                    holeStats[holeIdx].count += 1;
+                                }
+                            });
+                        }
+                    });
+                });
+                
+                // Calculate averages and fill scores
+                let totalExpected = 0;
+                let adjustmentNeeded = 0;
+                const roundedScores = [];
+                
+                // First pass: calculate raw averages and total
+                for (let h = 0; h < 18; h++) {
+                    if (holeStats[h].count > 0) {
+                        const avg = holeStats[h].total / holeStats[h].count;
+                        const rounded = Math.round(avg);
+                        roundedScores[h] = rounded;
+                        totalExpected += avg;
+                        adjustmentNeeded += (avg - rounded); // Track rounding error
+                    } else {
+                        // No data for this hole - use par
+                        roundedScores[h] = round.pars[h];
+                    }
+                }
+                
+                // Second pass: adjust scores to match expected total
+                // Distribute the rounding error across holes
+                const targetTotal = Math.round(totalExpected);
+                let currentTotal = roundedScores.reduce((sum, s) => sum + s, 0);
+                let diff = targetTotal - currentTotal;
+                
+                // Adjust highest-variance holes first
+                const holesWithData = [];
+                for (let h = 0; h < 18; h++) {
+                    if (holeStats[h].count > 0) {
+                        const avg = holeStats[h].total / holeStats[h].count;
+                        const variance = Math.abs(avg - roundedScores[h]);
+                        holesWithData.push({ hole: h, variance: variance, avg: avg });
+                    }
+                }
+                holesWithData.sort((a, b) => b.variance - a.variance);
+                
+                // Apply adjustments to make total accurate
+                let idx = 0;
+                while (diff !== 0 && idx < holesWithData.length) {
+                    const h = holesWithData[idx].hole;
+                    if (diff > 0) {
+                        roundedScores[h] += 1;
+                        diff -= 1;
+                    } else if (diff < 0) {
+                        if (roundedScores[h] > 1) { // Don't go below 1
+                            roundedScores[h] -= 1;
+                            diff += 1;
+                        }
+                    }
+                    idx += 1;
+                }
+                
+                // Fill the scores
+                player.scores = roundedScores;
+                
+                // Preserve scroll and re-render
+                const scrollX = window.scrollX || window.pageXOffset;
+                const scrollY = window.scrollY || window.pageYOffset;
+                render();
+                setTimeout(() => {
+                    window.scrollTo(scrollX, scrollY);
+                }, 10);
+                
+                const filledHoles = roundedScores.filter((s, i) => holeStats[i].count > 0).length;
+                notify(`📊 Auto-filled ${filledHoles} holes from ${eventRounds.length} previous rounds`);
+                
+            } catch (err) {
+                console.error('Auto-fill error:', err);
+                showError('Failed to auto-fill: ' + err.message);
+            }
+        };
+        
         window.recalculateTeam = (teamIdx) => {
             try {
                 // Preserve scroll position
@@ -13698,6 +14374,37 @@
                     eligibleWildCard.sort((a, b) => b.count - a.count);
                     round.wildCardWinners = eligibleWildCard.length > 0 ? [eligibleWildCard[0].playerId] : [];
                     
+                    // Calculate CTP Champion (event-wide with no-repeat logic)
+                    const previousCTPChampions = new Set();
+                    previousRounds.forEach(r => {
+                        if (r.ctpChampions && r.ctpChampions.length > 0) {
+                            r.ctpChampions.forEach(winnerId => previousCTPChampions.add(winnerId));
+                        }
+                    });
+                    const playerEventCTPCounts = new Map();
+                    const allEventRounds = state.rounds.filter((r, idx) => idx !== round.originalIndex && r.eventId === state.currentEventId);
+                    allEventRounds.push(round); // Include current round
+                    allEventRounds.forEach(r => {
+                        if (r.ctpWinners && r.ctpWinners.length > 0) {
+                            r.ctpWinners.forEach(winnerPosition => {
+                                const [teamIdx, playerIdx] = winnerPosition.split('-').map(Number);
+                                const team = r.teams[teamIdx];
+                                const player = team ? team.players[playerIdx] : null;
+                                if (player) {
+                                    playerEventCTPCounts.set(player.id, (playerEventCTPCounts.get(player.id) || 0) + 1);
+                                }
+                            });
+                        }
+                    });
+                    const eligibleCTPChampions = [];
+                    playerEventCTPCounts.forEach((ctpCount, playerId) => {
+                        if (!previousCTPChampions.has(playerId)) {
+                            eligibleCTPChampions.push({ playerId: playerId, count: ctpCount });
+                        }
+                    });
+                    eligibleCTPChampions.sort((a, b) => b.count - a.count);
+                    round.ctpChampions = eligibleCTPChampions.length > 0 ? [eligibleCTPChampions[0].playerId] : [];
+                    
                     // Set or preserve previousHandicap on each player for handicap changes display
                     const preservedRound = {
                         ...round,
@@ -14031,6 +14738,37 @@
                     });
                     eligibleWildCard.sort((a, b) => b.count - a.count);
                     round.wildCardWinners = eligibleWildCard.length > 0 ? [eligibleWildCard[0].playerId] : [];
+                    
+                    // Calculate CTP Champion (event-wide with no-repeat logic)
+                    const previousCTPChampions = new Set();
+                    previousRounds.forEach(r => {
+                        if (r.ctpChampions && r.ctpChampions.length > 0) {
+                            r.ctpChampions.forEach(winnerId => previousCTPChampions.add(winnerId));
+                        }
+                    });
+                    const playerEventCTPCounts = new Map();
+                    const allEventRounds = state.rounds.filter(r => r.eventId === state.currentEventId);
+                    allEventRounds.push(round); // Include current round
+                    allEventRounds.forEach(r => {
+                        if (r.ctpWinners && r.ctpWinners.length > 0) {
+                            r.ctpWinners.forEach(winnerPosition => {
+                                const [teamIdx, playerIdx] = winnerPosition.split('-').map(Number);
+                                const team = r.teams[teamIdx];
+                                const player = team ? team.players[playerIdx] : null;
+                                if (player) {
+                                    playerEventCTPCounts.set(player.id, (playerEventCTPCounts.get(player.id) || 0) + 1);
+                                }
+                            });
+                        }
+                    });
+                    const eligibleCTPChampions = [];
+                    playerEventCTPCounts.forEach((ctpCount, playerId) => {
+                        if (!previousCTPChampions.has(playerId)) {
+                            eligibleCTPChampions.push({ playerId: playerId, count: ctpCount });
+                        }
+                    });
+                    eligibleCTPChampions.sort((a, b) => b.count - a.count);
+                    round.ctpChampions = eligibleCTPChampions.length > 0 ? [eligibleCTPChampions[0].playerId] : [];
                     
                     // Check if this was a scheduled round that's being completed
                     // If so, preserve its original timestamp instead of creating a new one
@@ -15306,7 +16044,7 @@
                 }, 500);
             } else {
                 const dbType = useFirebase ? '☁️ Firebase' : '💾 LocalStorage';
-                notify(`✅ vApr15.3 Ready! (${dbType})`);
+                notify(`✅ v9.5 Ready! (${dbType})`);
             }
         });
     </script>
