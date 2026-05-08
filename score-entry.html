@@ -262,8 +262,13 @@ button, input, select { font-family: inherit; }
 /* Round picker */
 .round-option { display: block; width: 100%; text-align: left; background: white; border: 2px solid #e5e7eb; border-radius: 12px; padding: 14px 16px; margin-bottom: 8px; cursor: pointer; min-height: 56px; }
 .round-option:active { border-color: #10b981; background: #f0fdf4; }
-.round-option .round-date { font-weight: 700; color: #065f46; font-size: 16px; }
+.round-option .round-date { font-weight: 700; color: #065f46; font-size: 16px; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .round-option .round-meta { font-size: 13px; color: #6b7280; margin-top: 3px; }
+.round-option .round-status { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; }
+.round-option .round-status.scheduled { background: #dbeafe; color: #1e40af; }
+.round-option .round-status.today { background: #fef3c7; color: #92400e; }
+.round-option .round-status.in-progress { background: #d1fae5; color: #065f46; animation: pulse-progress 2s ease-in-out infinite; }
+@keyframes pulse-progress { 0%, 100% { background: #d1fae5; } 50% { background: #a7f3d0; } }
 
 .error-msg { background: #fee2e2; color: #991b1b; padding: 12px; border-radius: 8px; margin: 8px 0; font-size: 14px; word-break: break-word; }
 .foot-note { color: #9ca3af; font-size: 11px; text-align: center; padding: 16px 0 32px; }
@@ -293,7 +298,7 @@ input, select { -webkit-tap-highlight-color: transparent; }
     </div>
 </div>
 
-<div class="foot-note">Dutch Cup Score Entry · v2.1</div>
+<div class="foot-note">Dutch Cup Score Entry · v2.2</div>
 
 <script>
 'use strict';
@@ -445,8 +450,61 @@ function classForScore(grossScore, par, strokes) {
     return 'worse';
 }
 
-function getScheduledRounds(rounds) {
-    return (rounds || []).filter(r => r && r.active === false);
+function isRoundDateInPast(round) {
+    const ts = round.timestamp || round.id || 0;
+    if (!ts) return false;
+    const roundDay = new Date(ts); roundDay.setHours(0, 0, 0, 0);
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    return roundDay.getTime() < today.getTime();
+}
+
+function isRoundDateToday(round) {
+    const ts = round.timestamp || round.id || 0;
+    if (!ts) return false;
+    const roundDay = new Date(ts); roundDay.setHours(0, 0, 0, 0);
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    return roundDay.getTime() === today.getTime();
+}
+
+// True only if every player assigned to a group has all 18 holes scored.
+function isAllScored(round) {
+    const teams = round.teams || [];
+    let anyAssigned = false;
+    for (const team of teams) {
+        for (const p of (team.players || [])) {
+            if (!p.groupNumber) continue;
+            anyAssigned = true;
+            if (!Array.isArray(p.scores) || p.scores.length !== 18) return false;
+            for (let h = 0; h < 18; h++) {
+                if (p.scores[h] === '' || p.scores[h] == null) return false;
+            }
+        }
+    }
+    return anyAssigned;
+}
+
+// Completed = started AND date in the past AND every assigned player fully scored.
+function isRoundCompleted(round) {
+    if (!round || round.active === false) return false; // scheduled = not completed
+    return isRoundDateInPast(round) && isAllScored(round);
+}
+
+// Selectable on the entry page: scheduled OR in-progress (i.e., not yet completed).
+function isRoundSelectable(round) {
+    if (!round) return false;
+    if (round.active === false) return true;        // scheduled
+    return !isRoundCompleted(round);                // active === true but not yet completed
+}
+
+function getSelectableRounds(rounds) {
+    return (rounds || []).filter(r => isRoundSelectable(r));
+}
+
+// Status pill text/colour for the round picker.
+function roundStatusLabel(round) {
+    if (round.active !== false) return { text: 'In progress', cls: 'in-progress' };
+    if (isRoundDateToday(round)) return { text: 'Today', cls: 'today' };
+    return { text: 'Scheduled', cls: 'scheduled' };
 }
 
 function getRoundById(id) { return state.allRounds.find(r => idsEqual(r.id, id)); }
@@ -549,7 +607,7 @@ function handleRoundsSnapshot(doc) {
     if (state.selectedRoundId == null) {
         if (urlRoundId) {
             const wanted = getRoundById(urlRoundId);
-            if (wanted && wanted.active === false) {
+            if (wanted && isRoundSelectable(wanted)) {
                 state.selectedRoundId = idStr(wanted.id);
                 if (urlPlayerId) {
                     const grp = findGroupForPlayer(wanted, urlPlayerId);
@@ -567,10 +625,10 @@ function handleRoundsSnapshot(doc) {
             console.warn('URL roundId not found or completed:', urlRoundId);
         }
 
-        const scheduled = getScheduledRounds(state.allRounds);
-        if (scheduled.length === 0) { renderNoRound(); return; }
-        if (scheduled.length === 1) { state.selectedRoundId = idStr(scheduled[0].id); renderPlayerPicker(); return; }
-        renderRoundPicker(scheduled);
+        const selectable = getSelectableRounds(state.allRounds);
+        if (selectable.length === 0) { renderNoRound(); return; }
+        if (selectable.length === 1) { state.selectedRoundId = idStr(selectable[0].id); renderPlayerPicker(); return; }
+        renderRoundPicker(selectable);
         return;
     }
 
@@ -594,20 +652,35 @@ function firstUnscoredHole(round, groupNumber) {
 }
 
 // ─── Round picker ───────────────────────────────────────────────────────
-function renderRoundPicker(scheduled) {
+function renderRoundPicker(rounds) {
     setHeader('Dutch Cup', 'Choose a round');
-    const ordered = [...scheduled].sort((a,b) => (a.timestamp||a.id||0) - (b.timestamp||b.id||0));
+
+    // Bucket-sort: in-progress first (most likely the round being played right now),
+    // then today's scheduled, then upcoming (closest first), then past (most recent first).
+    const inProgress = rounds.filter(r => r.active !== false);
+    const todayScheduled = rounds.filter(r => r.active === false && isRoundDateToday(r));
+    const upcoming = rounds.filter(r => r.active === false && !isRoundDateToday(r) && !isRoundDateInPast(r));
+    const past = rounds.filter(r => r.active === false && isRoundDateInPast(r));
+    inProgress.sort((a,b) => (b.timestamp||b.id||0) - (a.timestamp||a.id||0));
+    upcoming.sort((a,b) => (a.timestamp||a.id||0) - (b.timestamp||b.id||0));
+    past.sort((a,b) => (b.timestamp||b.id||0) - (a.timestamp||a.id||0));
+    const ordered = [...inProgress, ...todayScheduled, ...upcoming, ...past];
+
     const appEl = $('#app'); appEl.innerHTML = '';
     const card = el('div', { class: 'card' },
         el('h2', null, 'Choose a round'),
-        el('p', { class: 'muted' }, "Multiple rounds are scheduled. Pick the one you're playing.")
+        el('p', { class: 'muted' }, "Pick the round you're playing.")
     );
     ordered.forEach(r => {
+        const status = roundStatusLabel(r);
+        const titleDiv = el('div', { class: 'round-date' });
+        titleDiv.appendChild(document.createTextNode(r.courseName || 'Round'));
+        titleDiv.appendChild(el('span', { class: 'round-status ' + status.cls }, status.text));
         card.appendChild(el('button', {
             class: 'round-option',
             onclick: () => { state.selectedRoundId = idStr(r.id); renderPlayerPicker(); }
         },
-            el('div', { class: 'round-date' }, r.courseName || 'Round'),
+            titleDiv,
             el('div', { class: 'round-meta' }, formatRoundDate(r))
         ));
     });
@@ -615,11 +688,11 @@ function renderRoundPicker(scheduled) {
 }
 
 function renderNoRound() {
-    setHeader('Dutch Cup', 'No round scheduled');
+    setHeader('Dutch Cup', 'No rounds available');
     $('#app').innerHTML = '';
     $('#app').appendChild(el('div', { class: 'card' },
-        el('h2', null, 'No scheduled round'),
-        el('p', { class: 'muted' }, "There are no scheduled rounds right now. The league admin needs to schedule a round and assign groups before you can enter scores.")
+        el('h2', null, 'No rounds available'),
+        el('p', { class: 'muted' }, "There are no scheduled or in-progress rounds right now. The league admin needs to schedule a round before you can enter scores.")
     ));
 }
 
