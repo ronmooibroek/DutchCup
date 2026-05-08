@@ -1,0 +1,1387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#065f46">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Dutch Cup — Score Entry</title>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+html, body {
+    margin: 0; padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #f3f4f6; color: #1f2937;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior-y: contain;
+}
+body {
+    min-height: 100vh;
+    padding-bottom: env(safe-area-inset-bottom);
+}
+button, input, select { font-family: inherit; }
+
+/* Header */
+.header {
+    background: linear-gradient(135deg, #065f46 0%, #047857 100%);
+    color: white; padding: 10px 14px;
+    padding-top: calc(10px + env(safe-area-inset-top));
+    position: sticky; top: 0; z-index: 50;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+.header-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.header-info { min-width: 0; flex: 1; }
+.header h1 { margin: 0; font-size: 16px; font-weight: 700; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.header .subtitle { font-size: 11px; opacity: 0.9; margin-top: 2px; }
+.header-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+.save-status {
+    font-size: 11px; padding: 4px 10px; border-radius: 999px;
+    background: rgba(255,255,255,0.2); white-space: nowrap; transition: background 0.2s;
+}
+.save-status.saving { background: rgba(251, 191, 36, 0.95); color: #78350f; }
+.save-status.saved { background: rgba(134, 239, 172, 0.95); color: #065f46; }
+.save-status.error { background: rgba(252, 165, 165, 0.95); color: #7f1d1d; }
+.btn-link {
+    background: rgba(255,255,255,0.18); color: white; border: none;
+    padding: 7px 11px; border-radius: 8px; font-size: 13px; cursor: pointer; font-weight: 500;
+}
+.btn-link:active { background: rgba(255,255,255,0.32); }
+
+/* Container */
+.container { padding: 12px; max-width: 540px; margin: 0 auto; }
+.card {
+    background: white; border-radius: 12px; padding: 14px;
+    margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+.card h2 { margin: 0 0 10px; font-size: 16px; color: #065f46; font-weight: 700; }
+.card p.muted { color: #6b7280; font-size: 14px; margin: 8px 0; line-height: 1.4; }
+
+.center-state { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; padding: 24px; text-align: center; }
+.spinner { width: 36px; height: 36px; border: 3px solid #e5e7eb; border-top-color: #10b981; border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Player picker */
+.group-card { background: white; border-radius: 12px; padding: 14px; margin-bottom: 10px; border: 1px solid #e5e7eb; }
+.group-title { font-size: 12px; font-weight: 700; color: #065f46; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; }
+.player-btn {
+    display: block; width: 100%; text-align: left;
+    background: #f9fafb; border: 2px solid #e5e7eb;
+    border-radius: 12px; padding: 16px 18px;
+    margin-bottom: 8px; font-size: 17px; font-weight: 600;
+    color: #1f2937; cursor: pointer; min-height: 56px;
+    transition: transform 0.1s, background 0.15s, border-color 0.15s;
+}
+.player-btn:active { background: #d1fae5; border-color: #10b981; transform: scale(0.99); }
+.player-btn .hcp { font-size: 13px; color: #6b7280; font-weight: 400; margin-left: 8px; }
+.player-btn .team { font-size: 12px; color: #9ca3af; font-weight: 400; display: block; margin-top: 3px; }
+
+/* Hole nav */
+.hole-nav {
+    background: white; border-radius: 12px; padding: 10px 12px;
+    margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    position: sticky; top: 60px; z-index: 40;
+}
+.dots-strip { display: flex; gap: 3px; margin-bottom: 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; padding: 2px 0; }
+.dots-strip::-webkit-scrollbar { display: none; }
+.dot {
+    flex: 0 0 auto; width: 26px; height: 26px;
+    border-radius: 50%; background: #e5e7eb; color: #6b7280;
+    font-size: 11px; font-weight: 600;
+    display: flex; align-items: center; justify-content: center;
+    border: none; cursor: pointer; padding: 0;
+    transition: background 0.15s, transform 0.1s;
+}
+.dot:active { transform: scale(0.92); }
+.dot.complete { background: #86efac; color: #065f46; }
+.dot.partial { background: #fde68a; color: #78350f; }
+.dot.current { background: #065f46; color: white; box-shadow: 0 0 0 2px #065f46; transform: scale(1.15); }
+
+.hole-bar { display: flex; align-items: center; gap: 8px; }
+.hole-arrow {
+    flex: 0 0 auto; width: 44px; height: 44px;
+    border-radius: 12px;
+    background: #f3f4f6; color: #065f46;
+    border: none; font-size: 22px; font-weight: 700; cursor: pointer;
+}
+.hole-arrow:disabled { opacity: 0.3; cursor: not-allowed; }
+.hole-arrow:not(:disabled):active { background: #d1fae5; }
+.hole-info {
+    flex: 1; text-align: center;
+    background: linear-gradient(135deg, #065f46 0%, #047857 100%);
+    color: white; padding: 8px 10px;
+    border-radius: 12px; min-height: 44px;
+    display: flex; flex-direction: column; justify-content: center;
+}
+.hole-info .num { font-size: 20px; font-weight: 800; line-height: 1.0; }
+.hole-info .meta { font-size: 11px; opacity: 0.9; margin-top: 2px; font-weight: 500; }
+.par3-pill { display: inline-block; background: rgba(255,255,255,0.25); padding: 1px 6px; border-radius: 4px; margin-left: 4px; font-size: 10px; font-weight: 700; }
+
+/* Score list */
+.score-list { background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.06); margin-bottom: 10px; }
+.score-row {
+    display: flex; align-items: center;
+    padding: 10px 12px;
+    border-bottom: 1px solid #f3f4f6;
+    transition: background 0.15s;
+    min-height: 76px;
+}
+.score-row:last-child { border-bottom: none; }
+.score-row.is-me { background: #f0fdf4; }
+.player-info { flex: 1; min-width: 0; padding-right: 10px; }
+.player-name { font-size: 16px; font-weight: 600; color: #1f2937; line-height: 1.2; }
+.player-name .me-tag { font-size: 11px; color: #047857; margin-left: 6px; font-weight: 700; text-transform: uppercase; }
+.player-meta { font-size: 12px; color: #6b7280; margin-top: 3px; }
+.player-meta .total { font-weight: 600; color: #065f46; }
+
+.score-input-wrap {
+    flex: 0 0 auto; width: 76px; height: 56px;
+    border-radius: 12px;
+    border: 2px solid #e5e7eb;
+    background: white;
+    transition: all 0.15s;
+    overflow: hidden;
+    position: relative;
+}
+.score-input {
+    width: 100%; height: 100%;
+    border: none; outline: none; background: transparent;
+    text-align: center; font-size: 28px; font-weight: 700;
+    color: #1f2937; font-family: inherit; padding: 0;
+    -moz-appearance: textfield;
+}
+.score-input::-webkit-outer-spin-button,
+.score-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.score-input-wrap:focus-within { border-color: #10b981; background: #ecfdf5; box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15); }
+
+.score-input-wrap.albatross { background: #000000 !important; border-color: #000000; }
+.score-input-wrap.albatross .score-input { color: #ffffff; }
+.score-input-wrap.eagle { background: #065f46 !important; border-color: #065f46; }
+.score-input-wrap.eagle .score-input { color: #ffffff; }
+.score-input-wrap.birdie { background: #86efac !important; border-color: #4ade80; }
+.score-input-wrap.birdie .score-input { color: #065f46; }
+.score-input-wrap.par-score { background: #f3f4f6 !important; border-color: #d1d5db; }
+.score-input-wrap.bogey { background: #fed7aa !important; border-color: #fdba74; }
+.score-input-wrap.bogey .score-input { color: #9a3412; }
+.score-input-wrap.double { background: #fecaca !important; border-color: #fca5a5; }
+.score-input-wrap.double .score-input { color: #991b1b; }
+.score-input-wrap.worse { background: #fca5a5 !important; border-color: #f87171; }
+.score-input-wrap.worse .score-input { color: #7f1d1d; }
+
+.score-pts { position: absolute; bottom: 1px; right: 4px; font-size: 10px; font-weight: 700; opacity: 0.7; pointer-events: none; }
+
+/* Section title */
+.section-title {
+    font-size: 11px; font-weight: 700; color: #6b7280;
+    text-transform: uppercase; letter-spacing: 0.6px;
+    margin: 14px 4px 6px;
+    display: flex; align-items: center; gap: 6px;
+}
+
+/* Generic select used for BBB and CTP */
+.pick-card {
+    background: white; border-radius: 12px;
+    padding: 12px 12px;
+    margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+.pick-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 0;
+    min-height: 52px;
+}
+.pick-row + .pick-row { border-top: 1px solid #f3f4f6; }
+.pick-label {
+    flex: 0 0 auto;
+    width: 78px;
+    font-size: 13px; font-weight: 700; color: #374151;
+    display: flex; align-items: center; gap: 6px;
+}
+.pick-label .badge {
+    width: 22px; height: 22px; border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 800; color: white;
+}
+.pick-label.bingo .badge { background: #f59e0b; }
+.pick-label.bango .badge { background: #10b981; }
+.pick-label.bongo .badge { background: #ef4444; }
+.pick-label.ctp .badge { background: #6366f1; }
+
+.pick-select {
+    flex: 1; min-width: 0; height: 44px;
+    border: 2px solid #e5e7eb; border-radius: 10px;
+    background: white; font-size: 15px; font-weight: 600;
+    color: #1f2937; padding: 0 32px 0 12px;
+    appearance: none; -webkit-appearance: none;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3e%3cpath fill='%236b7280' d='M6 8L0 0h12z'/%3e%3c/svg%3e");
+    background-repeat: no-repeat; background-position: right 12px center;
+    width: 100%; /* iOS quirk */
+}
+.pick-select:focus { border-color: #10b981; outline: none; }
+.pick-select.has-value { border-color: #a7f3d0; background-color: #f0fdf4; }
+
+.bbb-card { background: linear-gradient(180deg, #fffbeb 0%, #ffffff 70%); }
+.ctp-card { background: linear-gradient(180deg, #eef2ff 0%, #ffffff 70%); }
+
+.section-header {
+    font-size: 13px; font-weight: 800; color: #065f46;
+    margin: 0 0 8px; padding: 0 4px;
+    display: flex; align-items: center; gap: 8px;
+}
+.section-header .accent { font-size: 10px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; }
+
+/* Balls card (hole 18 only) */
+.balls-card { background: white; border-radius: 12px; padding: 12px 12px 8px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); border: 2px solid #fcd34d; }
+.balls-row { display: flex; align-items: center; padding: 8px 4px; border-bottom: 1px solid #f3f4f6; min-height: 48px; }
+.balls-row:last-child { border-bottom: none; }
+.balls-name { flex: 1; font-size: 14px; font-weight: 600; color: #1f2937; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 8px; }
+.balls-pips { flex: 0 0 auto; display: flex; gap: 4px; margin-right: 8px; }
+.pip { width: 14px; height: 14px; border-radius: 50%; background: #d1d5db; transition: background 0.2s; }
+.pip.full { background: linear-gradient(135deg, #fef3c7, #f59e0b); box-shadow: inset 0 -1px 2px rgba(120,53,15,0.3); }
+.balls-count { flex: 0 0 auto; font-size: 14px; font-weight: 700; color: #6b7280; min-width: 24px; text-align: center; }
+.balls-btns { flex: 0 0 auto; display: flex; gap: 4px; }
+.balls-btn { width: 36px; height: 36px; border-radius: 10px; border: none; background: #f3f4f6; color: #065f46; font-size: 18px; font-weight: 700; cursor: pointer; }
+.balls-btn:active { background: #d1fae5; }
+.balls-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* Footer nav */
+.foot-nav { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 4px; }
+.foot-btn {
+    height: 56px; border-radius: 12px;
+    border: none; font-size: 16px; font-weight: 700; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+}
+.foot-btn.prev { background: #f3f4f6; color: #065f46; }
+.foot-btn.next { background: #065f46; color: white; }
+.foot-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.foot-btn:not(:disabled):active { transform: scale(0.98); }
+.foot-btn.prev:not(:disabled):active { background: #d1fae5; }
+
+/* Round picker */
+.round-option { display: block; width: 100%; text-align: left; background: white; border: 2px solid #e5e7eb; border-radius: 12px; padding: 14px 16px; margin-bottom: 8px; cursor: pointer; min-height: 56px; }
+.round-option:active { border-color: #10b981; background: #f0fdf4; }
+.round-option .round-date { font-weight: 700; color: #065f46; font-size: 16px; }
+.round-option .round-meta { font-size: 13px; color: #6b7280; margin-top: 3px; }
+
+.error-msg { background: #fee2e2; color: #991b1b; padding: 12px; border-radius: 8px; margin: 8px 0; font-size: 14px; word-break: break-word; }
+.foot-note { color: #9ca3af; font-size: 11px; text-align: center; padding: 16px 0 32px; }
+button { -webkit-tap-highlight-color: transparent; }
+input, select { -webkit-tap-highlight-color: transparent; }
+</style>
+</head>
+<body>
+
+<header class="header">
+    <div class="header-row">
+        <div class="header-info">
+            <h1 id="header-title">Dutch Cup</h1>
+            <div class="subtitle" id="header-subtitle">Connecting…</div>
+        </div>
+        <div class="header-actions">
+            <span class="save-status" id="save-status" style="display:none;"></span>
+            <button class="btn-link" id="switch-btn" style="display:none;" onclick="window.__switchPlayer && window.__switchPlayer()">⤺ Switch</button>
+        </div>
+    </div>
+</header>
+
+<div class="container" id="app">
+    <div class="center-state">
+        <div class="spinner"></div>
+        <p class="muted" style="margin-top:14px;">Loading round…</p>
+    </div>
+</div>
+
+<div class="foot-note">Dutch Cup Score Entry · v2.1</div>
+
+<script>
+'use strict';
+
+// ─── Visible error surface ──────────────────────────────────────────────
+function showFatalError(msg, detail) {
+    const appEl = document.getElementById('app');
+    if (!appEl) { alert(msg + '\n\n' + (detail || '')); return; }
+    const escape = s => String(s).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+    appEl.innerHTML = '<div class="card">'
+        + '<h2 style="color:#991b1b;">⚠️ Error</h2>'
+        + '<div class="error-msg">' + escape(msg) + '</div>'
+        + (detail ? '<details style="margin-top:8px;"><summary style="cursor:pointer;color:#6b7280;font-size:12px;">Technical details</summary>'
+            + '<pre style="font-size:11px;background:#f3f4f6;padding:8px;border-radius:6px;overflow:auto;max-height:240px;white-space:pre-wrap;">'
+            + escape(detail) + '</pre></details>' : '')
+        + '<p class="muted" style="margin-top:12px;">Try a hard refresh. Saved scores are safe in the cloud.</p>'
+        + '</div>';
+}
+window.addEventListener('error', (e) => {
+    showFatalError(e.message || 'Unknown script error',
+        (e.error && e.error.stack) || (e.filename + ':' + e.lineno + ':' + e.colno));
+});
+window.addEventListener('unhandledrejection', (e) => {
+    const r = e.reason || {};
+    showFatalError('Async error: ' + (r.message || String(r)), r.stack);
+});
+
+// ─── Firebase init ──────────────────────────────────────────────────────
+const firebaseConfig = {
+    apiKey: "AIzaSyBNc104mTZIwHbg4tYUhYNv3n2GS6Z1Ijo",
+    authDomain: "dutchcup.firebaseapp.com",
+    projectId: "dutchcup",
+    storageBucket: "dutchcup.firebasestorage.app",
+    messagingSenderId: "643789311462",
+    appId: "1:643789311462:web:cfd7fc01ccf4a0171b9a27",
+    measurementId: "G-YMP33N5C55"
+};
+const LEAGUE_ID = "dutch-cup-2024";
+
+let firestoreDb = null;
+let roundsRef = null;
+try {
+    if (typeof firebase === 'undefined') throw new Error('Firebase SDK failed to load. Check your internet connection.');
+    firebase.initializeApp(firebaseConfig);
+    firestoreDb = firebase.firestore();
+    roundsRef = firestoreDb.collection('leagues').doc(LEAGUE_ID).collection('data').doc('rounds');
+} catch (err) {
+    console.error('Firebase init failed:', err);
+    document.addEventListener('DOMContentLoaded', () => {
+        showFatalError('Could not initialize Firebase: ' + (err.message || err), err.stack);
+    });
+}
+
+// ─── State ──────────────────────────────────────────────────────────────
+const state = {
+    allRounds: [],
+    selectedRoundId: null,
+    currentPlayerId: null,
+    groupNumber: null,
+    currentHole: 0,
+    unsubscribe: null,
+    pendingTimer: null,
+    autoAdvanceTimer: null,
+    pendingEdits: {
+        scores: {},        // { playerIdStr: { holeIdx: scoreStr } }
+        ctpWinners: {},    // { holeIdxStr: playerIdStr|'' }
+        balls: {},         // { playerIdStr: number }
+        bbb: {}            // { holeIdxStr: { bingo, bango, bongo } }
+    },
+    saving: false
+};
+
+const urlParams = new URLSearchParams(window.location.search);
+const urlRoundId = urlParams.get('roundId');
+const urlPlayerId = urlParams.get('playerId');
+
+// ─── Helpers ────────────────────────────────────────────────────────────
+function $(sel) { return document.querySelector(sel); }
+function el(tag, attrs, ...children) {
+    const e = document.createElement(tag);
+    if (attrs) for (const k in attrs) {
+        const v = attrs[k];
+        if (v == null) continue;
+        if (k === 'class') e.className = v;
+        else if (k === 'style') e.style.cssText = v;
+        else if (k.startsWith('on') && typeof v === 'function') e.addEventListener(k.slice(2), v);
+        else e.setAttribute(k, v);
+    }
+    for (const c of children) {
+        if (c == null || c === false) continue;
+        e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+    }
+    return e;
+}
+
+const idStr = v => (v == null ? '' : String(v));
+const idsEqual = (a, b) => idStr(a) === idStr(b);
+
+function setStatus(text, cls) {
+    const elt = $('#save-status');
+    if (!elt) return;
+    elt.textContent = text;
+    elt.className = 'save-status' + (cls ? ' ' + cls : '');
+    elt.style.display = text ? 'inline-block' : 'none';
+}
+
+function setHeader(title, subtitle) {
+    if (title) $('#header-title').textContent = title;
+    if (subtitle !== undefined) $('#header-subtitle').textContent = subtitle;
+}
+
+function formatRoundDate(round) {
+    if (round.timestamp) {
+        const d = new Date(round.timestamp);
+        return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+            + ' at ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    }
+    return round.date || 'Unknown date';
+}
+
+const POINTS = { albatross: 10, eagle: 7, birdie: 5, par: 2, bogey: 1, doubleOrWorse: 0 };
+function getPoints(netToPar) {
+    if (netToPar <= -3) return POINTS.albatross;
+    if (netToPar === -2) return POINTS.eagle;
+    if (netToPar === -1) return POINTS.birdie;
+    if (netToPar === 0)  return POINTS.par;
+    if (netToPar === 1)  return POINTS.bogey;
+    return POINTS.doubleOrWorse;
+}
+
+function strokesOnHole(handicap, holeHandicapIdx) {
+    let s = 0;
+    if (handicap >= holeHandicapIdx) s = 1;
+    if (handicap >= holeHandicapIdx + 18) s = 2;
+    return s;
+}
+
+function classForScore(grossScore, par, strokes) {
+    if (grossScore === '' || grossScore == null) return '';
+    const g = parseInt(grossScore, 10);
+    if (isNaN(g)) return '';
+    const netToPar = (g - strokes) - par;
+    if (netToPar <= -3) return 'albatross';
+    if (netToPar === -2) return 'eagle';
+    if (netToPar === -1) return 'birdie';
+    if (netToPar === 0)  return 'par-score';
+    if (netToPar === 1)  return 'bogey';
+    if (netToPar === 2)  return 'double';
+    return 'worse';
+}
+
+function getScheduledRounds(rounds) {
+    return (rounds || []).filter(r => r && r.active === false);
+}
+
+function getRoundById(id) { return state.allRounds.find(r => idsEqual(r.id, id)); }
+
+function getGroupPlayers(round, groupNumber) {
+    const out = [];
+    (round.teams || []).forEach(team => {
+        (team.players || []).forEach(p => {
+            if (p.groupNumber === groupNumber) out.push({ ...p, teamName: team.teamName });
+        });
+    });
+    return out;
+}
+
+function getAllRoundPlayers(round) {
+    const out = [];
+    (round.teams || []).forEach(team => {
+        (team.players || []).forEach(p => {
+            out.push({ ...p, teamName: team.teamName });
+        });
+    });
+    return out;
+}
+
+function findGroupForPlayer(round, playerId) {
+    let g = null;
+    (round.teams || []).forEach(team => {
+        (team.players || []).forEach(p => {
+            if (idsEqual(p.id, playerId) && p.groupNumber) g = p.groupNumber;
+        });
+    });
+    return g;
+}
+
+// Effective getters: pending edits override server data
+function effectiveScore(round, playerId, holeIdx) {
+    const pid = idStr(playerId);
+    if (state.pendingEdits.scores[pid] && state.pendingEdits.scores[pid][holeIdx] !== undefined)
+        return state.pendingEdits.scores[pid][holeIdx];
+    const player = (round.teams || []).flatMap(t => t.players || []).find(p => idsEqual(p.id, playerId));
+    if (!player || !Array.isArray(player.scores)) return '';
+    return player.scores[holeIdx] != null ? String(player.scores[holeIdx]) : '';
+}
+
+function effectiveBalls(round, playerId) {
+    const pid = idStr(playerId);
+    if (state.pendingEdits.balls[pid] !== undefined) return state.pendingEdits.balls[pid];
+    const player = (round.teams || []).flatMap(t => t.players || []).find(p => idsEqual(p.id, playerId));
+    return (player && player.ballsRemaining != null) ? player.ballsRemaining : 3;
+}
+
+// CTP: forgiving reader — supports {holeIdx,playerId}, {hole,playerId}, or 18-element indexed array
+function effectiveCTP(round, holeIdx) {
+    const h = String(holeIdx);
+    if (state.pendingEdits.ctpWinners[h] !== undefined) return state.pendingEdits.ctpWinners[h];
+    const cw = round.ctpWinners;
+    if (!Array.isArray(cw)) return '';
+    for (const item of cw) {
+        if (item && typeof item === 'object') {
+            const itemHole = (item.holeIdx != null) ? item.holeIdx
+                          : (item.hole != null) ? (item.hole - 1) : null;
+            if (itemHole === holeIdx) return idStr(item.playerId);
+        }
+    }
+    if (cw.length === 18 && (typeof cw[holeIdx] === 'string' || typeof cw[holeIdx] === 'number')) return idStr(cw[holeIdx]);
+    return '';
+}
+
+// BBB: read from round.bbbAwards = [{ holeIdx, bingo, bango, bongo }]
+function effectiveBBB(round, holeIdx) {
+    const h = String(holeIdx);
+    const pending = state.pendingEdits.bbb[h];
+    let base = { bingo: '', bango: '', bongo: '' };
+    if (Array.isArray(round.bbbAwards)) {
+        const found = round.bbbAwards.find(a => a && a.holeIdx === holeIdx);
+        if (found) base = { bingo: idStr(found.bingo), bango: idStr(found.bango), bongo: idStr(found.bongo) };
+    }
+    return Object.assign(base, pending || {});
+}
+
+// ─── Init ───────────────────────────────────────────────────────────────
+async function init() {
+    if (!roundsRef) return;
+    try {
+        state.unsubscribe = roundsRef.onSnapshot(handleRoundsSnapshot, (err) => {
+            console.error('Listen error:', err);
+            showFatalError('Connection error: ' + (err.message || err), 'Code: ' + (err.code || '?'));
+        });
+    } catch (err) {
+        console.error('Init error:', err);
+        showFatalError('Could not connect: ' + (err.message || err), err.stack);
+    }
+}
+
+function handleRoundsSnapshot(doc) {
+    if (!doc.exists) { showFatalError('No rounds data found in the league.'); return; }
+    const data = doc.data();
+    state.allRounds = Array.isArray(data.value) ? data.value : [];
+
+    if (state.selectedRoundId == null) {
+        if (urlRoundId) {
+            const wanted = getRoundById(urlRoundId);
+            if (wanted && wanted.active === false) {
+                state.selectedRoundId = idStr(wanted.id);
+                if (urlPlayerId) {
+                    const grp = findGroupForPlayer(wanted, urlPlayerId);
+                    if (grp) {
+                        state.currentPlayerId = idStr(urlPlayerId);
+                        state.groupNumber = grp;
+                        state.currentHole = firstUnscoredHole(wanted, grp);
+                        renderScoreEntry();
+                        return;
+                    }
+                }
+                renderPlayerPicker();
+                return;
+            }
+            console.warn('URL roundId not found or completed:', urlRoundId);
+        }
+
+        const scheduled = getScheduledRounds(state.allRounds);
+        if (scheduled.length === 0) { renderNoRound(); return; }
+        if (scheduled.length === 1) { state.selectedRoundId = idStr(scheduled[0].id); renderPlayerPicker(); return; }
+        renderRoundPicker(scheduled);
+        return;
+    }
+
+    const round = getRoundById(state.selectedRoundId);
+    if (!round) {
+        state.selectedRoundId = null; state.currentPlayerId = null; state.groupNumber = null;
+        handleRoundsSnapshot(doc);
+        return;
+    }
+    if (state.currentPlayerId == null) renderPlayerPicker();
+    else refreshScoreEntryFromServer();
+}
+
+function firstUnscoredHole(round, groupNumber) {
+    const players = getGroupPlayers(round, groupNumber);
+    for (let h = 0; h < 18; h++) {
+        const allHave = players.every(p => p.scores && p.scores[h] !== '' && p.scores[h] != null);
+        if (!allHave) return h;
+    }
+    return 0;
+}
+
+// ─── Round picker ───────────────────────────────────────────────────────
+function renderRoundPicker(scheduled) {
+    setHeader('Dutch Cup', 'Choose a round');
+    const ordered = [...scheduled].sort((a,b) => (a.timestamp||a.id||0) - (b.timestamp||b.id||0));
+    const appEl = $('#app'); appEl.innerHTML = '';
+    const card = el('div', { class: 'card' },
+        el('h2', null, 'Choose a round'),
+        el('p', { class: 'muted' }, "Multiple rounds are scheduled. Pick the one you're playing.")
+    );
+    ordered.forEach(r => {
+        card.appendChild(el('button', {
+            class: 'round-option',
+            onclick: () => { state.selectedRoundId = idStr(r.id); renderPlayerPicker(); }
+        },
+            el('div', { class: 'round-date' }, r.courseName || 'Round'),
+            el('div', { class: 'round-meta' }, formatRoundDate(r))
+        ));
+    });
+    appEl.appendChild(card);
+}
+
+function renderNoRound() {
+    setHeader('Dutch Cup', 'No round scheduled');
+    $('#app').innerHTML = '';
+    $('#app').appendChild(el('div', { class: 'card' },
+        el('h2', null, 'No scheduled round'),
+        el('p', { class: 'muted' }, "There are no scheduled rounds right now. The league admin needs to schedule a round and assign groups before you can enter scores.")
+    ));
+}
+
+// ─── Player picker ──────────────────────────────────────────────────────
+function renderPlayerPicker() {
+    const round = getRoundById(state.selectedRoundId);
+    if (!round) { state.selectedRoundId = null; return; }
+
+    setHeader(round.courseName || 'Round', formatRoundDate(round));
+    $('#switch-btn').style.display = 'none';
+    setStatus('', '');
+
+    const appEl = $('#app'); appEl.innerHTML = '';
+
+    const groups = {};
+    (round.teams || []).forEach(team => {
+        (team.players || []).forEach(p => {
+            if (p.groupNumber) {
+                if (!groups[p.groupNumber]) groups[p.groupNumber] = [];
+                groups[p.groupNumber].push({ ...p, teamName: team.teamName });
+            }
+        });
+    });
+    const groupNums = Object.keys(groups).map(Number).sort((a,b) => a - b);
+
+    if (groupNums.length === 0) {
+        appEl.appendChild(el('div', { class: 'card' },
+            el('h2', null, 'Groups not assigned yet'),
+            el('p', { class: 'muted' }, "The admin hasn't assigned players to groups for this round yet.")
+        ));
+        return;
+    }
+
+    appEl.appendChild(el('div', { class: 'card' },
+        el('h2', null, 'Pick your name'),
+        el('p', { class: 'muted' }, 'Tap your name to start scoring for your group.')
+    ));
+
+    groupNums.forEach(num => {
+        const card = el('div', { class: 'group-card' }, el('div', { class: 'group-title' }, `Group ${num}`));
+        groups[num].forEach(p => {
+            card.appendChild(el('button', {
+                class: 'player-btn',
+                onclick: () => selectPlayer(p.id, num)
+            },
+                document.createTextNode(p.name),
+                el('span', { class: 'hcp' }, ` · HCP ${p.handicap ?? '—'}`),
+                el('span', { class: 'team' }, p.teamName || '')
+            ));
+        });
+        appEl.appendChild(card);
+    });
+}
+
+function selectPlayer(playerId, groupNumber) {
+    state.currentPlayerId = idStr(playerId);
+    state.groupNumber = groupNumber;
+    const round = getRoundById(state.selectedRoundId);
+    state.currentHole = firstUnscoredHole(round, groupNumber);
+    renderScoreEntry();
+}
+
+window.__switchPlayer = function() {
+    if (state.pendingTimer) { clearTimeout(state.pendingTimer); flushPendingEdits(); }
+    state.currentPlayerId = null; state.groupNumber = null;
+    state.pendingEdits = { scores: {}, ctpWinners: {}, balls: {}, bbb: {} };
+    setStatus('', '');
+    renderPlayerPicker();
+};
+
+// ═══════════════════════════════════════════════════════════════════════
+// SCORE ENTRY VIEW
+// ═══════════════════════════════════════════════════════════════════════
+function renderScoreEntry() {
+    const round = getRoundById(state.selectedRoundId);
+    if (!round) return;
+    const groupPlayers = getGroupPlayers(round, state.groupNumber);
+    const me = groupPlayers.find(p => idsEqual(p.id, state.currentPlayerId));
+
+    setHeader(round.courseName || 'Round', `Group ${state.groupNumber}${me ? ' · ' + me.name : ''}`);
+    $('#switch-btn').style.display = 'inline-block';
+
+    const appEl = $('#app');
+    appEl.innerHTML = '';
+    appEl.appendChild(buildHoleNav(round, groupPlayers));
+    appEl.appendChild(buildScoresList(round, groupPlayers));
+    appEl.appendChild(buildBBBCard(round, groupPlayers));
+
+    const par = (round.pars || [])[state.currentHole];
+    if (par === 3) appEl.appendChild(buildCTPCard(round));
+
+    if (state.currentHole === 17) appEl.appendChild(buildBallsCard(round, groupPlayers));
+
+    appEl.appendChild(buildFooterNav());
+}
+
+function buildHoleNav(round, groupPlayers) {
+    const wrap = el('div', { class: 'hole-nav', id: 'hole-nav' });
+
+    const dots = el('div', { class: 'dots-strip', id: 'dots-strip' });
+    for (let h = 0; h < 18; h++) {
+        const status = holeStatus(round, groupPlayers, h);
+        dots.appendChild(el('button', {
+            class: 'dot ' + status + (h === state.currentHole ? ' current' : ''),
+            onclick: () => goToHole(h),
+            'aria-label': `Hole ${h+1}`
+        }, String(h + 1)));
+    }
+    wrap.appendChild(dots);
+
+    const bar = el('div', { class: 'hole-bar' });
+    const par = (round.pars || [])[state.currentHole];
+    const si = (round.handicaps || [])[state.currentHole];
+    bar.appendChild(el('button', {
+        class: 'hole-arrow',
+        onclick: () => goToHole(state.currentHole - 1),
+        disabled: state.currentHole === 0 ? '' : null
+    }, '‹'));
+    const info = el('div', { class: 'hole-info' });
+    const num = el('div', { class: 'num' }, `Hole ${state.currentHole + 1}`);
+    info.appendChild(num);
+    const meta = el('div', { class: 'meta' }, `Par ${par ?? '?'} · SI ${si ?? '?'}`);
+    if (par === 3) meta.appendChild(el('span', { class: 'par3-pill' }, 'CTP'));
+    info.appendChild(meta);
+    bar.appendChild(info);
+    bar.appendChild(el('button', {
+        class: 'hole-arrow',
+        onclick: () => goToHole(state.currentHole + 1),
+        disabled: state.currentHole === 17 ? '' : null
+    }, '›'));
+    wrap.appendChild(bar);
+
+    return wrap;
+}
+
+function holeStatus(round, groupPlayers, holeIdx) {
+    let filled = 0;
+    groupPlayers.forEach(p => {
+        const s = effectiveScore(round, p.id, holeIdx);
+        if (s !== '' && s != null) filled++;
+    });
+    if (filled === 0) return '';
+    if (filled === groupPlayers.length) return 'complete';
+    return 'partial';
+}
+
+function buildScoresList(round, groupPlayers) {
+    const list = el('div', { class: 'score-list', id: 'score-list' });
+
+    groupPlayers.forEach((p, idx) => {
+        const isMe = idsEqual(p.id, state.currentPlayerId);
+        const row = el('div', { class: 'score-row' + (isMe ? ' is-me' : '') });
+
+        const totals = computePlayerTotals(round, p);
+        row.appendChild(el('div', { class: 'player-info' },
+            el('div', { class: 'player-name' },
+                document.createTextNode(p.name || '?'),
+                isMe ? el('span', { class: 'me-tag' }, 'YOU') : null
+            ),
+            el('div', { class: 'player-meta' },
+                document.createTextNode(`HCP ${p.handicap ?? '—'} · `),
+                el('span', { class: 'total' }, `Thru ${totals.thru}: ${totals.gross || '—'} (${totals.points} pts)`)
+            )
+        ));
+
+        const par = (round.pars || [])[state.currentHole];
+        const holeHc = (round.handicaps || [])[state.currentHole];
+        const hc = parseInt(p.handicap, 10) || 0;
+        const strokes = strokesOnHole(hc, holeHc);
+        const currentScore = effectiveScore(round, p.id, state.currentHole);
+        const cls = classForScore(currentScore, par, strokes);
+
+        const inputWrap = el('div', { class: 'score-input-wrap' + (cls ? ' ' + cls : ''), 'data-player-id': idStr(p.id) });
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.inputMode = 'numeric';
+        input.pattern = '[0-9]*';
+        input.min = '1'; input.max = '15';
+        input.className = 'score-input';
+        input.dataset.playerId = idStr(p.id);
+        input.dataset.playerIdx = String(idx);
+        input.value = currentScore;
+        input.placeholder = '–';
+        input.addEventListener('input', onScoreInput);
+        input.addEventListener('blur', onScoreBlur);
+        input.addEventListener('focus', () => {
+            // Cancel pending auto-advance if user manually focuses an input
+            if (state.autoAdvanceTimer) { clearTimeout(state.autoAdvanceTimer); state.autoAdvanceTimer = null; }
+        });
+        inputWrap.appendChild(input);
+
+        if (currentScore !== '') {
+            const n = parseInt(currentScore, 10);
+            if (!isNaN(n)) {
+                const pts = getPoints((n - strokes) - par);
+                inputWrap.appendChild(el('span', { class: 'score-pts' }, `${pts}p`));
+            }
+        }
+
+        row.appendChild(inputWrap);
+        list.appendChild(row);
+    });
+
+    return list;
+}
+
+// ─── BBB card ───────────────────────────────────────────────────────────
+function buildBBBCard(round, groupPlayers) {
+    const wrap = el('div', { class: 'pick-card bbb-card' });
+    wrap.appendChild(el('div', { class: 'section-header' },
+        el('span', null, '🎯 Bingo Bango Bongo'),
+        el('span', { class: 'accent' }, '3 awarded · group only')
+    ));
+
+    const current = effectiveBBB(round, state.currentHole);
+
+    const slots = [
+        { key: 'bingo', label: 'Bingo', cls: 'bingo', char: 'B', desc: 'First on green' },
+        { key: 'bango', label: 'Bango', cls: 'bango', char: 'B', desc: 'Closest on green' },
+        { key: 'bongo', label: 'Bongo', cls: 'bongo', char: 'B', desc: 'First in cup' }
+    ];
+
+    slots.forEach(slot => {
+        const row = el('div', { class: 'pick-row' });
+        row.appendChild(el('div', { class: `pick-label ${slot.cls}` },
+            el('span', { class: 'badge' }, slot.char),
+            document.createTextNode(slot.label)
+        ));
+        const select = document.createElement('select');
+        select.className = 'pick-select' + (current[slot.key] ? ' has-value' : '');
+        select.dataset.bbbSlot = slot.key;
+        select.addEventListener('change', onBBBChange);
+
+        const noneOpt = document.createElement('option');
+        noneOpt.value = ''; noneOpt.textContent = `— ${slot.desc} —`;
+        select.appendChild(noneOpt);
+        groupPlayers.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = idStr(p.id);
+            opt.textContent = p.name;
+            select.appendChild(opt);
+        });
+        select.value = idStr(current[slot.key] || '');
+        row.appendChild(select);
+        wrap.appendChild(row);
+    });
+
+    return wrap;
+}
+
+// ─── CTP card (all players in round, grouped) ──────────────────────────
+function buildCTPCard(round) {
+    const wrap = el('div', { class: 'pick-card ctp-card' });
+    wrap.appendChild(el('div', { class: 'section-header' },
+        el('span', null, '⛳ Closest to Pin'),
+        el('span', { class: 'accent' }, 'all groups')
+    ));
+
+    const current = idStr(effectiveCTP(round, state.currentHole));
+
+    // Build grouped option list: by groupNumber, then by name
+    const allPlayers = getAllRoundPlayers(round);
+    const grouped = {};
+    allPlayers.forEach(p => {
+        const g = p.groupNumber || 0;
+        if (!grouped[g]) grouped[g] = [];
+        grouped[g].push(p);
+    });
+    const groupKeys = Object.keys(grouped).map(Number).sort((a,b) => a - b);
+
+    const row = el('div', { class: 'pick-row' });
+    row.appendChild(el('div', { class: 'pick-label ctp' },
+        el('span', { class: 'badge' }, '⛳'),
+        document.createTextNode('Winner')
+    ));
+
+    const select = document.createElement('select');
+    select.className = 'pick-select' + (current ? ' has-value' : '');
+    select.id = 'ctp-select';
+    select.addEventListener('change', onCTPChange);
+
+    const noneOpt = document.createElement('option');
+    noneOpt.value = ''; noneOpt.textContent = '— Select winner —';
+    select.appendChild(noneOpt);
+
+    groupKeys.forEach(g => {
+        const og = document.createElement('optgroup');
+        og.label = g === 0 ? 'No group' : `Group ${g}`;
+        const sorted = [...grouped[g]].sort((a,b) => (a.name || '').localeCompare(b.name || ''));
+        sorted.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = idStr(p.id);
+            opt.textContent = p.name;
+            og.appendChild(opt);
+        });
+        select.appendChild(og);
+    });
+
+    select.value = current;
+    row.appendChild(select);
+    wrap.appendChild(row);
+    return wrap;
+}
+
+// ─── Balls card (hole 18 only) ─────────────────────────────────────────
+function buildBallsCard(round, groupPlayers) {
+    const wrap = el('div', { class: 'balls-card' });
+    wrap.appendChild(el('div', { class: 'section-header' },
+        el('span', null, '🎱 Balls Remaining'),
+        el('span', { class: 'accent' }, 'end of round')
+    ));
+
+    groupPlayers.forEach(p => {
+        const balls = effectiveBalls(round, p.id);
+        const row = el('div', { class: 'balls-row', 'data-player-id': idStr(p.id) });
+        row.appendChild(el('div', { class: 'balls-name' }, p.name || '?'));
+
+        const pips = el('div', { class: 'balls-pips' });
+        for (let i = 0; i < 3; i++) pips.appendChild(el('span', { class: 'pip' + (i < balls ? ' full' : '') }));
+        row.appendChild(pips);
+
+        row.appendChild(el('div', { class: 'balls-count', 'data-role': 'balls-count' }, String(balls)));
+
+        const btns = el('div', { class: 'balls-btns' });
+        btns.appendChild(el('button', {
+            class: 'balls-btn',
+            onclick: () => adjustBalls(p.id, -1),
+            disabled: balls <= 0 ? '' : null
+        }, '−'));
+        btns.appendChild(el('button', {
+            class: 'balls-btn',
+            onclick: () => adjustBalls(p.id, +1),
+            disabled: balls >= 9 ? '' : null
+        }, '+'));
+        row.appendChild(btns);
+        wrap.appendChild(row);
+    });
+
+    return wrap;
+}
+
+function buildFooterNav() {
+    const wrap = el('div', { class: 'foot-nav' });
+    wrap.appendChild(el('button', {
+        class: 'foot-btn prev',
+        onclick: () => goToHole(state.currentHole - 1),
+        disabled: state.currentHole === 0 ? '' : null
+    }, el('span', null, '←'), el('span', null, 'Prev hole')));
+    wrap.appendChild(el('button', {
+        class: 'foot-btn next',
+        onclick: () => goToHole(state.currentHole + 1),
+        disabled: state.currentHole === 17 ? '' : null
+    }, el('span', null, 'Next hole'), el('span', null, '→')));
+    return wrap;
+}
+
+function goToHole(holeIdx) {
+    if (holeIdx < 0 || holeIdx > 17) return;
+    if (state.autoAdvanceTimer) { clearTimeout(state.autoAdvanceTimer); state.autoAdvanceTimer = null; }
+    if (hasPendingEdits()) {
+        if (state.pendingTimer) clearTimeout(state.pendingTimer);
+        flushPendingEdits();
+    }
+    state.currentHole = holeIdx;
+    renderScoreEntry();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function computePlayerTotals(round, p) {
+    let gross = 0, points = 0, thru = 0;
+    const hc = parseInt(p.handicap, 10) || 0;
+    for (let h = 0; h < 18; h++) {
+        const s = effectiveScore(round, p.id, h);
+        if (s === '' || s == null) continue;
+        const n = parseInt(s, 10);
+        if (isNaN(n)) continue;
+        thru++;
+        gross += n;
+        const par = (round.pars || [])[h];
+        const holeHc = (round.handicaps || [])[h];
+        const strokes = strokesOnHole(hc, holeHc);
+        points += getPoints((n - strokes) - par);
+    }
+    return { gross, points, thru };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// INPUT HANDLERS
+// ═══════════════════════════════════════════════════════════════════════
+function onScoreInput(e) {
+    const input = e.target;
+    const playerId = input.dataset.playerId;
+    let val = input.value.trim();
+    if (val !== '') {
+        const n = parseInt(val, 10);
+        if (isNaN(n) || n < 1 || n > 15) {
+            // Invalid mid-typing — don't pendingEdit yet, but still don't lose what's there
+            return;
+        }
+        val = String(n);
+    }
+
+    if (!state.pendingEdits.scores[playerId]) state.pendingEdits.scores[playerId] = {};
+    state.pendingEdits.scores[playerId][state.currentHole] = val;
+
+    updateCellLiveColor(playerId, val);
+    updatePlayerTotalsLive();
+    updateDotsLive();
+
+    setStatus('Saving…', 'saving');
+    if (state.pendingTimer) clearTimeout(state.pendingTimer);
+    state.pendingTimer = setTimeout(flushPendingEdits, 600);
+
+    // Auto-advance: 300ms after last keystroke, move focus to next score input on this hole
+    if (state.autoAdvanceTimer) clearTimeout(state.autoAdvanceTimer);
+    if (val !== '') {
+        state.autoAdvanceTimer = setTimeout(() => {
+            advanceFocusFrom(input);
+        }, 300);
+    }
+}
+
+function advanceFocusFrom(currentInput) {
+    const inputs = Array.from(document.querySelectorAll('.score-input'));
+    const idx = inputs.indexOf(currentInput);
+    if (idx < 0) return;
+    const next = inputs[idx + 1];
+    if (!next) return; // last input on this hole — stop here
+    // Some browsers preserve the keyboard if focus is moved synchronously.
+    // setTimeout 0 to escape current event loop turn helps on iOS.
+    next.focus();
+    if (next.select) try { next.select(); } catch (_) {}
+    // Scroll the next input into view if needed
+    try { next.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (_) {}
+}
+
+function onScoreBlur() {
+    if (hasPendingEdits() && !state.saving) {
+        if (state.pendingTimer) clearTimeout(state.pendingTimer);
+        flushPendingEdits();
+    }
+}
+
+function onCTPChange(e) {
+    state.pendingEdits.ctpWinners[String(state.currentHole)] = e.target.value || '';
+    e.target.classList.toggle('has-value', !!e.target.value);
+    setStatus('Saving…', 'saving');
+    if (state.pendingTimer) clearTimeout(state.pendingTimer);
+    state.pendingTimer = setTimeout(flushPendingEdits, 400);
+}
+
+function onBBBChange(e) {
+    const slot = e.target.dataset.bbbSlot;
+    if (!slot) return;
+    const h = String(state.currentHole);
+    if (!state.pendingEdits.bbb[h]) {
+        // Seed from current effective values so we don't lose other slots
+        state.pendingEdits.bbb[h] = { ...effectiveBBB(getRoundById(state.selectedRoundId), state.currentHole) };
+    }
+    state.pendingEdits.bbb[h][slot] = e.target.value || '';
+    e.target.classList.toggle('has-value', !!e.target.value);
+    setStatus('Saving…', 'saving');
+    if (state.pendingTimer) clearTimeout(state.pendingTimer);
+    state.pendingTimer = setTimeout(flushPendingEdits, 400);
+}
+
+function adjustBalls(playerId, delta) {
+    const round = getRoundById(state.selectedRoundId);
+    if (!round) return;
+    const current = effectiveBalls(round, playerId);
+    const next = Math.max(0, Math.min(9, current + delta));
+    if (next === current) return;
+    state.pendingEdits.balls[idStr(playerId)] = next;
+
+    const row = document.querySelector(`.balls-row[data-player-id="${cssEscape(idStr(playerId))}"]`);
+    if (row) {
+        row.querySelectorAll('.pip').forEach((p, i) => p.classList.toggle('full', i < next));
+        const cnt = row.querySelector('[data-role="balls-count"]');
+        if (cnt) cnt.textContent = String(next);
+        const btns = row.querySelectorAll('.balls-btn');
+        if (btns[0]) btns[0].disabled = (next <= 0);
+        if (btns[1]) btns[1].disabled = (next >= 9);
+    }
+
+    setStatus('Saving…', 'saving');
+    if (state.pendingTimer) clearTimeout(state.pendingTimer);
+    state.pendingTimer = setTimeout(flushPendingEdits, 400);
+}
+
+function hasPendingEdits() {
+    return Object.keys(state.pendingEdits.scores).length > 0
+        || Object.keys(state.pendingEdits.ctpWinners).length > 0
+        || Object.keys(state.pendingEdits.balls).length > 0
+        || Object.keys(state.pendingEdits.bbb).length > 0;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// SAVE — Firestore transaction (last-save-wins)
+// ═══════════════════════════════════════════════════════════════════════
+async function flushPendingEdits() {
+    if (state.saving) { state.pendingTimer = setTimeout(flushPendingEdits, 400); return; }
+    if (!hasPendingEdits()) { setStatus('', ''); return; }
+
+    const edits = state.pendingEdits;
+    state.pendingEdits = { scores: {}, ctpWinners: {}, balls: {}, bbb: {} };
+    state.saving = true;
+    state.pendingTimer = null;
+
+    try {
+        await firestoreDb.runTransaction(async (tx) => {
+            const snap = await tx.get(roundsRef);
+            if (!snap.exists) throw new Error('Rounds doc missing');
+            const data = snap.data();
+            const rounds = Array.isArray(data.value) ? JSON.parse(JSON.stringify(data.value)) : [];
+
+            const round = rounds.find(r => idsEqual(r.id, state.selectedRoundId));
+            if (!round) throw new Error('Round no longer exists');
+
+            // 1) Scores + balls (per-player edits within current group)
+            (round.teams || []).forEach(team => {
+                (team.players || []).forEach(player => {
+                    if (player.groupNumber !== state.groupNumber) return;
+                    const pid = idStr(player.id);
+
+                    if (edits.scores[pid]) {
+                        if (!Array.isArray(player.scores) || player.scores.length !== 18) {
+                            player.scores = Array(18).fill('');
+                        }
+                        Object.keys(edits.scores[pid]).forEach(h => {
+                            player.scores[parseInt(h, 10)] = edits.scores[pid][h];
+                        });
+                    }
+                    if (edits.balls[pid] !== undefined) player.ballsRemaining = edits.balls[pid];
+                });
+            });
+
+            // 2) CTP edits (last-save-wins; replace any entry for the hole)
+            if (Object.keys(edits.ctpWinners).length > 0) {
+                if (!Array.isArray(round.ctpWinners)) round.ctpWinners = [];
+                Object.keys(edits.ctpWinners).forEach(hStr => {
+                    const holeIdx = parseInt(hStr, 10);
+                    const winnerId = edits.ctpWinners[hStr];
+                    round.ctpWinners = round.ctpWinners.filter(item => {
+                        if (item == null) return false;
+                        if (typeof item === 'object') {
+                            const itemHole = (item.holeIdx != null) ? item.holeIdx
+                                          : (item.hole != null) ? (item.hole - 1) : null;
+                            return itemHole !== holeIdx;
+                        }
+                        return true;
+                    });
+                    if (winnerId) round.ctpWinners.push({ holeIdx, playerId: winnerId });
+                });
+            }
+
+            // 3) BBB edits (replace any entry for the hole)
+            if (Object.keys(edits.bbb).length > 0) {
+                if (!Array.isArray(round.bbbAwards)) round.bbbAwards = [];
+                Object.keys(edits.bbb).forEach(hStr => {
+                    const holeIdx = parseInt(hStr, 10);
+                    const slots = edits.bbb[hStr];
+                    round.bbbAwards = round.bbbAwards.filter(a => !(a && a.holeIdx === holeIdx));
+                    // Only push if at least one slot is set
+                    if (slots.bingo || slots.bango || slots.bongo) {
+                        round.bbbAwards.push({
+                            holeIdx,
+                            bingo: slots.bingo || '',
+                            bango: slots.bango || '',
+                            bongo: slots.bongo || ''
+                        });
+                    }
+                });
+
+                // Recompute every player's bbbTotal as count of awards across all holes
+                const counts = {};
+                round.bbbAwards.forEach(a => {
+                    ['bingo', 'bango', 'bongo'].forEach(slot => {
+                        const pid = a[slot];
+                        if (pid) counts[idStr(pid)] = (counts[idStr(pid)] || 0) + 1;
+                    });
+                });
+                (round.teams || []).forEach(team => {
+                    (team.players || []).forEach(player => {
+                        player.bbbTotal = counts[idStr(player.id)] || 0;
+                    });
+                });
+            }
+
+            tx.set(roundsRef, {
+                value: rounds,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        });
+
+        state.saving = false;
+
+        if (hasPendingEdits()) {
+            flushPendingEdits();
+        } else {
+            setStatus('Saved ✓', 'saved');
+            setTimeout(() => {
+                if (!state.saving && !hasPendingEdits()) setStatus('', '');
+            }, 1500);
+        }
+    } catch (err) {
+        console.error('Save error:', err);
+        state.saving = false;
+        setStatus('Save failed — retrying', 'error');
+        Object.keys(edits.scores).forEach(pid => {
+            if (!state.pendingEdits.scores[pid]) state.pendingEdits.scores[pid] = {};
+            Object.assign(state.pendingEdits.scores[pid], edits.scores[pid]);
+        });
+        Object.assign(state.pendingEdits.ctpWinners, edits.ctpWinners);
+        Object.assign(state.pendingEdits.balls, edits.balls);
+        Object.keys(edits.bbb).forEach(h => {
+            if (!state.pendingEdits.bbb[h]) state.pendingEdits.bbb[h] = {};
+            Object.assign(state.pendingEdits.bbb[h], edits.bbb[h]);
+        });
+        state.pendingTimer = setTimeout(flushPendingEdits, 2500);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// LIVE DOM updates (don't disturb focused input)
+// ═══════════════════════════════════════════════════════════════════════
+function cssEscape(s) {
+    if (window.CSS && window.CSS.escape) return window.CSS.escape(String(s));
+    return String(s).replace(/[^a-zA-Z0-9_-]/g, c => '\\' + c);
+}
+
+function updateCellLiveColor(playerId, gross) {
+    const round = getRoundById(state.selectedRoundId);
+    if (!round) return;
+    const groupPlayers = getGroupPlayers(round, state.groupNumber);
+    const p = groupPlayers.find(x => idsEqual(x.id, playerId));
+    if (!p) return;
+
+    const par = (round.pars || [])[state.currentHole];
+    const holeHc = (round.handicaps || [])[state.currentHole];
+    const hc = parseInt(p.handicap, 10) || 0;
+    const strokes = strokesOnHole(hc, holeHc);
+    const cls = classForScore(gross, par, strokes);
+
+    const wrap = document.querySelector(`.score-input-wrap[data-player-id="${cssEscape(idStr(playerId))}"]`);
+    if (!wrap) return;
+    ['albatross','eagle','birdie','par-score','bogey','double','worse'].forEach(c => wrap.classList.remove(c));
+    if (cls) wrap.classList.add(cls);
+
+    let badge = wrap.querySelector('.score-pts');
+    if (gross !== '' && !isNaN(parseInt(gross, 10))) {
+        const n = parseInt(gross, 10);
+        const pts = getPoints((n - strokes) - par);
+        if (!badge) {
+            badge = document.createElement('span');
+            badge.className = 'score-pts';
+            wrap.appendChild(badge);
+        }
+        badge.textContent = `${pts}p`;
+    } else if (badge) {
+        badge.remove();
+    }
+}
+
+function updatePlayerTotalsLive() {
+    const round = getRoundById(state.selectedRoundId);
+    if (!round) return;
+    const groupPlayers = getGroupPlayers(round, state.groupNumber);
+    const rows = document.querySelectorAll('.score-row');
+    rows.forEach((row, i) => {
+        const p = groupPlayers[i];
+        if (!p) return;
+        const totals = computePlayerTotals(round, p);
+        const meta = row.querySelector('.player-meta .total');
+        if (meta) meta.textContent = `Thru ${totals.thru}: ${totals.gross || '—'} (${totals.points} pts)`;
+    });
+}
+
+function updateDotsLive() {
+    const round = getRoundById(state.selectedRoundId);
+    if (!round) return;
+    const groupPlayers = getGroupPlayers(round, state.groupNumber);
+    document.querySelectorAll('#dots-strip .dot').forEach((dot, h) => {
+        const status = holeStatus(round, groupPlayers, h);
+        dot.classList.remove('complete', 'partial');
+        if (status) dot.classList.add(status);
+    });
+}
+
+function refreshScoreEntryFromServer() {
+    const focusedEl = document.activeElement;
+    const isEditingScore = focusedEl && focusedEl.classList && focusedEl.classList.contains('score-input');
+    const focusedPlayerId = isEditingScore ? focusedEl.dataset.playerId : null;
+
+    const round = getRoundById(state.selectedRoundId);
+    if (!round) return;
+    const groupPlayers = getGroupPlayers(round, state.groupNumber);
+
+    // Scores
+    groupPlayers.forEach(p => {
+        const pid = idStr(p.id);
+        const input = document.querySelector(`.score-input[data-player-id="${cssEscape(pid)}"]`);
+        if (!input) return;
+        if (focusedPlayerId === pid) return;
+        if (state.pendingEdits.scores[pid] && state.pendingEdits.scores[pid][state.currentHole] !== undefined) return;
+        const newVal = effectiveScore(round, p.id, state.currentHole);
+        if (input.value !== newVal) input.value = newVal;
+        updateCellLiveColor(pid, newVal);
+    });
+
+    // CTP
+    const ctpSel = document.getElementById('ctp-select');
+    if (ctpSel && document.activeElement !== ctpSel
+        && state.pendingEdits.ctpWinners[String(state.currentHole)] === undefined) {
+        const v = idStr(effectiveCTP(round, state.currentHole));
+        if (ctpSel.value !== v) ctpSel.value = v;
+        ctpSel.classList.toggle('has-value', !!v);
+    }
+
+    // BBB
+    const bbb = effectiveBBB(round, state.currentHole);
+    document.querySelectorAll('select[data-bbb-slot]').forEach(sel => {
+        if (document.activeElement === sel) return;
+        const slot = sel.dataset.bbbSlot;
+        if (state.pendingEdits.bbb[String(state.currentHole)]
+            && state.pendingEdits.bbb[String(state.currentHole)][slot] !== undefined) return;
+        const v = idStr(bbb[slot] || '');
+        if (sel.value !== v) sel.value = v;
+        sel.classList.toggle('has-value', !!v);
+    });
+
+    // Balls (only present on hole 18)
+    if (state.currentHole === 17) {
+        groupPlayers.forEach(p => {
+            const pid = idStr(p.id);
+            if (state.pendingEdits.balls[pid] !== undefined) return;
+            const balls = effectiveBalls(round, p.id);
+            const row = document.querySelector(`.balls-row[data-player-id="${cssEscape(pid)}"]`);
+            if (!row) return;
+            row.querySelectorAll('.pip').forEach((pip, i) => pip.classList.toggle('full', i < balls));
+            const cnt = row.querySelector('[data-role="balls-count"]');
+            if (cnt) cnt.textContent = String(balls);
+            const btns = row.querySelectorAll('.balls-btn');
+            if (btns[0]) btns[0].disabled = (balls <= 0);
+            if (btns[1]) btns[1].disabled = (balls >= 9);
+        });
+    }
+
+    updatePlayerTotalsLive();
+    updateDotsLive();
+}
+
+window.addEventListener('beforeunload', (e) => {
+    if (hasPendingEdits() && !state.saving) {
+        flushPendingEdits();
+        e.preventDefault();
+        e.returnValue = '';
+    }
+});
+
+window.__dutchCup = { state, flushPendingEdits, getRoundById };
+
+init();
+</script>
+</body>
+</html>
