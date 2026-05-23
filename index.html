@@ -527,7 +527,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.05.09.12';
+        const APP_VERSION = '2026.05.09.13';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -10299,6 +10299,8 @@
                     // CTP/BBB Leaders top-5 progressive reveals
                     ctpLeadersTop5: ctpLeadersTop5,
                     bbbLeadersTop5: bbbLeadersTop5,
+                    hasCTPLeadersSlide: hasCTPLeadersSlide,
+                    hasBBBLeadersSlide: hasBBBLeadersSlide,
                     // Event net scores
                     top3EventNetScores: top3EventNetScores,
                     hasEventNetSlide: hasEventNetSlide,
@@ -10563,6 +10565,7 @@
                     hasGrindSlide, hasDialedInSlide, hasPar3SpecialistSlide,
                     hasPhotosSlide,
                     hasMilestonesSlide, hasExtra9TeamsSlide, hasBBBLeaderboardSlide,
+                    hasCTPLeadersSlide, hasBBBLeadersSlide,
                     hasFieldSlide, hasByNumbersSlide, playersWhoPlayed, hasPerfIntroSlide,
                     bracketMatchSlides, bracketHasFallback, bracketCurrentStateData,
                     hasBracketIntroSlide, bracketCombinedSlideCount, bracketFallbackSlideCount,
