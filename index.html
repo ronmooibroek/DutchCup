@@ -527,7 +527,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.05.09.11';
+        const APP_VERSION = '2026.05.09.12';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -7342,6 +7342,9 @@
             netRevealStep: 0,
             bracketRevealStep: 0,
             playerRevealStep: 0,
+            ctpLeadersRevealStep: 0,
+            bbbLeadersRevealStep: 0,
+            teamRevealStep: 0,
             teamStandings: [],
             eventName: ''
         };
@@ -9293,6 +9296,29 @@
                             }
                         });
                         
+                        // Bounce Back winner (single per round, separate data structure)
+                        if (typeof bounceBackWinner !== 'undefined' && bounceBackWinner && _nameMatches(bounceBackWinner.playerName, playerSlide.playerName)) {
+                            awards.push({
+                                type: 'bounceBack',
+                                label: 'BOUNCE BACK',
+                                emoji: '🔄',
+                                color: '#ef4444',
+                                tagline: 'Mental toughness',
+                                detail: bounceBackWinner.count ? `${bounceBackWinner.count} bounce back${bounceBackWinner.count !== 1 ? 's' : ''}` : ''
+                            });
+                        }
+                        // Clutch player winner (single per round, separate data structure)
+                        if (typeof clutchWinner !== 'undefined' && clutchWinner && _nameMatches(clutchWinner.playerName, playerSlide.playerName)) {
+                            awards.push({
+                                type: 'clutch',
+                                label: 'CLUTCH',
+                                emoji: '⚡',
+                                color: '#fbbf24',
+                                tagline: 'Best on the final 3 holes',
+                                detail: (clutchWinner.netToPar != null) ? `Final 3 net ${clutchWinner.netToPar > 0 ? '+' : ''}${clutchWinner.netToPar}` : ''
+                            });
+                        }
+                        
                         playerSlide.playerAwards = awards;
                     });
                 }
@@ -9515,6 +9541,122 @@
                 ctpPlayers.sort((a, b) => b.ctpCount - a.ctpCount);
                 
                 presentationAnalytics.ctpLeaderboard = ctpPlayers;
+                
+                // ═══════════════════════════════════════════════════════════
+                // CTP LEADERS TOP-5 + BBB LEADERS TOP-5 — Progressive Reveal Data
+                // Event-scoped totals, today's contribution, movement vs previous standings
+                // ═══════════════════════════════════════════════════════════
+                
+                // Helper: resolve a winner entry (legacy "teamIdx-playerIdx" string or new {playerId, holeIdx} object) to a player ID
+                const _ctpResolveEntry = (entry, round) => {
+                    if (!entry) return null;
+                    if (typeof entry === 'object' && entry.playerId != null) return entry.playerId;
+                    if (typeof entry === 'string' && entry.includes('-')) {
+                        const [tIdx, pIdx] = entry.split('-').map(Number);
+                        if (!Number.isFinite(tIdx) || !Number.isFinite(pIdx)) return null;
+                        const team = round.teams && round.teams[tIdx];
+                        const pl = team && team.players && team.players[pIdx];
+                        return pl ? pl.id : null;
+                    }
+                    return null;
+                };
+                
+                // Sum CTPs per player across a set of rounds
+                const sumCTPsForRounds = (rounds) => {
+                    const counts = new Map();
+                    rounds.forEach(r => {
+                        if (!Array.isArray(r.ctpWinners)) return;
+                        r.ctpWinners.forEach(entry => {
+                            const pid = _ctpResolveEntry(entry, r);
+                            if (pid != null) counts.set(pid, (counts.get(pid) || 0) + 1);
+                        });
+                    });
+                    return counts;
+                };
+                // Sum BBBs per player across a set of rounds (read from player.bbbTotal saved on each round)
+                const sumBBBsForRounds = (rounds) => {
+                    const counts = new Map();
+                    rounds.forEach(r => {
+                        if (!Array.isArray(r.teams)) return;
+                        r.teams.forEach(team => {
+                            if (!Array.isArray(team.players)) return;
+                            team.players.forEach(p => {
+                                if (p.bbbTotal && p.bbbTotal > 0) {
+                                    counts.set(p.id, (counts.get(p.id) || 0) + p.bbbTotal);
+                                }
+                            });
+                        });
+                    });
+                    return counts;
+                };
+                
+                // Previous = all event rounds EXCEPT most recent. Today = most recent only. Total = all.
+                const _previousEventRounds = eventRounds.filter(r => r.id !== mostRecentRound.id);
+                
+                const ctpEventTotals = sumCTPsForRounds(eventRounds);
+                const ctpPreviousTotals = sumCTPsForRounds(_previousEventRounds);
+                const ctpTodayCounts = sumCTPsForRounds([mostRecentRound]);
+                
+                const bbbEventTotals = sumBBBsForRounds(eventRounds);
+                const bbbPreviousTotals = sumBBBsForRounds(_previousEventRounds);
+                const bbbTodayCounts = sumBBBsForRounds([mostRecentRound]);
+                
+                // Build a "top 5 with ties" array sorted by event total, then resolve positions with tie-aware ranking.
+                // Also computes previousPosition for the movement indicator.
+                const buildLeadersTop5 = (eventTotalsMap, todayCountsMap, previousTotalsMap) => {
+                    // Current rankings
+                    const currentRanked = Array.from(eventTotalsMap.entries())
+                        .filter(([pid, count]) => count > 0)
+                        .map(([pid, count]) => {
+                            const sp = state.players.find(p => p.id == pid);
+                            const team = sp ? state.teams.find(t => (t.players || []).some(p => p.id === sp.id)) : null;
+                            return {
+                                playerId: pid,
+                                playerName: sp ? sp.name : '?',
+                                teamName: team ? team.name : '',
+                                teamColor: team ? (team.color || '#3b82f6') : '#3b82f6',
+                                total: count,
+                                today: todayCountsMap.get(pid) || 0
+                            };
+                        })
+                        .sort((a, b) => b.total - a.total);
+                    
+                    // Assign places with ties
+                    let place = 1, prevTotal = null, atSame = 0;
+                    currentRanked.forEach((p, idx) => {
+                        if (prevTotal !== null && p.total !== prevTotal) { place += atSame; atSame = 0; }
+                        p.place = place;
+                        atSame++;
+                        prevTotal = p.total;
+                    });
+                    
+                    // Previous-round rankings (used for movement indicator)
+                    const previousRanked = Array.from(previousTotalsMap.entries())
+                        .filter(([pid, count]) => count > 0)
+                        .sort((a, b) => b[1] - a[1]);
+                    let pPlace = 1, pPrevTotal = null, pAtSame = 0;
+                    const previousPlaceById = new Map();
+                    previousRanked.forEach(([pid, count], idx) => {
+                        if (pPrevTotal !== null && count !== pPrevTotal) { pPlace += pAtSame; pAtSame = 0; }
+                        previousPlaceById.set(pid, pPlace);
+                        pAtSame++;
+                        pPrevTotal = count;
+                    });
+                    
+                    // Attach movement info: change = previous - current (positive = moved up)
+                    currentRanked.forEach(p => {
+                        const prev = previousPlaceById.get(p.playerId);
+                        p.previousPosition = prev != null ? prev : null;
+                        p.change = (prev != null) ? (prev - p.place) : null;
+                    });
+                    
+                    // Filter to top 5 places (includes all ties at each place)
+                    const top5 = currentRanked.filter(p => p.place <= 5);
+                    return top5;
+                };
+                
+                const ctpLeadersTop5 = buildLeadersTop5(ctpEventTotals, ctpTodayCounts, ctpPreviousTotals);
+                const bbbLeadersTop5 = buildLeadersTop5(bbbEventTotals, bbbTodayCounts, bbbPreviousTotals);
                 
                 // ═══════════════════════════════════════════════════════════
                 // END ENHANCED ANALYTICS ENGINE
@@ -10054,6 +10196,8 @@
                 const hasMilestonesSlide = presentationAnalytics.milestones.length > 0;
                 const hasExtra9TeamsSlide = presentationAnalytics.extra9Teams.length > 0;
                 const hasBBBLeaderboardSlide = presentationAnalytics.bbbLeaderboard.length > 0;
+                const hasCTPLeadersSlide = ctpLeadersTop5.length > 0;
+                const hasBBBLeadersSlide = bbbLeadersTop5.length > 0;
                 
                 // Warm-up slides: show field + by-the-numbers if the round has at least one player with a score
                 const playersWhoPlayed = [];
@@ -10080,16 +10224,14 @@
                 if (hasPhotosSlide) totalSlides++;
                 if (hasNetSlide) totalSlides++;
                 // BBB / CTP / Extra9 winner standalone slides are also rolled into per-player segments
-                if (hasCTPChampionSlide) totalSlides++;
-                if (hasBounceBackSlide) totalSlides++;
-                if (hasClutchSlide) totalSlides++;
-                if (hasWildCardSlide) totalSlides++;
+                // (BBB Leaderboard, CTP Champion, BounceBack, Clutch, WildCard are now removed or replaced)
+                if (hasCTPLeadersSlide) totalSlides++;
+                if (hasBBBLeadersSlide) totalSlides++;
                 if (hasWeeklyAchievementsSlide) totalSlides++;
                 totalSlides += leaderboard.length; // Team slides
                 if (hasEventNetSlide) totalSlides++; // Event net scores (only when complete)
                 if (hasMilestonesSlide) totalSlides++;
                 if (hasExtra9TeamsSlide) totalSlides++;
-                if (hasBBBLeaderboardSlide) totalSlides++;
                 if (hasHandicapSlide) totalSlides++;
                 if (hasNextRoundSlide) totalSlides++;
                 // Bracket reveal block (intro + matchup + result per match, OR intro + fallback)
@@ -10113,6 +10255,9 @@
                     netRevealStep: 0,
                     bracketRevealStep: 0,
                     playerRevealStep: 0,
+                    ctpLeadersRevealStep: 0,
+                    bbbLeadersRevealStep: 0,
+                    teamRevealStep: 0,
                     totalSlides: totalSlides,
                     // Player performances
                     individualPlayerSlides: individualPlayerSlides,
@@ -10151,6 +10296,9 @@
                     hasWildCardSlide: hasWildCardSlide,
                     hasExtra9Slide: hasExtra9Slide,
                     hasCtpSlide: hasCtpSlide,
+                    // CTP/BBB Leaders top-5 progressive reveals
+                    ctpLeadersTop5: ctpLeadersTop5,
+                    bbbLeadersTop5: bbbLeadersTop5,
                     // Event net scores
                     top3EventNetScores: top3EventNetScores,
                     hasEventNetSlide: hasEventNetSlide,
@@ -10464,20 +10612,36 @@
             presentationState._netTopCount = (presentationState.netTop5 || []).length;
             // Disabled — BBB / CTP / Extra9 winner standalone slides also roll into per-player segments
             const bbbSlideIndex = -1;
-            const ctpChampionSlideIndex = hasCTPChampionSlide ? slideIndex++ : -1;
-            const bounceBackSlideIndex = hasBounceBackSlide ? slideIndex++ : -1;
-            const clutchSlideIndex = hasClutchSlide ? slideIndex++ : -1;
-            const wildCardSlideIndex = hasWildCardSlide ? slideIndex++ : -1;
+            const ctpChampionSlideIndex = -1; // replaced by ctpLeadersSlideIndex (top-5 reveal)
+            const bounceBackSlideIndex = -1;  // rolled into per-player awards
+            const clutchSlideIndex = -1;      // rolled into per-player awards
+            const wildCardSlideIndex = -1;    // removed entirely per user request
+            // NEW: CTP and BBB Leaders top-5 progressive reveals
+            const ctpLeadersSlideIndex = hasCTPLeadersSlide ? slideIndex++ : -1;
+            const bbbLeadersSlideIndex = hasBBBLeadersSlide ? slideIndex++ : -1;
+            // Stash for nav handlers (top-5 progressive reveal sub-step navigation)
+            presentationState._ctpLeadersSlideIndex = ctpLeadersSlideIndex;
+            presentationState._ctpLeadersCount = (presentationState.ctpLeadersTop5 || []).length;
+            presentationState._bbbLeadersSlideIndex = bbbLeadersSlideIndex;
+            presentationState._bbbLeadersCount = (presentationState.bbbLeadersTop5 || []).length;
             const extra9SlideIndex = -1;
             const ctpSlideIndex = -1;
             const weeklyAchievementsSlideIndex = hasWeeklyAchievementsSlide ? slideIndex++ : -1;
             const teamSlidesStartIndex = slideIndex;
             slideIndex += teamStandings.length; // Team slides
+            // Stash for nav handlers (first team slide has a 2-stage reveal: full-bleed → regular page)
+            presentationState._teamSlidesStart = teamSlidesStartIndex;
+            presentationState._teamSlidesCount = teamStandings.length;
+            // The FIRST team in reverse-order display is at slide index (teamSlidesStartIndex + teamStandings.length - 1).
+            // That's the winning team (position #1) that gets the dramatic full-bleed overlay.
+            presentationState._winningTeamSlideIndex = teamStandings.length > 0
+                ? teamSlidesStartIndex + teamStandings.length - 1
+                : -1;
             const eventNetSlideIndex = hasEventNetSlide ? slideIndex++ : -1;
             const milestonesSlideIndex = hasMilestonesSlide ? slideIndex++ : -1;
             const handicapSlideIndex = hasHandicapSlide ? slideIndex++ : -1;
             const extra9TeamsSlideIndex = hasExtra9TeamsSlide ? slideIndex++ : -1;
-            const bbbLeaderboardSlideIndex = hasBBBLeaderboardSlide ? slideIndex++ : -1;
+            const bbbLeaderboardSlideIndex = -1; // replaced by bbbLeadersSlideIndex (top-5 reveal, moved up)
             const nextRoundSlideIndex = hasNextRoundSlide ? slideIndex++ : -1;
             
             // ─── PHOTO INTERLEAVE MAP ───
@@ -10681,10 +10845,16 @@
                                         📊 Analytics
                                     </button>
                                 ` : ''}
-                                ${hasBBBLeaderboardSlide ? `
-                                    <button onclick="presentationState.currentSlide = ${bbbLeaderboardSlideIndex}; renderPresentation();" 
+                                ${hasCTPLeadersSlide ? `
+                                    <button onclick="presentationState.currentSlide = ${ctpLeadersSlideIndex}; renderPresentation();" 
+                                            style="background:rgba(59,130,246,0.2);border:2px solid rgba(59,130,246,0.4);color:white;padding:12px 16px;border-radius:8px;cursor:pointer;font-size:14px;transition:all 0.3s;text-align:left;">
+                                        🎯 CTP Leaders
+                                    </button>
+                                ` : ''}
+                                ${hasBBBLeadersSlide ? `
+                                    <button onclick="presentationState.currentSlide = ${bbbLeadersSlideIndex}; renderPresentation();" 
                                             style="background:rgba(245,158,11,0.2);border:2px solid rgba(245,158,11,0.4);color:white;padding:12px 16px;border-radius:8px;cursor:pointer;font-size:14px;transition:all 0.3s;text-align:left;">
-                                        🎪 BBB Leaderboard
+                                        🎪 BBB Leaders
                                     </button>
                                 ` : ''}
                             </div>
@@ -12470,12 +12640,12 @@
                 // Tiebreaker text (fires only when winner shown and there's a true tie at place 1)
                 const tiedForFirst = top5.filter(p => p.place === 1).length > 1;
                 
-                // Map each position (1..totalPositions) to whether it's been revealed yet.
-                // After step N, positions (totalPositions - N + 1) through totalPositions are revealed.
-                // E.g., top5 with step 1 → only place 5 revealed; step 5 → all 5 revealed.
-                const isRevealed = (place) => {
-                    const firstRevealed = totalPositions - step + 1;
-                    return place >= firstRevealed;
+                // Map each ARRAY INDEX (not rank) to whether it's been revealed yet.
+                // Tied players share a rank but get distinct array positions, so they appear sequentially.
+                // After step N, the LAST N array entries are revealed (worst→best order, ending on the winner).
+                const isRevealedAtIndex = (idx) => {
+                    const firstRevealedIdx = totalPositions - step;
+                    return idx >= firstRevealedIdx;
                 };
                 
                 // Helper: look up state-side player record (for photo)
@@ -12561,8 +12731,8 @@
                             ` : ''}
                             
                             <div style="display:flex;flex-direction:column;gap:12px;">
-                                ${top5.map((p) => {
-                                    const revealed = isRevealed(p.place);
+                                ${top5.map((p, idx) => {
+                                    const revealed = isRevealedAtIndex(idx);
                                     const sp = getStatePlayer(p.playerId);
                                     const medal = p.place === 1 ? '🥇' : p.place === 2 ? '🥈' : p.place === 3 ? '🥉' : `#${p.place}`;
                                     if (!revealed) {
@@ -12595,7 +12765,7 @@
                                 ${step === 0
                                     ? `Tap Next to begin the countdown →`
                                     : (step < totalPositions - 1
-                                        ? `Tap Next to reveal #${totalPositions - step} →`
+                                        ? `Tap Next for the next reveal →`
                                         : (totalPositions > 1 ? '🥁 Tap Next for the winner →' : 'Tap Next →'))}
                             </div>
                         </div>
@@ -12625,6 +12795,160 @@
                     buttonGradient: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
                     buttonShadow: 'rgba(245,158,11,0.4)'
                 });
+            } else if (currentSlide === ctpLeadersSlideIndex) {
+                // ═══════════════════════════════════════════════════════
+                // CTP LEADERS TOP-5 — Progressive Reveal
+                // step 0: silhouettes for top 5
+                // step 1..N: reveal in reverse order (lowest place first), ending on #1
+                // Each entry shows: event total, today's count, movement vs previous standings
+                // ═══════════════════════════════════════════════════════
+                const ctpLeaders = (presentationState.ctpLeadersTop5 || []).slice().sort((a, b) => a.place - b.place);
+                const ctpTotalPositions = ctpLeaders.length;
+                const ctpStep = Math.min(presentationState.ctpLeadersRevealStep || 0, ctpTotalPositions);
+                const ctpIsRevealed = (idx) => idx >= (ctpTotalPositions - ctpStep);
+                const getStatePlayerCTP = (playerId) => state.players.find(sp => sp.id == playerId) || { id: playerId, name: '?' };
+                
+                // Movement indicator helper
+                const renderMovement = (p, accentColor) => {
+                    if (p.previousPosition == null) {
+                        return `<span style="color:#fbbf24;font-size:12px;font-weight:700;letter-spacing:1px;background:rgba(251,191,36,0.15);border:1px solid rgba(251,191,36,0.4);padding:2px 8px;border-radius:6px;">NEW</span>`;
+                    }
+                    if (p.change > 0) {
+                        return `<span style="color:#10b981;font-size:13px;font-weight:700;">⬆${p.change}</span>`;
+                    }
+                    if (p.change < 0) {
+                        return `<span style="color:#ef4444;font-size:13px;font-weight:700;">⬇${Math.abs(p.change)}</span>`;
+                    }
+                    return `<span style="color:#9ca3af;font-size:13px;font-weight:700;">=</span>`;
+                };
+                
+                html += `
+                    <div style="animation:slideUp 0.8s ease-out;max-width:900px;width:100%;margin:0 auto;">
+                        <div style="font-size:64px;margin-bottom:8px;">🎯</div>
+                        <h1 style="color:white;font-size:46px;margin:0 0 6px;font-weight:800;letter-spacing:1px;">CTP Leaders</h1>
+                        <p style="color:#a5b4fc;font-size:14px;margin:0 0 24px;font-weight:600;letter-spacing:2px;text-transform:uppercase;">Event Standings · Today's Round Changes</p>
+                        
+                        <div style="display:flex;flex-direction:column;gap:12px;">
+                            ${ctpLeaders.map((p, idx) => {
+                                const revealed = ctpIsRevealed(idx);
+                                const sp = getStatePlayerCTP(p.playerId);
+                                const medal = p.place === 1 ? '🥇' : p.place === 2 ? '🥈' : p.place === 3 ? '🥉' : `#${p.place}`;
+                                if (!revealed) {
+                                    return `
+                                        <div style="background:rgba(255,255,255,0.04);border:2px dashed rgba(255,255,255,0.15);border-radius:14px;padding:16px 18px;display:flex;align-items:center;gap:16px;opacity:0.55;">
+                                            <div style="font-size:24px;font-weight:700;color:#6b7280;min-width:54px;text-align:center;">${medal}</div>
+                                            <div style="width:56px;height:56px;border-radius:50%;background:#374151;display:flex;align-items:center;justify-content:center;color:#6b7280;font-size:28px;font-weight:700;">?</div>
+                                            <div style="flex:1;color:#6b7280;font-size:16px;font-style:italic;">— hidden —</div>
+                                        </div>
+                                    `;
+                                }
+                                return `
+                                    <div style="background:linear-gradient(90deg, ${p.teamColor || '#3b82f6'}25 0%, rgba(255,255,255,0.05) 100%);border:2px solid ${p.teamColor || '#3b82f6'};border-radius:14px;padding:16px 18px;display:flex;align-items:center;gap:16px;animation:slideUp 0.5s ease-out;">
+                                        <div style="font-size:24px;font-weight:700;min-width:54px;text-align:center;">${medal}</div>
+                                        ${renderAvatar(sp, 56)}
+                                        <div style="flex:1;text-align:left;">
+                                            <div style="color:white;font-size:20px;font-weight:700;line-height:1.1;">${p.playerName}</div>
+                                            <div style="display:flex;align-items:center;gap:10px;margin-top:4px;">
+                                                <div style="color:${p.teamColor || '#a5b4fc'};font-size:12px;font-weight:500;">${p.teamName}</div>
+                                                ${renderMovement(p, '#3b82f6')}
+                                            </div>
+                                        </div>
+                                        <div style="text-align:right;flex-shrink:0;">
+                                            <div style="color:white;font-size:32px;font-weight:800;line-height:1;">${p.total}</div>
+                                            <div style="color:#9ca3af;font-size:10px;margin-top:3px;letter-spacing:1px;">TOTAL CTPs</div>
+                                            ${p.today > 0 ? `
+                                                <div style="margin-top:6px;background:rgba(16,185,129,0.18);border:1px solid rgba(16,185,129,0.5);border-radius:6px;padding:2px 6px;color:#10b981;font-size:11px;font-weight:700;">
+                                                    +${p.today} today
+                                                </div>
+                                            ` : ''}
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                        
+                        <div style="margin-top:28px;color:#a5b4fc;font-size:14px;">
+                            ${ctpStep === 0
+                                ? `Tap Next to begin the countdown →`
+                                : (ctpStep < ctpTotalPositions
+                                    ? `Tap Next for the next reveal →`
+                                    : `🏆 All revealed`)}
+                        </div>
+                    </div>
+                `;
+            } else if (currentSlide === bbbLeadersSlideIndex) {
+                // ═══════════════════════════════════════════════════════
+                // BBB LEADERS TOP-5 — Progressive Reveal (same pattern as CTP)
+                // ═══════════════════════════════════════════════════════
+                const bbbLeaders = (presentationState.bbbLeadersTop5 || []).slice().sort((a, b) => a.place - b.place);
+                const bbbTotalPositions = bbbLeaders.length;
+                const bbbStep = Math.min(presentationState.bbbLeadersRevealStep || 0, bbbTotalPositions);
+                const bbbIsRevealed = (idx) => idx >= (bbbTotalPositions - bbbStep);
+                const getStatePlayerBBB = (playerId) => state.players.find(sp => sp.id == playerId) || { id: playerId, name: '?' };
+                
+                const renderMovementBBB = (p) => {
+                    if (p.previousPosition == null) {
+                        return `<span style="color:#fbbf24;font-size:12px;font-weight:700;letter-spacing:1px;background:rgba(251,191,36,0.15);border:1px solid rgba(251,191,36,0.4);padding:2px 8px;border-radius:6px;">NEW</span>`;
+                    }
+                    if (p.change > 0) return `<span style="color:#10b981;font-size:13px;font-weight:700;">⬆${p.change}</span>`;
+                    if (p.change < 0) return `<span style="color:#ef4444;font-size:13px;font-weight:700;">⬇${Math.abs(p.change)}</span>`;
+                    return `<span style="color:#9ca3af;font-size:13px;font-weight:700;">=</span>`;
+                };
+                
+                html += `
+                    <div style="animation:slideUp 0.8s ease-out;max-width:900px;width:100%;margin:0 auto;">
+                        <div style="font-size:64px;margin-bottom:8px;">🎪</div>
+                        <h1 style="color:white;font-size:46px;margin:0 0 6px;font-weight:800;letter-spacing:1px;">Bingo Bango Bongo</h1>
+                        <p style="color:#fde68a;font-size:14px;margin:0 0 24px;font-weight:600;letter-spacing:2px;text-transform:uppercase;">Event Leaders · Today's Round Changes</p>
+                        
+                        <div style="display:flex;flex-direction:column;gap:12px;">
+                            ${bbbLeaders.map((p, idx) => {
+                                const revealed = bbbIsRevealed(idx);
+                                const sp = getStatePlayerBBB(p.playerId);
+                                const medal = p.place === 1 ? '🥇' : p.place === 2 ? '🥈' : p.place === 3 ? '🥉' : `#${p.place}`;
+                                if (!revealed) {
+                                    return `
+                                        <div style="background:rgba(255,255,255,0.04);border:2px dashed rgba(255,255,255,0.15);border-radius:14px;padding:16px 18px;display:flex;align-items:center;gap:16px;opacity:0.55;">
+                                            <div style="font-size:24px;font-weight:700;color:#6b7280;min-width:54px;text-align:center;">${medal}</div>
+                                            <div style="width:56px;height:56px;border-radius:50%;background:#374151;display:flex;align-items:center;justify-content:center;color:#6b7280;font-size:28px;font-weight:700;">?</div>
+                                            <div style="flex:1;color:#6b7280;font-size:16px;font-style:italic;">— hidden —</div>
+                                        </div>
+                                    `;
+                                }
+                                return `
+                                    <div style="background:linear-gradient(90deg, ${p.teamColor || '#f59e0b'}25 0%, rgba(255,255,255,0.05) 100%);border:2px solid ${p.teamColor || '#f59e0b'};border-radius:14px;padding:16px 18px;display:flex;align-items:center;gap:16px;animation:slideUp 0.5s ease-out;">
+                                        <div style="font-size:24px;font-weight:700;min-width:54px;text-align:center;">${medal}</div>
+                                        ${renderAvatar(sp, 56)}
+                                        <div style="flex:1;text-align:left;">
+                                            <div style="color:white;font-size:20px;font-weight:700;line-height:1.1;">${p.playerName}</div>
+                                            <div style="display:flex;align-items:center;gap:10px;margin-top:4px;">
+                                                <div style="color:${p.teamColor || '#fde68a'};font-size:12px;font-weight:500;">${p.teamName}</div>
+                                                ${renderMovementBBB(p)}
+                                            </div>
+                                        </div>
+                                        <div style="text-align:right;flex-shrink:0;">
+                                            <div style="color:white;font-size:32px;font-weight:800;line-height:1;">${p.total}</div>
+                                            <div style="color:#9ca3af;font-size:10px;margin-top:3px;letter-spacing:1px;">TOTAL BBBs</div>
+                                            ${p.today > 0 ? `
+                                                <div style="margin-top:6px;background:rgba(16,185,129,0.18);border:1px solid rgba(16,185,129,0.5);border-radius:6px;padding:2px 6px;color:#10b981;font-size:11px;font-weight:700;">
+                                                    +${p.today} today
+                                                </div>
+                                            ` : ''}
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                        
+                        <div style="margin-top:28px;color:#fde68a;font-size:14px;">
+                            ${bbbStep === 0
+                                ? `Tap Next to begin the countdown →`
+                                : (bbbStep < bbbTotalPositions
+                                    ? `Tap Next for the next reveal →`
+                                    : `🏆 All revealed`)}
+                        </div>
+                    </div>
+                `;
             } else if (currentSlide === ctpChampionSlideIndex) {
                 // CTP CHAMPION SLIDE (Event-Wide)
                 const { ctpChampion, ctpChampionTop3 } = presentationState;
@@ -13091,8 +13415,12 @@
                     // Layered on top of the existing slide via z-index; nav
                     // buttons (z-index:10) stay clickable on top of this (z-index:5).
                     // Triggers confetti via isWinnerSlide flag.
+                    // SUB-STAGE: shown only when teamRevealStep === 0. Advancing the step
+                    // (via Next) hides the overlay and reveals the regular team scoring page,
+                    // which previously only flashed before the slide advanced.
                     // ═══════════════════════════════════════════════════════
-                    if (isFirst) {
+                    const _teamStep = presentationState.teamRevealStep || 0;
+                    if (isFirst && _teamStep === 0) {
                         presentationState.isWinnerSlide = true;
                         const championLabel = hasScheduledRounds ? 'LEADING' : 'CHAMPIONS';
                         const subLabel = hasScheduledRounds 
@@ -13257,56 +13585,38 @@
                     </div>
                 `;
             } else if (currentSlide === handicapSlideIndex) {
-                // HANDICAP CHANGES SLIDE
+                // HANDICAP CHANGES SLIDE — compact 3-column grid, no scrolling
+                // Each card sized so 12 players fit in a 3x4 grid on a typical 16:9 landscape view.
                 const actualChanges = handicapChanges.filter(ch => ch.beforeHandicap !== ch.afterHandicap);
                 
                 html += `
-                    <div style="animation:slideUp 0.8s ease-out;max-width:900px;width:100%;">
-                        <h1 style="color:white;font-size:48px;margin:0 0 16px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
+                    <div style="animation:slideUp 0.8s ease-out;max-width:1200px;width:100%;display:flex;flex-direction:column;height:100%;box-sizing:border-box;padding:8px 0;">
+                        <h1 style="color:white;font-size:36px;margin:0 0 4px;text-shadow:0 4px 20px rgba(0,0,0,0.5);flex-shrink:0;">
                             📊 Handicap Changes
                         </h1>
-                        <p style="color:#a5b4fc;font-size:20px;margin:0 0 40px;">
+                        <p style="color:#a5b4fc;font-size:14px;margin:0 0 14px;flex-shrink:0;">
                             Based on ${mostRecentRound.courseName}
                         </p>
                         
                         ${actualChanges.length > 0 ? `
-                            <div style="background:rgba(255,255,255,0.1);border:3px solid rgba(255,255,255,0.2);border-radius:20px;padding:30px;box-shadow:0 20px 60px rgba(0,0,0,0.4);">
+                            <div style="flex:1;display:grid;grid-template-columns:repeat(3,1fr);gap:10px;align-content:start;overflow:hidden;">
                                 ${actualChanges.map(change => {
                                     const diff = change.afterHandicap - change.beforeHandicap;
                                     const isDrop = diff < 0;
-                                    const bgColor = isDrop ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)';
+                                    const bgColor = isDrop ? 'rgba(16,185,129,0.18)' : 'rgba(239,68,68,0.18)';
                                     const borderColor = isDrop ? '#10b981' : '#ef4444';
-                                    const arrowIcon = isDrop ? '⬇️' : '⬆️';
+                                    const arrowIcon = isDrop ? '⬇' : '⬆';
                                     const diffColor = isDrop ? '#10b981' : '#ef4444';
                                     
                                     return `
-                                        <div style="background:${bgColor};border:3px solid ${borderColor};border-radius:16px;padding:24px;margin-bottom:20px;">
-                                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-                                                <strong style="font-size:32px;color:white;">${change.playerName}</strong>
-                                                <div style="display:flex;align-items:center;gap:12px;">
-                                                    <span style="font-size:20px;color:#a5b4fc;font-weight:600;">
-                                                        ${Math.abs(diff)} ${isDrop ? 'lower' : 'higher'}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                            
-                                            <div style="display:flex;align-items:center;gap:24px;justify-content:center;">
-                                                <div style="text-align:center;">
-                                                    <div style="font-size:16px;color:#a5b4fc;margin-bottom:8px;">Before</div>
-                                                    <div style="font-size:48px;font-weight:700;color:white;">${change.beforeHandicap}</div>
-                                                </div>
-                                                
-                                                <div style="font-size:56px;">${arrowIcon}</div>
-                                                
-                                                <div style="text-align:center;">
-                                                    <div style="font-size:16px;color:#a5b4fc;margin-bottom:8px;">After</div>
-                                                    <div style="font-size:48px;font-weight:700;color:${diffColor};">${change.afterHandicap}</div>
-                                                </div>
-                                                
-                                                <div style="background:rgba(255,255,255,0.15);border-radius:12px;padding:16px;min-width:100px;">
-                                                    <div style="font-size:40px;font-weight:700;color:${diffColor};text-align:center;">
-                                                        ${diff > 0 ? '+' : ''}${diff}
-                                                    </div>
+                                        <div style="background:${bgColor};border:2px solid ${borderColor};border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;">
+                                            <div style="color:white;font-size:15px;font-weight:700;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${change.playerName}</div>
+                                            <div style="display:flex;align-items:center;gap:8px;">
+                                                <div style="color:#a5b4fc;font-size:20px;font-weight:700;">${change.beforeHandicap}</div>
+                                                <div style="color:${diffColor};font-size:18px;line-height:1;">${arrowIcon}</div>
+                                                <div style="color:${diffColor};font-size:24px;font-weight:800;">${change.afterHandicap}</div>
+                                                <div style="margin-left:auto;background:rgba(255,255,255,0.12);border-radius:6px;padding:2px 8px;color:${diffColor};font-size:14px;font-weight:700;">
+                                                    ${diff > 0 ? '+' : ''}${diff}
                                                 </div>
                                             </div>
                                         </div>
@@ -13836,6 +14146,33 @@
                 return;
             }
             
+            // CTP Leaders top-5 reveal: advance sub-step until exhausted
+            const ctpLeadersIdx = presentationState._ctpLeadersSlideIndex;
+            const ctpLeadersCount = presentationState._ctpLeadersCount || 0;
+            if (!_navOnPhoto && ctpLeadersIdx >= 0 && _navContentIdx === ctpLeadersIdx && (presentationState.ctpLeadersRevealStep || 0) < ctpLeadersCount) {
+                presentationState.ctpLeadersRevealStep = (presentationState.ctpLeadersRevealStep || 0) + 1;
+                renderPresentation();
+                return;
+            }
+            
+            // BBB Leaders top-5 reveal: advance sub-step until exhausted
+            const bbbLeadersIdx = presentationState._bbbLeadersSlideIndex;
+            const bbbLeadersCount = presentationState._bbbLeadersCount || 0;
+            if (!_navOnPhoto && bbbLeadersIdx >= 0 && _navContentIdx === bbbLeadersIdx && (presentationState.bbbLeadersRevealStep || 0) < bbbLeadersCount) {
+                presentationState.bbbLeadersRevealStep = (presentationState.bbbLeadersRevealStep || 0) + 1;
+                renderPresentation();
+                return;
+            }
+            
+            // Winning team slide: 2 sub-stages (0=dramatic full-bleed overlay, 1=regular scoring page)
+            // Fixes the "regular team page flashes and disappears" bug — now it has a stable second stage.
+            const winTeamIdx = presentationState._winningTeamSlideIndex;
+            if (!_navOnPhoto && winTeamIdx >= 0 && _navContentIdx === winTeamIdx && (presentationState.teamRevealStep || 0) < 1) {
+                presentationState.teamRevealStep = 1;
+                renderPresentation();
+                return;
+            }
+            
             // Bracket combined slide: 3 sub-steps (0=matchup, 1=result, 2=details). Advance sub-step until exhausted.
             const bcStart = presentationState._bracketCombinedStart;
             const bcCount = presentationState._bracketMatchCount || 0;
@@ -13872,6 +14209,9 @@
             presentationState.netRevealStep = 0;
             presentationState.bracketRevealStep = 0;
             presentationState.playerRevealStep = 0;
+            presentationState.ctpLeadersRevealStep = 0;
+            presentationState.bbbLeadersRevealStep = 0;
+            presentationState.teamRevealStep = 0;
             
             if (presentationState.currentSlide >= presentationState.totalSlides) {
                 closePresentationMode();
@@ -13895,6 +14235,30 @@
             const netIdx = presentationState._netSlideIndex;
             if (!_onPhotoPre && netIdx >= 0 && _contentIdxPre === netIdx && (presentationState.netRevealStep || 0) > 0) {
                 presentationState.netRevealStep = (presentationState.netRevealStep || 0) - 1;
+                renderPresentation();
+                return;
+            }
+            
+            // CTP Leaders top-5: rewind sub-step before changing slide
+            const ctpLeadersIdx = presentationState._ctpLeadersSlideIndex;
+            if (!_onPhotoPre && ctpLeadersIdx >= 0 && _contentIdxPre === ctpLeadersIdx && (presentationState.ctpLeadersRevealStep || 0) > 0) {
+                presentationState.ctpLeadersRevealStep = (presentationState.ctpLeadersRevealStep || 0) - 1;
+                renderPresentation();
+                return;
+            }
+            
+            // BBB Leaders top-5: rewind sub-step before changing slide
+            const bbbLeadersIdx = presentationState._bbbLeadersSlideIndex;
+            if (!_onPhotoPre && bbbLeadersIdx >= 0 && _contentIdxPre === bbbLeadersIdx && (presentationState.bbbLeadersRevealStep || 0) > 0) {
+                presentationState.bbbLeadersRevealStep = (presentationState.bbbLeadersRevealStep || 0) - 1;
+                renderPresentation();
+                return;
+            }
+            
+            // Winning team slide: rewind sub-step (regular page → full-bleed overlay) before changing slide
+            const winTeamIdxPre = presentationState._winningTeamSlideIndex;
+            if (!_onPhotoPre && winTeamIdxPre >= 0 && _contentIdxPre === winTeamIdxPre && (presentationState.teamRevealStep || 0) > 0) {
+                presentationState.teamRevealStep = 0;
                 renderPresentation();
                 return;
             }
@@ -13936,6 +14300,24 @@
                     presentationState.netRevealStep = presentationState._netTopCount || 0;
                 } else {
                     presentationState.netRevealStep = 0;
+                }
+                // When entering CTP Leaders via Back, jump straight to the fully-revealed state
+                if (!_newOnPhoto && ctpLeadersIdx >= 0 && _newContentIdx === ctpLeadersIdx) {
+                    presentationState.ctpLeadersRevealStep = presentationState._ctpLeadersCount || 0;
+                } else {
+                    presentationState.ctpLeadersRevealStep = 0;
+                }
+                // When entering BBB Leaders via Back, jump straight to the fully-revealed state
+                if (!_newOnPhoto && bbbLeadersIdx >= 0 && _newContentIdx === bbbLeadersIdx) {
+                    presentationState.bbbLeadersRevealStep = presentationState._bbbLeadersCount || 0;
+                } else {
+                    presentationState.bbbLeadersRevealStep = 0;
+                }
+                // When entering the winning team slide via Back, jump to step 1 (regular page, post-overlay)
+                if (!_newOnPhoto && winTeamIdxPre >= 0 && _newContentIdx === winTeamIdxPre) {
+                    presentationState.teamRevealStep = 1;
+                } else {
+                    presentationState.teamRevealStep = 0;
                 }
                 // When entering a bracket combined slide via Back, jump to fully-revealed (step 2)
                 if (!_newOnPhoto && bcStart >= 0 && _newContentIdx >= bcStart && _newContentIdx < bcStart + bcCount) {
