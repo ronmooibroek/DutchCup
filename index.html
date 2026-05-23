@@ -527,7 +527,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.05.09.9';
+        const APP_VERSION = '2026.05.09.10';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -18800,7 +18800,12 @@
                         timestamp: originalRound.timestamp,
                         date: originalRound.date,
                         isEditing: undefined,
-                        originalIndex: undefined
+                        originalIndex: undefined,
+                        // Mark this round as completed so the score-entry app can lock it
+                        // (preserves any existing completedAt if re-editing an already-finished round)
+                        completed: true,
+                        completedAt: originalRound.completedAt || Date.now(),
+                        active: true
                     };
                     updatedRounds[round.originalIndex] = updatedRound;
                     save('rounds', updatedRounds);
@@ -18922,6 +18927,11 @@
                         r.date === round.date &&
                         JSON.stringify(r.teams.map(t => t.teamId).sort()) === JSON.stringify(round.teams.map(t => t.teamId).sort())
                     );
+                    
+                    // Mark round as completed so the score-entry app can lock it from further editing
+                    round.completed = true;
+                    round.completedAt = Date.now();
+                    round.active = true;
                     
                     if (originalScheduledRound && originalScheduledRound.timestamp) {
                         // Preserve the original scheduled timestamp
