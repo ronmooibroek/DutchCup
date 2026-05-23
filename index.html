@@ -527,7 +527,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.05.09.10';
+        const APP_VERSION = '2026.05.09.11';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -790,6 +790,13 @@
             db.listen('settings', (value) => {
                 if (value) {
                     state.settings = value;
+                    // Re-apply the access-control derived state — if the setting was flipped
+                    // to "no password required", anyone refreshing or receiving a snapshot
+                    // should immediately be in admin mode.
+                    if (state.settings.requireAdminPassword === false) {
+                        state.readOnly = false;
+                        state.isAuthenticated = true;
+                    }
                     render();
                 }
             });
@@ -1812,6 +1819,16 @@
 
         // Render functions
         const render = () => {
+            
+            // If "require admin password" is OFF, the app is in open-access mode.
+            // Treat the user as authenticated regardless of what state.readOnly was previously.
+            // This is a belt-and-suspenders safeguard: handles the case where state.readOnly
+            // might be stale from load-time defaults even though settings later loaded with
+            // requireAdminPassword: false.
+            if (state.settings && state.settings.requireAdminPassword === false) {
+                if (state.readOnly !== false) state.readOnly = false;
+                if (state.isAuthenticated !== true) state.isAuthenticated = true;
+            }
             
             // Protect edit pages in read-only mode
             if (state.readOnly) {
@@ -6376,6 +6393,15 @@
         // Actions (other functions)
 
         window.toggleAdminMode = () => {
+            // If "require admin password" is OFF in settings, no prompt is needed — admin access is automatic.
+            // This guard ensures even if someone clicks the lock button, they don't get a prompt they shouldn't.
+            if (state.settings && state.settings.requireAdminPassword === false) {
+                state.readOnly = false;
+                state.isAuthenticated = true;
+                render();
+                return;
+            }
+            
             // If already in admin mode, log out
             if (!state.readOnly && state.isAuthenticated) {
                 if (confirm('Exit Admin Mode? You\'ll need to re-enter the password to edit again.')) {
