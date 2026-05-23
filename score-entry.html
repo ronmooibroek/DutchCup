@@ -9,6 +9,7 @@
 <title>Dutch Cup — Score Entry</title>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-storage-compat.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
@@ -224,6 +225,55 @@ button, input, select { font-family: inherit; }
 
 .bbb-card { background: linear-gradient(180deg, #fffbeb 0%, #ffffff 70%); }
 .ctp-card { background: linear-gradient(180deg, #eef2ff 0%, #ffffff 70%); }
+.photo-card { background: linear-gradient(180deg, #f0f9ff 0%, #ffffff 70%); padding: 0; overflow: hidden; }
+.photo-card-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 14px; cursor: pointer; user-select: none;
+    font-size: 14px; font-weight: 700; color: #1e40af;
+}
+.photo-card-header:active { background: rgba(59, 130, 246, 0.06); }
+.photo-card-caret { font-size: 14px; color: #64748b; transition: transform 0.15s; }
+.photo-card-body { padding: 0 14px 14px; }
+.photo-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 12px;
+}
+.photo-tile {
+    position: relative; aspect-ratio: 1;
+    border-radius: 8px; overflow: hidden;
+    background: #e5e7eb;
+}
+.photo-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.photo-remove {
+    position: absolute; top: 4px; right: 4px;
+    width: 24px; height: 24px; border-radius: 50%;
+    background: rgba(239, 68, 68, 0.92); color: white;
+    border: none; cursor: pointer;
+    font-size: 12px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+}
+.photo-remove:active { background: rgba(220, 38, 38, 1); }
+.photo-add-row { display: flex; gap: 8px; }
+.photo-add-btn {
+    flex: 1; min-height: 48px;
+    background: #3b82f6; color: white;
+    border: none; border-radius: 10px;
+    font-size: 15px; font-weight: 700;
+    cursor: pointer;
+}
+.photo-add-btn:active { background: #2563eb; transform: scale(0.98); }
+.photo-hint {
+    color: #64748b; font-size: 12px;
+    margin-top: 8px; text-align: center;
+}
+.photo-warning {
+    color: #b45309; font-size: 12px;
+    margin-top: 8px; text-align: center;
+    background: #fef3c7; padding: 8px; border-radius: 6px;
+}
 
 .section-header {
     font-size: 13px; font-weight: 800; color: #065f46;
@@ -340,16 +390,75 @@ const LEAGUE_ID = "dutch-cup-2024";
 
 let firestoreDb = null;
 let roundsRef = null;
+let firebaseStorage = null; // optional; null if Storage SDK not available
 try {
     if (typeof firebase === 'undefined') throw new Error('Firebase SDK failed to load. Check your internet connection.');
     firebase.initializeApp(firebaseConfig);
     firestoreDb = firebase.firestore();
     roundsRef = firestoreDb.collection('leagues').doc(LEAGUE_ID).collection('data').doc('rounds');
+    // Storage is optional — if it's missing, photo upload will gracefully fall back to disabled state
+    if (firebase.storage) {
+        try { firebaseStorage = firebase.storage(); }
+        catch (storageErr) { console.warn('Firebase Storage init failed:', storageErr); firebaseStorage = null; }
+    }
 } catch (err) {
     console.error('Firebase init failed:', err);
     document.addEventListener('DOMContentLoaded', () => {
         showFatalError('Could not initialize Firebase: ' + (err.message || err), err.stack);
     });
+}
+
+// ─── Photo helpers ──────────────────────────────────────────────────────
+// Compress an image File/Blob to JPEG at <= maxDim on its longest edge.
+function compressImage(file, maxDim = 1200, quality = 0.85) {
+    return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => {
+            try {
+                URL.revokeObjectURL(url);
+                let { width, height } = img;
+                if (width > height && width > maxDim) {
+                    height = Math.round(height * (maxDim / width));
+                    width = maxDim;
+                } else if (height >= width && height > maxDim) {
+                    width = Math.round(width * (maxDim / height));
+                    height = maxDim;
+                }
+                const canvas = document.createElement('canvas');
+                canvas.width = width; canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+                canvas.toBlob(blob => {
+                    if (!blob) return reject(new Error('Compression produced no blob'));
+                    resolve(blob);
+                }, 'image/jpeg', quality);
+            } catch (e) { reject(e); }
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Image failed to load')); };
+        img.src = url;
+    });
+}
+
+function roundPhotoPath(roundId, ts) {
+    return `rounds/${roundId}/${ts || Date.now()}.jpg`;
+}
+
+async function uploadPhotoBlob(blob, storagePath) {
+    if (!firebaseStorage) throw new Error('Firebase Storage not initialized');
+    const ref = firebaseStorage.ref(storagePath);
+    await ref.put(blob, { contentType: 'image/jpeg' });
+    return await ref.getDownloadURL();
+}
+
+async function deletePhotoAtPath(storagePath) {
+    if (!firebaseStorage || !storagePath) return;
+    try {
+        await firebaseStorage.ref(storagePath).delete();
+    } catch (err) {
+        // Best effort — if the file's already gone, that's fine
+        console.warn('Storage delete failed (continuing):', err);
+    }
 }
 
 // ─── State ──────────────────────────────────────────────────────────────
@@ -483,9 +592,12 @@ function isAllScored(round) {
     return anyAssigned;
 }
 
-// Completed = started AND date in the past AND every assigned player fully scored.
+// Completed = the main app explicitly finished it (round.completed === true),
+// OR (legacy fallback) started AND date in the past AND every assigned player fully scored.
 function isRoundCompleted(round) {
-    if (!round || round.active === false) return false; // scheduled = not completed
+    if (!round) return false;
+    if (round.completed === true) return true; // explicit flag from main app finishRound
+    if (round.active === false) return false; // scheduled = not completed
     return isRoundDateInPast(round) && isAllScored(round);
 }
 
@@ -638,6 +750,30 @@ function handleRoundsSnapshot(doc) {
         handleRoundsSnapshot(doc);
         return;
     }
+    // If the currently-open round was finalized by the main app, kick back to the picker
+    if (round.completed === true) {
+        // Drop any unsaved edits — they can't be saved into a completed round
+        state.pendingEdits = { scores: {}, ctpWinners: {}, balls: {}, bbb: {} };
+        if (state.pendingTimer) { clearTimeout(state.pendingTimer); state.pendingTimer = null; }
+        state.saving = false;
+        const _wasOnEntry = state.currentPlayerId != null;
+        state.selectedRoundId = null;
+        state.currentPlayerId = null;
+        state.groupNumber = null;
+        state.currentHole = 0;
+        // Only alert if the user was actively in the scoring view (avoid spamming on picker)
+        if (_wasOnEntry) {
+            setTimeout(() => {
+                alert('This round was just finalized in the main app. Returning to the round list.');
+            }, 50);
+        }
+        // Re-render with fresh state
+        const selectable = getSelectableRounds(state.allRounds);
+        if (selectable.length === 0) { renderNoRound(); return; }
+        if (selectable.length === 1) { state.selectedRoundId = idStr(selectable[0].id); renderPlayerPicker(); return; }
+        renderRoundPicker(selectable);
+        return;
+    }
     if (state.currentPlayerId == null) renderPlayerPicker();
     else refreshScoreEntryFromServer();
 }
@@ -785,6 +921,9 @@ function renderScoreEntry() {
     if (par === 3) appEl.appendChild(buildCTPCard(round));
 
     if (state.currentHole === 17) appEl.appendChild(buildBallsCard(round, groupPlayers));
+
+    // Photo card — collapsible, always available during scoring
+    appEl.appendChild(buildPhotoCard(round));
 
     appEl.appendChild(buildFooterNav());
 }
@@ -1034,6 +1173,62 @@ function buildBallsCard(round, groupPlayers) {
     return wrap;
 }
 
+function buildPhotoCard(round) {
+    const photos = Array.isArray(round.photos) ? round.photos : [];
+    const wrap = el('div', { class: 'pick-card photo-card' });
+    
+    // Collapsible header
+    const header = el('div', { class: 'photo-card-header', onclick: 'togglePhotoCard()' });
+    header.appendChild(el('span', null, `📸 Round Photos${photos.length > 0 ? ` (${photos.length})` : ''}`));
+    header.appendChild(el('span', { id: 'photo-card-caret', class: 'photo-card-caret' }, photos.length > 0 ? '▼' : '▶'));
+    wrap.appendChild(header);
+    
+    const body = el('div', { id: 'photo-card-body', class: 'photo-card-body' });
+    body.style.display = photos.length > 0 ? 'block' : 'none';
+    
+    if (photos.length > 0) {
+        const grid = el('div', { class: 'photo-grid' });
+        photos.forEach((photo, idx) => {
+            // Handle both shapes: old base64 string, or new { url, path, uploadedAt }
+            const url = (typeof photo === 'string') ? photo : (photo && photo.url) ? photo.url : '';
+            if (!url) return;
+            const tile = el('div', { class: 'photo-tile' });
+            const img = el('img', { src: url, alt: `Photo ${idx + 1}`, loading: 'lazy' });
+            const btn = el('button', { class: 'photo-remove', onclick: `removeRoundPhoto(${idx})`, type: 'button' }, '✕');
+            tile.appendChild(img);
+            tile.appendChild(btn);
+            grid.appendChild(tile);
+        });
+        body.appendChild(grid);
+    }
+    
+    // Add Photo button — uses native file input with camera capture preferred on mobile
+    const addRow = el('div', { class: 'photo-add-row' });
+    const input = el('input', {
+        type: 'file', accept: 'image/*', multiple: '', capture: 'environment',
+        id: 'photo-file-input', style: 'display:none;', onchange: 'onPhotoFileSelected(event)'
+    });
+    const addBtn = el('button', {
+        class: 'photo-add-btn', type: 'button',
+        onclick: "document.getElementById('photo-file-input').click()"
+    }, photos.length > 0 ? '📷 Add More' : '📷 Add Photo');
+    
+    addRow.appendChild(input);
+    addRow.appendChild(addBtn);
+    body.appendChild(addRow);
+    
+    if (!firebaseStorage) {
+        body.appendChild(el('div', { class: 'photo-warning' },
+            '⚠️ Photo upload unavailable (Firebase Storage not configured)'));
+    } else {
+        body.appendChild(el('div', { class: 'photo-hint' },
+            'Photos appear in the presentation'));
+    }
+    
+    wrap.appendChild(body);
+    return wrap;
+}
+
 function buildFooterNav() {
     const wrap = el('div', { class: 'foot-nav' });
     wrap.appendChild(el('button', {
@@ -1210,6 +1405,14 @@ async function flushPendingEdits() {
 
             const round = rounds.find(r => idsEqual(r.id, state.selectedRoundId));
             if (!round) throw new Error('Round no longer exists');
+            // Reject the write if the round has been finalized by the main app since these edits were started.
+            // The transaction will throw here; the catch block below puts edits back so the user doesn't lose them
+            // (though the round being locked means they're stuck unless reopened in the main app).
+            if (round.completed === true) {
+                const err = new Error('ROUND_COMPLETED');
+                err.code = 'ROUND_COMPLETED';
+                throw err;
+            }
 
             // 1) Scores + balls (per-player edits within current group)
             (round.teams || []).forEach(team => {
@@ -1300,6 +1503,23 @@ async function flushPendingEdits() {
     } catch (err) {
         console.error('Save error:', err);
         state.saving = false;
+        // If the round was finalized by the main app, stop retrying and notify
+        if (err && (err.code === 'ROUND_COMPLETED' || (err.message && err.message.includes('ROUND_COMPLETED')))) {
+            setStatus('Round was finalized — edits not saved', 'error');
+            // Drop pending edits (they'd never save anyway) and kick back to picker
+            state.pendingEdits = { scores: {}, ctpWinners: {}, balls: {}, bbb: {} };
+            if (state.pendingTimer) { clearTimeout(state.pendingTimer); state.pendingTimer = null; }
+            // Show a brief alert then bounce to the round picker so the now-locked round is gone from view
+            setTimeout(() => {
+                alert('This round was finalized in the main app. Your latest edits could not be saved.');
+                state.selectedRoundId = null;
+                state.currentPlayerId = null;
+                state.groupNumber = null;
+                state.currentHole = 0;
+                render();
+            }, 100);
+            return;
+        }
         setStatus('Save failed — retrying', 'error');
         Object.keys(edits.scores).forEach(pid => {
             if (!state.pendingEdits.scores[pid]) state.pendingEdits.scores[pid] = {};
@@ -1442,6 +1662,123 @@ function refreshScoreEntryFromServer() {
 
     updatePlayerTotalsLive();
     updateDotsLive();
+}
+
+// ─── Photo upload & remove (transactional Firestore updates) ────────────
+let _photoUploadingCount = 0;
+
+async function uploadRoundPhotos(fileList) {
+    if (!firebaseStorage) {
+        setStatus('Photos disabled (Storage not configured)', 'error');
+        return;
+    }
+    if (!fileList || fileList.length === 0) return;
+    const roundId = state.selectedRoundId;
+    if (!roundId) return;
+    
+    const files = Array.from(fileList);
+    _photoUploadingCount += files.length;
+    setStatus(`📸 Uploading ${files.length} photo${files.length === 1 ? '' : 's'}…`, 'saving');
+    
+    let succeeded = 0;
+    for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        try {
+            // Compress, then upload to Firebase Storage
+            const blob = await compressImage(file, 1200, 0.85);
+            const ts = Date.now() + i; // unique even for rapid uploads
+            const path = roundPhotoPath(roundId, ts);
+            const url = await uploadPhotoBlob(blob, path);
+            const entry = { url, path, uploadedAt: ts };
+            
+            // Transactionally merge this photo into round.photos[]
+            await firestoreDb.runTransaction(async (tx) => {
+                const snap = await tx.get(roundsRef);
+                if (!snap.exists) throw new Error('Rounds doc missing');
+                const data = snap.data();
+                const rounds = Array.isArray(data.value) ? JSON.parse(JSON.stringify(data.value)) : [];
+                const round = rounds.find(r => idsEqual(r.id, roundId));
+                if (!round) throw new Error('Round no longer exists');
+                if (!Array.isArray(round.photos)) round.photos = [];
+                round.photos.push(entry);
+                tx.set(roundsRef, {
+                    value: rounds,
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+            });
+            succeeded++;
+        } catch (err) {
+            console.error(`Photo ${i + 1} upload failed:`, err);
+        } finally {
+            _photoUploadingCount--;
+        }
+    }
+    
+    if (succeeded === 0) {
+        setStatus('Photo upload failed', 'error');
+    } else if (succeeded < files.length) {
+        setStatus(`⚠️ ${succeeded} of ${files.length} uploaded`, 'saved');
+        setTimeout(() => setStatus('Saved ✓', 'saved'), 2000);
+    } else {
+        setStatus(`✅ ${succeeded} photo${succeeded === 1 ? '' : 's'} added`, 'saved');
+        setTimeout(() => setStatus('Saved ✓', 'saved'), 1500);
+    }
+    // The snapshot listener will pick up the new photos and re-render
+}
+
+async function removeRoundPhoto(index) {
+    const roundId = state.selectedRoundId;
+    if (!roundId) return;
+    const round = getRoundById(roundId);
+    if (!round || !Array.isArray(round.photos) || !round.photos[index]) return;
+    
+    if (!confirm('Remove this photo?')) return;
+    
+    const photo = round.photos[index];
+    const photoPath = (photo && typeof photo === 'object' && photo.path) ? photo.path : null;
+    
+    setStatus('Removing photo…', 'saving');
+    try {
+        // 1) Remove from Firestore via transaction
+        await firestoreDb.runTransaction(async (tx) => {
+            const snap = await tx.get(roundsRef);
+            if (!snap.exists) throw new Error('Rounds doc missing');
+            const data = snap.data();
+            const rounds = Array.isArray(data.value) ? JSON.parse(JSON.stringify(data.value)) : [];
+            const r = rounds.find(r => idsEqual(r.id, roundId));
+            if (!r) throw new Error('Round no longer exists');
+            if (!Array.isArray(r.photos)) return;
+            r.photos.splice(index, 1);
+            tx.set(roundsRef, {
+                value: rounds,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        });
+        // 2) Best-effort: delete the file from Storage
+        if (photoPath) await deletePhotoAtPath(photoPath);
+        setStatus('Photo removed', 'saved');
+        setTimeout(() => setStatus('Saved ✓', 'saved'), 1500);
+    } catch (err) {
+        console.error('Remove photo failed:', err);
+        setStatus('Failed to remove photo', 'error');
+    }
+}
+
+function onPhotoFileSelected(ev) {
+    const input = ev.target;
+    if (input.files && input.files.length > 0) {
+        uploadRoundPhotos(input.files);
+    }
+    input.value = ''; // reset so same file can be picked again
+}
+
+function togglePhotoCard() {
+    const body = document.getElementById('photo-card-body');
+    const caret = document.getElementById('photo-card-caret');
+    if (!body) return;
+    const isOpen = body.style.display !== 'none';
+    body.style.display = isOpen ? 'none' : 'block';
+    if (caret) caret.textContent = isOpen ? '▶' : '▼';
 }
 
 window.addEventListener('beforeunload', (e) => {
