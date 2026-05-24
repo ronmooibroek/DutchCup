@@ -527,7 +527,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.05.24.4';
+        const APP_VERSION = '2026.05.24.5';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -14619,8 +14619,14 @@
                 const dateStr = roundDate.toLocaleDateString('en-US', {weekday: 'long', month: 'long', day: 'numeric'});
                 const timeStr = roundDate.toLocaleTimeString('en-US', {hour: 'numeric', minute: '2-digit'});
                 
-                // ISO date (YYYY-MM-DD) for weather forecast query
-                const targetDateISO = roundDate.toISOString().slice(0, 10);
+                // ISO date (YYYY-MM-DD) for weather forecast query.
+                // Always target tomorrow (today + 1) rather than the round's actual timestamp.
+                // Rationale: during real events the next round is always the next day, and during
+                // testing the round timestamps may be days/months/years out — which would push us
+                // past Open-Meteo's 16-day forecast horizon. Tomorrow is always in-range.
+                const _tomorrowDate = new Date();
+                _tomorrowDate.setDate(_tomorrowDate.getDate() + 1);
+                const targetDateISO = _tomorrowDate.toISOString().slice(0, 10);
                 // Best string to geocode: courseAddress (most specific) → courseName (fallback)
                 // Hardcoded location for now — all Dutch Cup rounds are at Little River, SC.
                 // (Course addresses in the data don't always geocode cleanly so this is more reliable.)
