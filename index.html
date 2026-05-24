@@ -527,7 +527,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.05.09.14';
+        const APP_VERSION = '2026.05.09.15';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -9220,21 +9220,27 @@
                     const _achievementAwards = [
                         { key: 'rollercoaster', label: 'ROLLERCOASTER', emoji: '🎢',
                           color: '#a855f7', tagline: 'Most variable round',
+                          description: 'Awarded to the player with the widest swing in hole-to-hole scoring — the wildest ride of the day.',
                           detail: w => w.variance ? `Variance ${w.variance}` : '' },
                         { key: 'steadyEddie', label: 'STEADY EDDIE', emoji: '🧘',
                           color: '#0ea5e9', tagline: 'Most consistent round',
+                          description: 'Awarded to the player with the lowest hole-to-hole variance — unflappable from tee to green.',
                           detail: w => w.variance ? `Variance ${w.variance}` : '' },
                         { key: 'onFire', label: 'ON FIRE', emoji: '🔥',
                           color: '#ef4444', tagline: 'Hottest streak',
+                          description: 'Longest consecutive streak of pars or better in a single round.',
                           detail: w => w.streakLength ? `${w.streakLength}-hole hot streak` : '' },
                         { key: 'grind', label: 'GRINDER', emoji: '💪',
                           color: '#f59e0b', tagline: 'Battled through the grind',
+                          description: 'Most strokes recovered after a rough patch — refusing to give in when things went sideways.',
                           detail: w => w.recovery ? `Bounced back ${w.recovery}` : '' },
                         { key: 'dialedIn', label: 'DIALED IN', emoji: '🎯',
                           color: '#10b981', tagline: 'Locked-in performance',
+                          description: 'Most pars or better in a single round — pure, clean execution.',
                           detail: w => w.detail ? w.detail : '' },
                         { key: 'par3Specialist', label: 'PAR-3 SPECIALIST', emoji: '🎯',
                           color: '#6366f1', tagline: 'Owned the par-3s',
+                          description: 'Best combined score on all par-3 holes — sharp on the short stuff.',
                           detail: w => (w.par3Score != null) ? `Par-3 score ${w.par3Score}` : '' }
                     ];
                     
@@ -9250,6 +9256,7 @@
                                 emoji: '🎯',
                                 color: '#a855f7',
                                 tagline: 'Bingo Bango Bongo champion',
+                                description: 'Most Bingo-Bango-Bongo points: first ball on the green, closest to the pin once all are on, and first ball in the hole. Three chances per hole.',
                                 detail: (presentationAnalytics.bbbWinner.bbbCount != null)
                                     ? `${presentationAnalytics.bbbWinner.bbbCount} BBB points`
                                     : ''
@@ -9264,7 +9271,9 @@
                                 emoji: '🎯',
                                 color: '#3b82f6',
                                 tagline: win.holeIdx != null ? `Hole ${win.holeIdx + 1}` : '',
-                                detail: ''
+                                description: 'Closest to the pin off the tee on a par-3.',
+                                detail: '',
+                                holeIdx: win.holeIdx
                             });
                         });
                         
@@ -9276,7 +9285,9 @@
                                 emoji: '🦅',
                                 color: '#a855f7',
                                 tagline: win.holeIdx != null ? `Hole ${win.holeIdx + 1}` : 'Bonus winner',
-                                detail: ''
+                                description: 'Bonus closest-to-the-pin contest decided on this specific hole.',
+                                detail: '',
+                                holeIdx: win.holeIdx
                             });
                         });
                         
@@ -9291,6 +9302,7 @@
                                     emoji: spec.emoji,
                                     color: spec.color,
                                     tagline: spec.tagline,
+                                    description: spec.description,
                                     detail: spec.detail(won)
                                 });
                             }
@@ -9304,6 +9316,7 @@
                                 emoji: '🔄',
                                 color: '#ef4444',
                                 tagline: 'Mental toughness',
+                                description: 'Most pars or better immediately after a bogey-or-worse. Shaking off the bad and rising back up.',
                                 detail: bounceBackWinner.count ? `${bounceBackWinner.count} bounce back${bounceBackWinner.count !== 1 ? 's' : ''}` : ''
                             });
                         }
@@ -9315,7 +9328,9 @@
                                 emoji: '⚡',
                                 color: '#fbbf24',
                                 tagline: 'Best on the final 3 holes',
-                                detail: (clutchWinner.netToPar != null) ? `Final 3 net ${clutchWinner.netToPar > 0 ? '+' : ''}${clutchWinner.netToPar}` : ''
+                                description: 'Lowest net score across holes 16, 17, and 18 — closing strong when the pressure peaked.',
+                                detail: (clutchWinner.netToPar != null) ? `Final 3 net ${clutchWinner.netToPar > 0 ? '+' : ''}${clutchWinner.netToPar}` : '',
+                                holeRange: [15, 16, 17] // 0-indexed: holes 16,17,18
                             });
                         }
                         
@@ -11407,60 +11422,112 @@
                 };
                 const highlight = computeHighlight();
                 
-                if (playerStage === 0) {
-                    // Look up state player for photo
-                    const _heroStatePlayer = state.players.find(sp => sp.id == player.playerId) || { id: player.playerId, name: player.playerName };
-                    
-                    // ─── STAGE 0: HERO INTRO ───
-                    html += `
-                        <div style="animation:fadeIn 0.6s ease-out;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 20px;box-sizing:border-box;text-align:center;">
-                            <!-- Highlight callout banner -->
-                            ${highlight ? `
-                                <div style="background:linear-gradient(135deg, ${highlight.color}33, ${highlight.color}11);border:2px solid ${highlight.color};border-radius:14px;padding:14px 32px;margin-bottom:32px;animation:slideUp 0.7s 0.2s ease-out backwards;">
-                                    <div style="display:flex;align-items:center;gap:14px;justify-content:center;">
-                                        <div style="font-size:44px;line-height:1;">${highlight.emoji}</div>
-                                        <div style="text-align:left;">
-                                            <div style="color:${highlight.color};font-size:20px;font-weight:900;letter-spacing:3px;line-height:1;">${highlight.label}</div>
-                                            <div style="color:rgba(255,255,255,0.85);font-size:14px;margin-top:4px;">${highlight.detail}</div>
-                                        </div>
-                                    </div>
-                                </div>
-                            ` : ''}
-                            
-                            <!-- Player photo (big) -->
-                            <div style="margin-bottom:24px;animation:scaleIn 0.7s 0.3s ease-out backwards;">
-                                <div style="border:5px solid ${player.teamColor};border-radius:50%;padding:5px;box-shadow:0 8px 30px rgba(0,0,0,0.4), 0 0 40px ${player.teamColor}55;">
-                                    ${renderAvatar(_heroStatePlayer, 200)}
-                                </div>
-                            </div>
-                            
-                            <!-- Player name -->
-                            <h1 style="color:white;font-size:84px;font-weight:900;margin:0 0 12px;text-shadow:0 4px 30px rgba(0,0,0,0.6);line-height:1.05;animation:slideUp 0.8s 0.4s ease-out backwards;">
-                                ${player.playerName}
-                            </h1>
-                            
-                            <!-- Team -->
-                            <div style="display:inline-flex;align-items:center;gap:10px;animation:slideUp 0.6s 0.7s ease-out backwards;">
-                                <div style="width:14px;height:14px;border-radius:50%;background:${player.teamColor};box-shadow:0 0 16px ${player.teamColor};"></div>
-                                <div style="color:white;font-size:24px;font-weight:600;">${player.teamName}</div>
-                            </div>
-                            
-                            <!-- Position teaser -->
-                            <div style="margin-top:48px;color:rgba(255,255,255,0.6);font-size:18px;font-style:italic;animation:fadeIn 0.6s 1.2s ease-out backwards;">
-                                Tap "Next →" to see today's round
-                            </div>
-                        </div>
-                    `;
-                } else if (playerStage >= 3 && Array.isArray(player.playerAwards) && (playerStage - 3) < player.playerAwards.length) {
-                    // ─── STAGE 3+: AWARD REVEAL ───
-                    // Each award is its own dedicated reveal screen
-                    const awardIdx = playerStage - 3;
+                if (playerStage >= 1 && Array.isArray(player.playerAwards) && (playerStage - 1) < player.playerAwards.length) {
+                    // ─── STAGE 1+: AWARD REVEAL ───
+                    // Each award is its own dedicated reveal screen.
+                    // (Stage 0 is the unified player page; awards now start at stage 1.)
+                    const awardIdx = playerStage - 1;
                     const award = player.playerAwards[awardIdx];
                     const totalAwards = player.playerAwards.length;
                     const _statePlayer = state.players.find(sp => sp.id == player.playerId) || { id: player.playerId, name: player.playerName };
                     
                     // Trigger confetti for awards
                     presentationState.isWinnerSlide = true;
+                    
+                    // ── Compute the relevant holes for this award ──
+                    // Some awards have a clear hole subset; others span the round.
+                    let relevantHoles = []; // 0-indexed hole numbers to highlight
+                    let showFullScorecard = false;
+                    if (award.holeIdx != null && Number.isFinite(award.holeIdx)) {
+                        // CTP, Extra 9 — single hole
+                        relevantHoles = [award.holeIdx];
+                    } else if (Array.isArray(award.holeRange) && award.holeRange.length > 0) {
+                        // Clutch — specific hole range
+                        relevantHoles = award.holeRange;
+                    } else if (award.type === 'par3Specialist' && mostRecentRound && Array.isArray(mostRecentRound.pars)) {
+                        // Par-3 Specialist — all par-3 holes
+                        mostRecentRound.pars.forEach((par, idx) => { if (par === 3) relevantHoles.push(idx); });
+                    } else {
+                        // Round-wide awards: show full 18-hole scorecard
+                        showFullScorecard = true;
+                    }
+                    
+                    // ── Build the award scorecard slice ──
+                    // Styled to match the award's color palette. Highlighted holes are pulled out
+                    // visually with the award color; unhighlighted holes (full scorecard mode) are subdued.
+                    let awardScorecardHTML = '';
+                    if (player.scorecard && player.scorecard.length > 0 && mostRecentRound && Array.isArray(mostRecentRound.pars)) {
+                        const holeIndices = showFullScorecard
+                            ? Array.from({ length: 18 }, (_, i) => i)
+                            : relevantHoles.slice().sort((a, b) => a - b);
+                        
+                        // Render each hole cell
+                        const renderHoleCell = (i) => {
+                            const score = player.scorecard[i];
+                            const par = mostRecentRound.pars[i];
+                            const handicapIdx = mostRecentRound.handicaps[i];
+                            let strokes = 0;
+                            if (player.handicap >= handicapIdx) strokes = 1;
+                            if (player.handicap >= handicapIdx + 18) strokes = 2;
+                            const colors = getScoreColor(score, par, strokes > 0);
+                            let points = 0;
+                            if (score !== '' && score !== null && score !== undefined) {
+                                const netScoreHole = parseInt(score) - strokes;
+                                const netToParHole = netScoreHole - par;
+                                points = getPoints(netToParHole);
+                            }
+                            const isRelevant = relevantHoles.includes(i);
+                            const cellBorder = isRelevant
+                                ? `border:2px solid ${award.color};box-shadow:0 0 12px ${award.color}66;`
+                                : 'border:1px solid rgba(255,255,255,0.15);';
+                            const opacity = (showFullScorecard && !isRelevant) ? 'opacity:0.55;' : '';
+                            return `
+                                <div style="text-align:center;${opacity}">
+                                    <div style="font-size:9px;color:${isRelevant ? award.color : '#9ca3af'};font-weight:700;margin-bottom:2px;">${i + 1}</div>
+                                    <div style="${cellBorder}background:${colors.bg};color:${colors.text};padding:6px 2px;border-radius:4px;font-weight:${colors.fontWeight};font-size:14px;">
+                                        ${score || '-'}
+                                    </div>
+                                    <div style="font-size:8px;color:#64748b;margin-top:1px;">P${par}</div>
+                                    <div style="font-size:8px;color:${points > 0 ? '#10b981' : points < 0 ? '#ef4444' : '#64748b'};font-weight:600;min-height:10px;">
+                                        ${points !== 0 ? (points > 0 ? '+' : '') + points : ''}
+                                    </div>
+                                </div>
+                            `;
+                        };
+                        
+                        if (showFullScorecard) {
+                            // Full 18, two 9-hole rows
+                            awardScorecardHTML = `
+                                <div style="background:linear-gradient(135deg, ${award.color}1a, rgba(255,255,255,0.03));border:1px solid ${award.color}55;border-radius:12px;padding:14px 18px;margin-top:20px;animation:fadeIn 0.6s 0.7s ease-out backwards;">
+                                    <div style="color:${award.color};font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;">📊 Today's Scorecard</div>
+                                    <div style="display:grid;grid-template-columns:repeat(9,1fr);gap:4px;margin-bottom:6px;">
+                                        ${Array.from({ length: 9 }, (_, i) => renderHoleCell(i)).join('')}
+                                    </div>
+                                    <div style="display:grid;grid-template-columns:repeat(9,1fr);gap:4px;">
+                                        ${Array.from({ length: 9 }, (_, i) => renderHoleCell(i + 9)).join('')}
+                                    </div>
+                                </div>
+                            `;
+                        } else if (holeIndices.length > 0) {
+                            // Focused slice — show only the relevant holes, big and bold
+                            const sliceLabel = holeIndices.length === 1
+                                ? `Hole ${holeIndices[0] + 1}`
+                                : `Hole${holeIndices.length === 1 ? '' : 's'} ${holeIndices.map(i => i + 1).join(', ')}`;
+                            const cellWidth = holeIndices.length <= 3 ? '90px' : '70px';
+                            awardScorecardHTML = `
+                                <div style="background:linear-gradient(135deg, ${award.color}1a, rgba(255,255,255,0.03));border:1px solid ${award.color}55;border-radius:12px;padding:14px 18px;margin-top:20px;animation:fadeIn 0.6s 0.7s ease-out backwards;">
+                                    <div style="color:${award.color};font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;">📍 ${sliceLabel}</div>
+                                    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+                                        ${holeIndices.map(i => `
+                                            <div style="min-width:${cellWidth};">
+                                                ${renderHoleCell(i)}
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                            `;
+                        }
+                    }
                     
                     html += `
                         <style>
@@ -11479,7 +11546,7 @@
                                 100% { transform: translateY(0); opacity: 1; }
                             }
                         </style>
-                        <div style="animation:fadeIn 0.5s ease-out;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 20px;box-sizing:border-box;text-align:center;position:relative;">
+                        <div style="animation:fadeIn 0.5s ease-out;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px 20px;box-sizing:border-box;text-align:center;position:relative;overflow-y:auto;">
                             
                             <!-- Stage indicator (small, top) -->
                             <div style="position:absolute;top:30px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,0.5);font-size:12px;font-weight:700;letter-spacing:3px;">
@@ -11487,52 +11554,54 @@
                             </div>
                             
                             <!-- Player photo (small, contextualizing) -->
-                            <div style="display:flex;align-items:center;gap:14px;margin-bottom:32px;animation:fadeIn 0.6s 0.1s ease-out backwards;">
+                            <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px;animation:fadeIn 0.6s 0.1s ease-out backwards;">
                                 <div style="border:3px solid ${award.color};border-radius:50%;padding:3px;">
-                                    ${renderAvatar(_statePlayer, 72)}
+                                    ${renderAvatar(_statePlayer, 64)}
                                 </div>
                                 <div style="text-align:left;">
-                                    <div style="color:white;font-size:26px;font-weight:800;line-height:1.1;">${player.playerName}</div>
+                                    <div style="color:white;font-size:24px;font-weight:800;line-height:1.1;">${player.playerName}</div>
                                     <div style="display:flex;align-items:center;gap:6px;margin-top:4px;">
                                         <div style="width:10px;height:10px;border-radius:50%;background:${player.teamColor};"></div>
-                                        <div style="color:rgba(255,255,255,0.85);font-size:14px;">${player.teamName}</div>
+                                        <div style="color:rgba(255,255,255,0.85);font-size:13px;">${player.teamName}</div>
                                     </div>
                                 </div>
                             </div>
                             
                             <!-- Award emoji (huge, with entrance animation + ongoing glow) -->
-                            <div style="font-size:180px;line-height:1;margin-bottom:14px;animation:awardEntrance 0.8s ease-out, awardGlow 2.5s 0.8s ease-in-out infinite;">
+                            <div style="font-size:140px;line-height:1;margin-bottom:10px;animation:awardEntrance 0.8s ease-out, awardGlow 2.5s 0.8s ease-in-out infinite;">
                                 ${award.emoji}
                             </div>
                             
                             <!-- Award label -->
-                            <div style="background:linear-gradient(135deg, ${award.color}, ${award.color}dd);color:white;padding:14px 40px;border-radius:14px;box-shadow:0 12px 40px ${award.color}66;animation:awardLabelSlideUp 0.5s 0.4s ease-out backwards;">
-                                <div style="font-size:38px;font-weight:900;letter-spacing:3px;line-height:1;">${award.label}</div>
-                                ${award.tagline ? `<div style="font-size:16px;margin-top:8px;font-weight:600;opacity:0.95;">${award.tagline}</div>` : ''}
-                                ${award.detail ? `<div style="font-size:14px;margin-top:6px;font-weight:500;opacity:0.85;">${award.detail}</div>` : ''}
+                            <div style="background:linear-gradient(135deg, ${award.color}, ${award.color}dd);color:white;padding:12px 36px;border-radius:14px;box-shadow:0 12px 40px ${award.color}66;animation:awardLabelSlideUp 0.5s 0.4s ease-out backwards;">
+                                <div style="font-size:34px;font-weight:900;letter-spacing:3px;line-height:1;">${award.label}</div>
+                                ${award.tagline ? `<div style="font-size:15px;margin-top:6px;font-weight:600;opacity:0.95;">${award.tagline}</div>` : ''}
+                                ${award.detail ? `<div style="font-size:13px;margin-top:5px;font-weight:500;opacity:0.85;">${award.detail}</div>` : ''}
                             </div>
+                            
+                            <!-- Award description (what the award is given out for) -->
+                            ${award.description ? `
+                                <div style="margin-top:16px;max-width:680px;color:rgba(255,255,255,0.78);font-size:14px;font-style:italic;line-height:1.45;animation:fadeIn 0.6s 0.55s ease-out backwards;">
+                                    ${award.description}
+                                </div>
+                            ` : ''}
+                            
+                            <!-- Scorecard slice for this award -->
+                            ${awardScorecardHTML}
                             
                             <!-- Hint (only if more awards to come for this player) -->
                             ${awardIdx + 1 < totalAwards ? `
-                                <div style="margin-top:30px;color:rgba(255,255,255,0.5);font-size:14px;font-style:italic;animation:fadeIn 0.5s 1.5s ease-out backwards;">
+                                <div style="margin-top:22px;color:rgba(255,255,255,0.5);font-size:13px;font-style:italic;animation:fadeIn 0.5s 1.5s ease-out backwards;">
                                     Tap "Next →" for award ${awardIdx + 2}
                                 </div>
                             ` : ''}
                         </div>
                     `;
                 } else {
-                    // ─── STAGE 1+: existing grid layout, with stage-2 gating on points panel ───
+                    // ─── STAGE 0: full player page (no sub-step gating, no award badges) ───
                     html += `
                     <div style="animation:slideUp 0.8s ease-out;width:100%;height:100%;padding:16px;box-sizing:border-box;overflow:hidden;" data-player-stage="${playerStage}">
-                        <!-- Highlight banner (small, top of slide) -->
-                        ${highlight ? `
-                            <div style="background:linear-gradient(135deg, ${highlight.color}33, ${highlight.color}11);border:1px solid ${highlight.color}88;border-radius:8px;padding:6px 14px;margin-bottom:10px;display:inline-flex;align-items:center;gap:10px;">
-                                <span style="font-size:20px;line-height:1;">${highlight.emoji}</span>
-                                <span style="color:${highlight.color};font-size:13px;font-weight:800;letter-spacing:2px;">${highlight.label}</span>
-                                <span style="color:rgba(255,255,255,0.7);font-size:12px;">· ${highlight.detail}</span>
-                            </div>
-                        ` : ''}
-                        <div style="display:grid;grid-template-columns:300px 1fr;gap:16px;height:calc(100% - 40px);">
+                        <div style="display:grid;grid-template-columns:300px 1fr;gap:16px;height:100%;">
                             
                             <!-- LEFT COLUMN -->
                             <div style="display:flex;flex-direction:column;gap:12px;">
@@ -11606,8 +11675,7 @@
                                 <!-- Scorecard -->
                                 ${scorecardHTML}
                                 
-                                <!-- Points Breakdown - HORIZONTAL (stage 2 only) -->
-                                ${playerStage >= 2 ? `
+                                <!-- Points Breakdown - HORIZONTAL (always shown) -->
                                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;animation:slideUp 0.5s ease-out;">
                                     <!-- Today's Points -->
                                     <div style="background:rgba(255,255,255,0.05);border-radius:12px;padding:14px;">
@@ -11671,7 +11739,6 @@
                                         </div>
                                     </div>
                                 </div>
-                                ` : ''}
                             </div>
                         </div>
                     </div>
@@ -14044,10 +14111,20 @@
                     </div>
                 `;
             } else if (currentSlide === nextRoundSlideIndex) {
-                // NEXT ROUND DETAILS SLIDE
+                // NEXT ROUND DETAILS SLIDE — single-page no-scroll layout
                 const roundDate = new Date(nextRound.timestamp);
                 const dateStr = roundDate.toLocaleDateString('en-US', {weekday: 'long', month: 'long', day: 'numeric'});
                 const timeStr = roundDate.toLocaleTimeString('en-US', {hour: 'numeric', minute: '2-digit'});
+                
+                // ISO date (YYYY-MM-DD) for weather forecast query
+                const targetDateISO = roundDate.toISOString().slice(0, 10);
+                // Best string to geocode: courseAddress (most specific) → courseName (fallback)
+                const weatherQuery = nextRound.courseAddress || nextRound.courseName;
+                
+                // Course par/length info (if available)
+                const coursePar = nextRound.pars && Array.isArray(nextRound.pars)
+                    ? nextRound.pars.reduce((sum, p) => sum + p, 0)
+                    : null;
                 
                 // Organize players by group
                 const groupsMap = {};
@@ -14072,26 +14149,26 @@
                 
                 const sortedGroups = Object.keys(groupsMap).sort((a, b) => parseInt(a) - parseInt(b));
                 
-                // Build groups HTML separately to avoid nested template literals
+                // Compact groups grid — no internal scrolling, tighter player cards
                 let groupsHTML = '';
                 if (sortedGroups.length > 0) {
-                    groupsHTML = '<div style="background:rgba(255,255,255,0.1);border:3px solid rgba(255,255,255,0.2);border-radius:16px;padding:24px;max-height:400px;overflow-y:auto;">' +
-                        '<h2 style="color:white;font-size:28px;margin:0 0 20px;">👥 Groups</h2>' +
-                        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px;">';
+                    groupsHTML = '<div style="background:rgba(255,255,255,0.07);border:2px solid rgba(255,255,255,0.15);border-radius:14px;padding:14px 18px;flex:1;display:flex;flex-direction:column;min-height:0;">' +
+                        '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-shrink:0;">' +
+                            '<div style="font-size:22px;">👥</div>' +
+                            '<h2 style="color:white;font-size:18px;margin:0;font-weight:700;letter-spacing:1px;text-transform:uppercase;">Groups</h2>' +
+                        '</div>' +
+                        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;flex:1;min-height:0;">';
                     
                     sortedGroups.forEach(groupNum => {
                         const players = groupsMap[groupNum];
-                        groupsHTML += '<div style="background:rgba(255,255,255,0.1);border-radius:12px;padding:16px;">' +
-                            '<h3 style="color:#a5b4fc;font-size:18px;margin:0 0 12px;">Group ' + groupNum + '</h3>';
+                        groupsHTML += '<div style="background:rgba(255,255,255,0.05);border-radius:8px;padding:10px 12px;">' +
+                            '<h3 style="color:#a5b4fc;font-size:12px;margin:0 0 8px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;">Group ' + groupNum + '</h3>';
                         
                         players.forEach(player => {
-                            groupsHTML += '<div style="display:flex;align-items:center;gap:8px;padding:8px;background:rgba(255,255,255,0.05);border-radius:6px;margin-bottom:6px;">' +
-                                '<div style="width:8px;height:8px;border-radius:50%;background:' + player.teamColor + ';"></div>' +
-                                '<div style="flex:1;">' +
-                                    '<div style="color:white;font-size:14px;font-weight:600;">' + player.name + '</div>' +
-                                    '<div style="color:#a5b4fc;font-size:11px;">' + player.teamName + '</div>' +
-                                '</div>' +
-                                '<div style="color:#a5b4fc;font-size:11px;">HCP: ' + (player.handicap || 0) + '</div>' +
+                            groupsHTML += '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;">' +
+                                '<div style="width:8px;height:8px;border-radius:50%;background:' + player.teamColor + ';flex-shrink:0;"></div>' +
+                                '<div style="flex:1;min-width:0;color:white;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + player.name + '</div>' +
+                                '<div style="color:#a5b4fc;font-size:10px;flex-shrink:0;">HCP ' + (player.handicap || 0) + '</div>' +
                             '</div>';
                         });
                         
@@ -14100,73 +14177,74 @@
                     
                     groupsHTML += '</div></div>';
                 } else {
-                    groupsHTML = '<div style="background:rgba(239,68,68,0.2);border:3px solid rgba(239,68,68,0.4);border-radius:16px;padding:24px;text-align:center;">' +
-                        '<div style="font-size:48px;margin-bottom:12px;">⚠️</div>' +
-                        '<div style="color:white;font-size:20px;">Groups not yet assigned</div>' +
+                    groupsHTML = '<div style="background:rgba(239,68,68,0.18);border:2px solid rgba(239,68,68,0.4);border-radius:14px;padding:20px;text-align:center;">' +
+                        '<div style="font-size:32px;margin-bottom:6px;">⚠️</div>' +
+                        '<div style="color:white;font-size:15px;">Groups not yet assigned</div>' +
                     '</div>';
                 }
                 
                 html += `
-                    <div style="animation:slideUp 0.8s ease-out;max-width:1000px;width:100%;">
-                        <h1 style="color:white;font-size:48px;margin:0 0 16px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
-                            ⛳ Next Round
-                        </h1>
-                        <p style="color:#a5b4fc;font-size:24px;margin:0 0 40px;">
-                            ${nextRound.courseName}
-                        </p>
+                    <div style="animation:slideUp 0.8s ease-out;max-width:1200px;width:100%;height:100%;display:flex;flex-direction:column;padding:8px 0;box-sizing:border-box;">
+                        <!-- Header -->
+                        <div style="flex-shrink:0;margin-bottom:12px;">
+                            <h1 style="color:white;font-size:34px;margin:0;text-shadow:0 4px 20px rgba(0,0,0,0.5);font-weight:800;">
+                                ⛳ Next Round
+                            </h1>
+                            <p style="color:#a5b4fc;font-size:16px;margin:2px 0 0;font-weight:500;">
+                                ${nextRound.courseName}
+                            </p>
+                        </div>
                         
-                        <!-- Date, Time & Address -->
-                        <div style="background:rgba(59,130,246,0.2);border:3px solid rgba(59,130,246,0.4);border-radius:16px;padding:24px;margin-bottom:30px;">
-                            <div style="display:flex;justify-content:center;gap:40px;align-items:center;flex-wrap:wrap;">
+                        <!-- Box 1: Date + Time + Course Info (merged, replaces previous separate boxes) -->
+                        <div style="background:rgba(59,130,246,0.18);border:2px solid rgba(59,130,246,0.4);border-radius:14px;padding:14px 22px;margin-bottom:10px;flex-shrink:0;">
+                            <div style="display:grid;grid-template-columns:1fr 1fr 1fr ${coursePar ? '1fr' : ''};gap:18px;align-items:center;">
                                 <div style="text-align:center;">
-                                    <div style="font-size:48px;margin-bottom:8px;">📅</div>
-                                    <div style="color:#a5b4fc;font-size:16px;margin-bottom:4px;">Date</div>
-                                    <div style="color:white;font-size:28px;font-weight:700;">${dateStr}</div>
+                                    <div style="font-size:30px;margin-bottom:2px;">📅</div>
+                                    <div style="color:#a5b4fc;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;">Date</div>
+                                    <div style="color:white;font-size:17px;font-weight:700;line-height:1.15;margin-top:2px;">${dateStr}</div>
                                 </div>
                                 <div style="text-align:center;">
-                                    <div style="font-size:48px;margin-bottom:8px;">⏰</div>
-                                    <div style="color:#a5b4fc;font-size:16px;margin-bottom:4px;">Tee Time</div>
-                                    <div style="color:white;font-size:28px;font-weight:700;">${timeStr}</div>
+                                    <div style="font-size:30px;margin-bottom:2px;">⏰</div>
+                                    <div style="color:#a5b4fc;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;">Tee Time</div>
+                                    <div style="color:white;font-size:17px;font-weight:700;line-height:1.15;margin-top:2px;">${timeStr}</div>
                                 </div>
-                                ${nextRound.courseAddress ? 
-                                    '<div style="text-align:center;min-width:200px;">' +
-                                        '<div style="font-size:48px;margin-bottom:8px;">📍</div>' +
-                                        '<div style="color:#a5b4fc;font-size:16px;margin-bottom:4px;">Location</div>' +
-                                        '<div style="color:white;font-size:18px;font-weight:600;">' + nextRound.courseAddress + '</div>' +
-                                    '</div>'
-                                : ''}
+                                <div style="text-align:center;">
+                                    <div style="font-size:30px;margin-bottom:2px;">🏌️</div>
+                                    <div style="color:#a5b4fc;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;">Course</div>
+                                    <div style="color:white;font-size:15px;font-weight:700;line-height:1.15;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${nextRound.courseName}</div>
+                                </div>
+                                ${coursePar ? `
+                                    <div style="text-align:center;">
+                                        <div style="font-size:30px;margin-bottom:2px;">⛳</div>
+                                        <div style="color:#a5b4fc;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;">Par</div>
+                                        <div style="color:white;font-size:17px;font-weight:700;line-height:1.15;margin-top:2px;">${coursePar}</div>
+                                    </div>
+                                ` : ''}
                             </div>
                         </div>
                         
-                        <!-- Course Details -->
-                        <div style="background:rgba(139,92,246,0.2);border:3px solid rgba(139,92,246,0.4);border-radius:16px;padding:24px;margin-bottom:30px;">
-                            <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
-                                <div style="font-size:40px;">⛳</div>
-                                <div>
-                                    <h2 style="color:#a78bfa;font-size:24px;font-weight:700;margin:0;">Course Info</h2>
-                                    <p style="color:#a5b4fc;font-size:14px;margin:4px 0 0;">${dateStr}</p>
+                        <!-- Box 2: Weather forecast (hydrated async after render) -->
+                        <div id="nextRoundWeatherCard" style="background:rgba(99,102,241,0.18);border:2px solid rgba(99,102,241,0.4);border-radius:14px;padding:12px 22px;margin-bottom:10px;min-height:84px;flex-shrink:0;">
+                            <!-- Placeholder while fetching -->
+                            <div style="display:flex;align-items:center;gap:14px;justify-content:center;height:100%;">
+                                <div style="font-size:32px;opacity:0.6;animation:pulse 1.5s ease-in-out infinite;">🌤️</div>
+                                <div style="text-align:left;">
+                                    <div style="color:#a5b4fc;font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:2px;">Forecast</div>
+                                    <div style="color:rgba(255,255,255,0.7);font-size:13px;">Loading forecast…</div>
                                 </div>
-                            </div>
-                            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px;">
-                                <div style="background:rgba(255,255,255,0.1);border-radius:12px;padding:20px;text-align:center;">
-                                    <div style="font-size:48px;margin-bottom:8px;">🏌️</div>
-                                    <div style="color:white;font-size:18px;font-weight:600;">${nextRound.courseName}</div>
-                                    <div style="color:#a5b4fc;font-size:14px;margin-top:4px;">Course</div>
-                                </div>
-                                ${nextRound.courseAddress ? 
-                                    '<div style="background:rgba(255,255,255,0.1);border-radius:12px;padding:20px;text-align:center;">' +
-                                        '<div style="font-size:48px;margin-bottom:8px;">📍</div>' +
-                                        '<div style="color:white;font-size:16px;font-weight:600;">' + nextRound.courseAddress + '</div>' +
-                                        '<div style="color:#a5b4fc;font-size:14px;margin-top:4px;">Location</div>' +
-                                    '</div>'
-                                : ''}
                             </div>
                         </div>
                         
-                        <!-- Groups -->
+                        <!-- Box 3: Groups -->
                         ${groupsHTML}
                     </div>
                 `;
+                
+                // Kick off async weather fetch — runs after the DOM is inserted by the outer render flow.
+                // We use a microtask so the placeholder shows up before we try to update it.
+                if (weatherQuery && typeof hydrateWeatherCard === 'function') {
+                    setTimeout(() => hydrateWeatherCard(weatherQuery, targetDateISO), 30);
+                }
             }
             
             html += `
@@ -14324,7 +14402,8 @@
                 const playerSlideRec = (presentationState.individualPlayerSlides || [])[playerIdx];
                 const awardCount = (playerSlideRec && Array.isArray(playerSlideRec.playerAwards))
                     ? playerSlideRec.playerAwards.length : 0;
-                const maxStage = 2 + awardCount;
+                // Stage 0 = unified page; stages 1..awardCount = award reveals one per award.
+                const maxStage = awardCount;
                 if (step < maxStage) {
                     presentationState.playerRevealStep = step + 1;
                     renderPresentation();
@@ -14463,7 +14542,7 @@
                     const _playerRec = (presentationState.individualPlayerSlides || [])[_playerIdx];
                     const _awardCount = (_playerRec && Array.isArray(_playerRec.playerAwards))
                         ? _playerRec.playerAwards.length : 0;
-                    presentationState.playerRevealStep = 2 + _awardCount;
+                    presentationState.playerRevealStep = _awardCount;
                 } else {
                     presentationState.playerRevealStep = 0;
                 }
@@ -14646,6 +14725,114 @@
             const btn = document.getElementById('presentationMuteToggle');
             if (btn) btn.textContent = window.__presentationMuted ? '🔇' : '🔊';
         };
+        
+        // ─── Weather forecast helpers (Open-Meteo, no API key required) ───
+        // Two-step: geocode the location string → fetch a forecast for that lat/lng.
+        // Results cached in-memory for the session so the same location isn't re-fetched.
+        window.__weatherCache = window.__weatherCache || {};
+        
+        async function fetchWeatherForLocation(locationQuery, targetDateISO) {
+            const cacheKey = `${locationQuery}|${targetDateISO}`;
+            if (window.__weatherCache[cacheKey]) return window.__weatherCache[cacheKey];
+            
+            try {
+                // Step 1: geocode
+                const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(locationQuery)}&count=1&language=en&format=json`;
+                const geoResp = await fetch(geoUrl);
+                if (!geoResp.ok) throw new Error(`Geocode HTTP ${geoResp.status}`);
+                const geoData = await geoResp.json();
+                if (!geoData.results || geoData.results.length === 0) {
+                    throw new Error('Location not found');
+                }
+                const { latitude, longitude, name, country } = geoData.results[0];
+                
+                // Step 2: forecast for the target date
+                // Open-Meteo daily forecast goes ~16 days out; if target is past or too far, the API just omits it.
+                const forecastUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max&temperature_unit=celsius&wind_speed_unit=kmh&timezone=auto&start_date=${targetDateISO}&end_date=${targetDateISO}`;
+                const fcResp = await fetch(forecastUrl);
+                if (!fcResp.ok) throw new Error(`Forecast HTTP ${fcResp.status}`);
+                const fcData = await fcResp.json();
+                
+                if (!fcData.daily || !fcData.daily.time || fcData.daily.time.length === 0) {
+                    throw new Error('Forecast not available for this date');
+                }
+                
+                const result = {
+                    location: `${name}${country ? `, ${country}` : ''}`,
+                    date: fcData.daily.time[0],
+                    weatherCode: fcData.daily.weather_code[0],
+                    tempMax: fcData.daily.temperature_2m_max[0],
+                    tempMin: fcData.daily.temperature_2m_min[0],
+                    precipProb: fcData.daily.precipitation_probability_max[0],
+                    windMax: fcData.daily.wind_speed_10m_max[0]
+                };
+                window.__weatherCache[cacheKey] = result;
+                return result;
+            } catch (err) {
+                console.warn('Weather fetch failed:', err);
+                return { error: err.message || 'Unable to fetch forecast' };
+            }
+        }
+        
+        // Convert Open-Meteo weather code to emoji + label.
+        // Codes: https://open-meteo.com/en/docs#weathervariables
+        function describeWeatherCode(code) {
+            if (code === 0) return { emoji: '☀️', label: 'Clear' };
+            if (code === 1) return { emoji: '🌤️', label: 'Mainly clear' };
+            if (code === 2) return { emoji: '⛅', label: 'Partly cloudy' };
+            if (code === 3) return { emoji: '☁️', label: 'Overcast' };
+            if (code === 45 || code === 48) return { emoji: '🌫️', label: 'Foggy' };
+            if (code >= 51 && code <= 57) return { emoji: '🌦️', label: 'Drizzle' };
+            if (code >= 61 && code <= 67) return { emoji: '🌧️', label: 'Rain' };
+            if (code >= 71 && code <= 77) return { emoji: '🌨️', label: 'Snow' };
+            if (code >= 80 && code <= 82) return { emoji: '🌧️', label: 'Showers' };
+            if (code >= 85 && code <= 86) return { emoji: '🌨️', label: 'Snow showers' };
+            if (code === 95) return { emoji: '⛈️', label: 'Thunderstorm' };
+            if (code >= 96 && code <= 99) return { emoji: '⛈️', label: 'Thunderstorm with hail' };
+            return { emoji: '🌡️', label: 'Unknown' };
+        }
+        
+        // Render the weather card into a placeholder slot. Idempotent — safe to call multiple times.
+        async function hydrateWeatherCard(locationQuery, targetDateISO) {
+            const slot = document.getElementById('nextRoundWeatherCard');
+            if (!slot) return; // user navigated away
+            const data = await fetchWeatherForLocation(locationQuery, targetDateISO);
+            // Re-find slot in case render happened during the fetch
+            const slotNow = document.getElementById('nextRoundWeatherCard');
+            if (!slotNow) return;
+            
+            if (data.error) {
+                slotNow.innerHTML = `
+                    <div style="display:flex;align-items:center;gap:14px;justify-content:center;height:100%;">
+                        <div style="font-size:36px;opacity:0.6;">🌤️</div>
+                        <div style="text-align:left;">
+                            <div style="color:#a5b4fc;font-size:12px;font-weight:600;letter-spacing:1px;margin-bottom:2px;">FORECAST</div>
+                            <div style="color:rgba(255,255,255,0.7);font-size:14px;">${data.error}</div>
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+            
+            const w = describeWeatherCode(data.weatherCode);
+            slotNow.innerHTML = `
+                <div style="display:grid;grid-template-columns:auto 1fr auto;gap:16px;align-items:center;height:100%;">
+                    <div style="font-size:64px;line-height:1;">${w.emoji}</div>
+                    <div style="text-align:left;">
+                        <div style="color:#a5b4fc;font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:2px;">Forecast · ${data.location}</div>
+                        <div style="color:white;font-size:22px;font-weight:700;line-height:1.1;">${w.label}</div>
+                        <div style="color:rgba(255,255,255,0.65);font-size:12px;margin-top:4px;">
+                            💧 ${Math.round(data.precipProb || 0)}% precip · 💨 ${Math.round(data.windMax || 0)} km/h wind
+                        </div>
+                    </div>
+                    <div style="text-align:right;">
+                        <div style="color:white;font-size:32px;font-weight:800;line-height:1;">${Math.round(data.tempMax)}°</div>
+                        <div style="color:rgba(255,255,255,0.55);font-size:13px;font-weight:600;margin-top:2px;">↓ ${Math.round(data.tempMin)}°</div>
+                    </div>
+                </div>
+            `;
+        }
+        window.hydrateWeatherCard = hydrateWeatherCard;
 
         window.playWinnerCelebration = () => {
             try {
