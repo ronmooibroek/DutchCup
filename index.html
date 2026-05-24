@@ -527,7 +527,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.05.09.15';
+        const APP_VERSION = '2026.05.24.2';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -10186,6 +10186,7 @@
                 // Title + Individual Players (one per player) + Awards + Teams + Handicaps + Next Round
                 let totalSlides = 1; // Title
                 totalSlides += individualPlayerSlides.length; // One slide per player
+                if (individualPlayerSlides.length > 0) totalSlides++; // Champion intro slide (before player #1)
                 const hasNetSlide = hasScheduledRounds && netWinner !== null;
                 const hasBBBSlide = hasScheduledRounds && bbbWinner !== null;
                 const hasCTPChampionSlide = hasScheduledRounds && ctpChampion !== null;
@@ -10597,6 +10598,10 @@
             const byNumbersSlideIndex = hasByNumbersSlide ? slideIndex++ : -1;
             const biggestMomentsSlideIndex = hasBiggestMomentsSlide ? slideIndex++ : -1;
             const perfIntroSlideIndex = hasPerfIntroSlide ? slideIndex++ : -1;
+            // Champion intro — cinematic Dutch-themed slide that introduces the #1 player.
+            // Sits immediately before the first individualPlayerSlide (which is the winner since sorted low-to-high).
+            const hasChampionIntroSlide = individualPlayerSlides.length > 0;
+            const championIntroSlideIndex = hasChampionIntroSlide ? slideIndex++ : -1;
             const individualPlayerSlidesStart = slideIndex;
             slideIndex += individualPlayerSlides.length; // One slide per player
             
@@ -11073,6 +11078,15 @@
                 // ─── PERFORMANCE INTRO SLIDE ───
                 // Whimsical animated transition before per-player slides.
                 // CSS-only emoji animations: golf balls flying (hits + misses), swings, splashes, tree clangs.
+                // Plays a light intro sound on first landing (gated by flag so re-renders don't replay).
+                if (!presentationState._perfIntroSoundPlayed) {
+                    presentationState._perfIntroSoundPlayed = true;
+                    setTimeout(() => {
+                        if (typeof playPerfIntroSound === 'function') {
+                            try { playPerfIntroSound(); } catch (e) { console.warn('Perf intro sound failed:', e); }
+                        }
+                    }, 150);
+                }
                 html += `
                     <style>
                         @keyframes pi-fly-arc-1 {
@@ -11223,6 +11237,13 @@
                 // INDIVIDUAL PLAYER PERFORMANCE - FULL PAGE PER PLAYER (LAST TO FIRST)
                 const playerIndex = currentSlide - individualPlayerSlidesStart;
                 const player = individualPlayerSlides[playerIndex];
+                
+                // The LAST player in the array is the #1 finisher (champion).
+                // We give them an additional first sub-stage: the "Champion Golfer of the Day" reveal.
+                // For normal players: stage 0 = unified page, stages 1..N = award reveals.
+                // For champion: stage 0 = champion intro, stage 1 = unified page, stages 2..N+1 = award reveals.
+                const isChampionPlayer = (playerIndex === individualPlayerSlides.length - 1);
+                const champOffset = isChampionPlayer ? 1 : 0;
                 
                 // Helper functions for scorecard formatting (matching modal)
                 const getPoints = (netToPar) => {
@@ -11422,11 +11443,151 @@
                 };
                 const highlight = computeHighlight();
                 
-                if (playerStage >= 1 && Array.isArray(player.playerAwards) && (playerStage - 1) < player.playerAwards.length) {
-                    // ─── STAGE 1+: AWARD REVEAL ───
+                if (isChampionPlayer && playerStage === 0) {
+                    // ─── CHAMPION GOLFER OF THE DAY ───
+                    // Dutch-themed celebratory reveal for the #1 finisher (Champion Golfer of the Day).
+                    // Inspired by the British Open's tradition, themed in Dutch orange + flag colors.
+                    // Single sub-stage; tap Next to advance into their unified player page.
+                    const _championStatePlayer = state.players.find(sp => sp.id == player.playerId) || { id: player.playerId, name: player.playerName };
+                    
+                    // Fire celebration sound on first land
+                    if (!presentationState._championIntroSoundPlayed) {
+                        presentationState._championIntroSoundPlayed = true;
+                        presentationState.isWinnerSlide = true; // trigger confetti via existing hook
+                        setTimeout(() => {
+                            if (typeof playChampionIntroFanfare === 'function') {
+                                try { playChampionIntroFanfare(); } catch (e) {}
+                            }
+                        }, 200);
+                    }
+                    
+                    // Dutch palette: vibrant orange + the red/white/blue of the Netherlands flag
+                    const DUTCH_ORANGE = '#FF8C00';
+                    const DUTCH_RED = '#AE1C28';
+                    const DUTCH_BLUE = '#21468B';
+                    
+                    html += `
+                        <style>
+                            @keyframes ch-tulipSway {
+                                0%, 100% { transform: rotate(-6deg); }
+                                50%      { transform: rotate(6deg); }
+                            }
+                            @keyframes ch-windmillSpin {
+                                0%   { transform: rotate(0deg); }
+                                100% { transform: rotate(360deg); }
+                            }
+                            @keyframes ch-trophyFloat {
+                                0%, 100% { transform: translateY(0) rotate(-2deg); }
+                                50%      { transform: translateY(-14px) rotate(2deg); }
+                            }
+                            @keyframes ch-trophyGlow {
+                                0%, 100% { filter: drop-shadow(0 0 30px ${DUTCH_ORANGE}cc) drop-shadow(0 0 60px ${DUTCH_ORANGE}55); }
+                                50%      { filter: drop-shadow(0 0 50px ${DUTCH_ORANGE}) drop-shadow(0 0 100px ${DUTCH_ORANGE}77); }
+                            }
+                            @keyframes ch-titlePulse {
+                                0%, 100% { transform: scale(1); }
+                                50%      { transform: scale(1.025); }
+                            }
+                            @keyframes ch-namePop {
+                                0%   { transform: scale(0.5); opacity: 0; }
+                                70%  { transform: scale(1.08); opacity: 1; }
+                                100% { transform: scale(1); opacity: 1; }
+                            }
+                            @keyframes ch-orangeRibbon {
+                                0%   { background-position: -200% 0; }
+                                100% { background-position: 200% 0; }
+                            }
+                            @keyframes ch-flagWave {
+                                0%, 100% { transform: rotate(-2deg) skewY(-1deg); }
+                                50%      { transform: rotate(2deg) skewY(1deg); }
+                            }
+                            @keyframes ch-entranceUp {
+                                0%   { transform: translateY(40px); opacity: 0; }
+                                100% { transform: translateY(0); opacity: 1; }
+                            }
+                            @keyframes ch-sparkleTwinkle {
+                                0%, 100% { opacity: 0; transform: scale(0.5) rotate(0deg); }
+                                50%      { opacity: 1; transform: scale(1) rotate(180deg); }
+                            }
+                        </style>
+                        
+                        <!-- Full-bleed backdrop: deep Dutch blue with orange spotlight glow -->
+                        <div style="position:absolute;inset:0;overflow:hidden;background:radial-gradient(ellipse at center, ${DUTCH_BLUE}ee 0%, #0a0a25 70%, #000 100%);">
+                            
+                            <!-- Orange spotlight halo behind center -->
+                            <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:60vw;height:60vw;max-width:900px;max-height:900px;background:radial-gradient(circle, ${DUTCH_ORANGE}33 0%, transparent 70%);pointer-events:none;"></div>
+                            
+                            <!-- Floating Dutch motifs -->
+                            <div style="position:absolute;top:18%;left:12%;font-size:48px;animation:ch-tulipSway 3s ease-in-out infinite;transform-origin:bottom;">🌷</div>
+                            <div style="position:absolute;top:22%;right:14%;font-size:54px;animation:ch-tulipSway 3.4s ease-in-out infinite 0.6s;transform-origin:bottom;">🌷</div>
+                            <div style="position:absolute;bottom:24%;left:10%;font-size:44px;animation:ch-tulipSway 2.8s ease-in-out infinite 1.1s;transform-origin:bottom;">🌷</div>
+                            <div style="position:absolute;bottom:18%;right:12%;font-size:50px;animation:ch-tulipSway 3.2s ease-in-out infinite 1.6s;transform-origin:bottom;">🌷</div>
+                            <div style="position:absolute;top:38%;left:5%;font-size:38px;animation:ch-windmillSpin 8s linear infinite;">🌬️</div>
+                            <div style="position:absolute;top:46%;right:6%;font-size:38px;animation:ch-windmillSpin 9s linear infinite reverse;">🌬️</div>
+                            
+                            <!-- Sparkles -->
+                            <div style="position:absolute;top:14%;left:38%;font-size:26px;animation:ch-sparkleTwinkle 2.4s ease-in-out infinite;">✨</div>
+                            <div style="position:absolute;top:18%;right:32%;font-size:22px;animation:ch-sparkleTwinkle 2.9s ease-in-out infinite 0.7s;">⭐</div>
+                            <div style="position:absolute;bottom:30%;left:32%;font-size:24px;animation:ch-sparkleTwinkle 2.6s ease-in-out infinite 1.4s;">✨</div>
+                            <div style="position:absolute;bottom:25%;right:36%;font-size:28px;animation:ch-sparkleTwinkle 3s ease-in-out infinite 0.4s;">⭐</div>
+                            
+                            <!-- Center column -->
+                            <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px;text-align:center;">
+                                
+                                <!-- Dutch flag waving small -->
+                                <div style="font-size:34px;margin-bottom:8px;animation:ch-flagWave 2s ease-in-out infinite;line-height:1;">🇳🇱</div>
+                                
+                                <!-- Subtitle: "Champion Golfer of the Day" -->
+                                <div style="color:${DUTCH_ORANGE};font-size:18px;font-weight:700;letter-spacing:6px;text-transform:uppercase;margin-bottom:4px;animation:ch-entranceUp 0.7s ease-out;text-shadow:0 2px 8px rgba(0,0,0,0.5);">
+                                    Champion Golfer of the Day
+                                </div>
+                                <!-- Dutch tagline -->
+                                <div style="color:rgba(255,255,255,0.7);font-size:13px;font-weight:600;letter-spacing:3px;font-style:italic;margin-bottom:14px;animation:ch-entranceUp 0.7s 0.15s ease-out backwards;">
+                                    De Kampioen Golfer van de Dag
+                                </div>
+                                
+                                <!-- Trophy centerpiece -->
+                                <div style="font-size:140px;line-height:1;margin-bottom:14px;animation:ch-trophyFloat 3s ease-in-out infinite, ch-trophyGlow 2.5s ease-in-out infinite;">
+                                    🏆
+                                </div>
+                                
+                                <!-- Player photo with Dutch-orange ring -->
+                                <div style="margin-bottom:16px;animation:ch-namePop 0.9s 0.6s ease-out backwards;">
+                                    <div style="border:5px solid ${DUTCH_ORANGE};border-radius:50%;padding:4px;box-shadow:0 0 50px ${DUTCH_ORANGE}aa, 0 8px 32px rgba(0,0,0,0.5);display:inline-block;">
+                                        ${renderAvatar(_championStatePlayer, 140)}
+                                    </div>
+                                </div>
+                                
+                                <!-- Player name in giant gold/orange gradient text -->
+                                <h1 style="color:white;font-size:clamp(48px, 8vw, 96px);font-weight:900;margin:0 0 8px;line-height:1;letter-spacing:-1px;background:linear-gradient(180deg, #fff 0%, ${DUTCH_ORANGE} 60%, #c2410c 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;text-shadow:0 6px 30px rgba(0,0,0,0.4);animation:ch-namePop 1s 0.7s ease-out backwards, ch-titlePulse 2.5s 1.8s ease-in-out infinite;">
+                                    ${player.playerName}
+                                </h1>
+                                
+                                <!-- Team badge -->
+                                <div style="display:inline-flex;align-items:center;gap:10px;padding:8px 20px;background:rgba(255,255,255,0.08);border:1px solid ${player.teamColor};border-radius:999px;margin-top:6px;animation:ch-entranceUp 0.7s 0.95s ease-out backwards;">
+                                    <div style="width:12px;height:12px;border-radius:50%;background:${player.teamColor};box-shadow:0 0 12px ${player.teamColor};"></div>
+                                    <div style="color:white;font-size:16px;font-weight:700;">${player.teamName}</div>
+                                </div>
+                                
+                                <!-- Shimmer ribbon: stats line -->
+                                <div style="margin-top:20px;padding:10px 28px;border-radius:999px;background:linear-gradient(90deg, ${DUTCH_ORANGE}33, ${DUTCH_ORANGE}77, ${DUTCH_ORANGE}33);background-size:200% 100%;animation:ch-orangeRibbon 3s linear infinite, ch-entranceUp 0.7s 1.1s ease-out backwards;border:2px solid ${DUTCH_ORANGE};box-shadow:0 8px 32px ${DUTCH_ORANGE}55;">
+                                    <div style="color:white;font-size:17px;font-weight:700;letter-spacing:2px;">
+                                        🥇 ${player.totalPoints} POINTS · ${player.grossScore} GROSS
+                                    </div>
+                                </div>
+                                
+                                <!-- Tap hint -->
+                                <div style="margin-top:32px;color:${DUTCH_ORANGE};font-size:14px;font-weight:600;letter-spacing:2px;animation:ch-entranceUp 0.7s 1.4s ease-out backwards;">
+                                    Tap Next to see today's round →
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                } else if (playerStage >= (1 + champOffset) && Array.isArray(player.playerAwards) && (playerStage - 1 - champOffset) < player.playerAwards.length) {
+                    // ─── AWARD REVEAL ───
                     // Each award is its own dedicated reveal screen.
-                    // (Stage 0 is the unified player page; awards now start at stage 1.)
-                    const awardIdx = playerStage - 1;
+                    // For normal players: stages 1..N. For champion: stages 2..N+1 (champOffset = 1 shifts).
+                    const awardIdx = playerStage - 1 - champOffset;
                     const award = player.playerAwards[awardIdx];
                     const totalAwards = player.playerAwards.length;
                     const _statePlayer = state.players.find(sp => sp.id == player.playerId) || { id: player.playerId, name: player.playerName };
@@ -11942,103 +12103,163 @@
                     }
                     // ── STAGE 2: details + next matches + elimination/championship effects ──
                     else {
-                        // Loser display: explosion if eliminated, runner-up plate if GF runner-up, else dimmed
-                        let loserDisplay;
+                        // Build advancement labels — moved to the top now, paired with each player's name.
+                        // championship → winner gets "🏆 TOURNAMENT WINNER" pill
+                        // grand-final runner-up → "🥈 2ND PLACE" pill
+                        // otherwise → winner pill shows next match, loser pill shows next match (or "ELIMINATED")
+                        const winnerAdvLabel = (() => {
+                            if (championshipWinner) {
+                                return `<div style="background:linear-gradient(135deg,#fbbf24,#f59e0b);color:#1f2937;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:800;letter-spacing:1.5px;margin-top:4px;display:inline-block;">🏆 TOURNAMENT WINNER</div>`;
+                            }
+                            if (winnerNextMatchInfo) {
+                                return `<div style="background:rgba(16,185,129,0.22);border:1px solid #10b981;border-radius:8px;padding:5px 12px;font-size:11px;font-weight:700;color:#10b981;letter-spacing:1px;margin-top:4px;display:inline-block;">→ ${winnerNextMatchInfo.matchId.toUpperCase()}${winnerNextMatchInfo.segmentLabel ? ' · ' + winnerNextMatchInfo.segmentLabel : ''} vs ${winnerNextMatchInfo.opponentName}</div>`;
+                            }
+                            return '';
+                        })();
+                        const loserAdvLabel = (() => {
+                            if (loserEliminated) {
+                                return `<div style="background:rgba(239,68,68,0.22);border:1px solid #ef4444;border-radius:8px;padding:5px 12px;font-size:11px;font-weight:700;color:#ef4444;letter-spacing:1.5px;margin-top:4px;display:inline-block;">💥 ELIMINATED</div>`;
+                            }
+                            if (runnerUp) {
+                                return `<div style="background:linear-gradient(135deg,#e5e7eb,#9ca3af);color:#1f2937;border-radius:8px;padding:5px 12px;font-size:11px;font-weight:800;letter-spacing:1.5px;margin-top:4px;display:inline-block;">🥈 2ND PLACE</div>`;
+                            }
+                            if (loserNextMatchInfo) {
+                                return `<div style="background:rgba(245,158,11,0.22);border:1px solid #f59e0b;border-radius:8px;padding:5px 12px;font-size:11px;font-weight:700;color:#f59e0b;letter-spacing:1px;margin-top:4px;display:inline-block;">⬇ ${loserNextMatchInfo.matchId.toUpperCase()}${loserNextMatchInfo.segmentLabel ? ' · ' + loserNextMatchInfo.segmentLabel : ''} vs ${loserNextMatchInfo.opponentName}</div>`;
+                            }
+                            return '';
+                        })();
+                        
+                        // Big scorecard cells — designed for across-the-room readability.
+                        // Bigger fonts, taller cells, more dramatic color contrast.
+                        const scoreCellsBig = segHoles.map(h => {
+                            const winnerStr = winnerIsP1 ? h.gross1 : h.gross2;
+                            const loserStr  = winnerIsP1 ? h.gross2 : h.gross1;
+                            const winnerNet = winnerIsP1 ? h.net1 : h.net2;
+                            const loserNet  = winnerIsP1 ? h.net2 : h.net1;
+                            const winnerWonHole = h.result === winnerSlot;
+                            const loserWonHole  = h.result && h.result !== 'halved' && h.result !== winnerSlot;
+                            const halved = h.result === 'halved';
+                            // Winner row cell — highlight if won this hole
+                            const winnerCellBg = winnerWonHole ? 'background:rgba(16,185,129,0.20);' : '';
+                            // Loser row cell — highlight if won this hole
+                            const loserCellBg = loserWonHole ? 'background:rgba(239,68,68,0.18);' : '';
+                            const headerBg = halved ? 'background:rgba(148,163,184,0.18);' : '';
+                            return `
+                                <td style="padding:0;border:1px solid rgba(255,255,255,0.18);min-width:54px;">
+                                    <div style="${headerBg}text-align:center;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1);">
+                                        <div style="font-size:14px;color:rgba(255,255,255,0.55);font-weight:700;line-height:1;">${h.holeIndex}</div>
+                                    </div>
+                                    <div style="${winnerCellBg}text-align:center;padding:6px 4px;border-bottom:1px solid rgba(255,255,255,0.08);">
+                                        <div style="font-size:30px;font-weight:${winnerWonHole?'900':'700'};color:${winnerWonHole?'#10b981':'white'};line-height:1.05;">${winnerStr != null ? winnerStr : '–'}</div>
+                                        <div style="font-size:13px;color:${winnerWonHole?'rgba(16,185,129,0.85)':'rgba(255,255,255,0.5)'};font-weight:600;line-height:1;margin-top:2px;">net ${winnerNet != null ? winnerNet : '–'}</div>
+                                    </div>
+                                    <div style="${loserCellBg}text-align:center;padding:6px 4px;">
+                                        <div style="font-size:28px;font-weight:${loserWonHole?'900':'700'};color:${loserWonHole?'#ef4444':'rgba(255,255,255,0.7)'};line-height:1.05;">${loserStr != null ? loserStr : '–'}</div>
+                                        <div style="font-size:13px;color:${loserWonHole?'rgba(239,68,68,0.85)':'rgba(255,255,255,0.45)'};font-weight:600;line-height:1;margin-top:2px;">net ${loserNet != null ? loserNet : '–'}</div>
+                                    </div>
+                                </td>
+                            `;
+                        }).join('');
+                        
+                        // Loser visual: keep the explosion for eliminations as it's central drama,
+                        // but the runner-up / standard loser are simpler now since labels moved up.
+                        let loserVisual;
                         if (loserEliminated) {
-                            // EXPLOSION: shake → scale up → fade with radial 💥 emojis
                             const burstAngles = [0, 45, 90, 135, 180, 225, 270, 315];
                             const burstEmojis = burstAngles.map((deg, i) => {
-                                const dist = 100;
+                                const dist = 80;
                                 const tx = Math.round(Math.cos(deg * Math.PI / 180) * dist);
                                 const ty = Math.round(Math.sin(deg * Math.PI / 180) * dist);
-                                return `<div style="position:absolute;left:50%;top:50%;font-size:32px;animation:burstFly-${matchIdx}-${i} 0.9s ease-out forwards;">💥</div>
+                                return `<div style="position:absolute;left:50%;top:50%;font-size:24px;animation:burstFly-${matchIdx}-${i} 0.9s ease-out forwards;">💥</div>
                                 <style>@keyframes burstFly-${matchIdx}-${i} { 0% { transform: translate(-50%,-50%) scale(0.3); opacity: 0; } 25% { opacity: 1; } 100% { transform: translate(calc(-50% + ${tx}px), calc(-50% + ${ty}px)) scale(1.5); opacity: 0; } }</style>`;
                             }).join('');
-                            loserDisplay = `
-                                <div style="text-align:center;position:relative;">
-                                    <div style="position:relative;display:inline-block;animation:explodeShake 0.4s ease-out, explodeFade 0.6s 0.4s ease-out forwards;">
-                                        ${renderAvatar(loserPlayer, 100)}
-                                        <div style="position:absolute;inset:0;pointer-events:none;">${burstEmojis}</div>
-                                    </div>
-                                    <div style="margin-top:8px;color:#ef4444;font-size:24px;font-weight:900;letter-spacing:4px;text-shadow:0 0 20px rgba(239,68,68,0.6);transform:rotate(-6deg);animation:slideUp 0.4s 0.6s ease-out backwards;">
-                                        ELIMINATED
-                                    </div>
-                                    <div style="color:rgba(255,255,255,0.6);font-size:13px;margin-top:4px;">${loserPlayer.name}</div>
+                            loserVisual = `
+                                <div style="position:relative;display:inline-block;animation:explodeShake 0.4s ease-out, explodeFade 0.6s 0.4s ease-out forwards;">
+                                    ${renderAvatar(loserPlayer, 80)}
+                                    <div style="position:absolute;inset:0;pointer-events:none;">${burstEmojis}</div>
                                 </div>
                                 <style>
                                     @keyframes explodeShake { 0%,100% { transform: translateX(0); } 20% { transform: translateX(-6px) rotate(-3deg); } 40% { transform: translateX(6px) rotate(3deg); } 60% { transform: translateX(-4px) rotate(-2deg); } 80% { transform: translateX(4px) rotate(2deg); } }
                                     @keyframes explodeFade { 0% { transform: scale(1); opacity: 1; filter: brightness(1); } 30% { transform: scale(1.4) rotate(15deg); filter: brightness(2.5); } 100% { transform: scale(0.8) rotate(30deg); opacity: 0.2; filter: grayscale(1) brightness(0.5); } }
                                 </style>
                             `;
-                        } else if (runnerUp) {
-                            loserDisplay = `
-                                <div style="text-align:center;">
-                                    <div style="margin:0 auto 8px;filter:drop-shadow(0 4px 20px rgba(192,192,192,0.4));">${renderAvatar(loserPlayer, 90)}</div>
-                                    <div style="color:#c0c0c0;font-size:20px;font-weight:800;letter-spacing:3px;">🥈 2ND PLACE</div>
-                                    <div style="color:white;font-size:18px;font-weight:600;margin-top:4px;">${loserPlayer.name}</div>
-                                    <div style="color:rgba(255,255,255,0.7);font-size:12px;margin-top:2px;">Tournament Runner-Up</div>
-                                </div>
-                            `;
                         } else {
-                            loserDisplay = `
-                                <div style="text-align:center;opacity:0.55;">
-                                    <div style="margin:0 auto 8px;">${renderAvatar(loserPlayer, 80)}</div>
-                                    <div style="color:white;font-size:18px;font-weight:600;">${loserPlayer.name}</div>
-                                </div>
-                            `;
+                            loserVisual = `<div style="opacity:${runnerUp ? '0.85' : '0.55'};">${renderAvatar(loserPlayer, 80)}</div>`;
                         }
                         
                         html += `
-                            <div style="animation:slideUp 0.5s ease-out;max-width:1300px;width:100%;">
-                                <div style="text-align:center;margin-bottom:16px;">
-                                    <div style="color:rgba(255,255,255,0.7);font-size:14px;font-weight:600;letter-spacing:3px;">
-                                        ${roundLabel.toUpperCase()} · ${match.id.toUpperCase()}
+                            <div style="animation:slideUp 0.5s ease-out;max-width:1500px;width:100%;display:flex;flex-direction:column;height:100%;">
+                                <!-- Top: round label -->
+                                <div style="text-align:center;flex-shrink:0;margin-bottom:6px;">
+                                    <div style="color:rgba(255,255,255,0.7);font-size:12px;font-weight:600;letter-spacing:3px;">
+                                        ${roundLabel.toUpperCase()} · ${match.id.toUpperCase()} · ${segmentLabel}
                                     </div>
                                 </div>
                                 
-                                <!-- Winner + loser/eliminated/runner-up -->
-                                <div style="display:flex;justify-content:center;align-items:center;gap:40px;margin-bottom:18px;flex-wrap:wrap;">
-                                    <div style="text-align:center;">
-                                        <div style="margin:0 auto 8px;filter:drop-shadow(${championshipWinner ? '0 0 50px rgba(251,191,36,0.6)' : '0 4px 20px rgba(16,185,129,0.4)'});">${renderAvatar(winnerPlayer, championshipWinner ? 120 : 100)}</div>
-                                        <div style="color:white;font-size:${championshipWinner ? '28' : '22'}px;font-weight:800;">${winnerPlayer.name} ${championshipWinner ? '👑🏆' : '🏆'}</div>
-                                        <div style="color:${championshipWinner ? '#fbbf24' : '#10b981'};font-size:12px;font-weight:700;letter-spacing:1px;">${championshipWinner ? 'CHAMPION' : 'WINNER'}</div>
-                                    </div>
-                                    ${loserDisplay}
-                                </div>
-                                
-                                <!-- Tagline plate -->
-                                <div style="text-align:center;margin-bottom:16px;">
-                                    <div style="display:inline-block;background:linear-gradient(135deg,#fbbf24 0%,#f59e0b 100%);color:#1f2937;padding:8px 22px;border-radius:10px;box-shadow:0 4px 15px rgba(251,191,36,0.3);">
-                                        <span style="font-size:22px;font-weight:900;letter-spacing:2px;">${tagline}</span>
-                                        <span style="font-size:12px;margin-left:10px;opacity:0.8;">${taglineSubtext}</span>
-                                    </div>
-                                </div>
-                                
-                                <!-- Trajectory chart (compact) -->
-                                <div style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:8px 14px;margin-bottom:14px;">
-                                    <div style="color:rgba(255,255,255,0.7);font-size:10px;letter-spacing:2px;font-weight:600;text-align:center;margin-bottom:4px;">LEAD TRAJECTORY (winner perspective)</div>
-                                    ${trajectoryChart}
-                                </div>
-                                
-                                <!-- Mini scorecard -->
-                                <div style="background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:8px;overflow-x:auto;margin-bottom:14px;">
-                                    <table style="border-collapse:collapse;margin:0 auto;font-family:monospace;">
-                                        <tbody><tr><td style="font-size:10px;color:rgba(255,255,255,0.6);padding:2px 6px;text-align:right;font-weight:600;">${winnerPlayer.name.split(' ')[0]} / ${loserPlayer.name.split(' ')[0]}</td>${scoreCells}</tr></tbody>
-                                    </table>
-                                </div>
-                                
-                                <!-- Next-match cards (winner + loser if applicable) -->
-                                ${(winnerNextMatchInfo || loserNextMatchInfo || championshipWinner) ? `
-                                    <div style="display:flex;justify-content:center;gap:14px;flex-wrap:wrap;margin-bottom:6px;">
-                                        ${championshipWinner ? `
-                                            <div style="background:linear-gradient(135deg,#fbbf24,#f59e0b);color:#1f2937;border-radius:10px;padding:12px 22px;font-weight:800;text-align:center;">
-                                                <div style="font-size:11px;letter-spacing:2px;">${winnerPlayer.name.toUpperCase()}</div>
-                                                <div style="font-size:18px;margin-top:4px;">🏆 TOURNAMENT WINNER 🏆</div>
+                                <!-- Compact header: small avatars + names + inline advancement labels -->
+                                <div style="display:flex;justify-content:space-between;align-items:center;gap:24px;margin-bottom:10px;flex-shrink:0;padding:0 8px;">
+                                    <!-- Winner header -->
+                                    <div style="display:flex;align-items:center;gap:12px;flex:1;min-width:0;">
+                                        <div style="flex-shrink:0;filter:drop-shadow(${championshipWinner ? '0 0 30px rgba(251,191,36,0.7)' : '0 4px 14px rgba(16,185,129,0.5)'});">
+                                            ${renderAvatar(winnerPlayer, championshipWinner ? 64 : 60)}
+                                        </div>
+                                        <div style="min-width:0;flex:1;">
+                                            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                                                <div style="color:white;font-size:22px;font-weight:800;line-height:1.05;">${winnerPlayer.name} ${championshipWinner ? '👑🏆' : '🏆'}</div>
+                                                <div style="color:${championshipWinner ? '#fbbf24' : '#10b981'};font-size:10px;font-weight:700;letter-spacing:1.5px;background:${championshipWinner ? 'rgba(251,191,36,0.18)' : 'rgba(16,185,129,0.18)'};padding:3px 8px;border-radius:6px;">${championshipWinner ? 'CHAMPION' : 'WINNER'}</div>
                                             </div>
-                                        ` : nextMatchCard(winnerNextMatchInfo, '🏆 WINNER ADVANCES TO', '#10b981')}
-                                        ${nextMatchCard(loserNextMatchInfo, '⬇ LOSER DROPS TO', '#f59e0b')}
+                                            ${winnerAdvLabel}
+                                        </div>
                                     </div>
-                                ` : ''}
+                                    
+                                    <!-- Tagline plate (center) -->
+                                    <div style="flex-shrink:0;text-align:center;">
+                                        <div style="background:linear-gradient(135deg,#fbbf24 0%,#f59e0b 100%);color:#1f2937;padding:7px 18px;border-radius:8px;box-shadow:0 4px 14px rgba(251,191,36,0.3);">
+                                            <div style="font-size:15px;font-weight:900;letter-spacing:2px;line-height:1;">${tagline}</div>
+                                            <div style="font-size:10px;margin-top:2px;opacity:0.85;">${taglineSubtext}</div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Loser header -->
+                                    <div style="display:flex;align-items:center;gap:12px;flex:1;min-width:0;justify-content:flex-end;">
+                                        <div style="min-width:0;flex:1;text-align:right;">
+                                            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+                                                <div style="color:white;font-size:20px;font-weight:700;line-height:1.05;${loserEliminated ? 'opacity:0.55;' : runnerUp ? '' : 'opacity:0.75;'}">${loserPlayer.name}</div>
+                                            </div>
+                                            ${loserAdvLabel}
+                                        </div>
+                                        <div style="flex-shrink:0;">${loserVisual}</div>
+                                    </div>
+                                </div>
+                                
+                                <!-- DOMINANT scorecard — fills the entire remaining vertical space -->
+                                <div style="background:rgba(0,0,0,0.4);border:2px solid rgba(255,255,255,0.18);border-radius:14px;padding:14px 16px;flex:1;display:flex;flex-direction:column;min-height:0;box-shadow:0 8px 40px rgba(0,0,0,0.4);">
+                                    <div style="color:rgba(255,255,255,0.7);font-size:12px;letter-spacing:3px;font-weight:700;text-align:center;margin-bottom:10px;">
+                                        SCORECARD · ${segmentLabel.toUpperCase()}
+                                    </div>
+                                    <div style="flex:1;overflow-x:auto;display:flex;align-items:center;min-height:0;">
+                                        <table style="border-collapse:collapse;margin:0 auto;font-family:monospace;width:100%;max-width:100%;">
+                                            <tbody>
+                                                <tr>
+                                                    <td style="padding:0;border:1px solid rgba(255,255,255,0.18);">
+                                                        <div style="background:rgba(255,255,255,0.05);text-align:center;padding:4px 10px;border-bottom:1px solid rgba(255,255,255,0.1);">
+                                                            <div style="font-size:13px;color:rgba(255,255,255,0.5);font-weight:700;letter-spacing:1.5px;">HOLE</div>
+                                                        </div>
+                                                        <div style="text-align:center;padding:6px 12px;border-bottom:1px solid rgba(255,255,255,0.08);">
+                                                            <div style="font-size:18px;color:#10b981;font-weight:800;line-height:1.05;">${winnerPlayer.name.split(' ')[0]}</div>
+                                                            <div style="font-size:11px;color:rgba(16,185,129,0.7);font-weight:600;margin-top:2px;">HCP ${winnerHcap != null ? winnerHcap : '–'}</div>
+                                                        </div>
+                                                        <div style="text-align:center;padding:6px 12px;">
+                                                            <div style="font-size:16px;color:rgba(255,255,255,0.75);font-weight:700;line-height:1.05;">${loserPlayer.name.split(' ')[0]}</div>
+                                                            <div style="font-size:11px;color:rgba(255,255,255,0.45);font-weight:600;margin-top:2px;">HCP ${loserHcap != null ? loserHcap : '–'}</div>
+                                                        </div>
+                                                    </td>
+                                                    ${scoreCellsBig}
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
                             </div>
                         `;
                     }
@@ -12316,8 +12537,8 @@
             } else if (currentSlide === holeAnalysisSlideIndex) {
                 // HOLE ANALYSIS SLIDE
                 html += `
-                    <div style="animation:slideUp 0.8s ease-out;max-width:1200px;width:100%;">
-                        <h1 style="color:white;font-size:48px;margin:0 0 30px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
+                    <div style="animation:slideUp 0.8s ease-out;max-width:1500px;width:100%;">
+                        <h1 style="color:white;font-size:42px;margin:0 0 22px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
                             ⛳ Hole Performance
                         </h1>
                         
@@ -12370,19 +12591,19 @@
                         </div>
                         
                         <!-- All Holes Performance -->
-                        <div style="background:rgba(255,255,255,0.05);border:2px solid rgba(255,255,255,0.1);border-radius:12px;padding:20px;">
-                            <h3 style="color:#a5b4fc;font-size:20px;margin:0 0 16px;">All Holes (sorted by difficulty)</h3>
-                            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(60px,1fr));gap:8px;">
+                        <div style="background:rgba(255,255,255,0.05);border:2px solid rgba(255,255,255,0.1);border-radius:12px;padding:14px 12px;">
+                            <h3 style="color:#a5b4fc;font-size:18px;margin:0 0 12px;">All Holes (sorted by difficulty)</h3>
+                            <div style="display:grid;grid-template-columns:repeat(18,1fr);gap:4px;">
                                 ${analytics.allHoles.map(hole => {
                                     const difficulty = hole.toPar;
                                     const bgColor = difficulty <= -0.3 ? '#10b981' : 
                                                    difficulty <= 0.3 ? '#3b82f6' : 
                                                    difficulty <= 0.8 ? '#f59e0b' : '#ef4444';
                                     return `
-                                        <div style="background:rgba(255,255,255,0.1);border-left:4px solid ${bgColor};border-radius:6px;padding:8px;text-align:center;">
-                                            <div style="color:white;font-size:18px;font-weight:700;">#${hole.hole}</div>
-                                            <div style="color:#818cf8;font-size:11px;">Par ${hole.par}</div>
-                                            <div style="color:${bgColor};font-size:14px;font-weight:600;">
+                                        <div style="background:rgba(255,255,255,0.1);border-left:3px solid ${bgColor};border-radius:5px;padding:5px 2px;text-align:center;min-width:0;">
+                                            <div style="color:white;font-size:13px;font-weight:700;line-height:1.1;">#${hole.hole}</div>
+                                            <div style="color:#818cf8;font-size:9px;line-height:1;">P${hole.par}</div>
+                                            <div style="color:${bgColor};font-size:11px;font-weight:600;margin-top:2px;line-height:1;">
                                                 ${difficulty > 0 ? '+' : ''}${difficulty.toFixed(1)}
                                             </div>
                                         </div>
@@ -13341,12 +13562,107 @@
                 `;
             } else if (currentSlide >= teamSlidesStartIndex && currentSlide < teamSlidesStartIndex + teamStandings.length) {
                 // TEAM REVEAL SLIDES - LANDSCAPE OPTIMIZED
-                // Show teams in reverse order (last to first) for dramatic reveal
+                // Show teams in reverse order (last to first) for dramatic reveal.
+                // Sub-stages (teamRevealStep):
+                //   0: "POSITION N!" tension-building countdown reveal (NEW — all teams)
+                //   1: team result page (non-winners) OR winner full-bleed overlay (#1)
+                //   2: regular team page (winner only — was step 1 before countdown added)
                 const reverseIndex = teamStandings.length - 1 - (currentSlide - teamSlidesStartIndex);
                 const team = teamStandings[reverseIndex];
                 const position = reverseIndex + 1; // Position based on descending sorted array
+                const _currentTeamStep = presentationState.teamRevealStep || 0;
                 
-                if (team) {
+                // ─── STAGE 0: POSITION N COUNTDOWN ───
+                // Big tension-building reveal of just the position number, no team info yet.
+                // Inspired by game-show "...and in 6th place..." tension moments.
+                if (team && _currentTeamStep === 0) {
+                    // Trigger the stinger sound once per countdown
+                    if (!presentationState._teamCountdownSoundPlayed) {
+                        presentationState._teamCountdownSoundPlayed = true;
+                        setTimeout(() => {
+                            if (typeof playPositionCountdownStinger === 'function') {
+                                try { playPositionCountdownStinger(); } catch (e) {}
+                            }
+                        }, 120);
+                    }
+                    
+                    const isFinalReveal = position === 1;
+                    const totalTeamsCount = teamStandings.length;
+                    
+                    // Color scheme intensifies as position improves
+                    const intensity = isFinalReveal ? '#fbbf24' : position <= 3 ? '#f59e0b' : '#a5b4fc';
+                    const ordinalSuffix = (n) => {
+                        const s = ['th', 'st', 'nd', 'rd'];
+                        const v = n % 100;
+                        return s[(v - 20) % 10] || s[v] || s[0];
+                    };
+                    
+                    html += `
+                        <style>
+                            @keyframes posNumDrop {
+                                0%   { transform: translateY(-150px) scale(0.4); opacity: 0; }
+                                60%  { transform: translateY(20px) scale(1.15); opacity: 1; }
+                                80%  { transform: translateY(-8px) scale(0.95); }
+                                100% { transform: translateY(0) scale(1); opacity: 1; }
+                            }
+                            @keyframes posLabelFlash {
+                                0%   { opacity: 0; transform: translateY(20px); }
+                                50%  { opacity: 0; }
+                                100% { opacity: 1; transform: translateY(0); }
+                            }
+                            @keyframes posPulse {
+                                0%, 100% { text-shadow: 0 0 60px ${intensity}88, 0 0 120px ${intensity}44; transform: scale(1); }
+                                50%      { text-shadow: 0 0 90px ${intensity}cc, 0 0 180px ${intensity}66; transform: scale(1.025); }
+                            }
+                            @keyframes posSpotlight {
+                                0%   { transform: scale(0.2); opacity: 0; }
+                                100% { transform: scale(1); opacity: 1; }
+                            }
+                            @keyframes posBeamSweep {
+                                0%   { transform: translateX(-100%) skewX(-15deg); opacity: 0; }
+                                15%  { opacity: 0.4; }
+                                85%  { opacity: 0.4; }
+                                100% { transform: translateX(100%) skewX(-15deg); opacity: 0; }
+                            }
+                        </style>
+                        
+                        <!-- Full-bleed dramatic backdrop -->
+                        <div style="position:absolute;inset:0;overflow:hidden;background:radial-gradient(ellipse at center, #1a1a3a 0%, #050514 70%, #000 100%);">
+                            
+                            <!-- Spotlight halo behind position number -->
+                            <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:70vw;height:70vw;max-width:1100px;max-height:1100px;background:radial-gradient(circle, ${intensity}22 0%, transparent 65%);pointer-events:none;animation:posSpotlight 0.5s ease-out;"></div>
+                            
+                            <!-- Spotlight sweep beam -->
+                            <div style="position:absolute;top:-10%;left:-20%;width:30%;height:120%;background:linear-gradient(90deg, transparent, ${intensity}22, transparent);animation:posBeamSweep 3s ease-in-out infinite;pointer-events:none;"></div>
+                            
+                            <!-- Center stack -->
+                            <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px;">
+                                
+                                <!-- Top label (delayed appearance) -->
+                                <div style="color:${intensity};font-size:18px;font-weight:700;letter-spacing:10px;text-transform:uppercase;margin-bottom:20px;animation:posLabelFlash 0.6s 0.4s ease-out backwards;">
+                                    ${isFinalReveal ? '🏆 And in first place 🏆' : '... and in'}
+                                </div>
+                                
+                                <!-- THE POSITION NUMBER — huge, drops in, then pulses -->
+                                <div style="position:relative;line-height:0.85;">
+                                    <div style="color:white;font-size:clamp(160px, 28vw, 380px);font-weight:900;letter-spacing:-12px;background:linear-gradient(180deg, #fff 0%, ${intensity} 65%, ${intensity}cc 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:posNumDrop 0.8s ease-out, posPulse 2.2s 0.8s ease-in-out infinite;">
+                                        ${position}<span style="font-size:0.4em;font-weight:700;letter-spacing:0;vertical-align:top;line-height:1;">${ordinalSuffix(position)}</span>
+                                    </div>
+                                </div>
+                                
+                                <!-- Bottom: place label -->
+                                <div style="margin-top:20px;color:${intensity};font-size:24px;font-weight:800;letter-spacing:8px;text-transform:uppercase;animation:posLabelFlash 0.6s 1.1s ease-out backwards;">
+                                    ${isFinalReveal ? '🥇 The Champion 🥇' : `Place · ${totalTeamsCount > 0 ? `of ${totalTeamsCount}` : ''}`}
+                                </div>
+                                
+                                <!-- Tap hint -->
+                                <div style="margin-top:36px;color:rgba(255,255,255,0.5);font-size:14px;font-style:italic;animation:posLabelFlash 0.6s 1.6s ease-out backwards;">
+                                    Tap Next to reveal the team →
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                } else if (team) {
                     const isFirst = position === 1;
                     const isLast = position === teamStandings.length;
                     
@@ -13611,13 +13927,23 @@
                     // Layered on top of the existing slide via z-index; nav
                     // buttons (z-index:10) stay clickable on top of this (z-index:5).
                     // Triggers confetti via isWinnerSlide flag.
-                    // SUB-STAGE: shown only when teamRevealStep === 0. Advancing the step
-                    // (via Next) hides the overlay and reveals the regular team scoring page,
-                    // which previously only flashed before the slide advanced.
+                    // ═══════════════════════════════════════════════════════
+                    // B3: Full-bleed winner overlay (position #1 only)
+                    // Triggered at sub-stage 1 (after the countdown reveal at stage 0).
+                    // Advancing to stage 2 hides the overlay and shows the regular team page.
                     // ═══════════════════════════════════════════════════════
                     const _teamStep = presentationState.teamRevealStep || 0;
-                    if (isFirst && _teamStep === 0) {
+                    if (isFirst && _teamStep === 1) {
                         presentationState.isWinnerSlide = true;
+                        // Play a winning-team celebration sound on first land (gated by flag)
+                        if (!presentationState._winningTeamSoundPlayed) {
+                            presentationState._winningTeamSoundPlayed = true;
+                            setTimeout(() => {
+                                if (typeof playWinningTeamFanfare === 'function') {
+                                    try { playWinningTeamFanfare(); } catch (e) {}
+                                }
+                            }, 200);
+                        }
                         const championLabel = hasScheduledRounds ? 'LEADING' : 'CHAMPIONS';
                         const subLabel = hasScheduledRounds 
                             ? `After ${totalRounds} of ${totalRounds + scheduledRoundsCount} round${(totalRounds + scheduledRoundsCount) === 1 ? '' : 's'}`
@@ -13805,7 +14131,7 @@
                                     const diffColor = isDrop ? '#10b981' : '#ef4444';
                                     
                                     return `
-                                        <div style="background:${bgColor};border:2px solid ${borderColor};border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;">
+                                        <div onclick="showHandicapDetailModal('${change.playerId}')" style="background:${bgColor};border:2px solid ${borderColor};border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;cursor:pointer;transition:transform 0.15s, box-shadow 0.15s;" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 24px rgba(0,0,0,0.3)';" onmouseout="this.style.transform='';this.style.boxShadow='';">
                                             <div style="color:white;font-size:15px;font-weight:700;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${change.playerName}</div>
                                             <div style="display:flex;align-items:center;gap:8px;">
                                                 <div style="color:#a5b4fc;font-size:20px;font-weight:700;">${change.beforeHandicap}</div>
@@ -13815,6 +14141,7 @@
                                                     ${diff > 0 ? '+' : ''}${diff}
                                                 </div>
                                             </div>
+                                            <div style="color:rgba(255,255,255,0.45);font-size:10px;font-style:italic;text-align:right;margin-top:2px;">tap for details</div>
                                         </div>
                                     `;
                                 }).join('')}
@@ -14119,7 +14446,9 @@
                 // ISO date (YYYY-MM-DD) for weather forecast query
                 const targetDateISO = roundDate.toISOString().slice(0, 10);
                 // Best string to geocode: courseAddress (most specific) → courseName (fallback)
-                const weatherQuery = nextRound.courseAddress || nextRound.courseName;
+                // Hardcoded location for now — all Dutch Cup rounds are at Little River, SC.
+                // (Course addresses in the data don't always geocode cleanly so this is more reliable.)
+                const weatherQuery = 'Little River, South Carolina';
                 
                 // Course par/length info (if available)
                 const coursePar = nextRound.pars && Array.isArray(nextRound.pars)
@@ -14149,26 +14478,35 @@
                 
                 const sortedGroups = Object.keys(groupsMap).sort((a, b) => parseInt(a) - parseInt(b));
                 
-                // Compact groups grid — no internal scrolling, tighter player cards
+                // Group cards with more substantial visual structure now that there's room for it.
                 let groupsHTML = '';
                 if (sortedGroups.length > 0) {
-                    groupsHTML = '<div style="background:rgba(255,255,255,0.07);border:2px solid rgba(255,255,255,0.15);border-radius:14px;padding:14px 18px;flex:1;display:flex;flex-direction:column;min-height:0;">' +
-                        '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-shrink:0;">' +
-                            '<div style="font-size:22px;">👥</div>' +
-                            '<h2 style="color:white;font-size:18px;margin:0;font-weight:700;letter-spacing:1px;text-transform:uppercase;">Groups</h2>' +
+                    groupsHTML = '<div style="background:rgba(255,255,255,0.07);border:2px solid rgba(255,255,255,0.15);border-radius:14px;padding:16px 20px;flex:1;display:flex;flex-direction:column;min-height:0;">' +
+                        '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-shrink:0;">' +
+                            '<div style="font-size:24px;">👥</div>' +
+                            '<h2 style="color:white;font-size:18px;margin:0;font-weight:700;letter-spacing:1px;text-transform:uppercase;">Tee Time Groups</h2>' +
                         '</div>' +
-                        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;flex:1;min-height:0;">';
+                        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;flex:1;min-height:0;align-content:start;">';
                     
-                    sortedGroups.forEach(groupNum => {
+                    // Group accent colors — rotate through a small palette so each group has its own identity
+                    const groupAccents = ['#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#a855f7', '#06b6d4'];
+                    
+                    sortedGroups.forEach((groupNum, gIdx) => {
                         const players = groupsMap[groupNum];
-                        groupsHTML += '<div style="background:rgba(255,255,255,0.05);border-radius:8px;padding:10px 12px;">' +
-                            '<h3 style="color:#a5b4fc;font-size:12px;margin:0 0 8px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;">Group ' + groupNum + '</h3>';
+                        const accent = groupAccents[gIdx % groupAccents.length];
+                        groupsHTML += '<div style="background:linear-gradient(135deg, ' + accent + '1f 0%, rgba(255,255,255,0.04) 100%);border:2px solid ' + accent + '66;border-radius:12px;padding:12px 14px;box-shadow:0 4px 16px rgba(0,0,0,0.2);">' +
+                            // Group header strip with circle badge
+                            '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid ' + accent + '44;">' +
+                                '<div style="width:30px;height:30px;border-radius:50%;background:' + accent + ';color:white;font-weight:800;font-size:15px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px ' + accent + '88;">' + groupNum + '</div>' +
+                                '<div style="color:white;font-size:13px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;">Group ' + groupNum + '</div>' +
+                                '<div style="margin-left:auto;color:rgba(255,255,255,0.55);font-size:11px;font-weight:600;">' + players.length + ' player' + (players.length === 1 ? '' : 's') + '</div>' +
+                            '</div>';
                         
                         players.forEach(player => {
-                            groupsHTML += '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;">' +
-                                '<div style="width:8px;height:8px;border-radius:50%;background:' + player.teamColor + ';flex-shrink:0;"></div>' +
+                            groupsHTML += '<div style="display:flex;align-items:center;gap:10px;padding:7px 8px;margin-bottom:5px;border-radius:8px;background:rgba(0,0,0,0.18);border:1px solid rgba(255,255,255,0.06);">' +
+                                '<div style="width:10px;height:10px;border-radius:50%;background:' + player.teamColor + ';flex-shrink:0;box-shadow:0 0 8px ' + player.teamColor + '88;"></div>' +
                                 '<div style="flex:1;min-width:0;color:white;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + player.name + '</div>' +
-                                '<div style="color:#a5b4fc;font-size:10px;flex-shrink:0;">HCP ' + (player.handicap || 0) + '</div>' +
+                                '<div style="color:rgba(255,255,255,0.55);font-size:10px;flex-shrink:0;font-weight:600;background:rgba(255,255,255,0.08);padding:2px 6px;border-radius:4px;">HCP ' + (player.handicap || 0) + '</div>' +
                             '</div>';
                         });
                         
@@ -14371,13 +14709,21 @@
                 return;
             }
             
-            // Winning team slide: 2 sub-stages (0=dramatic full-bleed overlay, 1=regular scoring page)
-            // Fixes the "regular team page flashes and disappears" bug — now it has a stable second stage.
+            // Team reveal sub-stages — applies to ALL team slides now:
+            //   Non-winner: stage 0 (POSITION countdown) → stage 1 (team page). maxStage = 1.
+            //   Winner (#1): stage 0 (POSITION countdown) → stage 1 (full-bleed overlay) → stage 2 (regular page). maxStage = 2.
+            const teamSlidesStart = presentationState._teamSlidesStart;
+            const teamSlidesCount = presentationState._teamSlidesCount || 0;
             const winTeamIdx = presentationState._winningTeamSlideIndex;
-            if (!_navOnPhoto && winTeamIdx >= 0 && _navContentIdx === winTeamIdx && (presentationState.teamRevealStep || 0) < 1) {
-                presentationState.teamRevealStep = 1;
-                renderPresentation();
-                return;
+            if (!_navOnPhoto && teamSlidesStart >= 0 && _navContentIdx >= teamSlidesStart && _navContentIdx < teamSlidesStart + teamSlidesCount) {
+                const _step = presentationState.teamRevealStep || 0;
+                const _isWinnerSlide = (_navContentIdx === winTeamIdx);
+                const _maxStep = _isWinnerSlide ? 2 : 1;
+                if (_step < _maxStep) {
+                    presentationState.teamRevealStep = _step + 1;
+                    renderPresentation();
+                    return;
+                }
             }
             
             // Bracket combined slide: 3 sub-steps (0=matchup, 1=result, 2=details). Advance sub-step until exhausted.
@@ -14392,8 +14738,9 @@
                 }
             }
             
-            // Per-player slide: 3 base sub-steps (0=hero, 1=position+scorecard, 2=points) + N award reveals.
-            // Max stage = 2 + playerAwards.length. So if player has 3 awards, stages 0..5 are valid.
+            // Per-player slide sub-steps:
+            //   Normal player: stage 0 = unified page; stages 1..awardCount = award reveals.
+            //   Champion (#1): stage 0 = Champion Golfer of the Day intro; stage 1 = unified page; stages 2..awardCount+1 = award reveals.
             const psStart = presentationState._playerSlidesStart;
             const psCount = presentationState._playerSlidesCount || 0;
             if (!_navOnPhoto && psStart >= 0 && _navContentIdx >= psStart && _navContentIdx < psStart + psCount) {
@@ -14402,8 +14749,8 @@
                 const playerSlideRec = (presentationState.individualPlayerSlides || [])[playerIdx];
                 const awardCount = (playerSlideRec && Array.isArray(playerSlideRec.playerAwards))
                     ? playerSlideRec.playerAwards.length : 0;
-                // Stage 0 = unified page; stages 1..awardCount = award reveals one per award.
-                const maxStage = awardCount;
+                const isChampion = playerIdx === psCount - 1;
+                const maxStage = awardCount + (isChampion ? 1 : 0);
                 if (step < maxStage) {
                     presentationState.playerRevealStep = step + 1;
                     renderPresentation();
@@ -14421,6 +14768,10 @@
             presentationState.bbbLeadersRevealStep = 0;
             presentationState.teamRevealStep = 0;
             presentationState._teamIntroFanfarePlayed = false; // allow re-play on revisit
+            presentationState._perfIntroSoundPlayed = false;
+            presentationState._championIntroSoundPlayed = false;
+            presentationState._teamCountdownSoundPlayed = false;
+            presentationState._winningTeamSoundPlayed = false;
             
             if (presentationState.currentSlide >= presentationState.totalSlides) {
                 closePresentationMode();
@@ -14464,10 +14815,12 @@
                 return;
             }
             
-            // Winning team slide: rewind sub-step (regular page → full-bleed overlay) before changing slide
+            // Team reveal sub-stages: rewind step before changing slide (applies to ALL team slides).
+            const teamSlidesStartPre = presentationState._teamSlidesStart;
+            const teamSlidesCountPre = presentationState._teamSlidesCount || 0;
             const winTeamIdxPre = presentationState._winningTeamSlideIndex;
-            if (!_onPhotoPre && winTeamIdxPre >= 0 && _contentIdxPre === winTeamIdxPre && (presentationState.teamRevealStep || 0) > 0) {
-                presentationState.teamRevealStep = 0;
+            if (!_onPhotoPre && teamSlidesStartPre >= 0 && _contentIdxPre >= teamSlidesStartPre && _contentIdxPre < teamSlidesStartPre + teamSlidesCountPre && (presentationState.teamRevealStep || 0) > 0) {
+                presentationState.teamRevealStep = (presentationState.teamRevealStep || 0) - 1;
                 renderPresentation();
                 return;
             }
@@ -14522,14 +14875,20 @@
                 } else {
                     presentationState.bbbLeadersRevealStep = 0;
                 }
-                // When entering the winning team slide via Back, jump to step 1 (regular page, post-overlay)
-                if (!_newOnPhoto && winTeamIdxPre >= 0 && _newContentIdx === winTeamIdxPre) {
-                    presentationState.teamRevealStep = 1;
+                // When entering a team slide via Back, jump to the fully-revealed stage.
+                // Non-winner teams: step 1 (team page). Winner team: step 2 (regular page after full-bleed).
+                if (!_newOnPhoto && teamSlidesStartPre >= 0 && _newContentIdx >= teamSlidesStartPre && _newContentIdx < teamSlidesStartPre + teamSlidesCountPre) {
+                    presentationState.teamRevealStep = (_newContentIdx === winTeamIdxPre) ? 2 : 1;
                 } else {
                     presentationState.teamRevealStep = 0;
                 }
+                // Reset team-countdown sound flag when navigating away/in so it can replay
+                presentationState._teamCountdownSoundPlayed = false;
+                presentationState._winningTeamSoundPlayed = false;
                 // Reset team-intro fanfare flag so it can replay if user returns to that slide
                 presentationState._teamIntroFanfarePlayed = false;
+                presentationState._perfIntroSoundPlayed = false;
+                presentationState._championIntroSoundPlayed = false;
                 // When entering a bracket combined slide via Back, jump to fully-revealed (step 2)
                 if (!_newOnPhoto && bcStart >= 0 && _newContentIdx >= bcStart && _newContentIdx < bcStart + bcCount) {
                     presentationState.bracketRevealStep = 2;
@@ -14542,7 +14901,8 @@
                     const _playerRec = (presentationState.individualPlayerSlides || [])[_playerIdx];
                     const _awardCount = (_playerRec && Array.isArray(_playerRec.playerAwards))
                         ? _playerRec.playerAwards.length : 0;
-                    presentationState.playerRevealStep = _awardCount;
+                    const _isChampion = _playerIdx === psCount - 1;
+                    presentationState.playerRevealStep = _awardCount + (_isChampion ? 1 : 0);
                 } else {
                     presentationState.playerRevealStep = 0;
                 }
@@ -14718,6 +15078,157 @@
             }
         };
         
+        // Champion fanfare — for the "Champion Golfer of the Day" intro slide before the #1 player.
+        // More royal/triumphant than the team-intro fanfare: longer rising sequence, organ-like sustained chord,
+        // bell-toll bookend. Dutch national anthem energy without copying any specific tune.
+        window.playChampionFanfare = () => {
+            try {
+                if (window.__presentationMuted) return;
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (!AudioContext) return;
+                const ctx = new AudioContext();
+                const now = ctx.currentTime;
+                
+                const master = ctx.createGain();
+                master.gain.value = 0.32;
+                master.connect(ctx.destination);
+                
+                // Bell-toll opening: low frequency with long decay (royal proclamation)
+                const playBell = (startTime, freq, peakGain, duration) => {
+                    const osc = ctx.createOscillator();
+                    osc.type = 'sine';
+                    osc.frequency.value = freq;
+                    const gain = ctx.createGain();
+                    gain.gain.setValueAtTime(0, startTime);
+                    gain.gain.linearRampToValueAtTime(peakGain, startTime + 0.03);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+                    // Add a soft second harmonic
+                    const osc2 = ctx.createOscillator();
+                    osc2.type = 'sine';
+                    osc2.frequency.value = freq * 2;
+                    const gain2 = ctx.createGain();
+                    gain2.gain.setValueAtTime(0, startTime);
+                    gain2.gain.linearRampToValueAtTime(peakGain * 0.4, startTime + 0.03);
+                    gain2.gain.exponentialRampToValueAtTime(0.0001, startTime + duration * 0.7);
+                    osc.connect(gain).connect(master);
+                    osc2.connect(gain2).connect(master);
+                    osc.start(startTime); osc.stop(startTime + duration + 0.1);
+                    osc2.start(startTime); osc2.stop(startTime + duration + 0.1);
+                };
+                playBell(now + 0.0, 261.63, 0.4, 1.5); // C4 — royal opening
+                playBell(now + 0.5, 261.63, 0.3, 1.2); // C4 again
+                
+                // Rising royal fanfare — slower, more deliberate than team-intro
+                const scheduleNote = (startTime, freq, duration, peakGain) => {
+                    [-3, 3].forEach(detuneCents => {
+                        const osc = ctx.createOscillator();
+                        osc.type = 'sawtooth';
+                        osc.frequency.value = freq;
+                        osc.detune.value = detuneCents;
+                        const noteGain = ctx.createGain();
+                        noteGain.gain.setValueAtTime(0, startTime);
+                        noteGain.gain.linearRampToValueAtTime(peakGain, startTime + 0.04);
+                        noteGain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+                        const filt = ctx.createBiquadFilter();
+                        filt.type = 'lowpass';
+                        filt.frequency.value = 2200;
+                        filt.Q.value = 1.5;
+                        osc.connect(filt).connect(noteGain).connect(master);
+                        osc.start(startTime);
+                        osc.stop(startTime + duration + 0.05);
+                    });
+                };
+                // Royal ascending pattern: G - C - E - G - C (higher)
+                scheduleNote(now + 1.5, 392.00, 0.45, 0.28); // G4
+                scheduleNote(now + 1.95, 523.25, 0.45, 0.30); // C5
+                scheduleNote(now + 2.40, 659.25, 0.45, 0.32); // E5
+                scheduleNote(now + 2.85, 783.99, 0.45, 0.34); // G5
+                scheduleNote(now + 3.30, 1046.50, 0.70, 0.42); // C6 — peak
+                
+                // Sustained organ-like chord at the end
+                const chordStart = now + 4.0;
+                const chordDuration = 2.2;
+                [261.63, 329.63, 392.00, 523.25, 659.25].forEach(freq => {
+                    [-2, 2].forEach(detuneCents => {
+                        const osc = ctx.createOscillator();
+                        osc.type = 'triangle';
+                        osc.frequency.value = freq;
+                        osc.detune.value = detuneCents;
+                        const noteGain = ctx.createGain();
+                        noteGain.gain.setValueAtTime(0, chordStart);
+                        noteGain.gain.linearRampToValueAtTime(0.10, chordStart + 0.4);
+                        noteGain.gain.setValueAtTime(0.10, chordStart + 1.2);
+                        noteGain.gain.exponentialRampToValueAtTime(0.0001, chordStart + chordDuration);
+                        const filt = ctx.createBiquadFilter();
+                        filt.type = 'lowpass';
+                        filt.frequency.value = 1800;
+                        osc.connect(filt).connect(noteGain).connect(master);
+                        osc.start(chordStart);
+                        osc.stop(chordStart + chordDuration + 0.05);
+                    });
+                });
+                
+                setTimeout(() => { try { ctx.close(); } catch (e) {} }, (chordDuration + 4.5) * 1000);
+            } catch (err) {
+                console.warn('Champion fanfare failed:', err);
+            }
+        };
+        
+        // Team countdown sting — short tension/anticipation cue when a "#N!" countdown slide appears.
+        // Two-note "ba-DUM" pattern with a snare hit. ~0.6s total.
+        window.playCountdownSting = () => {
+            try {
+                if (window.__presentationMuted) return;
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (!AudioContext) return;
+                const ctx = new AudioContext();
+                const now = ctx.currentTime;
+                
+                const master = ctx.createGain();
+                master.gain.value = 0.40;
+                master.connect(ctx.destination);
+                
+                // Snare-style noise burst
+                const burstDuration = 0.18;
+                const sr = ctx.sampleRate;
+                const burstBuffer = ctx.createBuffer(1, burstDuration * sr, sr);
+                const burstData = burstBuffer.getChannelData(0);
+                for (let i = 0; i < burstData.length; i++) {
+                    const t = i / sr;
+                    const env = Math.exp(-t * 12);
+                    burstData[i] = (Math.random() * 2 - 1) * env * 0.7;
+                }
+                const burstSrc = ctx.createBufferSource();
+                burstSrc.buffer = burstBuffer;
+                const burstFilter = ctx.createBiquadFilter();
+                burstFilter.type = 'bandpass';
+                burstFilter.frequency.value = 2500;
+                burstFilter.Q.value = 1.2;
+                burstSrc.connect(burstFilter).connect(master);
+                burstSrc.start(now);
+                
+                // Low "ba-DUM" — two thumps
+                const playThump = (startTime, freq, peak, dur) => {
+                    const osc = ctx.createOscillator();
+                    osc.type = 'sine';
+                    osc.frequency.value = freq;
+                    const gain = ctx.createGain();
+                    gain.gain.setValueAtTime(0, startTime);
+                    gain.gain.linearRampToValueAtTime(peak, startTime + 0.01);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, startTime + dur);
+                    osc.connect(gain).connect(master);
+                    osc.start(startTime);
+                    osc.stop(startTime + dur + 0.02);
+                };
+                playThump(now + 0.05, 110, 0.55, 0.22);
+                playThump(now + 0.32, 73.4, 0.65, 0.35); // lower, louder second thump
+                
+                setTimeout(() => { try { ctx.close(); } catch (e) {} }, 800);
+            } catch (err) {
+                console.warn('Countdown sting failed:', err);
+            }
+        };
+        
         // Toggle mute state for presentation audio (persists for the duration of the presentation only)
         window.togglePresentationMute = () => {
             window.__presentationMuted = !window.__presentationMuted;
@@ -14736,19 +15247,16 @@
             if (window.__weatherCache[cacheKey]) return window.__weatherCache[cacheKey];
             
             try {
-                // Step 1: geocode
-                const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(locationQuery)}&count=1&language=en&format=json`;
-                const geoResp = await fetch(geoUrl);
-                if (!geoResp.ok) throw new Error(`Geocode HTTP ${geoResp.status}`);
-                const geoData = await geoResp.json();
-                if (!geoData.results || geoData.results.length === 0) {
-                    throw new Error('Location not found');
-                }
-                const { latitude, longitude, name, country } = geoData.results[0];
+                // Hardcoded to Little River, South Carolina (33.879°N, 78.663°W).
+                // We skip geocoding because the location is fixed; this also saves ~500ms on each weather load.
+                const latitude = 33.879;
+                const longitude = -78.663;
+                const name = 'Little River';
+                const country = 'SC';
                 
-                // Step 2: forecast for the target date
-                // Open-Meteo daily forecast goes ~16 days out; if target is past or too far, the API just omits it.
-                const forecastUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max&temperature_unit=celsius&wind_speed_unit=kmh&timezone=auto&start_date=${targetDateISO}&end_date=${targetDateISO}`;
+                // Forecast for the target date. US units (Fahrenheit + mph).
+                // Open-Meteo's daily forecast covers ~16 days; out-of-range dates produce no results.
+                const forecastUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=America%2FNew_York&start_date=${targetDateISO}&end_date=${targetDateISO}`;
                 const fcResp = await fetch(forecastUrl);
                 if (!fcResp.ok) throw new Error(`Forecast HTTP ${fcResp.status}`);
                 const fcData = await fcResp.json();
@@ -14758,13 +15266,15 @@
                 }
                 
                 const result = {
-                    location: `${name}${country ? `, ${country}` : ''}`,
+                    location: `${name}, ${country}`,
                     date: fcData.daily.time[0],
                     weatherCode: fcData.daily.weather_code[0],
                     tempMax: fcData.daily.temperature_2m_max[0],
                     tempMin: fcData.daily.temperature_2m_min[0],
                     precipProb: fcData.daily.precipitation_probability_max[0],
-                    windMax: fcData.daily.wind_speed_10m_max[0]
+                    windMax: fcData.daily.wind_speed_10m_max[0],
+                    tempUnit: '°F',
+                    windUnit: 'mph'
                 };
                 window.__weatherCache[cacheKey] = result;
                 return result;
@@ -14815,6 +15325,8 @@
             }
             
             const w = describeWeatherCode(data.weatherCode);
+            const tempUnit = data.tempUnit || '°';
+            const windUnit = data.windUnit || 'km/h';
             slotNow.innerHTML = `
                 <div style="display:grid;grid-template-columns:auto 1fr auto;gap:16px;align-items:center;height:100%;">
                     <div style="font-size:64px;line-height:1;">${w.emoji}</div>
@@ -14822,17 +15334,420 @@
                         <div style="color:#a5b4fc;font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:2px;">Forecast · ${data.location}</div>
                         <div style="color:white;font-size:22px;font-weight:700;line-height:1.1;">${w.label}</div>
                         <div style="color:rgba(255,255,255,0.65);font-size:12px;margin-top:4px;">
-                            💧 ${Math.round(data.precipProb || 0)}% precip · 💨 ${Math.round(data.windMax || 0)} km/h wind
+                            💧 ${Math.round(data.precipProb || 0)}% precip · 💨 ${Math.round(data.windMax || 0)} ${windUnit} wind
                         </div>
                     </div>
                     <div style="text-align:right;">
-                        <div style="color:white;font-size:32px;font-weight:800;line-height:1;">${Math.round(data.tempMax)}°</div>
-                        <div style="color:rgba(255,255,255,0.55);font-size:13px;font-weight:600;margin-top:2px;">↓ ${Math.round(data.tempMin)}°</div>
+                        <div style="color:white;font-size:32px;font-weight:800;line-height:1;">${Math.round(data.tempMax)}${tempUnit}</div>
+                        <div style="color:rgba(255,255,255,0.55);font-size:13px;font-weight:600;margin-top:2px;">↓ ${Math.round(data.tempMin)}${tempUnit}</div>
                     </div>
                 </div>
             `;
         }
         window.hydrateWeatherCard = hydrateWeatherCard;
+        
+        // Champion Golfer of the Day fanfare — grand, regal, slightly Dutch.
+        // Rising 4-note brass salute → held major chord → light flourish on top.
+        window.playChampionIntroFanfare = () => {
+            try {
+                if (window.__presentationMuted) return;
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (!AudioContext) return;
+                const ctx = new AudioContext();
+                const now = ctx.currentTime;
+                
+                const master = ctx.createGain();
+                master.gain.value = 0.32;
+                master.connect(ctx.destination);
+                
+                // Brass-like note helper (paired detuned sawtooth + lowpass)
+                const playNote = (startTime, freq, duration, peakGain) => {
+                    [-5, 5].forEach(detune => {
+                        const osc = ctx.createOscillator();
+                        osc.type = 'sawtooth';
+                        osc.frequency.value = freq;
+                        osc.detune.value = detune;
+                        const g = ctx.createGain();
+                        g.gain.setValueAtTime(0, startTime);
+                        g.gain.linearRampToValueAtTime(peakGain, startTime + 0.03);
+                        g.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+                        const filter = ctx.createBiquadFilter();
+                        filter.type = 'lowpass';
+                        filter.frequency.value = 2200;
+                        filter.Q.value = 1.2;
+                        osc.connect(filter).connect(g).connect(master);
+                        osc.start(startTime);
+                        osc.stop(startTime + duration + 0.05);
+                    });
+                };
+                
+                // Royal salute: G4 → C5 → E5 → G5 stab pattern
+                playNote(now + 0.00, 392.00, 0.30, 0.28);
+                playNote(now + 0.25, 523.25, 0.30, 0.30);
+                playNote(now + 0.50, 659.25, 0.30, 0.32);
+                playNote(now + 0.75, 783.99, 0.45, 0.36);
+                
+                // Held C major chord — "the champion has arrived" sustain
+                const holdStart = now + 1.25;
+                const holdDur = 1.8;
+                [261.63, 329.63, 392.00, 523.25].forEach(freq => {
+                    [-3, 3].forEach(detune => {
+                        const osc = ctx.createOscillator();
+                        osc.type = 'triangle';
+                        osc.frequency.value = freq;
+                        osc.detune.value = detune;
+                        const g = ctx.createGain();
+                        g.gain.setValueAtTime(0, holdStart);
+                        g.gain.linearRampToValueAtTime(0.13, holdStart + 0.25);
+                        g.gain.setValueAtTime(0.13, holdStart + 1.0);
+                        g.gain.exponentialRampToValueAtTime(0.0001, holdStart + holdDur);
+                        const filter = ctx.createBiquadFilter();
+                        filter.type = 'lowpass';
+                        filter.frequency.value = 1800;
+                        osc.connect(filter).connect(g).connect(master);
+                        osc.start(holdStart);
+                        osc.stop(holdStart + holdDur + 0.05);
+                    });
+                });
+                
+                // High flourish ~1.6s in
+                [
+                    { time: 1.60, freq: 1568.00, dur: 0.20 },
+                    { time: 1.75, freq: 1318.51, dur: 0.20 },
+                    { time: 1.90, freq: 1568.00, dur: 0.20 },
+                    { time: 2.05, freq: 2093.00, dur: 0.35 }
+                ].forEach(n => {
+                    const osc = ctx.createOscillator();
+                    osc.type = 'triangle';
+                    osc.frequency.value = n.freq;
+                    const g = ctx.createGain();
+                    g.gain.setValueAtTime(0, now + n.time);
+                    g.gain.linearRampToValueAtTime(0.08, now + n.time + 0.02);
+                    g.gain.exponentialRampToValueAtTime(0.0001, now + n.time + n.dur);
+                    osc.connect(g).connect(master);
+                    osc.start(now + n.time);
+                    osc.stop(now + n.time + n.dur + 0.05);
+                });
+                
+                setTimeout(() => { try { ctx.close(); } catch (e) {} }, (holdDur + 1.5) * 1000);
+            } catch (err) {
+                console.warn('Champion intro fanfare failed:', err);
+            }
+        };
+        
+        // Position-countdown stinger — short, punchy: kick-drum thump + brass C-major stab.
+        // Used before each team-standings reveal.
+        window.playPositionCountdownStinger = () => {
+            try {
+                if (window.__presentationMuted) return;
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (!AudioContext) return;
+                const ctx = new AudioContext();
+                const now = ctx.currentTime;
+                
+                const master = ctx.createGain();
+                master.gain.value = 0.35;
+                master.connect(ctx.destination);
+                
+                // Kick-drum thump (low sine sweep)
+                const kick = ctx.createOscillator();
+                kick.type = 'sine';
+                kick.frequency.setValueAtTime(150, now);
+                kick.frequency.exponentialRampToValueAtTime(40, now + 0.15);
+                const kickGain = ctx.createGain();
+                kickGain.gain.setValueAtTime(0.5, now);
+                kickGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
+                kick.connect(kickGain).connect(master);
+                kick.start(now);
+                kick.stop(now + 0.2);
+                
+                // Brass stab on top
+                [523.25, 659.25, 783.99].forEach(freq => {
+                    const osc = ctx.createOscillator();
+                    osc.type = 'sawtooth';
+                    osc.frequency.value = freq;
+                    const g = ctx.createGain();
+                    g.gain.setValueAtTime(0, now + 0.05);
+                    g.gain.linearRampToValueAtTime(0.18, now + 0.07);
+                    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
+                    const filter = ctx.createBiquadFilter();
+                    filter.type = 'lowpass';
+                    filter.frequency.value = 2400;
+                    osc.connect(filter).connect(g).connect(master);
+                    osc.start(now + 0.05);
+                    osc.stop(now + 0.4);
+                });
+                
+                setTimeout(() => { try { ctx.close(); } catch (e) {} }, 800);
+            } catch (err) {
+                console.warn('Position stinger failed:', err);
+            }
+        };
+        
+        // Winning-team celebration fanfare — bigger, longer, more elaborate than champion fanfare.
+        // Triumphant ascending sequence + held major chord + applause-like noise wash.
+        window.playWinningTeamFanfare = () => {
+            try {
+                if (window.__presentationMuted) return;
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (!AudioContext) return;
+                const ctx = new AudioContext();
+                const now = ctx.currentTime;
+                
+                const master = ctx.createGain();
+                master.gain.value = 0.35;
+                master.connect(ctx.destination);
+                
+                // 1) Two-octave ascending brass run
+                const brassNote = (startTime, freq, duration, peakGain) => {
+                    [-6, 6].forEach(detune => {
+                        const osc = ctx.createOscillator();
+                        osc.type = 'sawtooth';
+                        osc.frequency.value = freq;
+                        osc.detune.value = detune;
+                        const g = ctx.createGain();
+                        g.gain.setValueAtTime(0, startTime);
+                        g.gain.linearRampToValueAtTime(peakGain, startTime + 0.025);
+                        g.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+                        const filter = ctx.createBiquadFilter();
+                        filter.type = 'lowpass';
+                        filter.frequency.value = 2400;
+                        filter.Q.value = 1.4;
+                        osc.connect(filter).connect(g).connect(master);
+                        osc.start(startTime);
+                        osc.stop(startTime + duration + 0.05);
+                    });
+                };
+                
+                // Ascending C major run: C5 → E5 → G5 → C6 → E6 → G6
+                brassNote(now + 0.00, 523.25, 0.25, 0.26);  // C5
+                brassNote(now + 0.18, 659.25, 0.25, 0.28);  // E5
+                brassNote(now + 0.36, 783.99, 0.25, 0.30);  // G5
+                brassNote(now + 0.54, 1046.50, 0.25, 0.32); // C6
+                brassNote(now + 0.72, 1318.51, 0.25, 0.34); // E6
+                brassNote(now + 0.90, 1567.98, 0.55, 0.38); // G6 (sustain)
+                
+                // 2) Massive held C major chord (two octaves)
+                const holdStart = now + 1.5;
+                const holdDur = 2.5;
+                [261.63, 329.63, 392.00, 523.25, 659.25, 783.99, 1046.50].forEach(freq => {
+                    [-4, 4].forEach(detune => {
+                        const osc = ctx.createOscillator();
+                        osc.type = 'triangle';
+                        osc.frequency.value = freq;
+                        osc.detune.value = detune;
+                        const g = ctx.createGain();
+                        g.gain.setValueAtTime(0, holdStart);
+                        g.gain.linearRampToValueAtTime(0.11, holdStart + 0.3);
+                        g.gain.setValueAtTime(0.11, holdStart + 1.4);
+                        g.gain.exponentialRampToValueAtTime(0.0001, holdStart + holdDur);
+                        const filter = ctx.createBiquadFilter();
+                        filter.type = 'lowpass';
+                        filter.frequency.value = 2000;
+                        osc.connect(filter).connect(g).connect(master);
+                        osc.start(holdStart);
+                        osc.stop(holdStart + holdDur + 0.05);
+                    });
+                });
+                
+                // 3) Crowd-applause-like noise wash under the chord
+                const applauseStart = now + 1.6;
+                const applauseDur = 2.5;
+                const sr = ctx.sampleRate;
+                const apBuf = ctx.createBuffer(2, applauseDur * sr, sr);
+                for (let ch = 0; ch < 2; ch++) {
+                    const data = apBuf.getChannelData(ch);
+                    for (let i = 0; i < data.length; i++) {
+                        const t = i / sr;
+                        // Slow swell up then fade
+                        const env = Math.min(1, t * 1.5) * (1 - t / applauseDur);
+                        // Pinkish noise: random with a tiny bit of bass
+                        data[i] = (Math.random() * 2 - 1) * env * 0.18;
+                    }
+                }
+                const apSrc = ctx.createBufferSource();
+                apSrc.buffer = apBuf;
+                const apFilter = ctx.createBiquadFilter();
+                apFilter.type = 'bandpass';
+                apFilter.frequency.value = 1200;
+                apFilter.Q.value = 0.6;
+                apSrc.connect(apFilter).connect(master);
+                apSrc.start(applauseStart);
+                
+                setTimeout(() => { try { ctx.close(); } catch (e) {} }, (holdDur + 2) * 1000);
+            } catch (err) {
+                console.warn('Winning team fanfare failed:', err);
+            }
+        };
+        
+        // Performance intro sound — playful, light, sets the stage for player results.
+        // Uses a "golf swing + bird chirp" feel: short whoosh + 3-note ascending chirp.
+        window.playPerfIntroSound = () => {
+            try {
+                if (window.__presentationMuted) return;
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (!AudioContext) return;
+                const ctx = new AudioContext();
+                const now = ctx.currentTime;
+                
+                const master = ctx.createGain();
+                master.gain.value = 0.3;
+                master.connect(ctx.destination);
+                
+                // 1) Swing whoosh — quick noise burst with a low-pass sweep
+                const swingDuration = 0.35;
+                const sr = ctx.sampleRate;
+                const buf = ctx.createBuffer(1, swingDuration * sr, sr);
+                const data = buf.getChannelData(0);
+                for (let i = 0; i < data.length; i++) {
+                    const t = i / sr;
+                    const env = Math.exp(-t * 8); // fast decay
+                    data[i] = (Math.random() * 2 - 1) * env * 0.6;
+                }
+                const swingSrc = ctx.createBufferSource();
+                swingSrc.buffer = buf;
+                const swingFilter = ctx.createBiquadFilter();
+                swingFilter.type = 'bandpass';
+                swingFilter.frequency.setValueAtTime(2000, now);
+                swingFilter.frequency.exponentialRampToValueAtTime(400, now + swingDuration);
+                swingFilter.Q.value = 2;
+                swingSrc.connect(swingFilter).connect(master);
+                swingSrc.start(now);
+                
+                // 2) Three-note ascending chirp ("ta-da-da!") starting at 350ms
+                const chirpNotes = [
+                    { time: 0.32, freq: 659.25, dur: 0.18 }, // E5
+                    { time: 0.46, freq: 783.99, dur: 0.18 }, // G5
+                    { time: 0.60, freq: 1046.50, dur: 0.30 }  // C6 (sustain)
+                ];
+                chirpNotes.forEach(note => {
+                    const osc = ctx.createOscillator();
+                    osc.type = 'triangle';
+                    osc.frequency.value = note.freq;
+                    const g = ctx.createGain();
+                    g.gain.setValueAtTime(0, now + note.time);
+                    g.gain.linearRampToValueAtTime(0.25, now + note.time + 0.02);
+                    g.gain.exponentialRampToValueAtTime(0.0001, now + note.time + note.dur);
+                    osc.connect(g).connect(master);
+                    osc.start(now + note.time);
+                    osc.stop(now + note.time + note.dur + 0.05);
+                });
+                
+                setTimeout(() => { try { ctx.close(); } catch (e) {} }, 1500);
+            } catch (err) {
+                console.warn('Perf intro sound failed:', err);
+            }
+        };
+        
+        // Handicap detail modal — shows the full Index → Course Handicap derivation for a player.
+        // Triggered by clicking a card on the Handicap Changes presentation slide.
+        window.showHandicapDetailModal = (playerId) => {
+            try {
+                const statePlayer = state.players.find(p => String(p.id) === String(playerId));
+                if (!statePlayer) return;
+                
+                // Find the most recent round (same one used by the handicap slide)
+                const eventRounds = state.rounds.filter(r => r.eventId === state.currentEventId && r.active === true);
+                if (eventRounds.length === 0) return;
+                const sortedRounds = eventRounds.slice().sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+                const round = sortedRounds[0];
+                
+                // Find the teamPlayer snapshot for this player in the round (for tee info)
+                let teamPlayer = null;
+                round.teams.forEach(t => {
+                    (t.players || []).forEach(p => { if (String(p.id) === String(playerId)) teamPlayer = p; });
+                });
+                
+                const deriv = getHandicapDerivation(statePlayer, round, teamPlayer);
+                const isUSGA = deriv.mode === 'usga';
+                const hasIndex = isUSGA && deriv.index !== null;
+                
+                // Compute the formula breakdown if USGA
+                let formulaBlock = '';
+                if (hasIndex) {
+                    const idx = deriv.index;
+                    const slope = deriv.slope;
+                    const rating = deriv.rating;
+                    const par = deriv.coursePar;
+                    const factor = slope / 113;
+                    const slopePart = idx * factor;
+                    const ratingPart = rating - par;
+                    formulaBlock = `
+                        <div style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:14px;margin-top:14px;font-family:monospace;">
+                            <div style="color:#a5b4fc;font-size:11px;font-weight:700;letter-spacing:2px;margin-bottom:8px;">USGA COURSE HANDICAP FORMULA</div>
+                            <div style="color:white;font-size:14px;line-height:1.8;">
+                                Course HCP = Index × (Slope ÷ 113) + (Rating − Par)
+                            </div>
+                            <div style="color:rgba(255,255,255,0.85);font-size:13px;line-height:1.7;margin-top:8px;">
+                                = ${idx.toFixed(1)} × (${slope} ÷ 113) + (${rating} − ${par})<br/>
+                                = ${idx.toFixed(1)} × ${factor.toFixed(4)} + ${ratingPart > 0 ? '+' : ''}${ratingPart.toFixed(1)}<br/>
+                                = ${slopePart.toFixed(2)} ${ratingPart >= 0 ? '+ ' : '− '}${Math.abs(ratingPart).toFixed(1)}<br/>
+                                = <span style="color:#fbbf24;font-weight:800;font-size:18px;">${deriv.courseHandicap}</span> (rounded)
+                            </div>
+                        </div>
+                    `;
+                } else if (isUSGA && deriv.fallback) {
+                    formulaBlock = `
+                        <div style="background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.4);border-radius:10px;padding:14px;margin-top:14px;">
+                            <div style="color:#fbbf24;font-size:13px;font-weight:700;margin-bottom:4px;">⚠️ Falling back to Dutch Cup handicap</div>
+                            <div style="color:rgba(255,255,255,0.85);font-size:13px;line-height:1.5;">${deriv.fallbackReason}</div>
+                        </div>
+                    `;
+                } else {
+                    // Dutch Cup mode
+                    formulaBlock = `
+                        <div style="background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.4);border-radius:10px;padding:14px;margin-top:14px;">
+                            <div style="color:#a5b4fc;font-size:13px;font-weight:700;margin-bottom:4px;">DUTCH CUP MODE</div>
+                            <div style="color:rgba(255,255,255,0.85);font-size:13px;line-height:1.5;">Handicap is set per-round from the team roster snapshot — no slope/rating math.</div>
+                        </div>
+                    `;
+                }
+                
+                const modal = document.createElement('div');
+                modal.id = 'handicapDetailModal';
+                modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;animation:fadeIn 0.2s ease-out;';
+                modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+                modal.innerHTML = `
+                    <div style="background:linear-gradient(135deg,#1e1b4b 0%,#312e81 100%);border:2px solid rgba(255,255,255,0.2);border-radius:16px;padding:28px 32px;max-width:580px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.5);" onclick="event.stopPropagation()">
+                        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px;">
+                            <div>
+                                <div style="color:#a5b4fc;font-size:11px;font-weight:700;letter-spacing:2px;margin-bottom:4px;">HANDICAP DETAILS</div>
+                                <div style="color:white;font-size:26px;font-weight:800;line-height:1.1;">${statePlayer.name}</div>
+                            </div>
+                            <button onclick="document.getElementById('handicapDetailModal').remove()" style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:white;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:18px;line-height:1;display:flex;align-items:center;justify-content:center;">✕</button>
+                        </div>
+                        
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                            ${hasIndex ? `
+                                <div style="background:rgba(255,255,255,0.06);border-radius:10px;padding:12px 14px;">
+                                    <div style="color:#a5b4fc;font-size:10px;font-weight:700;letter-spacing:1.5px;">HCP INDEX</div>
+                                    <div style="color:white;font-size:26px;font-weight:800;margin-top:2px;">${deriv.index.toFixed(1)}</div>
+                                </div>
+                            ` : ''}
+                            <div style="background:rgba(255,255,255,0.06);border-radius:10px;padding:12px 14px;">
+                                <div style="color:#a5b4fc;font-size:10px;font-weight:700;letter-spacing:1.5px;">COURSE HCP</div>
+                                <div style="color:#fbbf24;font-size:26px;font-weight:800;margin-top:2px;">${deriv.courseHandicap}</div>
+                            </div>
+                            ${deriv.teeName ? `
+                                <div style="background:rgba(255,255,255,0.06);border-radius:10px;padding:12px 14px;">
+                                    <div style="color:#a5b4fc;font-size:10px;font-weight:700;letter-spacing:1.5px;">TEES</div>
+                                    <div style="color:white;font-size:16px;font-weight:700;margin-top:2px;">${deriv.teeName}</div>
+                                </div>
+                            ` : ''}
+                            <div style="background:rgba(255,255,255,0.06);border-radius:10px;padding:12px 14px;">
+                                <div style="color:#a5b4fc;font-size:10px;font-weight:700;letter-spacing:1.5px;">SLOPE / RATING / PAR</div>
+                                <div style="color:white;font-size:15px;font-weight:600;margin-top:2px;">${deriv.slope} / ${deriv.rating} / ${deriv.coursePar}</div>
+                            </div>
+                        </div>
+                        
+                        ${formulaBlock}
+                    </div>
+                `;
+                document.body.appendChild(modal);
+            } catch (err) {
+                console.error('showHandicapDetailModal failed:', err);
+            }
+        };
 
         window.playWinnerCelebration = () => {
             try {
