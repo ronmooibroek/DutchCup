@@ -527,7 +527,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.05.24.2';
+        const APP_VERSION = '2026.05.24.3';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -12051,6 +12051,18 @@
                     }
                     // ── STAGE 1: result + tagline + final score ──
                     else if (stage === 1) {
+                        // Play badge-specific MP3 sound on first land (gated by per-match flag so re-renders don't replay).
+                        // Sound file is looked up from window.__badgeSoundMap by tagline (e.g. "DOMINATION" → sounds/you-win.mp3).
+                        const _badgeSoundFlag = '_badgeSoundPlayed_match' + matchIdx;
+                        if (!presentationState[_badgeSoundFlag]) {
+                            presentationState[_badgeSoundFlag] = true;
+                            setTimeout(() => {
+                                if (typeof playBadgeSound === 'function') {
+                                    try { playBadgeSound(tagline); } catch (e) {}
+                                }
+                            }, 250); // small delay so it lands with the visual reveal
+                        }
+                        
                         const winnerGlow = championshipWinner ? '0 0 60px rgba(251,191,36,0.8), 0 0 120px rgba(251,191,36,0.4)' : '0 4px 30px rgba(16,185,129,0.5)';
                         html += `
                             <div style="animation:slideUp 0.5s ease-out;max-width:1300px;width:100%;">
@@ -12131,7 +12143,37 @@
                         
                         // Big scorecard cells — designed for across-the-room readability.
                         // Bigger fonts, taller cells, more dramatic color contrast.
-                        const scoreCellsBig = segHoles.map(h => {
+                        // Now includes a running match-play state row (e.g. "1 UP", "AS") from the winner's perspective.
+                        // Compute running state across segHoles: increment when winner wins a hole, decrement when loser wins, no change on halved.
+                        let _runningState = 0; // positive = winner up, negative = loser up
+                        const runningStates = segHoles.map(h => {
+                            if (h.result === winnerSlot) _runningState += 1;
+                            else if (h.result && h.result !== 'halved') _runningState -= 1;
+                            // halved or no result: unchanged
+                            return _runningState;
+                        });
+                        
+                        const formatRunningState = (state, holeNum, totalHoles) => {
+                            if (state === 0) return { label: 'AS', color: '#9ca3af', bg: 'rgba(148,163,184,0.18)' };
+                            const abs = Math.abs(state);
+                            const holesLeft = totalHoles - holeNum;
+                            // "Dormie" = lead equals holes remaining (closer can no longer win, only tie)
+                            const isDormie = abs === holesLeft && abs > 0 && holesLeft > 0;
+                            // "X & Y" notation for closed-out matches
+                            if (abs > holesLeft) {
+                                // Match-decided text
+                                return state > 0
+                                    ? { label: `${abs}&${holesLeft}`, color: '#10b981', bg: 'rgba(16,185,129,0.22)' }
+                                    : { label: `${abs}&${holesLeft}`, color: '#ef4444', bg: 'rgba(239,68,68,0.22)' };
+                            }
+                            if (state > 0) {
+                                return { label: `${abs} UP${isDormie ? ' D' : ''}`, color: '#10b981', bg: 'rgba(16,185,129,0.18)' };
+                            }
+                            return { label: `${abs} UP${isDormie ? ' D' : ''}`, color: '#ef4444', bg: 'rgba(239,68,68,0.18)' };
+                        };
+                        
+                        const totalSegHoles = segHoles.length;
+                        const scoreCellsBig = segHoles.map((h, i) => {
                             const winnerStr = winnerIsP1 ? h.gross1 : h.gross2;
                             const loserStr  = winnerIsP1 ? h.gross2 : h.gross1;
                             const winnerNet = winnerIsP1 ? h.net1 : h.net2;
@@ -12144,6 +12186,8 @@
                             // Loser row cell — highlight if won this hole
                             const loserCellBg = loserWonHole ? 'background:rgba(239,68,68,0.18);' : '';
                             const headerBg = halved ? 'background:rgba(148,163,184,0.18);' : '';
+                            // Running match-play state after this hole (from winner's perspective)
+                            const rs = formatRunningState(runningStates[i], h.holeIndex, totalSegHoles);
                             return `
                                 <td style="padding:0;border:1px solid rgba(255,255,255,0.18);min-width:54px;">
                                     <div style="${headerBg}text-align:center;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1);">
@@ -12153,9 +12197,13 @@
                                         <div style="font-size:30px;font-weight:${winnerWonHole?'900':'700'};color:${winnerWonHole?'#10b981':'white'};line-height:1.05;">${winnerStr != null ? winnerStr : '–'}</div>
                                         <div style="font-size:13px;color:${winnerWonHole?'rgba(16,185,129,0.85)':'rgba(255,255,255,0.5)'};font-weight:600;line-height:1;margin-top:2px;">net ${winnerNet != null ? winnerNet : '–'}</div>
                                     </div>
-                                    <div style="${loserCellBg}text-align:center;padding:6px 4px;">
+                                    <div style="${loserCellBg}text-align:center;padding:6px 4px;border-bottom:1px solid rgba(255,255,255,0.08);">
                                         <div style="font-size:28px;font-weight:${loserWonHole?'900':'700'};color:${loserWonHole?'#ef4444':'rgba(255,255,255,0.7)'};line-height:1.05;">${loserStr != null ? loserStr : '–'}</div>
                                         <div style="font-size:13px;color:${loserWonHole?'rgba(239,68,68,0.85)':'rgba(255,255,255,0.45)'};font-weight:600;line-height:1;margin-top:2px;">net ${loserNet != null ? loserNet : '–'}</div>
+                                    </div>
+                                    <!-- Running match-play state after this hole -->
+                                    <div style="background:${rs.bg};text-align:center;padding:6px 4px;">
+                                        <div style="font-size:18px;font-weight:800;color:${rs.color};line-height:1;letter-spacing:0.5px;">${rs.label}</div>
                                     </div>
                                 </td>
                             `;
@@ -12249,9 +12297,13 @@
                                                             <div style="font-size:18px;color:#10b981;font-weight:800;line-height:1.05;">${winnerPlayer.name.split(' ')[0]}</div>
                                                             <div style="font-size:11px;color:rgba(16,185,129,0.7);font-weight:600;margin-top:2px;">HCP ${winnerHcap != null ? winnerHcap : '–'}</div>
                                                         </div>
-                                                        <div style="text-align:center;padding:6px 12px;">
+                                                        <div style="text-align:center;padding:6px 12px;border-bottom:1px solid rgba(255,255,255,0.08);">
                                                             <div style="font-size:16px;color:rgba(255,255,255,0.75);font-weight:700;line-height:1.05;">${loserPlayer.name.split(' ')[0]}</div>
                                                             <div style="font-size:11px;color:rgba(255,255,255,0.45);font-weight:600;margin-top:2px;">HCP ${loserHcap != null ? loserHcap : '–'}</div>
+                                                        </div>
+                                                        <div style="background:rgba(255,255,255,0.04);text-align:center;padding:6px 12px;">
+                                                            <div style="font-size:11px;color:rgba(255,255,255,0.55);font-weight:700;letter-spacing:1.5px;">MATCH</div>
+                                                            <div style="font-size:9px;color:rgba(255,255,255,0.35);font-weight:600;margin-top:1px;">running</div>
                                                         </div>
                                                     </td>
                                                     ${scoreCellsBig}
@@ -14772,6 +14824,10 @@
             presentationState._championIntroSoundPlayed = false;
             presentationState._teamCountdownSoundPlayed = false;
             presentationState._winningTeamSoundPlayed = false;
+            // Reset any per-match badge sound flags so sounds can replay if user navigates back
+            Object.keys(presentationState).forEach(k => {
+                if (k.startsWith('_badgeSoundPlayed_match')) delete presentationState[k];
+            });
             
             if (presentationState.currentSlide >= presentationState.totalSlides) {
                 closePresentationMode();
@@ -14889,6 +14945,10 @@
                 presentationState._teamIntroFanfarePlayed = false;
                 presentationState._perfIntroSoundPlayed = false;
                 presentationState._championIntroSoundPlayed = false;
+                // Reset badge sound flags so they can replay if user navigates back
+                Object.keys(presentationState).forEach(k => {
+                    if (k.startsWith('_badgeSoundPlayed_match')) delete presentationState[k];
+                });
                 // When entering a bracket combined slide via Back, jump to fully-revealed (step 2)
                 if (!_newOnPhoto && bcStart >= 0 && _newContentIdx >= bcStart && _newContentIdx < bcStart + bcCount) {
                     presentationState.bracketRevealStep = 2;
@@ -15481,6 +15541,60 @@
                 setTimeout(() => { try { ctx.close(); } catch (e) {} }, 800);
             } catch (err) {
                 console.warn('Position stinger failed:', err);
+            }
+        };
+        
+        // ─── Badge sound effects via MP3 files hosted in the repo ───
+        // Maps each match-play tagline to an MP3 filename. Drop the MP3s into a `sounds/` folder
+        // in the GitHub repo (alongside index.html) and they'll play when that badge appears.
+        // Missing files fail silently — no broken UI, just no sound.
+        window.__badgeSoundMap = {
+            // Universal/default celebration sound — used if no specific mapping is found.
+            // Set this to the Pixabay "You Win" MP3 you mentioned.
+            'DEFAULT':            'sounds/you-win.mp3',
+            
+            // Specific badge taglines → specific MP3s. Add filenames once you upload them.
+            // The KEY here should match exactly what's in slide.tagline (uppercase).
+            'DOMINATION':         'sounds/you-win.mp3',
+            'WIRE-TO-WIRE':       'sounds/you-win.mp3',
+            'WIPEOUT':            'sounds/you-win.mp3',
+            'BIG COMEBACK':       'sounds/you-win.mp3',
+            'COMEBACK':           'sounds/you-win.mp3',
+            'NAILBITER':          'sounds/you-win.mp3',
+            'BACK-AND-FORTH':     'sounds/you-win.mp3',
+            'DECIDED ON LAST HOLE': 'sounds/you-win.mp3',
+            'CLINICAL':           'sounds/you-win.mp3',
+            'GRINDER':            'sounds/you-win.mp3',
+            'SOLID WIN':          'sounds/you-win.mp3'
+        };
+        
+        // Cache for Audio elements so they don't reload on every play
+        window.__badgeAudioCache = window.__badgeAudioCache || {};
+        
+        window.playBadgeSound = (tagline) => {
+            try {
+                if (window.__presentationMuted) return;
+                const key = (tagline || 'DEFAULT').toString().toUpperCase().trim();
+                const file = window.__badgeSoundMap[key] || window.__badgeSoundMap['DEFAULT'];
+                if (!file) return;
+                
+                // Reuse cached Audio if available (better for rapid replays)
+                let audio = window.__badgeAudioCache[file];
+                if (!audio) {
+                    audio = new Audio(file);
+                    audio.preload = 'auto';
+                    audio.volume = 0.7;
+                    window.__badgeAudioCache[file] = audio;
+                }
+                // Rewind to start in case it's mid-playback
+                try { audio.currentTime = 0; } catch (e) {}
+                // play() returns a Promise — catch silently if blocked by autoplay policy etc.
+                const p = audio.play();
+                if (p && typeof p.catch === 'function') {
+                    p.catch(err => console.warn('Badge sound playback blocked:', err && err.message));
+                }
+            } catch (err) {
+                console.warn('Badge sound failed:', err);
             }
         };
         
