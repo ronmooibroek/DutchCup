@@ -527,7 +527,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.05.24.3';
+        const APP_VERSION = '2026.05.24.4';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -12141,6 +12141,102 @@
                             return '';
                         })();
                         
+                        // ─── Match narrative ───
+                        // Auto-generate 2-3 sentences explaining how the match unfolded.
+                        // Uses the running-state trajectory + per-hole wins to construct the story.
+                        const buildMatchNarrative = () => {
+                            const winnerWins = segHoles.filter(h => h.result === winnerSlot).length;
+                            const loserWins  = segHoles.filter(h => h.result && h.result !== 'halved' && h.result !== winnerSlot).length;
+                            const halvedCount = segHoles.filter(h => h.result === 'halved').length;
+                            const totalH = segHoles.length;
+                            
+                            // Find the largest lead each player had at any point
+                            let maxWinnerLead = 0;
+                            let maxLoserLead = 0;
+                            let winnerEverBehind = false;
+                            runningStates.forEach(s => {
+                                if (s > maxWinnerLead) maxWinnerLead = s;
+                                if (s < -maxLoserLead) maxLoserLead = -s;
+                                if (s < 0) winnerEverBehind = true;
+                            });
+                            
+                            // Final state
+                            const finalState = runningStates[runningStates.length - 1] || 0;
+                            
+                            // Stretch analysis: find the winner's biggest run
+                            let bestStreak = 0, currentStreak = 0;
+                            let streakStartIdx = -1, streakEndIdx = -1, tmpStart = -1;
+                            segHoles.forEach((h, i) => {
+                                if (h.result === winnerSlot) {
+                                    if (currentStreak === 0) tmpStart = i;
+                                    currentStreak++;
+                                    if (currentStreak > bestStreak) {
+                                        bestStreak = currentStreak;
+                                        streakStartIdx = tmpStart;
+                                        streakEndIdx = i;
+                                    }
+                                } else if (h.result && h.result !== 'halved') {
+                                    currentStreak = 0;
+                                }
+                            });
+                            
+                            // Find front-9 vs back-9 splits (when applicable)
+                            const winnerName = winnerPlayer.name.split(' ')[0];
+                            const loserName = loserPlayer.name.split(' ')[0];
+                            
+                            const sentences = [];
+                            
+                            // OPENING — set the scene
+                            if (winnerEverBehind && maxLoserLead >= 2) {
+                                sentences.push(`${loserName} jumped out to an early lead, going up by ${maxLoserLead}.`);
+                            } else if (winnerEverBehind) {
+                                sentences.push(`${loserName} took an early advantage, but ${winnerName} hung in.`);
+                            } else if (maxWinnerLead >= 3) {
+                                sentences.push(`${winnerName} took control early and never let go.`);
+                            } else {
+                                sentences.push(`The match opened tight, with neither player able to pull away.`);
+                            }
+                            
+                            // MIDDLE — turning point
+                            if (winnerEverBehind && bestStreak >= 2) {
+                                const startHole = segHoles[streakStartIdx].holeIndex;
+                                const endHole = segHoles[streakEndIdx].holeIndex;
+                                sentences.push(`${winnerName} responded with a ${bestStreak}-hole run from hole ${startHole} to hole ${endHole} to flip the script.`);
+                            } else if (bestStreak >= 3) {
+                                const startHole = segHoles[streakStartIdx].holeIndex;
+                                const endHole = segHoles[streakEndIdx].holeIndex;
+                                sentences.push(`A ${bestStreak}-hole run from hole ${startHole} to hole ${endHole} sealed it.`);
+                            } else if (winnerWins > loserWins) {
+                                sentences.push(`${winnerName} chipped away with ${winnerWins} hole wins to ${loserName}'s ${loserWins}, plus ${halvedCount} halved.`);
+                            }
+                            
+                            // CLOSING — how it ended
+                            if (finalState > 0 && finalState >= totalH - segHoles.length + 1 - 1) {
+                                // X & Y closeout — match ended before all holes
+                            }
+                            // Check if match was closed out early
+                            const lastDecidedHole = (() => {
+                                for (let i = runningStates.length - 1; i >= 0; i--) {
+                                    const holesLeft = totalH - (i + 1);
+                                    if (Math.abs(runningStates[i]) > holesLeft) return i + 1;
+                                }
+                                return null;
+                            })();
+                            if (lastDecidedHole && lastDecidedHole < totalH) {
+                                const closedAtHole = segHoles[lastDecidedHole - 1].holeIndex;
+                                sentences.push(`Match closed out on hole ${closedAtHole} — ${winnerName} couldn't be caught.`);
+                            } else if (finalState === 0) {
+                                sentences.push(`The match finished all-square through ${totalH} holes — decision came on a tiebreaker.`);
+                            } else if (finalState === 1) {
+                                sentences.push(`A nail-biter to the finish — ${winnerName} held on by a single hole.`);
+                            } else if (finalState >= 2) {
+                                sentences.push(`${winnerName} closed it out ${finalState} UP after ${totalH}.`);
+                            }
+                            
+                            return sentences;
+                        };
+                        const narrativeSentences = buildMatchNarrative();
+                        
                         // Big scorecard cells — designed for across-the-room readability.
                         // Bigger fonts, taller cells, more dramatic color contrast.
                         // Now includes a running match-play state row (e.g. "1 UP", "AS") from the winner's perspective.
@@ -12178,6 +12274,8 @@
                             const loserStr  = winnerIsP1 ? h.gross2 : h.gross1;
                             const winnerNet = winnerIsP1 ? h.net1 : h.net2;
                             const loserNet  = winnerIsP1 ? h.net2 : h.net1;
+                            const winnerStrokes = winnerIsP1 ? h.strokes1 : h.strokes2;
+                            const loserStrokes  = winnerIsP1 ? h.strokes2 : h.strokes1;
                             const winnerWonHole = h.result === winnerSlot;
                             const loserWonHole  = h.result && h.result !== 'halved' && h.result !== winnerSlot;
                             const halved = h.result === 'halved';
@@ -12188,16 +12286,29 @@
                             const headerBg = halved ? 'background:rgba(148,163,184,0.18);' : '';
                             // Running match-play state after this hole (from winner's perspective)
                             const rs = formatRunningState(runningStates[i], h.holeIndex, totalSegHoles);
+                            // Stroke index (handicap difficulty 1-18) for this hole
+                            const si = h.handicapIndex != null ? h.handicapIndex : '';
+                            // Highlight the hardest holes (SI ≤ 6) so the audience can see where strokes typically land
+                            const siHighlight = (si && si >= 1 && si <= 6);
+                            // Stroke dots — small markers showing each player got a stroke here
+                            const winnerDots = winnerStrokes > 0 ? '•'.repeat(winnerStrokes) : '';
+                            const loserDots  = loserStrokes  > 0 ? '•'.repeat(loserStrokes)  : '';
                             return `
                                 <td style="padding:0;border:1px solid rgba(255,255,255,0.18);min-width:54px;">
-                                    <div style="${headerBg}text-align:center;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1);">
+                                    <!-- Hole number + stroke index sub-row -->
+                                    <div style="${headerBg}text-align:center;padding:3px 0 4px;border-bottom:1px solid rgba(255,255,255,0.1);">
                                         <div style="font-size:14px;color:rgba(255,255,255,0.55);font-weight:700;line-height:1;">${h.holeIndex}</div>
+                                        <div style="font-size:9px;color:${siHighlight ? '#fbbf24' : 'rgba(255,255,255,0.35)'};font-weight:700;line-height:1;margin-top:2px;letter-spacing:0.5px;">SI ${si}</div>
                                     </div>
-                                    <div style="${winnerCellBg}text-align:center;padding:6px 4px;border-bottom:1px solid rgba(255,255,255,0.08);">
+                                    <!-- Winner row -->
+                                    <div style="${winnerCellBg}text-align:center;padding:6px 4px;border-bottom:1px solid rgba(255,255,255,0.08);position:relative;">
+                                        ${winnerDots ? `<div style="position:absolute;top:2px;left:3px;color:#fbbf24;font-size:14px;font-weight:900;line-height:1;letter-spacing:1px;">${winnerDots}</div>` : ''}
                                         <div style="font-size:30px;font-weight:${winnerWonHole?'900':'700'};color:${winnerWonHole?'#10b981':'white'};line-height:1.05;">${winnerStr != null ? winnerStr : '–'}</div>
                                         <div style="font-size:13px;color:${winnerWonHole?'rgba(16,185,129,0.85)':'rgba(255,255,255,0.5)'};font-weight:600;line-height:1;margin-top:2px;">net ${winnerNet != null ? winnerNet : '–'}</div>
                                     </div>
-                                    <div style="${loserCellBg}text-align:center;padding:6px 4px;border-bottom:1px solid rgba(255,255,255,0.08);">
+                                    <!-- Loser row -->
+                                    <div style="${loserCellBg}text-align:center;padding:6px 4px;border-bottom:1px solid rgba(255,255,255,0.08);position:relative;">
+                                        ${loserDots ? `<div style="position:absolute;top:2px;left:3px;color:#fbbf24;font-size:14px;font-weight:900;line-height:1;letter-spacing:1px;">${loserDots}</div>` : ''}
                                         <div style="font-size:28px;font-weight:${loserWonHole?'900':'700'};color:${loserWonHole?'#ef4444':'rgba(255,255,255,0.7)'};line-height:1.05;">${loserStr != null ? loserStr : '–'}</div>
                                         <div style="font-size:13px;color:${loserWonHole?'rgba(239,68,68,0.85)':'rgba(255,255,255,0.45)'};font-weight:600;line-height:1;margin-top:2px;">net ${loserNet != null ? loserNet : '–'}</div>
                                     </div>
@@ -12280,6 +12391,18 @@
                                     </div>
                                 </div>
                                 
+                                <!-- Match narrative — explains how the match unfolded -->
+                                ${narrativeSentences.length > 0 ? `
+                                    <div style="background:linear-gradient(135deg, rgba(251,191,36,0.10), rgba(251,191,36,0.03));border:1px solid rgba(251,191,36,0.35);border-radius:12px;padding:14px 22px;margin-bottom:10px;flex-shrink:0;animation:slideUp 0.6s 0.2s ease-out backwards;">
+                                        <div style="display:flex;align-items:flex-start;gap:14px;">
+                                            <div style="font-size:24px;line-height:1;flex-shrink:0;">📖</div>
+                                            <div style="flex:1;color:rgba(255,255,255,0.92);font-size:17px;line-height:1.45;font-weight:500;">
+                                                ${narrativeSentences.map(s => `<span style="margin-right:6px;">${s}</span>`).join(' ')}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ` : ''}
+                                
                                 <!-- DOMINANT scorecard — fills the entire remaining vertical space -->
                                 <div style="background:rgba(0,0,0,0.4);border:2px solid rgba(255,255,255,0.18);border-radius:14px;padding:14px 16px;flex:1;display:flex;flex-direction:column;min-height:0;box-shadow:0 8px 40px rgba(0,0,0,0.4);">
                                     <div style="color:rgba(255,255,255,0.7);font-size:12px;letter-spacing:3px;font-weight:700;text-align:center;margin-bottom:10px;">
@@ -12290,8 +12413,9 @@
                                             <tbody>
                                                 <tr>
                                                     <td style="padding:0;border:1px solid rgba(255,255,255,0.18);">
-                                                        <div style="background:rgba(255,255,255,0.05);text-align:center;padding:4px 10px;border-bottom:1px solid rgba(255,255,255,0.1);">
-                                                            <div style="font-size:13px;color:rgba(255,255,255,0.5);font-weight:700;letter-spacing:1.5px;">HOLE</div>
+                                                        <div style="background:rgba(255,255,255,0.05);text-align:center;padding:3px 10px 4px;border-bottom:1px solid rgba(255,255,255,0.1);">
+                                                            <div style="font-size:13px;color:rgba(255,255,255,0.5);font-weight:700;letter-spacing:1.5px;line-height:1;">HOLE</div>
+                                                            <div style="font-size:9px;color:rgba(255,255,255,0.4);font-weight:700;letter-spacing:0.5px;line-height:1;margin-top:2px;">STROKE INDEX</div>
                                                         </div>
                                                         <div style="text-align:center;padding:6px 12px;border-bottom:1px solid rgba(255,255,255,0.08);">
                                                             <div style="font-size:18px;color:#10b981;font-weight:800;line-height:1.05;">${winnerPlayer.name.split(' ')[0]}</div>
@@ -15314,30 +15438,65 @@
                 const name = 'Little River';
                 const country = 'SC';
                 
-                // Forecast for the target date. US units (Fahrenheit + mph).
-                // Open-Meteo's daily forecast covers ~16 days; out-of-range dates produce no results.
-                const forecastUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=America%2FNew_York&start_date=${targetDateISO}&end_date=${targetDateISO}`;
+                // Open-Meteo forecast horizon: today + 15 days. Dates outside this range produce HTTP 400.
+                // Detect out-of-range targets and gracefully fall back to a 7-day "current conditions" snapshot
+                // for Little River, so the slide still shows useful info instead of a raw API error.
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const target = new Date(targetDateISO + 'T12:00:00');
+                const daysDiff = Math.round((target - today) / (1000 * 60 * 60 * 24));
+                const outOfRange = daysDiff < 0 || daysDiff > 15;
+                
+                // Build the URL: use explicit start/end if in-range, otherwise default 7-day forecast.
+                const dateParams = outOfRange
+                    ? '&forecast_days=7'
+                    : `&start_date=${targetDateISO}&end_date=${targetDateISO}`;
+                const forecastUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max&current=temperature_2m,weather_code,wind_speed_10m&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=America%2FNew_York${dateParams}`;
+                
                 const fcResp = await fetch(forecastUrl);
                 if (!fcResp.ok) throw new Error(`Forecast HTTP ${fcResp.status}`);
                 const fcData = await fcResp.json();
                 
-                if (!fcData.daily || !fcData.daily.time || fcData.daily.time.length === 0) {
-                    throw new Error('Forecast not available for this date');
+                // If we got daily forecast, use the first entry (either the target date or today)
+                if (fcData.daily && fcData.daily.time && fcData.daily.time.length > 0) {
+                    const result = {
+                        location: `${name}, ${country}`,
+                        date: fcData.daily.time[0],
+                        weatherCode: fcData.daily.weather_code[0],
+                        tempMax: fcData.daily.temperature_2m_max[0],
+                        tempMin: fcData.daily.temperature_2m_min[0],
+                        precipProb: fcData.daily.precipitation_probability_max[0],
+                        windMax: fcData.daily.wind_speed_10m_max[0],
+                        tempUnit: '°F',
+                        windUnit: 'mph',
+                        outOfRange: outOfRange,
+                        targetDate: targetDateISO
+                    };
+                    window.__weatherCache[cacheKey] = result;
+                    return result;
                 }
                 
-                const result = {
-                    location: `${name}, ${country}`,
-                    date: fcData.daily.time[0],
-                    weatherCode: fcData.daily.weather_code[0],
-                    tempMax: fcData.daily.temperature_2m_max[0],
-                    tempMin: fcData.daily.temperature_2m_min[0],
-                    precipProb: fcData.daily.precipitation_probability_max[0],
-                    windMax: fcData.daily.wind_speed_10m_max[0],
-                    tempUnit: '°F',
-                    windUnit: 'mph'
-                };
-                window.__weatherCache[cacheKey] = result;
-                return result;
+                // Last fallback: use current-conditions snapshot if daily failed
+                if (fcData.current) {
+                    const result = {
+                        location: `${name}, ${country}`,
+                        date: targetDateISO,
+                        weatherCode: fcData.current.weather_code,
+                        tempMax: fcData.current.temperature_2m,
+                        tempMin: fcData.current.temperature_2m,
+                        precipProb: 0,
+                        windMax: fcData.current.wind_speed_10m,
+                        tempUnit: '°F',
+                        windUnit: 'mph',
+                        currentOnly: true,
+                        outOfRange: true,
+                        targetDate: targetDateISO
+                    };
+                    window.__weatherCache[cacheKey] = result;
+                    return result;
+                }
+                
+                throw new Error('Forecast not available');
             } catch (err) {
                 console.warn('Weather fetch failed:', err);
                 return { error: err.message || 'Unable to fetch forecast' };
@@ -15387,19 +15546,27 @@
             const w = describeWeatherCode(data.weatherCode);
             const tempUnit = data.tempUnit || '°';
             const windUnit = data.windUnit || 'km/h';
+            // If the round is outside Open-Meteo's 16-day forecast horizon, show a disclaimer so
+            // viewers know they're looking at today's conditions, not the round day's forecast.
+            const labelText = data.outOfRange
+                ? (data.currentOnly ? `Current conditions · ${data.location}` : `Today's forecast · ${data.location}`)
+                : `Forecast · ${data.location}`;
+            const tempLine = data.currentOnly
+                ? `<div style="color:white;font-size:32px;font-weight:800;line-height:1;">${Math.round(data.tempMax)}${tempUnit}</div>`
+                : `<div style="color:white;font-size:32px;font-weight:800;line-height:1;">${Math.round(data.tempMax)}${tempUnit}</div>
+                   <div style="color:rgba(255,255,255,0.55);font-size:13px;font-weight:600;margin-top:2px;">↓ ${Math.round(data.tempMin)}${tempUnit}</div>`;
             slotNow.innerHTML = `
                 <div style="display:grid;grid-template-columns:auto 1fr auto;gap:16px;align-items:center;height:100%;">
                     <div style="font-size:64px;line-height:1;">${w.emoji}</div>
                     <div style="text-align:left;">
-                        <div style="color:#a5b4fc;font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:2px;">Forecast · ${data.location}</div>
+                        <div style="color:#a5b4fc;font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:2px;">${labelText}</div>
                         <div style="color:white;font-size:22px;font-weight:700;line-height:1.1;">${w.label}</div>
                         <div style="color:rgba(255,255,255,0.65);font-size:12px;margin-top:4px;">
-                            💧 ${Math.round(data.precipProb || 0)}% precip · 💨 ${Math.round(data.windMax || 0)} ${windUnit} wind
+                            💧 ${Math.round(data.precipProb || 0)}% precip · 💨 ${Math.round(data.windMax || 0)} ${windUnit} wind${data.outOfRange ? ' · Round day is beyond 16-day forecast' : ''}
                         </div>
                     </div>
                     <div style="text-align:right;">
-                        <div style="color:white;font-size:32px;font-weight:800;line-height:1;">${Math.round(data.tempMax)}${tempUnit}</div>
-                        <div style="color:rgba(255,255,255,0.55);font-size:13px;font-weight:600;margin-top:2px;">↓ ${Math.round(data.tempMin)}${tempUnit}</div>
+                        ${tempLine}
                     </div>
                 </div>
             `;
