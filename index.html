@@ -527,7 +527,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.05.24.7';
+        const APP_VERSION = '2026.05.24.8';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -9100,8 +9100,11 @@
                 
                 presentationAnalytics.awards.closestToHandicap = closestToHandicapWinners.length > 0 ? closestToHandicapWinners : null;
                 
-                // Par 3 Specialist Award - best average net score on par 3 holes
-                let bestPar3Avg = Infinity;
+                // Par 3 Specialist Award - best combined NET score on par 3 holes.
+                // (Lower net total wins. Ties allowed only on identical net totals.)
+                // Bart's gross might differ from Jeff's, but their nets can tie when their handicap-stroke
+                // allocations on par-3 holes differ — which is the legitimate Stableford / net-scoring outcome.
+                let bestPar3NetTotal = Infinity;
                 const par3SpecialistWinners = [];
                 
                 // Find which holes are par 3s
@@ -9118,42 +9121,49 @@
                             const player = team.players.find(pl => pl.id === p.playerId);
                             if (player && player.scores) {
                                 let par3NetTotal = 0;
+                                let par3GrossTotal = 0;
                                 let par3Count = 0;
                                 
                                 par3Holes.forEach(holeIdx => {
                                     const score = player.scores[holeIdx];
                                     if (score) {
-                                        const par = mostRecentRound.pars[holeIdx];
                                         const holeHandicap = mostRecentRound.handicaps[holeIdx];
                                         let strokes = getPlayerStrokesOnHole(player, mostRecentRound, holeHandicap);
                                         const net = score - strokes;
                                         
                                         par3NetTotal += net;
+                                        par3GrossTotal += score;
                                         par3Count++;
                                     }
                                 });
                                 
-                                if (par3Count > 0) {
-                                    const avgPar3 = par3NetTotal / par3Count;
-                                    
-                                    if (avgPar3 < bestPar3Avg) {
-                                        bestPar3Avg = avgPar3;
+                                // Only count players who completed ALL par-3 holes (no partial cards)
+                                if (par3Count === par3Holes.length && par3Count > 0) {
+                                    if (par3NetTotal < bestPar3NetTotal) {
+                                        bestPar3NetTotal = par3NetTotal;
                                         par3SpecialistWinners.length = 0;
                                         par3SpecialistWinners.push({
                                             player: p.playerName,
                                             team: p.teamName,
                                             teamColor: p.teamColor,
-                                            average: avgPar3.toFixed(2),
-                                            count: par3Count
+                                            netTotal: par3NetTotal,
+                                            grossTotal: par3GrossTotal,
+                                            count: par3Count,
+                                            // Keep the legacy fields for any downstream code that reads them
+                                            average: (par3NetTotal / par3Count).toFixed(2),
+                                            par3Score: par3NetTotal
                                         });
-                                    } else if (Math.abs(avgPar3 - bestPar3Avg) < 0.01 && bestPar3Avg < Infinity) {
-                                        // Tie - add to winners (using small threshold for floating point comparison)
+                                    } else if (par3NetTotal === bestPar3NetTotal) {
+                                        // Strict integer tie on net total — both players win.
                                         par3SpecialistWinners.push({
                                             player: p.playerName,
                                             team: p.teamName,
                                             teamColor: p.teamColor,
-                                            average: avgPar3.toFixed(2),
-                                            count: par3Count
+                                            netTotal: par3NetTotal,
+                                            grossTotal: par3GrossTotal,
+                                            count: par3Count,
+                                            average: (par3NetTotal / par3Count).toFixed(2),
+                                            par3Score: par3NetTotal
                                         });
                                     }
                                 }
@@ -9240,8 +9250,15 @@
                           detail: w => w.detail ? w.detail : '' },
                         { key: 'par3Specialist', label: 'PAR-3 SPECIALIST', emoji: '🎯',
                           color: '#6366f1', tagline: 'Owned the par-3s',
-                          description: 'Best combined score on all par-3 holes — sharp on the short stuff.',
-                          detail: w => (w.par3Score != null) ? `Par-3 score ${w.par3Score}` : '' }
+                          description: 'Best combined NET score on all par-3 holes — handicap-adjusted, sharp on the short stuff.',
+                          detail: w => {
+                              if (w.netTotal != null) {
+                                  return w.grossTotal != null && w.grossTotal !== w.netTotal
+                                      ? `Net ${w.netTotal} (Gross ${w.grossTotal})`
+                                      : `Net ${w.netTotal}`;
+                              }
+                              return (w.par3Score != null) ? `Par-3 net ${w.par3Score}` : '';
+                          } }
                     ];
                     
                     // Build the awards list for each player
@@ -10669,46 +10686,21 @@
             const bbbLeaderboardSlideIndex = -1; // replaced by bbbLeadersSlideIndex (top-5 reveal, moved up)
             const nextRoundSlideIndex = hasNextRoundSlide ? slideIndex++ : -1;
             
-            // ─── PHOTO INTERLEAVE MAP ───
-            // Photos appear as their own slides, inserted between content slides.
-            // First fill the gaps between individual player slides (P1↔P2, P2↔P3, ...).
-            // Then continue inserting between every subsequent slide until all photos shown.
-            // Photos appear in upload order (round.photos[0], [1], ...).
+            // ─── PHOTO INTERLEAVE MAP (DISABLED) ───
+            // Photos are now shown exclusively on the dedicated "Photos of the Day" gallery slide.
+            // We keep the _presentationMap structure for downstream code compatibility, but it now
+            // only contains content entries (no photo interleaving between slides).
             const _contentSlideCount = slideIndex; // slideIndex now equals total content slides
             const _availablePhotos = Array.isArray(roundPhotos) ? roundPhotos : [];
             const _firstPlayerSlide = individualPlayerSlidesStart;
             const _lastPlayerSlide = individualPlayerSlidesStart + individualPlayerSlides.length - 1;
             
-            // presentationMap: array of length (contentSlides + photoCount). Each entry:
-            //   { kind: 'content', value: <0..contentSlideCount-1> }  → render normal content
-            //   { kind: 'photo',   value: <photoIdx 0..photos.length-1> }  → render photo slide
             const _presentationMap = [];
-            let _photosUsed = 0;
             for (let i = 0; i < _contentSlideCount; i++) {
                 _presentationMap.push({ kind: 'content', value: i });
-                // After this content slide, decide whether to insert a photo
-                if (_photosUsed >= _availablePhotos.length) continue;
-                
-                const isPlayerSlide = i >= _firstPlayerSlide && i <= _lastPlayerSlide;
-                const isLastPlayer = i === _lastPlayerSlide;
-                const isPastPlayers = i > _lastPlayerSlide;
-                
-                let insertPhoto = false;
-                if (isPlayerSlide && !isLastPlayer) {
-                    // Between consecutive player slides
-                    insertPhoto = true;
-                } else if (isPastPlayers) {
-                    // After every page once we're past the player block
-                    insertPhoto = true;
-                }
-                
-                if (insertPhoto) {
-                    _presentationMap.push({ kind: 'photo', value: _photosUsed });
-                    _photosUsed++;
-                }
             }
             
-            // Override totalSlides to include photo slides
+            // totalSlides reflects content slides only (no photo interleaving)
             const _totalSlidesWithPhotos = _presentationMap.length;
             presentationState.totalSlides = _totalSlidesWithPhotos;
             // Stash map for nav and back-rewind logic
@@ -11733,6 +11725,7 @@
                             let strokes = 0;
                             if (player.handicap >= handicapIdx) strokes = 1;
                             if (player.handicap >= handicapIdx + 18) strokes = 2;
+                            const net = score != null ? score - strokes : null;
                             const isRelevant = relevantSet.has(i);
                             // Dim non-relevant cells when full scorecard has highlights
                             const dim = (displayMode === 'fullScorecard' && relevantHoles.length > 0 && !isRelevant);
@@ -11745,7 +11738,7 @@
                             let scoreColor = 'white';
                             let scoreBg = 'rgba(255,255,255,0.05)';
                             if (score != null) {
-                                const netToPar = (score - strokes) - par;
+                                const netToPar = net - par;
                                 if (netToPar <= -2) { scoreColor = '#a78bfa'; scoreBg = 'rgba(167,139,250,0.15)'; }
                                 else if (netToPar === -1) { scoreColor = '#10b981'; scoreBg = 'rgba(16,185,129,0.15)'; }
                                 else if (netToPar === 0) { scoreColor = '#3b82f6'; scoreBg = 'rgba(59,130,246,0.12)'; }
@@ -11754,12 +11747,25 @@
                             }
                             // Stroke indicator (small gold dot) when this player gets a stroke on this hole
                             const strokeDot = strokes > 0 ? `<div style="position:absolute;top:2px;left:3px;color:#fbbf24;font-size:11px;font-weight:900;line-height:1;">${'•'.repeat(strokes)}</div>` : '';
+                            
+                            // For Par-3 Specialist: net is the prominent number, gross is shown smaller as context.
+                            // For all other awards: gross is the prominent number (matches the scorecard convention).
+                            const isPar3SpecAward = award.type === 'par3Specialist';
+                            const bigScoreText = isPar3SpecAward
+                                ? (net != null ? net : '–')
+                                : (score != null ? score : '–');
+                            const smallScoreText = isPar3SpecAward && net != null && net !== score
+                                ? `gross ${score}`
+                                : '';
+                            const bigFontSize = displayMode === 'focusedSlice' ? '34' : '24';
+                            
                             return `
                                 <div style="opacity:${opacity};text-align:center;${cellBorder}background:${scoreBg};border-radius:6px;padding:6px 2px;position:relative;min-width:0;">
                                     ${strokeDot}
                                     <div style="font-size:11px;color:${isRelevant ? award.color : 'rgba(255,255,255,0.55)'};font-weight:700;line-height:1;">${i + 1}</div>
                                     <div style="font-size:9px;color:rgba(255,255,255,0.4);font-weight:600;line-height:1;margin-top:1px;">P${par}</div>
-                                    <div style="font-size:${displayMode === 'focusedSlice' ? '34' : '24'}px;color:${scoreColor};font-weight:900;line-height:1.05;margin-top:4px;">${score != null ? score : '–'}</div>
+                                    <div style="font-size:${bigFontSize}px;color:${scoreColor};font-weight:900;line-height:1.05;margin-top:4px;">${bigScoreText}</div>
+                                    ${smallScoreText ? `<div style="font-size:10px;color:rgba(255,255,255,0.5);font-weight:600;line-height:1;margin-top:3px;">${smallScoreText}</div>` : ''}
                                 </div>
                             `;
                         };
@@ -12396,22 +12402,39 @@
                             }
                             
                             // CLOSING — how it ended
-                            if (finalState > 0 && finalState >= totalH - segHoles.length + 1 - 1) {
-                                // X & Y closeout — match ended before all holes
-                            }
-                            // Check if match was closed out early
-                            const lastDecidedHole = (() => {
-                                for (let i = runningStates.length - 1; i >= 0; i--) {
+                            // Determine if the match was mathematically clinched before all holes were played.
+                            // A match is decided the FIRST time |lead| > holesRemaining. After that point the
+                            // result is locked even if they keep playing for fun. So iterate FORWARD and stop
+                            // at the first such hole.
+                            const decidedAtIdx = (() => {
+                                for (let i = 0; i < runningStates.length; i++) {
                                     const holesLeft = totalH - (i + 1);
-                                    if (Math.abs(runningStates[i]) > holesLeft) return i + 1;
+                                    if (Math.abs(runningStates[i]) > holesLeft) return i;
                                 }
                                 return null;
                             })();
-                            if (lastDecidedHole && lastDecidedHole < totalH) {
-                                const closedAtHole = segHoles[lastDecidedHole - 1].holeIndex;
-                                sentences.push(`Match closed out on hole ${closedAtHole} — ${winnerName} couldn't be caught.`);
+                            
+                            if (decidedAtIdx !== null) {
+                                // Closeout: report "X & Y" notation (won by X with Y to play) at the deciding hole.
+                                const clinchedAt = segHoles[decidedAtIdx].holeIndex;
+                                const lead = Math.abs(runningStates[decidedAtIdx]);
+                                const holesLeftAtClinch = totalH - (decidedAtIdx + 1);
+                                sentences.push(`${winnerName} closed it out ${lead}&${holesLeftAtClinch} — match ended at hole ${clinchedAt}.`);
                             } else if (finalState === 0) {
-                                sentences.push(`The match finished all-square through ${totalH} holes — decision came on a tiebreaker.`);
+                                // Match went all 18 (or all of segment) all-square. Resolved by tiebreaker.
+                                // Pull the actual tiebreaker rule from the match data if available.
+                                const tbNote = (match && match.tiebreakerNote) ? match.tiebreakerNote : null;
+                                // Translate the stored notation into a player-readable sentence.
+                                let tbExplain = '';
+                                if (tbNote && tbNote.startsWith('Won on last')) {
+                                    const seg = tbNote.replace('Won on last ', '').trim();
+                                    tbExplain = ` Tiebreaker: most holes won across the final ${seg} (count-back).`;
+                                } else if (tbNote && tbNote.includes('higher seed')) {
+                                    tbExplain = ` Tiebreaker: dead-even after every count-back — higher seed awarded the match.`;
+                                } else if (tbNote) {
+                                    tbExplain = ` Tiebreaker: ${tbNote}.`;
+                                }
+                                sentences.push(`The match finished all-square through ${totalH} holes — decision came on a tiebreaker.${tbExplain}`);
                             } else if (finalState === 1) {
                                 sentences.push(`A nail-biter to the finish — ${winnerName} held on by a single hole.`);
                             } else if (finalState >= 2) {
@@ -13248,36 +13271,68 @@
                     buttonShadow: 'rgba(34,211,238,0.4)'
                 });
             } else if (currentSlide === photosSlideIndex) {
-                // PHOTOS FROM TODAY SLIDE
-                // Photos may be in legacy schema (array of URL strings) or new schema (array of {url, path, uploadedAt})
+                // ─── PHOTOS OF THE DAY ───
+                // Gallery view of all round photos + button to launch fullscreen slideshow.
+                // Photos may be in legacy schema (array of URL strings) or new schema (array of {url, path, uploadedAt}).
                 const rawPhotos = mostRecentRound.photos || [];
                 const photos = rawPhotos.map(p => (typeof p === 'string' ? { url: p } : p)).filter(p => p && p.url);
+                // Stash photo URLs globally so the slideshow window can access them
+                window.__photoSlideshowUrls = photos.map(p => p.url);
                 
-                html += `
-                    <div style="animation:fadeIn 1s ease-in;max-width:1200px;width:100%;">
-                        <h1 style="color:white;font-size:48px;margin:0 0 30px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
-                            📸 Photos from Today
-                        </h1>
-                        
-                        <div style="background:linear-gradient(135deg, rgba(59,130,246,0.2) 0%, rgba(59,130,246,0.1) 100%);border:3px solid rgba(59,130,246,0.4);border-radius:20px;padding:30px;">
-                            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:20px;">
-                                ${photos.map((photo, idx) => `
-                                    <div style="background:rgba(0,0,0,0.3);border-radius:12px;overflow:hidden;border:2px solid rgba(255,255,255,0.2);cursor:pointer;transition:transform 0.2s;"
-                                         onclick="window.open('${photo.url}', '_blank')"
-                                         onmouseover="this.style.transform='scale(1.05)'"
-                                         onmouseout="this.style.transform='scale(1)'">
-                                        <img src="${photo.url}" 
-                                             style="width:100%;height:300px;object-fit:cover;display:block;" 
-                                             alt="Photo ${idx + 1}">
+                if (photos.length === 0) {
+                    html += `
+                        <div style="animation:fadeIn 0.8s ease-in;width:100%;max-width:900px;text-align:center;padding:60px 20px;">
+                            <div style="font-size:96px;margin-bottom:18px;opacity:0.5;">📷</div>
+                            <h1 style="color:white;font-size:42px;margin:0 0 12px;font-weight:800;">No Photos Today</h1>
+                            <p style="color:rgba(255,255,255,0.65);font-size:18px;">Photos uploaded during the round will appear here.</p>
+                        </div>
+                    `;
+                } else {
+                    // Grid: 3 columns wide, photos tile evenly. Cap height so 10+ photos still fit on one screen.
+                    const gridCols = photos.length <= 4 ? 2 : (photos.length <= 9 ? 3 : 4);
+                    html += `
+                        <div style="animation:fadeIn 0.8s ease-in;width:100%;max-width:1400px;height:100%;display:flex;flex-direction:column;padding:8px 0;box-sizing:border-box;">
+                            <!-- Header with title + slideshow button -->
+                            <div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0;margin-bottom:16px;padding:0 8px;">
+                                <div>
+                                    <h1 style="color:white;font-size:38px;margin:0;text-shadow:0 4px 20px rgba(0,0,0,0.5);font-weight:800;">
+                                        📸 Photos of the Day
+                                    </h1>
+                                    <div style="color:#a5b4fc;font-size:14px;margin-top:4px;font-weight:500;">
+                                        ${photos.length} photo${photos.length !== 1 ? 's' : ''} captured during the round
                                     </div>
-                                `).join('')}
+                                </div>
+                                <button onclick="window.startPhotoSlideshow && window.startPhotoSlideshow()"
+                                        style="background:linear-gradient(135deg, #f59e0b 0%, #d97706 100%);color:white;border:none;padding:12px 24px;border-radius:10px;cursor:pointer;font-weight:700;font-size:15px;letter-spacing:1px;box-shadow:0 6px 20px rgba(245,158,11,0.4);transition:transform 0.15s, box-shadow 0.15s;"
+                                        onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 10px 28px rgba(245,158,11,0.5)'"
+                                        onmouseout="this.style.transform='';this.style.boxShadow='0 6px 20px rgba(245,158,11,0.4)'">
+                                    ▶ Start Slideshow
+                                </button>
                             </div>
-                            <div style="text-align:center;margin-top:24px;color:#93c5fd;font-size:14px;">
-                                ${photos.length} photo${photos.length !== 1 ? 's' : ''} • Click to enlarge
+                            
+                            <!-- Gallery grid (auto-sized so all photos fit, no scroll) -->
+                            <div style="flex:1;min-height:0;background:linear-gradient(135deg, rgba(59,130,246,0.12) 0%, rgba(59,130,246,0.05) 100%);border:2px solid rgba(59,130,246,0.3);border-radius:16px;padding:18px;overflow:hidden;">
+                                <div style="display:grid;grid-template-columns:repeat(${gridCols}, 1fr);gap:12px;height:100%;">
+                                    ${photos.map((photo, idx) => `
+                                        <div onclick="window.startPhotoSlideshow && window.startPhotoSlideshow(${idx})"
+                                             style="background:rgba(0,0,0,0.4);border-radius:10px;overflow:hidden;border:2px solid rgba(255,255,255,0.18);cursor:pointer;position:relative;transition:transform 0.15s, border-color 0.15s, box-shadow 0.15s;min-height:0;"
+                                             onmouseover="this.style.transform='scale(1.03)';this.style.borderColor='#fbbf24';this.style.boxShadow='0 8px 24px rgba(251,191,36,0.4)'"
+                                             onmouseout="this.style.transform='';this.style.borderColor='rgba(255,255,255,0.18)';this.style.boxShadow=''">
+                                            <img src="${photo.url}" 
+                                                 style="width:100%;height:100%;object-fit:cover;display:block;" 
+                                                 alt="Photo ${idx + 1}"
+                                                 loading="lazy"
+                                                 onerror="this.style.display='none';this.parentNode.innerHTML+='<div style=\\'color:rgba(255,255,255,0.5);font-size:14px;text-align:center;padding:30px;\\'>Image unavailable</div>';">
+                                            <div style="position:absolute;bottom:6px;right:8px;background:rgba(0,0,0,0.7);color:white;font-size:11px;font-weight:700;padding:3px 8px;border-radius:4px;letter-spacing:0.5px;">
+                                                ${idx + 1}/${photos.length}
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                </div>
                             </div>
                         </div>
-                    </div>
-                `;
+                    `;
+                }
             } else if (currentSlide === netSlideIndex) {
                 // ═══════════════════════════════════════════════════════
                 // NET SCORE WINNER — Progressive Reveal (B2)
@@ -15920,6 +15975,116 @@
         
         // Cache for Audio elements so they don't reload on every play
         window.__badgeAudioCache = window.__badgeAudioCache || {};
+        
+        // ─── Photo slideshow ───
+        // Fullscreen overlay that cycles through the round's photos.
+        // Starts from a specific index (e.g., the photo the user tapped) or 0 by default.
+        // Tapping arrows, swiping, or pressing arrow keys navigates. Tapping outside or pressing Esc closes.
+        window.startPhotoSlideshow = (startIdx) => {
+            const urls = window.__photoSlideshowUrls || [];
+            if (urls.length === 0) return;
+            let idx = (typeof startIdx === 'number' && startIdx >= 0 && startIdx < urls.length) ? startIdx : 0;
+            let autoplayTimer = null;
+            let isPlaying = false;
+            
+            // Remove any existing slideshow overlay
+            const existing = document.getElementById('photoSlideshowOverlay');
+            if (existing) existing.remove();
+            
+            const overlay = document.createElement('div');
+            overlay.id = 'photoSlideshowOverlay';
+            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.95);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
+            
+            const render = () => {
+                const url = urls[idx];
+                overlay.innerHTML = `
+                    <style>
+                        @keyframes pssFadeIn { from { opacity: 0; } to { opacity: 1; } }
+                    </style>
+                    <!-- Top bar: counter + close button -->
+                    <div style="position:absolute;top:20px;left:20px;right:20px;display:flex;justify-content:space-between;align-items:center;z-index:2;">
+                        <div style="color:white;font-size:16px;font-weight:700;background:rgba(0,0,0,0.6);padding:8px 16px;border-radius:8px;letter-spacing:1px;">
+                            📸 ${idx + 1} / ${urls.length}
+                        </div>
+                        <div style="display:flex;gap:8px;align-items:center;">
+                            <button id="pssPlayBtn" style="background:rgba(245,158,11,0.9);color:white;border:none;padding:8px 14px;border-radius:8px;cursor:pointer;font-weight:700;font-size:14px;">
+                                ${isPlaying ? '⏸ Pause' : '▶ Auto'}
+                            </button>
+                            <button id="pssCloseBtn" style="background:rgba(239,68,68,0.9);color:white;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;font-weight:700;font-size:14px;">
+                                ✕ Close
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Main image, fills available space without cropping -->
+                    <img src="${url}" style="max-width:92vw;max-height:80vh;object-fit:contain;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,0.8);animation:pssFadeIn 0.3s ease-out;" alt="Photo ${idx + 1}" />
+                    
+                    <!-- Bottom navigation arrows -->
+                    ${urls.length > 1 ? `
+                        <div style="position:absolute;bottom:30px;left:50%;transform:translateX(-50%);display:flex;gap:20px;align-items:center;">
+                            <button id="pssPrevBtn" style="background:rgba(255,255,255,0.15);color:white;border:2px solid rgba(255,255,255,0.3);padding:14px 22px;border-radius:50%;cursor:pointer;font-size:20px;font-weight:700;">‹</button>
+                            <div style="color:rgba(255,255,255,0.7);font-size:13px;letter-spacing:1px;">SWIPE OR ARROW KEYS</div>
+                            <button id="pssNextBtn" style="background:rgba(255,255,255,0.15);color:white;border:2px solid rgba(255,255,255,0.3);padding:14px 22px;border-radius:50%;cursor:pointer;font-size:20px;font-weight:700;">›</button>
+                        </div>
+                    ` : ''}
+                `;
+                
+                // Wire up buttons (re-bind each render since innerHTML wipes them)
+                const closeBtn = overlay.querySelector('#pssCloseBtn');
+                if (closeBtn) closeBtn.onclick = closeSlideshow;
+                const prevBtn = overlay.querySelector('#pssPrevBtn');
+                if (prevBtn) prevBtn.onclick = (e) => { e.stopPropagation(); goPrev(); };
+                const nextBtn = overlay.querySelector('#pssNextBtn');
+                if (nextBtn) nextBtn.onclick = (e) => { e.stopPropagation(); goNext(); };
+                const playBtn = overlay.querySelector('#pssPlayBtn');
+                if (playBtn) playBtn.onclick = (e) => { e.stopPropagation(); toggleAutoplay(); };
+            };
+            
+            const goNext = () => { idx = (idx + 1) % urls.length; render(); };
+            const goPrev = () => { idx = (idx - 1 + urls.length) % urls.length; render(); };
+            
+            const toggleAutoplay = () => {
+                if (isPlaying) {
+                    clearInterval(autoplayTimer);
+                    autoplayTimer = null;
+                    isPlaying = false;
+                } else {
+                    isPlaying = true;
+                    autoplayTimer = setInterval(goNext, 3500); // advance every 3.5s
+                }
+                render();
+            };
+            
+            const closeSlideshow = () => {
+                if (autoplayTimer) clearInterval(autoplayTimer);
+                document.removeEventListener('keydown', keyHandler);
+                overlay.remove();
+            };
+            
+            const keyHandler = (e) => {
+                if (e.key === 'Escape') closeSlideshow();
+                else if (e.key === 'ArrowRight') goNext();
+                else if (e.key === 'ArrowLeft') goPrev();
+                else if (e.key === ' ') { e.preventDefault(); toggleAutoplay(); }
+            };
+            document.addEventListener('keydown', keyHandler);
+            
+            // Tap/click outside the image area closes the slideshow
+            overlay.onclick = (e) => {
+                if (e.target === overlay) closeSlideshow();
+            };
+            
+            // Touch swipe handling
+            let touchStartX = 0;
+            overlay.addEventListener('touchstart', (e) => { touchStartX = e.touches[0].clientX; }, { passive: true });
+            overlay.addEventListener('touchend', (e) => {
+                const dx = e.changedTouches[0].clientX - touchStartX;
+                if (Math.abs(dx) > 50) { dx < 0 ? goNext() : goPrev(); }
+            }, { passive: true });
+            
+            document.body.appendChild(overlay);
+            render();
+        };
         
         window.playBadgeSound = (tagline) => {
             try {
