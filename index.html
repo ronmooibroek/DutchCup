@@ -527,7 +527,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.05.24.5';
+        const APP_VERSION = '2026.05.24.7';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -10185,8 +10185,7 @@
                 // Calculate total slides
                 // Title + Individual Players (one per player) + Awards + Teams + Handicaps + Next Round
                 let totalSlides = 1; // Title
-                totalSlides += individualPlayerSlides.length; // One slide per player
-                if (individualPlayerSlides.length > 0) totalSlides++; // Champion intro slide (before player #1)
+                totalSlides += individualPlayerSlides.length; // One slide per player (#1 player has champion intro as sub-stage)
                 const hasNetSlide = hasScheduledRounds && netWinner !== null;
                 const hasBBBSlide = hasScheduledRounds && bbbWinner !== null;
                 const hasCTPChampionSlide = hasScheduledRounds && ctpChampion !== null;
@@ -10598,10 +10597,8 @@
             const byNumbersSlideIndex = hasByNumbersSlide ? slideIndex++ : -1;
             const biggestMomentsSlideIndex = hasBiggestMomentsSlide ? slideIndex++ : -1;
             const perfIntroSlideIndex = hasPerfIntroSlide ? slideIndex++ : -1;
-            // Champion intro — cinematic Dutch-themed slide that introduces the #1 player.
-            // Sits immediately before the first individualPlayerSlide (which is the winner since sorted low-to-high).
-            const hasChampionIntroSlide = individualPlayerSlides.length > 0;
-            const championIntroSlideIndex = hasChampionIntroSlide ? slideIndex++ : -1;
+            // Champion intro is implemented as a sub-stage 0 of the #1 player's slide,
+            // not as a separate slot. No slide allocation needed here.
             const individualPlayerSlidesStart = slideIndex;
             slideIndex += individualPlayerSlides.length; // One slide per player
             
@@ -11595,100 +11592,275 @@
                     // Trigger confetti for awards
                     presentationState.isWinnerSlide = true;
                     
-                    // ── Compute the relevant holes for this award ──
-                    // Some awards have a clear hole subset; others span the round.
-                    let relevantHoles = []; // 0-indexed hole numbers to highlight
-                    let showFullScorecard = false;
-                    if (award.holeIdx != null && Number.isFinite(award.holeIdx)) {
-                        // CTP, Extra 9 — single hole
-                        relevantHoles = [award.holeIdx];
-                    } else if (Array.isArray(award.holeRange) && award.holeRange.length > 0) {
-                        // Clutch — specific hole range
-                        relevantHoles = award.holeRange;
-                    } else if (award.type === 'par3Specialist' && mostRecentRound && Array.isArray(mostRecentRound.pars)) {
-                        // Par-3 Specialist — all par-3 holes
-                        mostRecentRound.pars.forEach((par, idx) => { if (par === 3) relevantHoles.push(idx); });
-                    } else {
-                        // Round-wide awards: show full 18-hole scorecard
-                        showFullScorecard = true;
+                    // ─── Per-award display mode ─────────────────────────────
+                    // Each award type gets a tailored visual treatment:
+                    //   - "ctp"         → no scorecard; show the single par-3 hole as a big pin hero
+                    //   - "extra9"      → no scorecard; money-themed slide with falling cash
+                    //   - "clutch"      → focused 3-hole slice (16-17-18)
+                    //   - "par3Spec"    → focused multi-hole slice (the par-3s only)
+                    //   - others        → prominent full 18-hole scorecard, with award-specific highlights
+                    
+                    // Compute the par-3 holes in order, for CTP resolution
+                    const par3HolesInOrder = [];
+                    if (mostRecentRound && Array.isArray(mostRecentRound.pars)) {
+                        mostRecentRound.pars.forEach((par, idx) => { if (par === 3) par3HolesInOrder.push(idx); });
                     }
                     
-                    // ── Build the award scorecard slice ──
-                    // Styled to match the award's color palette. Highlighted holes are pulled out
-                    // visually with the award color; unhighlighted holes (full scorecard mode) are subdued.
+                    // Compute bounce-back holes for this player (par-or-better immediately after a bogey-or-worse)
+                    const computeBounceBackHoles = () => {
+                        const out = [];
+                        if (!player.scorecard || !mostRecentRound || !Array.isArray(mostRecentRound.pars)) return out;
+                        for (let i = 1; i < player.scorecard.length; i++) {
+                            const prev = parseInt(player.scorecard[i - 1]);
+                            const curr = parseInt(player.scorecard[i]);
+                            if (isNaN(prev) || isNaN(curr)) continue;
+                            const prevPar = mostRecentRound.pars[i - 1];
+                            const currPar = mostRecentRound.pars[i];
+                            const prevHi = mostRecentRound.handicaps[i - 1];
+                            const currHi = mostRecentRound.handicaps[i];
+                            let pStrokes = 0; if (player.handicap >= prevHi) pStrokes = 1; if (player.handicap >= prevHi + 18) pStrokes = 2;
+                            let cStrokes = 0; if (player.handicap >= currHi) cStrokes = 1; if (player.handicap >= currHi + 18) cStrokes = 2;
+                            const prevNet = prev - pStrokes;
+                            const currNet = curr - cStrokes;
+                            if ((prevNet - prevPar >= 1) && (currNet - currPar <= 0)) out.push(i);
+                        }
+                        return out;
+                    };
+                    
+                    // Compute the on-fire streak start/end for this player (longest consecutive par-or-better run)
+                    const computeOnFireStreak = () => {
+                        if (!player.scorecard || !mostRecentRound || !Array.isArray(mostRecentRound.pars)) return null;
+                        let bestLen = 0, bestStart = -1, bestEnd = -1;
+                        let curLen = 0, curStart = -1;
+                        for (let i = 0; i < player.scorecard.length; i++) {
+                            const score = parseInt(player.scorecard[i]);
+                            if (isNaN(score)) { curLen = 0; continue; }
+                            const par = mostRecentRound.pars[i];
+                            const hi = mostRecentRound.handicaps[i];
+                            let s = 0; if (player.handicap >= hi) s = 1; if (player.handicap >= hi + 18) s = 2;
+                            const net = score - s;
+                            if (net <= par) {
+                                if (curLen === 0) curStart = i;
+                                curLen++;
+                                if (curLen > bestLen) { bestLen = curLen; bestStart = curStart; bestEnd = i; }
+                            } else {
+                                curLen = 0;
+                            }
+                        }
+                        if (bestLen === 0) return null;
+                        return { start: bestStart, end: bestEnd, length: bestLen };
+                    };
+                    
+                    // Compute "bogey-or-worse" holes — used as Grinder highlights
+                    // (these are the holes the player ground through to still come out on top)
+                    const computeBogeyOrWorseHoles = () => {
+                        const out = [];
+                        if (!player.scorecard || !mostRecentRound || !Array.isArray(mostRecentRound.pars)) return out;
+                        for (let i = 0; i < player.scorecard.length; i++) {
+                            const score = parseInt(player.scorecard[i]);
+                            if (isNaN(score)) continue;
+                            const par = mostRecentRound.pars[i];
+                            const hi = mostRecentRound.handicaps[i];
+                            let s = 0; if (player.handicap >= hi) s = 1; if (player.handicap >= hi + 18) s = 2;
+                            const net = score - s;
+                            if (net > par) out.push(i);
+                        }
+                        return out;
+                    };
+                    
+                    // Determine display mode based on award type
+                    let displayMode = 'fullScorecard'; // default
+                    let relevantHoles = [];
+                    let highlightLabel = '';  // human label for the highlighted holes
+                    let highlightConnect = false; // whether to draw a connecting band across consecutive highlighted holes
+                    
+                    if (award.type === 'ctp') {
+                        displayMode = 'ctpHero';
+                    } else if (award.type === 'extra9') {
+                        displayMode = 'extra9Money';
+                    } else if (award.type === 'clutch') {
+                        displayMode = 'focusedSlice';
+                        relevantHoles = Array.isArray(award.holeRange) ? award.holeRange : [];
+                        highlightLabel = `Final 3 Holes`;
+                    } else if (award.type === 'par3Specialist') {
+                        displayMode = 'focusedSlice';
+                        relevantHoles = par3HolesInOrder.slice();
+                        highlightLabel = `All Par-3 Holes`;
+                    } else if (award.type === 'bounceBack') {
+                        displayMode = 'fullScorecard';
+                        relevantHoles = computeBounceBackHoles();
+                        highlightLabel = `Bounce-back holes`;
+                    } else if (award.type === 'onFire') {
+                        displayMode = 'fullScorecard';
+                        const streak = computeOnFireStreak();
+                        if (streak) {
+                            for (let i = streak.start; i <= streak.end; i++) relevantHoles.push(i);
+                            highlightLabel = `${streak.length}-hole streak (${streak.start + 1}–${streak.end + 1})`;
+                            highlightConnect = true;
+                        }
+                    } else if (award.type === 'grind') {
+                        // Grinder = fewest bogeys; highlight the bogey-or-worse holes they ground through.
+                        // The few they had ARE the holes that drove this award (the rare misses against an otherwise clean card).
+                        displayMode = 'fullScorecard';
+                        relevantHoles = computeBogeyOrWorseHoles();
+                        const n = relevantHoles.length;
+                        highlightLabel = n === 0
+                            ? `No bogeys today`
+                            : `${n} bogey${n === 1 ? '' : 's'} ground through`;
+                    } else if (award.type === 'rollercoaster' || award.type === 'steadyEddie' || award.type === 'dialedIn' || award.type === 'bbb') {
+                        // Round-wide awards: full scorecard, no specific highlights — the whole round IS the story
+                        displayMode = 'fullScorecard';
+                        relevantHoles = [];
+                    }
+                    
+                    // ─── Build the big scorecard HTML (for displayMode === 'fullScorecard' or 'focusedSlice') ──
+                    // Designed to be readable from across the room — large cells, big numbers.
                     let awardScorecardHTML = '';
-                    if (player.scorecard && player.scorecard.length > 0 && mostRecentRound && Array.isArray(mostRecentRound.pars)) {
-                        const holeIndices = showFullScorecard
-                            ? Array.from({ length: 18 }, (_, i) => i)
-                            : relevantHoles.slice().sort((a, b) => a - b);
+                    if ((displayMode === 'fullScorecard' || displayMode === 'focusedSlice')
+                        && player.scorecard && player.scorecard.length > 0
+                        && mostRecentRound && Array.isArray(mostRecentRound.pars)) {
+                        const totalHoles = player.scorecard.length;
+                        const holeIndices = displayMode === 'focusedSlice'
+                            ? relevantHoles.slice().sort((a, b) => a - b)
+                            : Array.from({ length: totalHoles }, (_, i) => i);
+                        const relevantSet = new Set(relevantHoles);
                         
-                        // Render each hole cell
-                        const renderHoleCell = (i) => {
-                            const score = player.scorecard[i];
+                        const renderBigHoleCell = (i, isFocused) => {
+                            const scoreRaw = player.scorecard[i];
+                            const score = (scoreRaw === '' || scoreRaw === null || scoreRaw === undefined) ? null : parseInt(scoreRaw);
                             const par = mostRecentRound.pars[i];
                             const handicapIdx = mostRecentRound.handicaps[i];
                             let strokes = 0;
                             if (player.handicap >= handicapIdx) strokes = 1;
                             if (player.handicap >= handicapIdx + 18) strokes = 2;
-                            const colors = getScoreColor(score, par, strokes > 0);
-                            let points = 0;
-                            if (score !== '' && score !== null && score !== undefined) {
-                                const netScoreHole = parseInt(score) - strokes;
-                                const netToParHole = netScoreHole - par;
-                                points = getPoints(netToParHole);
-                            }
-                            const isRelevant = relevantHoles.includes(i);
+                            const isRelevant = relevantSet.has(i);
+                            // Dim non-relevant cells when full scorecard has highlights
+                            const dim = (displayMode === 'fullScorecard' && relevantHoles.length > 0 && !isRelevant);
+                            const opacity = dim ? '0.45' : '1';
+                            // Cell styling: relevant gets thick award-color border + glow
                             const cellBorder = isRelevant
-                                ? `border:2px solid ${award.color};box-shadow:0 0 12px ${award.color}66;`
-                                : 'border:1px solid rgba(255,255,255,0.15);';
-                            const opacity = (showFullScorecard && !isRelevant) ? 'opacity:0.55;' : '';
+                                ? `border:3px solid ${award.color};box-shadow:0 0 18px ${award.color}aa, inset 0 0 12px ${award.color}33;`
+                                : 'border:1px solid rgba(255,255,255,0.18);';
+                            // Score color based on net to par
+                            let scoreColor = 'white';
+                            let scoreBg = 'rgba(255,255,255,0.05)';
+                            if (score != null) {
+                                const netToPar = (score - strokes) - par;
+                                if (netToPar <= -2) { scoreColor = '#a78bfa'; scoreBg = 'rgba(167,139,250,0.15)'; }
+                                else if (netToPar === -1) { scoreColor = '#10b981'; scoreBg = 'rgba(16,185,129,0.15)'; }
+                                else if (netToPar === 0) { scoreColor = '#3b82f6'; scoreBg = 'rgba(59,130,246,0.12)'; }
+                                else if (netToPar === 1) { scoreColor = '#f59e0b'; scoreBg = 'rgba(245,158,11,0.12)'; }
+                                else { scoreColor = '#ef4444'; scoreBg = 'rgba(239,68,68,0.15)'; }
+                            }
+                            // Stroke indicator (small gold dot) when this player gets a stroke on this hole
+                            const strokeDot = strokes > 0 ? `<div style="position:absolute;top:2px;left:3px;color:#fbbf24;font-size:11px;font-weight:900;line-height:1;">${'•'.repeat(strokes)}</div>` : '';
                             return `
-                                <div style="text-align:center;${opacity}">
-                                    <div style="font-size:9px;color:${isRelevant ? award.color : '#9ca3af'};font-weight:700;margin-bottom:2px;">${i + 1}</div>
-                                    <div style="${cellBorder}background:${colors.bg};color:${colors.text};padding:6px 2px;border-radius:4px;font-weight:${colors.fontWeight};font-size:14px;">
-                                        ${score || '-'}
-                                    </div>
-                                    <div style="font-size:8px;color:#64748b;margin-top:1px;">P${par}</div>
-                                    <div style="font-size:8px;color:${points > 0 ? '#10b981' : points < 0 ? '#ef4444' : '#64748b'};font-weight:600;min-height:10px;">
-                                        ${points !== 0 ? (points > 0 ? '+' : '') + points : ''}
-                                    </div>
+                                <div style="opacity:${opacity};text-align:center;${cellBorder}background:${scoreBg};border-radius:6px;padding:6px 2px;position:relative;min-width:0;">
+                                    ${strokeDot}
+                                    <div style="font-size:11px;color:${isRelevant ? award.color : 'rgba(255,255,255,0.55)'};font-weight:700;line-height:1;">${i + 1}</div>
+                                    <div style="font-size:9px;color:rgba(255,255,255,0.4);font-weight:600;line-height:1;margin-top:1px;">P${par}</div>
+                                    <div style="font-size:${displayMode === 'focusedSlice' ? '34' : '24'}px;color:${scoreColor};font-weight:900;line-height:1.05;margin-top:4px;">${score != null ? score : '–'}</div>
                                 </div>
                             `;
                         };
                         
-                        if (showFullScorecard) {
-                            // Full 18, two 9-hole rows
+                        if (displayMode === 'fullScorecard') {
+                            // 18 holes in one row for prominence
+                            const cells = Array.from({ length: 18 }, (_, i) => renderBigHoleCell(i, false));
                             awardScorecardHTML = `
-                                <div style="background:linear-gradient(135deg, ${award.color}1a, rgba(255,255,255,0.03));border:1px solid ${award.color}55;border-radius:12px;padding:14px 18px;margin-top:20px;animation:fadeIn 0.6s 0.7s ease-out backwards;">
-                                    <div style="color:${award.color};font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;">📊 Today's Scorecard</div>
-                                    <div style="display:grid;grid-template-columns:repeat(9,1fr);gap:4px;margin-bottom:6px;">
-                                        ${Array.from({ length: 9 }, (_, i) => renderHoleCell(i)).join('')}
+                                <div style="background:linear-gradient(135deg, ${award.color}1a, rgba(0,0,0,0.4));border:2px solid ${award.color}66;border-radius:12px;padding:14px 16px;margin-top:18px;animation:fadeIn 0.6s 0.7s ease-out backwards;width:100%;max-width:1500px;box-shadow:0 8px 32px rgba(0,0,0,0.4);">
+                                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                                        <div style="color:${award.color};font-size:13px;font-weight:800;letter-spacing:2px;text-transform:uppercase;">📊 Today's Scorecard</div>
+                                        ${highlightLabel ? `<div style="color:${award.color};font-size:12px;font-weight:700;background:${award.color}26;border:1px solid ${award.color};border-radius:6px;padding:4px 12px;letter-spacing:1px;">${highlightLabel}</div>` : ''}
                                     </div>
-                                    <div style="display:grid;grid-template-columns:repeat(9,1fr);gap:4px;">
-                                        ${Array.from({ length: 9 }, (_, i) => renderHoleCell(i + 9)).join('')}
+                                    <div style="display:grid;grid-template-columns:repeat(18,1fr);gap:5px;">
+                                        ${cells.join('')}
                                     </div>
                                 </div>
                             `;
-                        } else if (holeIndices.length > 0) {
-                            // Focused slice — show only the relevant holes, big and bold
-                            const sliceLabel = holeIndices.length === 1
-                                ? `Hole ${holeIndices[0] + 1}`
-                                : `Hole${holeIndices.length === 1 ? '' : 's'} ${holeIndices.map(i => i + 1).join(', ')}`;
-                            const cellWidth = holeIndices.length <= 3 ? '90px' : '70px';
+                        } else if (displayMode === 'focusedSlice' && holeIndices.length > 0) {
+                            const cells = holeIndices.map(i => renderBigHoleCell(i, true));
+                            const colCount = Math.min(holeIndices.length, 6);
                             awardScorecardHTML = `
-                                <div style="background:linear-gradient(135deg, ${award.color}1a, rgba(255,255,255,0.03));border:1px solid ${award.color}55;border-radius:12px;padding:14px 18px;margin-top:20px;animation:fadeIn 0.6s 0.7s ease-out backwards;">
-                                    <div style="color:${award.color};font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;">📍 ${sliceLabel}</div>
-                                    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
-                                        ${holeIndices.map(i => `
-                                            <div style="min-width:${cellWidth};">
-                                                ${renderHoleCell(i)}
-                                            </div>
-                                        `).join('')}
+                                <div style="background:linear-gradient(135deg, ${award.color}1a, rgba(0,0,0,0.4));border:2px solid ${award.color}66;border-radius:12px;padding:18px 22px;margin-top:18px;animation:fadeIn 0.6s 0.7s ease-out backwards;box-shadow:0 8px 32px rgba(0,0,0,0.4);">
+                                    <div style="text-align:center;margin-bottom:14px;color:${award.color};font-size:13px;font-weight:800;letter-spacing:2px;text-transform:uppercase;">📍 ${highlightLabel || 'Award Holes'}</div>
+                                    <div style="display:grid;grid-template-columns:repeat(${colCount},1fr);gap:10px;justify-content:center;">
+                                        ${cells.join('')}
                                     </div>
                                 </div>
                             `;
                         }
                     }
+                    
+                    // ─── CTP hero (par-3 hole with big "Hole N" treatment) ──
+                    // Resolves which par-3 from the CTP selection number, shows pin/flag visual.
+                    let ctpHeroHTML = '';
+                    if (displayMode === 'ctpHero') {
+                        // Determine the hole index: prefer award.holeIdx if set; else try to map from a numeric selection
+                        let resolvedHole = null;
+                        if (award.holeIdx != null && Number.isFinite(award.holeIdx)) {
+                            resolvedHole = award.holeIdx;
+                        }
+                        // Fallback: if no holeIdx but we know selection (1-4) and par-3 list, resolve
+                        // (Not currently in award shape; future-proof for the case where only selection number is stored.)
+                        const holeNumberDisplay = resolvedHole != null ? (resolvedHole + 1) : (award.tagline && award.tagline.match(/\d+/) ? award.tagline.match(/\d+/)[0] : '?');
+                        const par = (resolvedHole != null && mostRecentRound && mostRecentRound.pars) ? mostRecentRound.pars[resolvedHole] : 3;
+                        ctpHeroHTML = `
+                            <div style="margin-top:14px;display:flex;flex-direction:column;align-items:center;gap:8px;animation:fadeIn 0.6s 0.7s ease-out backwards;">
+                                <div style="background:linear-gradient(135deg, ${award.color}33, ${award.color}11);border:3px solid ${award.color};border-radius:20px;padding:28px 56px;box-shadow:0 0 50px ${award.color}66, inset 0 0 30px ${award.color}22;text-align:center;position:relative;">
+                                    <!-- Flag icon -->
+                                    <div style="font-size:64px;line-height:1;margin-bottom:6px;">🚩</div>
+                                    <div style="color:${award.color};font-size:13px;font-weight:800;letter-spacing:3px;text-transform:uppercase;">Closest Pin Won On</div>
+                                    <div style="color:white;font-size:80px;font-weight:900;line-height:0.95;margin-top:4px;letter-spacing:-2px;">HOLE ${holeNumberDisplay}</div>
+                                    <div style="color:rgba(255,255,255,0.7);font-size:18px;font-weight:600;margin-top:4px;">Par ${par}</div>
+                                </div>
+                            </div>
+                        `;
+                    }
+                    
+                    // ─── Extra 9 money-themed slide (no scorecard) ──
+                    let extra9MoneyHTML = '';
+                    if (displayMode === 'extra9Money') {
+                        const holeNumberDisplay = award.holeIdx != null && Number.isFinite(award.holeIdx) ? (award.holeIdx + 1) : null;
+                        extra9MoneyHTML = `
+                            <style>
+                                @keyframes ex9-fall {
+                                    0%   { transform: translateY(-120vh) rotate(0deg); opacity: 0; }
+                                    10%  { opacity: 1; }
+                                    90%  { opacity: 1; }
+                                    100% { transform: translateY(120vh) rotate(720deg); opacity: 0; }
+                                }
+                                @keyframes ex9-sway {
+                                    0%, 100% { transform: translateX(0) rotate(-5deg); }
+                                    50%      { transform: translateX(20px) rotate(5deg); }
+                                }
+                            </style>
+                            <!-- Falling cash backdrop -->
+                            <div style="position:absolute;inset:0;pointer-events:none;overflow:hidden;">
+                                ${Array.from({ length: 18 }, (_, i) => {
+                                    const left = (i * 5.6 + (i % 3) * 1.8) % 100;
+                                    const delay = (i * 0.35) % 4;
+                                    const duration = 4 + (i % 3) * 1;
+                                    const emoji = ['💵', '💸', '💰', '🤑'][i % 4];
+                                    const size = 30 + (i % 4) * 10;
+                                    return `<div style="position:absolute;left:${left}%;top:-10vh;font-size:${size}px;animation:ex9-fall ${duration}s linear ${delay}s infinite;">${emoji}</div>`;
+                                }).join('')}
+                            </div>
+                            <!-- Center money plate -->
+                            <div style="margin-top:14px;display:flex;flex-direction:column;align-items:center;gap:8px;animation:fadeIn 0.6s 0.7s ease-out backwards;position:relative;z-index:2;">
+                                <div style="background:linear-gradient(135deg, #16a34a 0%, #15803d 50%, #166534 100%);border:3px solid #fbbf24;border-radius:20px;padding:30px 60px;box-shadow:0 0 60px rgba(22,163,74,0.6), inset 0 0 30px rgba(251,191,36,0.18);text-align:center;">
+                                    <div style="font-size:72px;line-height:1;margin-bottom:8px;animation:ex9-sway 2.2s ease-in-out infinite;">💰</div>
+                                    <div style="color:#fbbf24;font-size:13px;font-weight:800;letter-spacing:3px;text-transform:uppercase;">Money in the Bank</div>
+                                    <div style="color:white;font-size:54px;font-weight:900;line-height:1;margin-top:6px;letter-spacing:-1px;text-shadow:0 4px 18px rgba(0,0,0,0.5);">EXTRA 9 WINNER</div>
+                                    ${holeNumberDisplay ? `<div style="color:rgba(255,255,255,0.92);font-size:18px;font-weight:600;margin-top:8px;">Closest on Hole ${holeNumberDisplay} · Cash collected 💵</div>` : `<div style="color:rgba(255,255,255,0.92);font-size:16px;font-weight:600;margin-top:8px;">Side bet · Cash collected 💵</div>`}
+                                </div>
+                            </div>
+                        `;
+                    }
+                    
+                    // Override emoji + label for Extra 9 (money theme); other awards use their normal emoji
+                    const displayEmoji = (displayMode === 'extra9Money') ? '💰' : award.emoji;
+                    const displayColor = (displayMode === 'extra9Money') ? '#16a34a' : award.color;
                     
                     html += `
                         <style>
@@ -11699,28 +11871,28 @@
                                 100% { transform: scale(1) rotate(0deg); opacity: 1; }
                             }
                             @keyframes awardGlow {
-                                0%, 100% { filter: drop-shadow(0 0 20px ${award.color}88); }
-                                50%      { filter: drop-shadow(0 0 50px ${award.color}); }
+                                0%, 100% { filter: drop-shadow(0 0 20px ${displayColor}88); }
+                                50%      { filter: drop-shadow(0 0 50px ${displayColor}); }
                             }
                             @keyframes awardLabelSlideUp {
                                 0%   { transform: translateY(40px); opacity: 0; }
                                 100% { transform: translateY(0); opacity: 1; }
                             }
                         </style>
-                        <div style="animation:fadeIn 0.5s ease-out;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px 20px;box-sizing:border-box;text-align:center;position:relative;overflow-y:auto;">
+                        <div style="animation:fadeIn 0.5s ease-out;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:24px 20px;box-sizing:border-box;text-align:center;position:relative;overflow:hidden;">
                             
                             <!-- Stage indicator (small, top) -->
-                            <div style="position:absolute;top:30px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,0.5);font-size:12px;font-weight:700;letter-spacing:3px;">
+                            <div style="position:absolute;top:20px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,0.5);font-size:12px;font-weight:700;letter-spacing:3px;z-index:3;">
                                 AWARD ${awardIdx + 1} OF ${totalAwards}
                             </div>
                             
-                            <!-- Player photo (small, contextualizing) -->
-                            <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px;animation:fadeIn 0.6s 0.1s ease-out backwards;">
-                                <div style="border:3px solid ${award.color};border-radius:50%;padding:3px;">
-                                    ${renderAvatar(_statePlayer, 64)}
+                            <!-- Player photo + team -->
+                            <div style="display:flex;align-items:center;gap:14px;margin-top:20px;margin-bottom:10px;animation:fadeIn 0.6s 0.1s ease-out backwards;position:relative;z-index:2;">
+                                <div style="border:3px solid ${displayColor};border-radius:50%;padding:3px;">
+                                    ${renderAvatar(_statePlayer, 56)}
                                 </div>
                                 <div style="text-align:left;">
-                                    <div style="color:white;font-size:24px;font-weight:800;line-height:1.1;">${player.playerName}</div>
+                                    <div style="color:white;font-size:22px;font-weight:800;line-height:1.1;">${player.playerName}</div>
                                     <div style="display:flex;align-items:center;gap:6px;margin-top:4px;">
                                         <div style="width:10px;height:10px;border-radius:50%;background:${player.teamColor};"></div>
                                         <div style="color:rgba(255,255,255,0.85);font-size:13px;">${player.teamName}</div>
@@ -11728,31 +11900,33 @@
                                 </div>
                             </div>
                             
-                            <!-- Award emoji (huge, with entrance animation + ongoing glow) -->
-                            <div style="font-size:140px;line-height:1;margin-bottom:10px;animation:awardEntrance 0.8s ease-out, awardGlow 2.5s 0.8s ease-in-out infinite;">
-                                ${award.emoji}
+                            <!-- Award emoji (with entrance + glow) -->
+                            <div style="font-size:${(displayMode === 'fullScorecard') ? '88' : '120'}px;line-height:1;margin-bottom:6px;animation:awardEntrance 0.8s ease-out, awardGlow 2.5s 0.8s ease-in-out infinite;position:relative;z-index:2;">
+                                ${displayEmoji}
                             </div>
                             
                             <!-- Award label -->
-                            <div style="background:linear-gradient(135deg, ${award.color}, ${award.color}dd);color:white;padding:12px 36px;border-radius:14px;box-shadow:0 12px 40px ${award.color}66;animation:awardLabelSlideUp 0.5s 0.4s ease-out backwards;">
-                                <div style="font-size:34px;font-weight:900;letter-spacing:3px;line-height:1;">${award.label}</div>
-                                ${award.tagline ? `<div style="font-size:15px;margin-top:6px;font-weight:600;opacity:0.95;">${award.tagline}</div>` : ''}
-                                ${award.detail ? `<div style="font-size:13px;margin-top:5px;font-weight:500;opacity:0.85;">${award.detail}</div>` : ''}
+                            <div style="background:linear-gradient(135deg, ${displayColor}, ${displayColor}dd);color:white;padding:10px 30px;border-radius:12px;box-shadow:0 12px 40px ${displayColor}66;animation:awardLabelSlideUp 0.5s 0.4s ease-out backwards;position:relative;z-index:2;">
+                                <div style="font-size:${(displayMode === 'fullScorecard') ? '26' : '32'}px;font-weight:900;letter-spacing:3px;line-height:1;">${award.label}</div>
+                                ${award.tagline ? `<div style="font-size:14px;margin-top:5px;font-weight:600;opacity:0.95;">${award.tagline}</div>` : ''}
+                                ${award.detail ? `<div style="font-size:12px;margin-top:4px;font-weight:500;opacity:0.85;">${award.detail}</div>` : ''}
                             </div>
                             
-                            <!-- Award description (what the award is given out for) -->
+                            <!-- Award description -->
                             ${award.description ? `
-                                <div style="margin-top:16px;max-width:680px;color:rgba(255,255,255,0.78);font-size:14px;font-style:italic;line-height:1.45;animation:fadeIn 0.6s 0.55s ease-out backwards;">
+                                <div style="margin-top:12px;max-width:680px;color:rgba(255,255,255,0.78);font-size:13px;font-style:italic;line-height:1.45;animation:fadeIn 0.6s 0.55s ease-out backwards;position:relative;z-index:2;">
                                     ${award.description}
                                 </div>
                             ` : ''}
                             
-                            <!-- Scorecard slice for this award -->
+                            <!-- Hero content: scorecard, CTP pin, or money plate (mutually exclusive) -->
                             ${awardScorecardHTML}
+                            ${ctpHeroHTML}
+                            ${extra9MoneyHTML}
                             
-                            <!-- Hint (only if more awards to come for this player) -->
+                            <!-- Hint -->
                             ${awardIdx + 1 < totalAwards ? `
-                                <div style="margin-top:22px;color:rgba(255,255,255,0.5);font-size:13px;font-style:italic;animation:fadeIn 0.5s 1.5s ease-out backwards;">
+                                <div style="margin-top:18px;color:rgba(255,255,255,0.5);font-size:13px;font-style:italic;animation:fadeIn 0.5s 1.5s ease-out backwards;position:relative;z-index:2;">
                                     Tap "Next →" for award ${awardIdx + 2}
                                 </div>
                             ` : ''}
@@ -12141,6 +12315,17 @@
                             return '';
                         })();
                         
+                        // Compute running match-play state across segHoles. Used by both the narrative
+                        // (stage 1) and the scorecard cells (stage 2). Must be declared BEFORE the narrative builder.
+                        // increment = winner won the hole, decrement = loser won, no change on halved.
+                        let _runningState = 0; // positive = winner up, negative = loser up
+                        const runningStates = segHoles.map(h => {
+                            if (h.result === winnerSlot) _runningState += 1;
+                            else if (h.result && h.result !== 'halved') _runningState -= 1;
+                            // halved or no result: unchanged
+                            return _runningState;
+                        });
+                        
                         // ─── Match narrative ───
                         // Auto-generate 2-3 sentences explaining how the match unfolded.
                         // Uses the running-state trajectory + per-hole wins to construct the story.
@@ -12240,14 +12425,6 @@
                         // Big scorecard cells — designed for across-the-room readability.
                         // Bigger fonts, taller cells, more dramatic color contrast.
                         // Now includes a running match-play state row (e.g. "1 UP", "AS") from the winner's perspective.
-                        // Compute running state across segHoles: increment when winner wins a hole, decrement when loser wins, no change on halved.
-                        let _runningState = 0; // positive = winner up, negative = loser up
-                        const runningStates = segHoles.map(h => {
-                            if (h.result === winnerSlot) _runningState += 1;
-                            else if (h.result && h.result !== 'halved') _runningState -= 1;
-                            // halved or no result: unchanged
-                            return _runningState;
-                        });
                         
                         const formatRunningState = (state, holeNum, totalHoles) => {
                             if (state === 0) return { label: 'AS', color: '#9ca3af', bg: 'rgba(148,163,184,0.18)' };
