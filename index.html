@@ -527,7 +527,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.05.24.8';
+        const APP_VERSION = '2026.05.30.3';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -7345,6 +7345,7 @@
             ctpLeadersRevealStep: 0,
             bbbLeadersRevealStep: 0,
             teamRevealStep: 0,
+            byNumbersRevealStep: 0,
             teamStandings: [],
             eventName: ''
         };
@@ -7732,6 +7733,13 @@
                         
                         const totalPoints = strokePoints + bbbPoints + ballPoints + extra9Points + ctpPoints;
                         
+                        // Use the per-round USGA-aware course handicap so it matches the award computations.
+                        // Without this, the inline cell renderer (which uses player.handicap directly)
+                        // can compute a different stroke allocation than the award logic (which goes through
+                        // getPlayerStrokesOnHole → getPlayerHandicapForRound) — leading to mismatched net totals.
+                        const _statePlayerForHc = state.players.find(sp => sp.id === player.id);
+                        const _effectiveHandicapForRound = getPlayerHandicapForRound(_statePlayerForHc, mostRecentRound, player);
+                        
                         allPlayerPerformances.push({
                             playerId: player.id,
                             playerName: player.name,
@@ -7743,7 +7751,9 @@
                             extra9Points: extra9Points,
                             ctpPoints: ctpPoints,
                             totalPoints: totalPoints,
-                            handicap: player.handicap || 0,
+                            // handicap is what the cell rendering uses to derive strokes per hole.
+                            // It must agree with the award computations, so use the USGA-aware course handicap.
+                            handicap: (typeof _effectiveHandicapForRound === 'number') ? _effectiveHandicapForRound : (player.handicap || 0),
                             grossScore: grossScore
                         });
                     });
@@ -10267,6 +10277,9 @@
                 if (hasExtra9TeamsSlide) totalSlides++;
                 if (hasHandicapSlide) totalSlides++;
                 if (hasNextRoundSlide) totalSlides++;
+                // Closing collage slide — only shown when there are round photos
+                const hasClosingSlide_ = (mostRecentRound && Array.isArray(mostRecentRound.photos) && mostRecentRound.photos.length > 0);
+                if (hasClosingSlide_) totalSlides++;
                 // Bracket reveal block (intro + matchup + result per match, OR intro + fallback)
                 if (hasBracketIntroSlide) totalSlides += 1;
                 totalSlides += bracketCombinedSlideCount;
@@ -10291,6 +10304,7 @@
                     ctpLeadersRevealStep: 0,
                     bbbLeadersRevealStep: 0,
                     teamRevealStep: 0,
+                    byNumbersRevealStep: 0,
                     totalSlides: totalSlides,
                     // Player performances
                     individualPlayerSlides: individualPlayerSlides,
@@ -10612,6 +10626,8 @@
             let slideIndex = 1; // Start after title (0)
             const fieldSlideIndex = hasFieldSlide ? slideIndex++ : -1;
             const byNumbersSlideIndex = hasByNumbersSlide ? slideIndex++ : -1;
+            // Stash for nav handlers — 3 sub-stages of progressive reveal on this slide
+            presentationState._byNumbersSlideIndex = byNumbersSlideIndex;
             const biggestMomentsSlideIndex = hasBiggestMomentsSlide ? slideIndex++ : -1;
             const perfIntroSlideIndex = hasPerfIntroSlide ? slideIndex++ : -1;
             // Champion intro is implemented as a sub-stage 0 of the #1 player's slide,
@@ -10685,6 +10701,207 @@
             const extra9TeamsSlideIndex = hasExtra9TeamsSlide ? slideIndex++ : -1;
             const bbbLeaderboardSlideIndex = -1; // replaced by bbbLeadersSlideIndex (top-5 reveal, moved up)
             const nextRoundSlideIndex = hasNextRoundSlide ? slideIndex++ : -1;
+            // Closing collage: photo mosaic + sign-off message. Only shown when there are photos.
+            const hasClosingSlide = roundPhotos && roundPhotos.length > 0;
+            const closingSlideIndex = hasClosingSlide ? slideIndex++ : -1;
+            
+            // ─── FACTOID GENERATOR ───
+            // Produces a small array of "Did you know?" facts surfaced on the title slide.
+            // Pulls from cross-round event data: who's been consistent, who's improving, who owns CTPs, etc.
+            // Each factoid is built lazily and gracefully skipped if the underlying data is missing.
+            const _buildFactoids = () => {
+                const facts = [];
+                try {
+                    // Collect rounds in this event up to and including the most recent
+                    const eventRounds = state.rounds
+                        .filter(r => r.eventId === state.currentEventId)
+                        .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+                    
+                    if (eventRounds.length === 0) return facts;
+                    
+                    // Helper: for each player, build an array of their finish positions across rounds
+                    // (1 = won the round on points, n = last). We compute per-round leaderboards on the fly.
+                    const playerFinishes = {}; // playerId → [position, position, ...] one per round played
+                    const playerPoints = {};   // playerId → [points per round]
+                    const playerCTPs = {};     // playerId → count of CTP wins this event
+                    const playerExtra9s = {}; // playerId → count of extra 9 wins
+                    const playerBBBTotals = {}; // playerId → total BBB points across rounds
+                    const teamPointsByRound = {}; // teamId → [points per round]
+                    
+                    eventRounds.forEach((round, rIdx) => {
+                        // Build the round's leaderboard (player → total points)
+                        const leaderboard = [];
+                        if (Array.isArray(round.teams)) {
+                            round.teams.forEach(team => {
+                                if (!Array.isArray(team.players)) return;
+                                team.players.forEach(p => {
+                                    // Approximate "total points" the way the main app does it
+                                    const stroke = p.strokePoints || 0;
+                                    const bbb = p.bbbPoints || ((p.bbbTotal || 0) * (state.settings.bbbPoints || 0));
+                                    const ball = p.ballPoints || ((p.ballsRemaining || 0) * (state.settings.ballPoints || 0));
+                                    const e9 = p.extra9Points || 0;
+                                    const ctp = p.ctpPoints || 0;
+                                    const total = stroke + bbb + ball + e9 + ctp;
+                                    leaderboard.push({ playerId: p.id, name: p.name, points: total });
+                                    
+                                    if (!(p.id in playerPoints)) playerPoints[p.id] = [];
+                                    playerPoints[p.id].push(total);
+                                    
+                                    if (!(p.id in playerBBBTotals)) playerBBBTotals[p.id] = 0;
+                                    playerBBBTotals[p.id] += (p.bbbTotal || 0);
+                                });
+                                // Team totals
+                                if (!(team.id in teamPointsByRound)) teamPointsByRound[team.id] = [];
+                                const teamTotal = team.players.reduce((s, p) => {
+                                    return s + (p.strokePoints || 0)
+                                             + (p.bbbPoints || 0)
+                                             + (p.ballPoints || 0)
+                                             + (p.extra9Points || 0)
+                                             + (p.ctpPoints || 0);
+                                }, 0);
+                                teamPointsByRound[team.id].push({ name: team.name, points: teamTotal });
+                            });
+                        }
+                        // Sort leaderboard descending and assign position
+                        leaderboard.sort((a, b) => b.points - a.points);
+                        leaderboard.forEach((entry, idx) => {
+                            const pos = idx + 1;
+                            if (!(entry.playerId in playerFinishes)) playerFinishes[entry.playerId] = [];
+                            playerFinishes[entry.playerId].push(pos);
+                        });
+                        // Count CTP/extra9 winners
+                        if (Array.isArray(round.ctpWinners)) {
+                            round.ctpWinners.forEach(w => {
+                                if (typeof w === 'object' && w.playerId != null) {
+                                    playerCTPs[w.playerId] = (playerCTPs[w.playerId] || 0) + 1;
+                                }
+                            });
+                        }
+                        if (Array.isArray(round.extra9Winners)) {
+                            round.extra9Winners.forEach(w => {
+                                if (typeof w === 'object' && w.playerId != null) {
+                                    playerExtra9s[w.playerId] = (playerExtra9s[w.playerId] || 0) + 1;
+                                }
+                            });
+                        }
+                    });
+                    
+                    const nameById = (pid) => {
+                        const sp = state.players.find(p => p.id === pid);
+                        return sp ? sp.name : null;
+                    };
+                    const firstName = (pid) => {
+                        const nm = nameById(pid);
+                        return nm ? nm.split(' ')[0] : null;
+                    };
+                    
+                    // ── Factoid: top-3 finishes consistency ──
+                    if (eventRounds.length >= 3) {
+                        Object.keys(playerFinishes).forEach(pid => {
+                            const positions = playerFinishes[pid];
+                            const top3Count = positions.filter(p => p <= 3).length;
+                            if (top3Count >= 3 && positions.length >= top3Count) {
+                                const nm = nameById(pid);
+                                if (nm) facts.push(`${nm} has finished in the top 3 in ${top3Count} of the last ${positions.length} rounds.`);
+                            }
+                        });
+                    }
+                    
+                    // ── Factoid: player won the most rounds (1st place) ──
+                    if (eventRounds.length >= 2) {
+                        const winnerCounts = {};
+                        Object.keys(playerFinishes).forEach(pid => {
+                            const wins = playerFinishes[pid].filter(p => p === 1).length;
+                            if (wins > 0) winnerCounts[pid] = wins;
+                        });
+                        const topWinner = Object.entries(winnerCounts).sort((a, b) => b[1] - a[1])[0];
+                        if (topWinner && topWinner[1] >= 2) {
+                            const nm = nameById(topWinner[0]);
+                            if (nm) facts.push(`${nm} has topped the leaderboard ${topWinner[1]} times this event.`);
+                        }
+                    }
+                    
+                    // ── Factoid: CTP king ──
+                    const ctpLeader = Object.entries(playerCTPs).sort((a, b) => b[1] - a[1])[0];
+                    if (ctpLeader && ctpLeader[1] >= 2) {
+                        const nm = nameById(ctpLeader[0]);
+                        if (nm) facts.push(`${nm} has won ${ctpLeader[1]} CTPs this event — sharpest stick on the par-3s.`);
+                    }
+                    
+                    // ── Factoid: Extra 9 cash hauler ──
+                    const e9Leader = Object.entries(playerExtra9s).sort((a, b) => b[1] - a[1])[0];
+                    if (e9Leader && e9Leader[1] >= 2) {
+                        const nm = nameById(e9Leader[0]);
+                        if (nm) facts.push(`${nm} has cashed in on Extra 9 ${e9Leader[1]} times this event.`);
+                    }
+                    
+                    // ── Factoid: BBB powerhouse ──
+                    const bbbLeader = Object.entries(playerBBBTotals).sort((a, b) => b[1] - a[1])[0];
+                    if (bbbLeader && bbbLeader[1] >= 5) {
+                        const nm = nameById(bbbLeader[0]);
+                        if (nm) facts.push(`${nm} leads the field with ${bbbLeader[1]} Bingo-Bango-Bongo points this event.`);
+                    }
+                    
+                    // ── Factoid: most improved (best recent vs best earlier) ──
+                    if (eventRounds.length >= 3) {
+                        let mostImproved = null;
+                        let biggestGain = 0;
+                        Object.keys(playerPoints).forEach(pid => {
+                            const pts = playerPoints[pid];
+                            if (pts.length < 3) return;
+                            const earlyAvg = pts.slice(0, Math.floor(pts.length / 2)).reduce((a, b) => a + b, 0) / Math.floor(pts.length / 2);
+                            const lateAvg = pts.slice(Math.floor(pts.length / 2)).reduce((a, b) => a + b, 0) / Math.ceil(pts.length / 2);
+                            const gain = lateAvg - earlyAvg;
+                            if (gain > biggestGain) { biggestGain = gain; mostImproved = pid; }
+                        });
+                        if (mostImproved && biggestGain >= 3) {
+                            const nm = nameById(mostImproved);
+                            if (nm) facts.push(`${nm} has been steadily improving — up ${Math.round(biggestGain)} points per round versus earlier in the event.`);
+                        }
+                    }
+                    
+                    // ── Factoid: perfect attendance ──
+                    if (eventRounds.length >= 3) {
+                        const attendanceCounts = {};
+                        Object.keys(playerPoints).forEach(pid => { attendanceCounts[pid] = playerPoints[pid].length; });
+                        const fullAttendance = Object.entries(attendanceCounts).filter(([_, c]) => c === eventRounds.length);
+                        if (fullAttendance.length === 1) {
+                            const nm = nameById(fullAttendance[0][0]);
+                            if (nm) facts.push(`${nm} is the only player with perfect attendance across all ${eventRounds.length} rounds.`);
+                        } else if (fullAttendance.length >= 2 && fullAttendance.length <= 4) {
+                            const names = fullAttendance.map(([pid]) => firstName(pid)).filter(Boolean);
+                            if (names.length > 0) facts.push(`${names.join(', ')} have perfect attendance across all ${eventRounds.length} rounds.`);
+                        }
+                    }
+                    
+                    // ── Factoid: team that's won the most rounds ──
+                    if (eventRounds.length >= 2 && Object.keys(teamPointsByRound).length > 0) {
+                        const teamRoundWins = {};
+                        const teamNameById = {};
+                        const numRoundsWithData = Math.min(...Object.values(teamPointsByRound).map(arr => arr.length));
+                        for (let rIdx = 0; rIdx < numRoundsWithData; rIdx++) {
+                            let winner = null, bestPts = -Infinity;
+                            Object.entries(teamPointsByRound).forEach(([tid, arr]) => {
+                                if (arr[rIdx] && arr[rIdx].points > bestPts) {
+                                    bestPts = arr[rIdx].points;
+                                    winner = tid;
+                                    teamNameById[tid] = arr[rIdx].name;
+                                }
+                            });
+                            if (winner) teamRoundWins[winner] = (teamRoundWins[winner] || 0) + 1;
+                        }
+                        const topTeam = Object.entries(teamRoundWins).sort((a, b) => b[1] - a[1])[0];
+                        if (topTeam && topTeam[1] >= 2) {
+                            const tname = teamNameById[topTeam[0]];
+                            if (tname) facts.push(`${tname} have won ${topTeam[1]} of the last ${numRoundsWithData} rounds outright.`);
+                        }
+                    }
+                } catch (err) {
+                    console.warn('Factoid generation failed:', err);
+                }
+                return facts;
+            };
+            const _factoids = _buildFactoids();
             
             // ─── PHOTO INTERLEAVE MAP (DISABLED) ───
             // Photos are now shown exclusively on the dedicated "Photos of the Day" gallery slide.
@@ -10839,6 +11056,21 @@
                             </p>
                         `}
                         
+                        ${_factoids.length > 0 ? `
+                            <!-- Random factoid card — pulled from cross-round event data -->
+                            <div style="background:linear-gradient(135deg, rgba(251,191,36,0.13), rgba(251,191,36,0.04));border:2px solid rgba(251,191,36,0.45);border-radius:14px;padding:18px 26px;margin:24px auto;max-width:760px;animation:slideUp 0.7s 0.3s ease-out backwards;">
+                                <div style="display:flex;align-items:flex-start;gap:14px;text-align:left;">
+                                    <div style="font-size:30px;line-height:1;flex-shrink:0;">💡</div>
+                                    <div style="flex:1;">
+                                        <div style="color:#fbbf24;font-size:11px;font-weight:800;letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;">Did you know?</div>
+                                        <div style="color:rgba(255,255,255,0.92);font-size:17px;font-weight:500;line-height:1.4;">
+                                            ${_factoids[Math.floor(Math.random() * _factoids.length)]}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        ` : ''}
+                        
                         <div style="background:rgba(255,255,255,0.05);border:2px solid rgba(255,255,255,0.1);border-radius:16px;padding:24px;margin:30px auto;max-width:700px;">
                             <h3 style="color:#a5b4fc;font-size:20px;margin:0 0 16px;text-align:center;">
                                 📋 Jump to Section
@@ -10979,7 +11211,14 @@
                     </div>
                 `;
             } else if (currentSlide === byNumbersSlideIndex) {
-                // BY THE NUMBERS — anonymous big stats to build curiosity for reveals
+                // BY THE NUMBERS — anonymous big stats to build curiosity for reveals.
+                // Sub-stages: 0 = empty (initial), 1 = Total Strokes, 2 = + Best Score, 3 = + Highest Score.
+                // Each card reveals with a count-up animation. Cards stay visible once revealed.
+                // Historical comparisons (best/worst all-time, last-round value) appear below each number
+                // with celebration/roast reactions when a record is broken.
+                const _bnStep = presentationState.byNumbersRevealStep || 0;
+                
+                // ── Current round metrics ──
                 const grossScores = playersWhoPlayed
                     .map(p => sumScores(p.scores))
                     .filter(g => g > 0);
@@ -10987,6 +11226,175 @@
                 const bestGross = grossScores.length > 0 ? Math.min(...grossScores) : 0;
                 const worstGross = grossScores.length > 0 ? Math.max(...grossScores) : 0;
                 const coursePar = (mostRecentRound.pars || []).reduce((s, p) => s + (parseInt(p) || 0), 0);
+                
+                // ── Historical comparison data ──
+                // Walk every prior round in the Dutch Cup history (any event), compute the same metrics,
+                // and find: (a) the all-time best/worst, (b) the metric from the most recent prior round.
+                const _historicalRounds = (state.rounds || [])
+                    .filter(r => r && r.timestamp != null && r.timestamp < mostRecentRound.timestamp)
+                    .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+                
+                const _computeRoundMetrics = (round) => {
+                    if (!round || !Array.isArray(round.teams)) return null;
+                    const players = [];
+                    round.teams.forEach(t => {
+                        if (Array.isArray(t.players)) {
+                            t.players.forEach(p => {
+                                if (p && Array.isArray(p.scores)) {
+                                    const gross = p.scores.reduce((s, x) => s + (parseInt(x) || 0), 0);
+                                    if (gross > 0) players.push(gross);
+                                }
+                            });
+                        }
+                    });
+                    if (players.length === 0) return null;
+                    return {
+                        total: players.reduce((s, g) => s + g, 0),
+                        best: Math.min(...players),
+                        worst: Math.max(...players),
+                        courseName: round.courseName || null,
+                        date: round.date || null
+                    };
+                };
+                
+                // Last round's metrics
+                const _lastRound = _historicalRounds.length > 0 ? _historicalRounds[_historicalRounds.length - 1] : null;
+                const _lastMetrics = _lastRound ? _computeRoundMetrics(_lastRound) : null;
+                
+                // All-time bests/worsts (excluding today)
+                let _allTimeLowestSingle = Infinity;
+                let _allTimeHighestSingle = -Infinity;
+                let _allTimeLowestTotal = Infinity;
+                let _allTimeHighestTotal = -Infinity;
+                _historicalRounds.forEach(r => {
+                    const m = _computeRoundMetrics(r);
+                    if (!m) return;
+                    if (m.best < _allTimeLowestSingle) _allTimeLowestSingle = m.best;
+                    if (m.worst > _allTimeHighestSingle) _allTimeHighestSingle = m.worst;
+                    if (m.total < _allTimeLowestTotal) _allTimeLowestTotal = m.total;
+                    if (m.total > _allTimeHighestTotal) _allTimeHighestTotal = m.total;
+                });
+                const _hasHistory = _historicalRounds.length > 0 && _allTimeLowestSingle !== Infinity;
+                
+                // ── Determine record-breaking status for each metric ──
+                // For Total Strokes: more players = more strokes, so "record" is meaningless across different player counts.
+                //   Only flag when the player count matches. Otherwise skip celebration/roast for this stat.
+                const _isTotalRecord = false; // intentionally suppressed; player counts vary
+                
+                // Best Score: lower is better. New all-time low = celebrate. New all-time high (for "best score") not relevant.
+                const _isBestScoreAllTimeBest = _hasHistory && bestGross < _allTimeLowestSingle;
+                const _isBestScoreEventBest = _hasHistory && _lastMetrics && bestGross < _lastMetrics.best;
+                
+                // Highest Score: higher = worse. New all-time high = roast. New all-time low (for "highest score") = mild praise.
+                const _isHighestScoreAllTimeHigh = _hasHistory && worstGross > _allTimeHighestSingle;
+                const _isHighestScoreAllTimeLow = _hasHistory && worstGross < _allTimeHighestSingle; // means the field's "worst" beat the all-time worst — everyone played well today
+                
+                // ── Helpers for card rendering ──
+                // The count-up animation uses an inline span with a data-target attribute.
+                // A small inline script (added after the HTML) animates each unique counter element.
+                const _counterId = (label) => `bnCounter_${label}_${currentSlide}`;
+                
+                const _renderCard = (opts) => {
+                    // opts: { label, colors (bg gradient + border + text), value, comparisonNode, recordBanner, suffixText }
+                    return `
+                        <div style="background:linear-gradient(135deg, ${opts.colors.bgFrom}, ${opts.colors.bgTo});border:2px solid ${opts.colors.border};border-radius:20px;padding:26px 20px;animation:slideUp 0.6s ease-out;position:relative;overflow:hidden;">
+                            ${opts.recordBanner || ''}
+                            <div style="color:${opts.colors.label};font-size:14px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:14px;position:relative;z-index:1;">${opts.label}</div>
+                            <div style="color:white;font-size:84px;font-weight:800;line-height:1;letter-spacing:-2px;position:relative;z-index:1;">
+                                <span class="bn-counter" data-target="${opts.value}" data-format="${opts.format || 'plain'}">0</span>
+                            </div>
+                            <div style="color:${opts.colors.label};font-size:13px;margin-top:10px;position:relative;z-index:1;">${opts.suffixText}</div>
+                            ${opts.comparisonNode || ''}
+                        </div>
+                    `;
+                };
+                
+                // Comparison line builder — small text under the big number showing last round + all-time
+                const _renderComparison = (currentVal, lastVal, allTimeVal, lowerIsBetter) => {
+                    if (!_hasHistory) return '';
+                    const lines = [];
+                    if (_lastMetrics && lastVal != null) {
+                        const diff = currentVal - lastVal;
+                        const arrow = (lowerIsBetter ? diff < 0 : diff > 0) ? '⬇' : (diff === 0 ? '=' : '⬆');
+                        const arrowColor = (lowerIsBetter ? diff < 0 : diff > 0) ? '#10b981' : (diff === 0 ? '#9ca3af' : '#ef4444');
+                        const absDiff = Math.abs(diff);
+                        lines.push(`<div style="color:rgba(255,255,255,0.75);font-size:12px;display:flex;justify-content:space-between;align-items:center;">
+                            <span>Last round:</span>
+                            <span style="color:white;font-weight:600;">${lastVal.toLocaleString()} <span style="color:${arrowColor};font-weight:700;margin-left:4px;">${arrow}${absDiff > 0 ? ` ${absDiff}` : ''}</span></span>
+                        </div>`);
+                    }
+                    if (allTimeVal != null && allTimeVal !== Infinity && allTimeVal !== -Infinity) {
+                        const recordLabel = lowerIsBetter ? 'All-time best:' : 'All-time worst:';
+                        lines.push(`<div style="color:rgba(255,255,255,0.75);font-size:12px;display:flex;justify-content:space-between;align-items:center;margin-top:4px;">
+                            <span>${recordLabel}</span>
+                            <span style="color:white;font-weight:600;">${allTimeVal.toLocaleString()}</span>
+                        </div>`);
+                    }
+                    if (lines.length === 0) return '';
+                    return `<div style="margin-top:16px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.15);position:relative;z-index:1;animation:fadeIn 0.5s 0.8s ease-out backwards;">${lines.join('')}</div>`;
+                };
+                
+                // Record banner builder — for new records, draped across the top of the card
+                const _renderRecordBanner = (isAllTimeBest, isAllTimeWorst, isMildPraise) => {
+                    if (isAllTimeBest) {
+                        return `
+                            <div style="position:absolute;top:0;left:0;right:0;background:linear-gradient(90deg, #fbbf24, #f59e0b);color:#1f2937;font-size:11px;font-weight:900;letter-spacing:2px;text-align:center;padding:4px;text-transform:uppercase;box-shadow:0 2px 8px rgba(251,191,36,0.4);animation:slideUp 0.5s 1s ease-out backwards;">
+                                🏆 New All-Time Record
+                            </div>
+                            <div style="position:absolute;top:0;right:8px;font-size:30px;animation:slideUp 0.5s 1.1s ease-out backwards;opacity:0.85;">🎉</div>
+                        `;
+                    }
+                    if (isAllTimeWorst) {
+                        return `
+                            <div style="position:absolute;top:0;left:0;right:0;background:linear-gradient(90deg, #7c2d12, #991b1b);color:#fef2f2;font-size:11px;font-weight:900;letter-spacing:2px;text-align:center;padding:4px;text-transform:uppercase;box-shadow:0 2px 8px rgba(127,29,29,0.5);animation:slideUp 0.5s 1s ease-out backwards;">
+                                💀 Worst in Dutch Cup History
+                            </div>
+                            <div style="position:absolute;top:0;right:8px;font-size:30px;animation:slideUp 0.5s 1.1s ease-out backwards;opacity:0.85;">📉</div>
+                        `;
+                    }
+                    if (isMildPraise) {
+                        return `
+                            <div style="position:absolute;top:0;left:0;right:0;background:linear-gradient(90deg, #166534, #16a34a);color:white;font-size:11px;font-weight:800;letter-spacing:2px;text-align:center;padding:4px;text-transform:uppercase;animation:slideUp 0.5s 1s ease-out backwards;">
+                                ✨ Best 'Worst' Score Ever
+                            </div>
+                        `;
+                    }
+                    return '';
+                };
+                
+                // Reaction line — appears below the cards, contextual based on records
+                let _reactionLine = '';
+                if (_bnStep >= 3) {
+                    if (_isBestScoreAllTimeBest && _isHighestScoreAllTimeHigh) {
+                        _reactionLine = `<span style="color:#f59e0b;">A round of extremes — record-breaking on both ends.</span>`;
+                    } else if (_isBestScoreAllTimeBest) {
+                        _reactionLine = `<span style="color:#10b981;">🏆 Lowest single round in Dutch Cup history.</span>`;
+                    } else if (_isHighestScoreAllTimeHigh) {
+                        _reactionLine = `<span style="color:#ef4444;">💀 Yikes. Someone left their A-game at home today.</span>`;
+                    } else if (_isHighestScoreAllTimeLow) {
+                        _reactionLine = `<span style="color:#10b981;">✨ Even the worst score today beat the all-time worst — everyone played sharp.</span>`;
+                    } else {
+                        _reactionLine = `<span style="color:#a5b4fc;">Whose was whose? Stay tuned…</span>`;
+                    }
+                }
+                
+                // Trigger a record fanfare/roast sound the first time stage 3 lands AND a record was broken
+                if (_bnStep >= 3 && !presentationState._byNumbersRecordSoundPlayed) {
+                    presentationState._byNumbersRecordSoundPlayed = true;
+                    if (_isBestScoreAllTimeBest || _isHighestScoreAllTimeLow) {
+                        setTimeout(() => {
+                            if (typeof playChampionIntroFanfare === 'function') {
+                                try { playChampionIntroFanfare(); } catch (e) {}
+                            }
+                        }, 600);
+                    } else if (_isHighestScoreAllTimeHigh) {
+                        setTimeout(() => {
+                            if (typeof playSadTromboneSound === 'function') {
+                                try { playSadTromboneSound(); } catch (e) {}
+                            }
+                        }, 600);
+                    }
+                }
                 
                 html += `
                     <div style="animation:fadeIn 0.8s ease-in;max-width:1100px;width:100%;">
@@ -10997,31 +11405,48 @@
                             no names yet…
                         </p>
                         
-                        <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:24px;">
-                            <div style="background:linear-gradient(135deg, rgba(59,130,246,0.2), rgba(59,130,246,0.05));border:2px solid rgba(59,130,246,0.4);border-radius:20px;padding:32px 20px;">
-                                <div style="color:#93c5fd;font-size:14px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:16px;">Total Strokes</div>
-                                <div style="color:white;font-size:84px;font-weight:800;line-height:1;letter-spacing:-2px;">${totalStrokes.toLocaleString()}</div>
-                                <div style="color:#93c5fd;font-size:13px;margin-top:12px;">across ${grossScores.length} player${grossScores.length === 1 ? '' : 's'}</div>
-                            </div>
+                        <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:24px;min-height:340px;">
+                            <!-- Card 1: Total Strokes -->
+                            ${_bnStep >= 1 ? _renderCard({
+                                label: 'Total Strokes',
+                                colors: { bgFrom: 'rgba(59,130,246,0.2)', bgTo: 'rgba(59,130,246,0.05)', border: 'rgba(59,130,246,0.4)', label: '#93c5fd' },
+                                value: totalStrokes,
+                                format: 'comma',
+                                suffixText: `across ${grossScores.length} player${grossScores.length === 1 ? '' : 's'}`,
+                                comparisonNode: _renderComparison(totalStrokes, _lastMetrics ? _lastMetrics.total : null, _allTimeLowestTotal !== Infinity ? _allTimeLowestTotal : null, true)
+                            }) : `<div style="border:2px dashed rgba(59,130,246,0.25);border-radius:20px;padding:32px 20px;min-height:280px;display:flex;align-items:center;justify-content:center;color:rgba(147,197,253,0.4);font-size:14px;letter-spacing:2px;">— TAP NEXT —</div>`}
                             
-                            <div style="background:linear-gradient(135deg, rgba(16,185,129,0.2), rgba(16,185,129,0.05));border:2px solid rgba(16,185,129,0.4);border-radius:20px;padding:32px 20px;">
-                                <div style="color:#6ee7b7;font-size:14px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:16px;">Best Score</div>
-                                <div style="color:white;font-size:84px;font-weight:800;line-height:1;letter-spacing:-2px;">${bestGross}</div>
-                                <div style="color:#6ee7b7;font-size:13px;margin-top:12px;">${coursePar > 0 ? (bestGross >= coursePar ? '+' : '') + (bestGross - coursePar) + ' vs par' : 'gross'}</div>
-                            </div>
+                            <!-- Card 2: Best Score -->
+                            ${_bnStep >= 2 ? _renderCard({
+                                label: 'Best Score',
+                                colors: { bgFrom: 'rgba(16,185,129,0.2)', bgTo: 'rgba(16,185,129,0.05)', border: _isBestScoreAllTimeBest ? '#fbbf24' : 'rgba(16,185,129,0.4)', label: '#6ee7b7' },
+                                value: bestGross,
+                                suffixText: coursePar > 0 ? `${bestGross >= coursePar ? '+' : ''}${bestGross - coursePar} vs par` : 'gross',
+                                comparisonNode: _renderComparison(bestGross, _lastMetrics ? _lastMetrics.best : null, _allTimeLowestSingle !== Infinity ? _allTimeLowestSingle : null, true),
+                                recordBanner: _renderRecordBanner(_isBestScoreAllTimeBest, false, false)
+                            }) : `<div style="border:2px dashed rgba(16,185,129,0.25);border-radius:20px;padding:32px 20px;min-height:280px;display:flex;align-items:center;justify-content:center;color:rgba(110,231,183,0.4);font-size:14px;letter-spacing:2px;">${_bnStep >= 1 ? '— TAP NEXT —' : ''}</div>`}
                             
-                            <div style="background:linear-gradient(135deg, rgba(239,68,68,0.2), rgba(239,68,68,0.05));border:2px solid rgba(239,68,68,0.4);border-radius:20px;padding:32px 20px;">
-                                <div style="color:#fca5a5;font-size:14px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:16px;">Highest Score</div>
-                                <div style="color:white;font-size:84px;font-weight:800;line-height:1;letter-spacing:-2px;">${worstGross}</div>
-                                <div style="color:#fca5a5;font-size:13px;margin-top:12px;">${coursePar > 0 ? '+' + (worstGross - coursePar) + ' vs par' : 'gross'}</div>
-                            </div>
+                            <!-- Card 3: Highest Score -->
+                            ${_bnStep >= 3 ? _renderCard({
+                                label: 'Highest Score',
+                                colors: { bgFrom: 'rgba(239,68,68,0.2)', bgTo: 'rgba(239,68,68,0.05)', border: _isHighestScoreAllTimeHigh ? '#7c2d12' : (_isHighestScoreAllTimeLow ? '#16a34a' : 'rgba(239,68,68,0.4)'), label: '#fca5a5' },
+                                value: worstGross,
+                                suffixText: coursePar > 0 ? '+' + (worstGross - coursePar) + ' vs par' : 'gross',
+                                comparisonNode: _renderComparison(worstGross, _lastMetrics ? _lastMetrics.worst : null, _allTimeHighestSingle !== -Infinity ? _allTimeHighestSingle : null, false),
+                                recordBanner: _renderRecordBanner(false, _isHighestScoreAllTimeHigh, _isHighestScoreAllTimeLow)
+                            }) : `<div style="border:2px dashed rgba(239,68,68,0.25);border-radius:20px;padding:32px 20px;min-height:280px;display:flex;align-items:center;justify-content:center;color:rgba(252,165,165,0.4);font-size:14px;letter-spacing:2px;">${_bnStep >= 2 ? '— TAP NEXT —' : ''}</div>`}
                         </div>
                         
-                        <p style="color:#818cf8;font-size:16px;margin-top:40px;font-style:italic;">
-                            Whose was whose? Stay tuned…
+                        <p style="color:#818cf8;font-size:16px;margin-top:32px;font-style:italic;min-height:24px;">
+                            ${_reactionLine || (_bnStep < 3 ? `Tap "Next →" to reveal the next number…` : '')}
                         </p>
                     </div>
                 `;
+                // Schedule the count-up animation to fire after the DOM is patched in.
+                // (We CANNOT put a script tag inside the html string — the browser's HTML parser
+                // would see the close-script-tag inside the string and close the outer script element early,
+                // killing the rest of the JavaScript on the page.)
+                presentationState._bnNeedsCountUp = true;
             } else if (currentSlide === biggestMomentsSlideIndex) {
                 // BIGGEST MOMENTS SLIDE
                 html += `
@@ -11940,9 +12365,21 @@
                     `;
                 } else {
                     // ─── STAGE 0: full player page (no sub-step gating, no award badges) ───
+                    // Background: round photo as faded backdrop. Adds round atmosphere without
+                    // claiming the photo is OF this player (we can't identify faces). The photo
+                    // rotates per player so different slides show different photos for variety.
+                    const _photoBg = (roundPhotos && roundPhotos.length > 0)
+                        ? roundPhotos[playerIndex % roundPhotos.length]
+                        : null;
+                    
                     html += `
-                    <div style="animation:slideUp 0.8s ease-out;width:100%;height:100%;padding:16px;box-sizing:border-box;overflow:hidden;" data-player-stage="${playerStage}">
-                        <div style="display:grid;grid-template-columns:300px 1fr;gap:16px;height:100%;">
+                    <div style="animation:slideUp 0.8s ease-out;width:100%;height:100%;padding:16px;box-sizing:border-box;overflow:hidden;position:relative;" data-player-stage="${playerStage}">
+                        ${_photoBg ? `
+                            <!-- Photo backdrop: ambient round atmosphere, heavily darkened so content stays readable -->
+                            <div style="position:absolute;inset:0;background-image:url('${_photoBg}');background-size:cover;background-position:center;opacity:0.18;z-index:0;pointer-events:none;"></div>
+                            <div style="position:absolute;inset:0;background:linear-gradient(180deg, rgba(30,27,75,0.55) 0%, rgba(49,46,129,0.75) 100%);z-index:0;pointer-events:none;"></div>
+                        ` : ''}
+                        <div style="display:grid;grid-template-columns:300px 1fr;gap:16px;height:100%;position:relative;z-index:1;">
                             
                             <!-- LEFT COLUMN -->
                             <div style="display:flex;flex-direction:column;gap:12px;">
@@ -14997,6 +15434,78 @@
                 if (weatherQuery && typeof hydrateWeatherCard === 'function') {
                     setTimeout(() => hydrateWeatherCard(weatherQuery, targetDateISO), 30);
                 }
+            } else if (currentSlide === closingSlideIndex) {
+                // ─── END-OF-NIGHT CLOSING COLLAGE ───
+                // Photo mosaic with subtle Ken Burns animation + sign-off message.
+                // Closes the deck with an emotional/atmospheric note rather than a configuration screen.
+                const rawPhotos = mostRecentRound.photos || [];
+                const photos = rawPhotos.map(p => (typeof p === 'string' ? { url: p } : p)).filter(p => p && p.url);
+                
+                // Layout: 4-column grid that fills the viewport, with the closing message centered as an overlay
+                const gridCols = photos.length <= 4 ? 2 : (photos.length <= 9 ? 3 : (photos.length <= 16 ? 4 : 5));
+                // Distribute Ken-Burns animation timing so tiles don't all pulse in sync
+                const sayings = [
+                    'Until next time, golfers.',
+                    'Same time next round?',
+                    'See you on the first tee.',
+                    'Thanks for a great round.',
+                    'Another one in the books.',
+                    'See you out there.'
+                ];
+                const sayingIdx = (totalRounds + (photos.length || 0)) % sayings.length;
+                const closingSaying = sayings[sayingIdx];
+                
+                html += `
+                    <style>
+                        @keyframes closingKenBurns {
+                            0%, 100% { transform: scale(1.0); }
+                            50%      { transform: scale(1.12); }
+                        }
+                        @keyframes closingTileFadeIn {
+                            from { opacity: 0; transform: scale(0.92); }
+                            to   { opacity: 1; transform: scale(1); }
+                        }
+                        @keyframes closingTitleSlideUp {
+                            0%   { opacity: 0; transform: translateY(40px); }
+                            100% { opacity: 1; transform: translateY(0); }
+                        }
+                    </style>
+                    
+                    <!-- Full-bleed photo mosaic backdrop -->
+                    <div style="position:absolute;inset:0;display:grid;grid-template-columns:repeat(${gridCols}, 1fr);gap:6px;padding:6px;background:#000;">
+                        ${photos.map((photo, idx) => {
+                            // Stagger animation delays so tiles fade in and pulse independently
+                            const fadeDelay = (idx * 60) / 1000;
+                            const burnDuration = 8 + (idx % 4) * 2;
+                            const burnDelay = (idx * 0.7) % burnDuration;
+                            return `
+                                <div style="position:relative;overflow:hidden;border-radius:4px;animation:closingTileFadeIn 0.7s ${fadeDelay}s ease-out backwards;">
+                                    <img src="${photo.url}" 
+                                         style="width:100%;height:100%;object-fit:cover;display:block;animation:closingKenBurns ${burnDuration}s ease-in-out -${burnDelay}s infinite;"
+                                         alt="Round photo ${idx + 1}"
+                                         loading="lazy" />
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                    
+                    <!-- Dark overlay so the message reads clearly -->
+                    <div style="position:absolute;inset:0;background:radial-gradient(ellipse at center, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.85) 100%);pointer-events:none;"></div>
+                    
+                    <!-- Center message stack -->
+                    <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px;pointer-events:none;">
+                        <div style="font-size:72px;line-height:1;margin-bottom:18px;animation:closingTitleSlideUp 0.9s 0.4s ease-out backwards;text-shadow:0 4px 24px rgba(0,0,0,0.8);">⛳</div>
+                        <h1 style="color:white;font-size:clamp(48px, 7vw, 84px);font-weight:900;letter-spacing:-1px;line-height:1.05;margin:0 0 20px;text-shadow:0 6px 32px rgba(0,0,0,0.9), 0 2px 8px rgba(0,0,0,0.6);animation:closingTitleSlideUp 1s 0.55s ease-out backwards;">
+                            ${closingSaying}
+                        </h1>
+                        <div style="color:rgba(255,255,255,0.85);font-size:20px;font-weight:600;letter-spacing:2px;text-transform:uppercase;text-shadow:0 2px 12px rgba(0,0,0,0.8);animation:closingTitleSlideUp 1s 0.75s ease-out backwards;">
+                            ${mostRecentRound.courseName || 'The Dutch Cup'}
+                        </div>
+                        <div style="color:#fbbf24;font-size:15px;font-weight:700;letter-spacing:4px;margin-top:12px;text-shadow:0 2px 12px rgba(0,0,0,0.8);animation:closingTitleSlideUp 1s 0.95s ease-out backwards;">
+                            ${photos.length} memor${photos.length === 1 ? 'y' : 'ies'} captured today
+                        </div>
+                    </div>
+                `;
             }
             
             html += `
@@ -15025,6 +15534,28 @@
                 existingPresentation.remove();
             }
             document.body.insertAdjacentHTML('beforeend', html);
+            
+            // ─── SLIDE TRANSITION FADE-IN ───
+            // Apply a quick fade-in to the new slide so transitions don't feel like a snap-cut.
+            // Half a cross-fade: the old slide is already gone (removed above), but the new one
+            // eases in over 200ms. Cheap and reads as much more cinematic.
+            const _newSlide = document.getElementById('presentationMode');
+            if (_newSlide) {
+                // Set initial state synchronously, then transition to final state on the next frame.
+                _newSlide.style.opacity = '0';
+                _newSlide.style.transition = 'opacity 200ms ease-out';
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        _newSlide.style.opacity = '1';
+                        // If the just-rendered slide is "By The Numbers" and any of its counter
+                        // elements are new (not yet animated), kick off the count-up animation.
+                        if (presentationState._bnNeedsCountUp && typeof window.runByNumbersCountUp === 'function') {
+                            window.runByNumbersCountUp();
+                            presentationState._bnNeedsCountUp = false;
+                        }
+                    });
+                });
+            }
             
             // ─── SWIPE NAVIGATION ───
             // Touch swipes on the presentation container navigate between slides.
@@ -15114,6 +15645,15 @@
                 return;
             }
             
+            // By The Numbers progressive reveal: 3 sub-stages (one per card).
+            // Each tap reveals the next card. After stage 3, the next tap moves to the next slide.
+            const byNumbersIdx = presentationState._byNumbersSlideIndex;
+            if (!_navOnPhoto && byNumbersIdx >= 0 && _navContentIdx === byNumbersIdx && (presentationState.byNumbersRevealStep || 0) < 3) {
+                presentationState.byNumbersRevealStep = (presentationState.byNumbersRevealStep || 0) + 1;
+                renderPresentation();
+                return;
+            }
+            
             // BBB Leaders top-5 reveal: advance sub-step until exhausted
             const bbbLeadersIdx = presentationState._bbbLeadersSlideIndex;
             const bbbLeadersCount = presentationState._bbbLeadersCount || 0;
@@ -15181,6 +15721,8 @@
             presentationState.ctpLeadersRevealStep = 0;
             presentationState.bbbLeadersRevealStep = 0;
             presentationState.teamRevealStep = 0;
+            presentationState.byNumbersRevealStep = 0;
+            presentationState._byNumbersRecordSoundPlayed = false;
             presentationState._teamIntroFanfarePlayed = false; // allow re-play on revisit
             presentationState._perfIntroSoundPlayed = false;
             presentationState._championIntroSoundPlayed = false;
@@ -15293,6 +15835,15 @@
                 } else {
                     presentationState.bbbLeadersRevealStep = 0;
                 }
+                // When entering By The Numbers via Back, jump to fully-revealed (all 3 cards)
+                const _byNumIdx = presentationState._byNumbersSlideIndex;
+                if (!_newOnPhoto && _byNumIdx >= 0 && _newContentIdx === _byNumIdx) {
+                    presentationState.byNumbersRevealStep = 3;
+                } else {
+                    presentationState.byNumbersRevealStep = 0;
+                }
+                // Reset the record-sound flag so it can replay if user returns
+                presentationState._byNumbersRecordSoundPlayed = false;
                 // When entering a team slide via Back, jump to the fully-revealed stage.
                 // Non-winner teams: step 1 (team page). Winner team: step 2 (regular page after full-bleed).
                 if (!_newOnPhoto && teamSlidesStartPre >= 0 && _newContentIdx >= teamSlidesStartPre && _newContentIdx < teamSlidesStartPre + teamSlidesCountPre) {
@@ -16110,6 +16661,82 @@
                 }
             } catch (err) {
                 console.warn('Badge sound failed:', err);
+            }
+        };
+        
+        // ─── By The Numbers count-up animator ───
+        // Called from the post-render hook in renderPresentation when the By The Numbers slide
+        // has new counter elements that haven't been animated yet. Each .bn-counter element holds
+        // a data-target (final integer) and an optional data-format ("comma" for thousands separators).
+        // Animation eases from 0 → target over 1.4 seconds using easeOutQuart for a slot-machine feel.
+        window.runByNumbersCountUp = () => {
+            document.querySelectorAll('.bn-counter').forEach(el => {
+                if (el.dataset.bnAnimated === '1') return; // already animated; skip
+                el.dataset.bnAnimated = '1';
+                const target = parseInt(el.dataset.target, 10) || 0;
+                const format = el.dataset.format || 'plain';
+                const duration = 1400; // ms
+                const start = performance.now();
+                const step = (now) => {
+                    const t = Math.min(1, (now - start) / duration);
+                    // easeOutQuart — fast start, slow finish (the slot-machine landing feel)
+                    const eased = 1 - Math.pow(1 - t, 4);
+                    const v = Math.round(target * eased);
+                    el.textContent = format === 'comma' ? v.toLocaleString() : v;
+                    if (t < 1) {
+                        requestAnimationFrame(step);
+                    } else {
+                        // Snap to exact target on the final frame to avoid any rounding drift
+                        el.textContent = format === 'comma' ? target.toLocaleString() : target;
+                    }
+                };
+                requestAnimationFrame(step);
+            });
+        };
+        
+        // Sad trombone — comedic "wah wah waaaaaaah" reaction for record-worst moments.
+        // Three descending notes with a low-pass envelope sweep that gives the deflating "waaaah" feel on the last note.
+        window.playSadTromboneSound = () => {
+            try {
+                if (window.__presentationMuted) return;
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (!AudioContext) return;
+                const ctx = new AudioContext();
+                const now = ctx.currentTime;
+                
+                const master = ctx.createGain();
+                master.gain.value = 0.30;
+                master.connect(ctx.destination);
+                
+                // Three descending notes ~F4 → D4 → B♭3 with pitch-bend "wah" on the last note
+                const playWah = (startTime, freq, duration, peakGain, bendDown) => {
+                    const osc = ctx.createOscillator();
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(freq, startTime);
+                    if (bendDown) {
+                        // pitch sags 3 semitones for the comedic deflation
+                        osc.frequency.exponentialRampToValueAtTime(freq * 0.84, startTime + duration);
+                    }
+                    const g = ctx.createGain();
+                    g.gain.setValueAtTime(0, startTime);
+                    g.gain.linearRampToValueAtTime(peakGain, startTime + 0.05);
+                    g.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+                    const filter = ctx.createBiquadFilter();
+                    filter.type = 'lowpass';
+                    filter.frequency.value = 1800;
+                    filter.Q.value = 1.4;
+                    osc.connect(filter).connect(g).connect(master);
+                    osc.start(startTime);
+                    osc.stop(startTime + duration + 0.05);
+                };
+                
+                playWah(now + 0.00, 349.23, 0.32, 0.34, false); // F4 — wah
+                playWah(now + 0.30, 293.66, 0.32, 0.32, false); // D4 — wah
+                playWah(now + 0.60, 233.08, 0.95, 0.36, true);  // B♭3 with downward bend — waaaah
+                
+                setTimeout(() => { try { ctx.close(); } catch (e) {} }, 2200);
+            } catch (err) {
+                console.warn('Sad trombone failed:', err);
             }
         };
         
