@@ -527,7 +527,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.05.30.3';
+        const APP_VERSION = '2026.05.30.4';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -9194,12 +9194,33 @@
                     
                     // Resolve CTP/Extra9 winner entries — supports both legacy "teamIdx-playerIdx" strings
                     // AND new { holeIdx, playerId } objects from the score-entry app
-                    const _resolveWinnerEntry = (entry, round) => {
+                    // Pre-compute the par-3 hole indices in their actual play order.
+                    // CTP and Extra 9 winners are stored as a fixed-length array (length 4) where
+                    // slot N corresponds to the (N+1)-th par-3 hole on the course. The slot itself
+                    // is the only signal of which hole the winner won on — there's no hole field
+                    // stored with the winner entry. So we map slot → actual hole index here.
+                    const _par3HoleIndices = [];
+                    if (mostRecentRound && Array.isArray(mostRecentRound.pars)) {
+                        mostRecentRound.pars.forEach((par, idx) => {
+                            if (parseInt(par) === 3) _par3HoleIndices.push(idx);
+                        });
+                    }
+                    
+                    const _resolveWinnerEntry = (entry, round, slotIdx) => {
                         if (!entry || !round) return null;
+                        // Determine the actual hole index from the slot position (the (slotIdx+1)-th par-3).
+                        // If the entry already carries an explicit holeIdx (newer data shape), prefer that;
+                        // otherwise derive from slot. Falls back to null when no par-3 list is available.
+                        const slotHoleIdx = (typeof slotIdx === 'number' && _par3HoleIndices[slotIdx] != null)
+                            ? _par3HoleIndices[slotIdx]
+                            : null;
                         // New shape: { playerId, holeIdx }
                         if (typeof entry === 'object' && entry.playerId != null) {
                             const sp = state.players.find(p => p.id == entry.playerId);
-                            return sp ? { playerName: sp.name, holeIdx: entry.holeIdx } : null;
+                            const resolvedHoleIdx = (entry.holeIdx != null && Number.isFinite(entry.holeIdx))
+                                ? entry.holeIdx
+                                : slotHoleIdx;
+                            return sp ? { playerName: sp.name, holeIdx: resolvedHoleIdx } : null;
                         }
                         // Legacy shape: "teamIdx-playerIdx" string
                         if (typeof entry === 'string' && entry.includes('-')) {
@@ -9207,7 +9228,12 @@
                             if (!Number.isFinite(tIdx) || !Number.isFinite(pIdx)) return null;
                             const team = round.teams && round.teams[tIdx];
                             const pl = team && team.players && team.players[pIdx];
-                            return pl ? { playerName: pl.name, holeIdx: null } : null;
+                            return pl ? { playerName: pl.name, holeIdx: slotHoleIdx } : null;
+                        }
+                        // Plain player ID string (the actual stored shape in this app's UI editor)
+                        if (typeof entry === 'string' && entry.length > 0) {
+                            const sp = state.players.find(p => String(p.id) === entry);
+                            return sp ? { playerName: sp.name, holeIdx: slotHoleIdx } : null;
                         }
                         return null;
                     };
@@ -9215,8 +9241,8 @@
                     const _allCtpForPlayer = (playerName) => {
                         if (!mostRecentRound || !Array.isArray(mostRecentRound.ctpWinners)) return [];
                         const wins = [];
-                        mostRecentRound.ctpWinners.forEach(entry => {
-                            const r = _resolveWinnerEntry(entry, mostRecentRound);
+                        mostRecentRound.ctpWinners.forEach((entry, slotIdx) => {
+                            const r = _resolveWinnerEntry(entry, mostRecentRound, slotIdx);
                             if (r && _nameMatches(r.playerName, playerName)) {
                                 wins.push({ holeIdx: r.holeIdx });
                             }
@@ -9226,8 +9252,8 @@
                     const _allExtra9ForPlayer = (playerName) => {
                         if (!mostRecentRound || !Array.isArray(mostRecentRound.extra9Winners)) return [];
                         const wins = [];
-                        mostRecentRound.extra9Winners.forEach(entry => {
-                            const r = _resolveWinnerEntry(entry, mostRecentRound);
+                        mostRecentRound.extra9Winners.forEach((entry, slotIdx) => {
+                            const r = _resolveWinnerEntry(entry, mostRecentRound, slotIdx);
                             if (r && _nameMatches(r.playerName, playerName)) {
                                 wins.push({ holeIdx: r.holeIdx });
                             }
