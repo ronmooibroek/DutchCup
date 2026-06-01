@@ -527,7 +527,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.05.30.4';
+        const APP_VERSION = '2026.05.30.5';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -7346,6 +7346,7 @@
             bbbLeadersRevealStep: 0,
             teamRevealStep: 0,
             byNumbersRevealStep: 0,
+            holePerfRevealStep: 0,
             teamStandings: [],
             eventName: ''
         };
@@ -8350,22 +8351,32 @@
                         const roundBouncebacks = [];
                         r.teams.forEach(team => {
                             team.players.forEach(player => {
+                                // Same new bounce back logic as for the current round:
+                                // 2+ bad → 2+ good qualifies, 1 pt per recovery hole, capped at 3 per stretch.
+                                const holeStates = [];
+                                for (let i = 0; i < player.scores.length; i++) {
+                                    const score = parseInt(player.scores[i]);
+                                    if (isNaN(score)) { holeStates.push('unscored'); continue; }
+                                    const par = r.pars[i];
+                                    const hi = r.handicaps[i];
+                                    let s = 0; if (player.handicap >= hi) s = 1; if (player.handicap >= hi + 18) s = 2;
+                                    const net = score - s;
+                                    holeStates.push(net <= par ? 'good' : 'bad');
+                                }
                                 let bounceBackCount = 0;
-                                for (let i = 1; i < player.scores.length; i++) {
-                                    const prevScore = parseInt(player.scores[i-1]);
-                                    const currScore = parseInt(player.scores[i]);
-                                    const prevPar = r.pars[i-1];
-                                    const currPar = r.pars[i];
-                                    const prevHandicap = r.handicaps[i-1];
-                                    const currHandicap = r.handicaps[i];
-                                    
-                                    // Calculate net scores
-                                    let prevStrokes = 0; if (player.handicap >= prevHandicap) prevStrokes = 1; if (player.handicap >= prevHandicap + 18) prevStrokes = 2; const prevNet = prevScore - prevStrokes;
-                                    let currStrokes = 0; if (player.handicap >= currHandicap) currStrokes = 1; if (player.handicap >= currHandicap + 18) currStrokes = 2; const currNet = currScore - currStrokes;
-                                    
-                                    // Check if previous was bogey+ and current is par or better
-                                    if ((prevNet - prevPar >= 1) && (currNet - currPar <= 0)) {
-                                        bounceBackCount++;
+                                let i = 0;
+                                while (i < holeStates.length) {
+                                    if (holeStates[i] === 'bad') {
+                                        let badStart = i;
+                                        while (i < holeStates.length && holeStates[i] === 'bad') i++;
+                                        if ((i - badStart) >= 2 && i < holeStates.length && holeStates[i] === 'good') {
+                                            let goodStart = i;
+                                            while (i < holeStates.length && holeStates[i] === 'good') i++;
+                                            const goodLen = i - goodStart;
+                                            if (goodLen >= 2) bounceBackCount += Math.min(goodLen, 3);
+                                        }
+                                    } else {
+                                        i++;
                                     }
                                 }
                                 if (bounceBackCount > 0 && !previousBounceBackWinners.has(player.id)) {
@@ -8388,20 +8399,50 @@
                     
                     team.players.forEach(player => {
                         if (!previousBounceBackWinners.has(player.id)) {
-                            let bounceBackCount = 0;
-                            for (let i = 1; i < player.scores.length; i++) {
-                                const prevScore = parseInt(player.scores[i-1]);
-                                const currScore = parseInt(player.scores[i]);
-                                const prevPar = mostRecentRound.pars[i-1];
-                                const currPar = mostRecentRound.pars[i];
-                                const prevHandicap = mostRecentRound.handicaps[i-1];
-                                const currHandicap = mostRecentRound.handicaps[i];
-                                
-                                let prevStrokes = 0; if (player.handicap >= prevHandicap) prevStrokes = 1; if (player.handicap >= prevHandicap + 18) prevStrokes = 2; const prevNet = prevScore - prevStrokes;
-                                let currStrokes = 0; if (player.handicap >= currHandicap) currStrokes = 1; if (player.handicap >= currHandicap + 18) currStrokes = 2; const currNet = currScore - currStrokes;
-                                
-                                if ((prevNet - prevPar >= 1) && (currNet - currPar <= 0)) {
-                                    bounceBackCount++;
+                            // ─── NEW BOUNCE BACK RULES ───
+                            // Trigger: 2+ consecutive holes of net bogey-or-worse, immediately followed by
+                            //          2+ consecutive holes of net par-or-better (qualifying recovery).
+                            // Points: 1 point per consecutive recovery hole, capped at 3 per stretch.
+                            // Total: sum points across all qualifying stretches in the round.
+                            //
+                            // Computes "isGood" / "isBad" per hole based on net-to-par:
+                            //   isGood = netToPar <= 0 (net par or better)
+                            //   isBad  = netToPar >= 1 (net bogey or worse)
+                            const holeStates = []; // 'good' | 'bad' | 'unscored'
+                            for (let i = 0; i < player.scores.length; i++) {
+                                const score = parseInt(player.scores[i]);
+                                if (isNaN(score)) { holeStates.push('unscored'); continue; }
+                                const par = mostRecentRound.pars[i];
+                                const handicapIdx = mostRecentRound.handicaps[i];
+                                let strokes = 0;
+                                if (player.handicap >= handicapIdx) strokes = 1;
+                                if (player.handicap >= handicapIdx + 18) strokes = 2;
+                                const net = score - strokes;
+                                if (net <= par) holeStates.push('good');
+                                else holeStates.push('bad');
+                            }
+                            
+                            // Walk through, finding qualifying stretches
+                            let bounceBackCount = 0; // total points
+                            let i = 0;
+                            while (i < holeStates.length) {
+                                // Find a bad streak starting at i
+                                if (holeStates[i] === 'bad') {
+                                    let badStart = i;
+                                    while (i < holeStates.length && holeStates[i] === 'bad') i++;
+                                    const badLen = i - badStart;
+                                    // If 2+ bad and the next hole is good, count recovery
+                                    if (badLen >= 2 && i < holeStates.length && holeStates[i] === 'good') {
+                                        let goodStart = i;
+                                        while (i < holeStates.length && holeStates[i] === 'good') i++;
+                                        const goodLen = i - goodStart;
+                                        // Only qualifies if recovery is 2+ holes
+                                        if (goodLen >= 2) {
+                                            bounceBackCount += Math.min(goodLen, 3);
+                                        }
+                                    }
+                                } else {
+                                    i++;
                                 }
                             }
                             
@@ -9277,8 +9318,8 @@
                           description: 'Longest consecutive streak of pars or better in a single round.',
                           detail: w => w.streakLength ? `${w.streakLength}-hole hot streak` : '' },
                         { key: 'grind', label: 'GRINDER', emoji: '💪',
-                          color: '#f59e0b', tagline: 'Battled through the grind',
-                          description: 'Most strokes recovered after a rough patch — refusing to give in when things went sideways.',
+                          color: '#f59e0b', tagline: 'least number of net bogeys or worse, keeping it even keel',
+                          description: 'Fewest net bogeys-or-worse on the day — kept the card clean and held steady through the round.',
                           detail: w => w.recovery ? `Bounced back ${w.recovery}` : '' },
                         { key: 'dialedIn', label: 'DIALED IN', emoji: '🎯',
                           color: '#10b981', tagline: 'Locked-in performance',
@@ -9330,15 +9371,15 @@
                             });
                         });
                         
-                        // Extra 9 wins (one award per hole won)
+                        // Extra 9 wins (one award per win on this round)
                         _allExtra9ForPlayer(playerSlide.playerName).forEach((win, idx) => {
                             awards.push({
                                 type: 'extra9',
                                 label: 'EXTRA 9',
                                 emoji: '🦅',
                                 color: '#a855f7',
-                                tagline: win.holeIdx != null ? `Hole ${win.holeIdx + 1}` : 'Bonus winner',
-                                description: 'Bonus closest-to-the-pin contest decided on this specific hole.',
+                                tagline: 'Won the extra 9 scramble',
+                                description: 'Winners of the extra-9 scramble side competition.',
                                 detail: '',
                                 holeIdx: win.holeIdx
                             });
@@ -9369,8 +9410,8 @@
                                 emoji: '🔄',
                                 color: '#ef4444',
                                 tagline: 'Mental toughness',
-                                description: 'Most pars or better immediately after a bogey-or-worse. Shaking off the bad and rising back up.',
-                                detail: bounceBackWinner.count ? `${bounceBackWinner.count} bounce back${bounceBackWinner.count !== 1 ? 's' : ''}` : ''
+                                description: 'Recovery from a rough patch: two-plus net bogeys followed by two-plus net pars-or-better. 1 point per recovery hole, up to 3 per stretch.',
+                                detail: bounceBackWinner.count ? `${bounceBackWinner.count} point${bounceBackWinner.count !== 1 ? 's' : ''}` : ''
                             });
                         }
                         // Clutch player winner (single per round, separate data structure)
@@ -10250,7 +10291,14 @@
                 const hasNextRoundSlide = nextRound !== null;
                 
                 // New enhanced slides
-                const hasBiggestMomentsSlide = presentationAnalytics.biggestMoments.length > 0;
+                // Hole Performance slide shows best/worst single holes — available whenever any player
+                // has a scored hole in the most recent round (not tied to the old biggestMoments data).
+                const hasBiggestMomentsSlide = (() => {
+                    if (!mostRecentRound || !Array.isArray(mostRecentRound.teams)) return false;
+                    return mostRecentRound.teams.some(t => Array.isArray(t.players) && t.players.some(p =>
+                        Array.isArray(p.scores) && p.scores.some(s => parseInt(s) > 0)
+                    ));
+                })();
                 const hasBeatComparisonSlide = presentationAnalytics.beatComparison.playersBeatTarget.length > 0;
                 const hasHoleAnalysisSlide = true; // Always show hole performance
                 const hasScoringDistSlide = true; // Always show scoring distribution
@@ -10331,6 +10379,7 @@
                     bbbLeadersRevealStep: 0,
                     teamRevealStep: 0,
                     byNumbersRevealStep: 0,
+                    holePerfRevealStep: 0,
                     totalSlides: totalSlides,
                     // Player performances
                     individualPlayerSlides: individualPlayerSlides,
@@ -10655,6 +10704,8 @@
             // Stash for nav handlers — 3 sub-stages of progressive reveal on this slide
             presentationState._byNumbersSlideIndex = byNumbersSlideIndex;
             const biggestMomentsSlideIndex = hasBiggestMomentsSlide ? slideIndex++ : -1;
+            // Stash for nav handlers — 4 sub-stages (best, best+all, worst, worst+all)
+            presentationState._holePerfSlideIndex = biggestMomentsSlideIndex;
             const perfIntroSlideIndex = hasPerfIntroSlide ? slideIndex++ : -1;
             // Champion intro is implemented as a sub-stage 0 of the #1 player's slide,
             // not as a separate slot. No slide allocation needed here.
@@ -11321,44 +11372,95 @@
                 const _counterId = (label) => `bnCounter_${label}_${currentSlide}`;
                 
                 const _renderCard = (opts) => {
-                    // opts: { label, colors (bg gradient + border + text), value, comparisonNode, recordBanner, suffixText }
+                    // opts: { label, colors, value, lastVal, allTimeVal, lowerIsBetter, suffixText, recordBanner, isAlreadyAnimated }
+                    // The card has two comparison regions:
+                    //   - PROMINENT (top, visible while counting): big "TARGET" pills showing last round + all-time
+                    //   - SUBTLE (bottom, visible after count finishes): small text version
+                    // The count-up animator hides prominent + reveals subtle when done.
+                    // For PRIOR cards (revealed in earlier sub-stages), we render in the final state directly:
+                    //   - prominent block omitted entirely
+                    //   - subtle block visible from the start
+                    //   - counter has bnAnimated="1" so the animator skips it
+                    //   - counter text already shows the final value
+                    const hasLast = (opts.lastVal != null);
+                    const hasAllTime = (opts.allTimeVal != null && opts.allTimeVal !== Infinity && opts.allTimeVal !== -Infinity);
+                    const isPrior = !!opts.isAlreadyAnimated;
+                    
+                    // Build milestone targets (used by count-up to know where to slow down)
+                    const milestones = [];
+                    if (hasLast) milestones.push(opts.lastVal);
+                    if (hasAllTime) milestones.push(opts.allTimeVal);
+                    
+                    // Diff arrow for the subtle (final) version of "Last round"
+                    let lastDiffHTML = '';
+                    if (hasLast) {
+                        const diff = opts.value - opts.lastVal;
+                        const isBetter = opts.lowerIsBetter ? diff < 0 : diff > 0;
+                        const arrow = isBetter ? '⬇' : (diff === 0 ? '=' : '⬆');
+                        const arrowColor = isBetter ? '#10b981' : (diff === 0 ? '#9ca3af' : '#ef4444');
+                        const absDiff = Math.abs(diff);
+                        lastDiffHTML = `<span style="color:${arrowColor};font-weight:700;margin-left:4px;">${arrow}${absDiff > 0 ? ` ${absDiff}` : ''}</span>`;
+                    }
+                    
+                    // PROMINENT pre-count milestones (only rendered for the current/active card)
+                    const prominentTargetsHTML = (!isPrior && (hasLast || hasAllTime)) ? `
+                        <div class="bn-targets-prominent" style="display:flex;flex-direction:column;gap:8px;margin-bottom:18px;animation:fadeIn 0.5s ease-out;">
+                            ${hasLast ? `
+                                <div style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.18);border-radius:10px;padding:8px 14px;display:flex;justify-content:space-between;align-items:center;">
+                                    <span style="color:${opts.colors.label};font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;">Last round</span>
+                                    <span style="color:white;font-size:22px;font-weight:800;letter-spacing:-0.5px;">${opts.lastVal.toLocaleString()}</span>
+                                </div>
+                            ` : ''}
+                            ${hasAllTime ? `
+                                <div style="background:rgba(251,191,36,0.10);border:1px solid rgba(251,191,36,0.35);border-radius:10px;padding:8px 14px;display:flex;justify-content:space-between;align-items:center;">
+                                    <span style="color:#fbbf24;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;">${opts.lowerIsBetter ? '🏆 All-time best' : '💀 All-time worst'}</span>
+                                    <span style="color:#fbbf24;font-size:22px;font-weight:800;letter-spacing:-0.5px;">${opts.allTimeVal.toLocaleString()}</span>
+                                </div>
+                            ` : ''}
+                        </div>
+                    ` : '';
+                    
+                    // SUBTLE post-count comparison — display block from the start for prior cards
+                    const subtleDisplay = isPrior ? 'block' : 'none';
+                    const subtleComparisonHTML = (hasLast || hasAllTime) ? `
+                        <div class="bn-targets-subtle" style="margin-top:16px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.15);position:relative;z-index:1;display:${subtleDisplay};">
+                            ${hasLast ? `
+                                <div style="color:rgba(255,255,255,0.75);font-size:12px;display:flex;justify-content:space-between;align-items:center;">
+                                    <span>Last round:</span>
+                                    <span style="color:white;font-weight:600;">${opts.lastVal.toLocaleString()} ${lastDiffHTML}</span>
+                                </div>
+                            ` : ''}
+                            ${hasAllTime ? `
+                                <div style="color:rgba(255,255,255,0.75);font-size:12px;display:flex;justify-content:space-between;align-items:center;margin-top:4px;">
+                                    <span>${opts.lowerIsBetter ? 'All-time best:' : 'All-time worst:'}</span>
+                                    <span style="color:white;font-weight:600;">${opts.allTimeVal.toLocaleString()}</span>
+                                </div>
+                            ` : ''}
+                        </div>
+                    ` : '';
+                    
+                    // Counter initial content: final value if prior, "0" if currently animating
+                    const counterInitial = isPrior
+                        ? (opts.format === 'comma' ? opts.value.toLocaleString() : opts.value)
+                        : '0';
+                    const counterAnimatedFlag = isPrior ? '1' : '';
+                    
                     return `
-                        <div style="background:linear-gradient(135deg, ${opts.colors.bgFrom}, ${opts.colors.bgTo});border:2px solid ${opts.colors.border};border-radius:20px;padding:26px 20px;animation:slideUp 0.6s ease-out;position:relative;overflow:hidden;">
+                        <div style="background:linear-gradient(135deg, ${opts.colors.bgFrom}, ${opts.colors.bgTo});border:2px solid ${opts.colors.border};border-radius:20px;padding:22px 20px;animation:slideUp 0.6s ease-out;position:relative;overflow:hidden;">
                             ${opts.recordBanner || ''}
-                            <div style="color:${opts.colors.label};font-size:14px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:14px;position:relative;z-index:1;">${opts.label}</div>
+                            <div style="color:${opts.colors.label};font-size:14px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:12px;position:relative;z-index:1;">${opts.label}</div>
+                            ${prominentTargetsHTML}
                             <div style="color:white;font-size:84px;font-weight:800;line-height:1;letter-spacing:-2px;position:relative;z-index:1;">
-                                <span class="bn-counter" data-target="${opts.value}" data-format="${opts.format || 'plain'}">0</span>
+                                <span class="bn-counter" data-target="${opts.value}" data-format="${opts.format || 'plain'}" data-milestones="${milestones.join(',')}" data-bn-animated="${counterAnimatedFlag}">${counterInitial}</span>
                             </div>
                             <div style="color:${opts.colors.label};font-size:13px;margin-top:10px;position:relative;z-index:1;">${opts.suffixText}</div>
-                            ${opts.comparisonNode || ''}
+                            ${subtleComparisonHTML}
                         </div>
                     `;
                 };
                 
-                // Comparison line builder — small text under the big number showing last round + all-time
-                const _renderComparison = (currentVal, lastVal, allTimeVal, lowerIsBetter) => {
-                    if (!_hasHistory) return '';
-                    const lines = [];
-                    if (_lastMetrics && lastVal != null) {
-                        const diff = currentVal - lastVal;
-                        const arrow = (lowerIsBetter ? diff < 0 : diff > 0) ? '⬇' : (diff === 0 ? '=' : '⬆');
-                        const arrowColor = (lowerIsBetter ? diff < 0 : diff > 0) ? '#10b981' : (diff === 0 ? '#9ca3af' : '#ef4444');
-                        const absDiff = Math.abs(diff);
-                        lines.push(`<div style="color:rgba(255,255,255,0.75);font-size:12px;display:flex;justify-content:space-between;align-items:center;">
-                            <span>Last round:</span>
-                            <span style="color:white;font-weight:600;">${lastVal.toLocaleString()} <span style="color:${arrowColor};font-weight:700;margin-left:4px;">${arrow}${absDiff > 0 ? ` ${absDiff}` : ''}</span></span>
-                        </div>`);
-                    }
-                    if (allTimeVal != null && allTimeVal !== Infinity && allTimeVal !== -Infinity) {
-                        const recordLabel = lowerIsBetter ? 'All-time best:' : 'All-time worst:';
-                        lines.push(`<div style="color:rgba(255,255,255,0.75);font-size:12px;display:flex;justify-content:space-between;align-items:center;margin-top:4px;">
-                            <span>${recordLabel}</span>
-                            <span style="color:white;font-weight:600;">${allTimeVal.toLocaleString()}</span>
-                        </div>`);
-                    }
-                    if (lines.length === 0) return '';
-                    return `<div style="margin-top:16px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.15);position:relative;z-index:1;animation:fadeIn 0.5s 0.8s ease-out backwards;">${lines.join('')}</div>`;
-                };
+                // Legacy stub for backwards compat — the renderer now embeds comparison data into the card itself.
+                const _renderComparison = () => '';
                 
                 // Record banner builder — for new records, draped across the top of the card
                 const _renderRecordBanner = (isAllTimeBest, isAllTimeWorst, isMildPraise) => {
@@ -11439,7 +11541,10 @@
                                 value: totalStrokes,
                                 format: 'comma',
                                 suffixText: `across ${grossScores.length} player${grossScores.length === 1 ? '' : 's'}`,
-                                comparisonNode: _renderComparison(totalStrokes, _lastMetrics ? _lastMetrics.total : null, _allTimeLowestTotal !== Infinity ? _allTimeLowestTotal : null, true)
+                                lastVal: _lastMetrics ? _lastMetrics.total : null,
+                                allTimeVal: _allTimeLowestTotal !== Infinity ? _allTimeLowestTotal : null,
+                                lowerIsBetter: true,
+                                isAlreadyAnimated: _bnStep > 1
                             }) : `<div style="border:2px dashed rgba(59,130,246,0.25);border-radius:20px;padding:32px 20px;min-height:280px;display:flex;align-items:center;justify-content:center;color:rgba(147,197,253,0.4);font-size:14px;letter-spacing:2px;">— TAP NEXT —</div>`}
                             
                             <!-- Card 2: Best Score -->
@@ -11448,7 +11553,10 @@
                                 colors: { bgFrom: 'rgba(16,185,129,0.2)', bgTo: 'rgba(16,185,129,0.05)', border: _isBestScoreAllTimeBest ? '#fbbf24' : 'rgba(16,185,129,0.4)', label: '#6ee7b7' },
                                 value: bestGross,
                                 suffixText: coursePar > 0 ? `${bestGross >= coursePar ? '+' : ''}${bestGross - coursePar} vs par` : 'gross',
-                                comparisonNode: _renderComparison(bestGross, _lastMetrics ? _lastMetrics.best : null, _allTimeLowestSingle !== Infinity ? _allTimeLowestSingle : null, true),
+                                lastVal: _lastMetrics ? _lastMetrics.best : null,
+                                allTimeVal: _allTimeLowestSingle !== Infinity ? _allTimeLowestSingle : null,
+                                lowerIsBetter: true,
+                                isAlreadyAnimated: _bnStep > 2,
                                 recordBanner: _renderRecordBanner(_isBestScoreAllTimeBest, false, false)
                             }) : `<div style="border:2px dashed rgba(16,185,129,0.25);border-radius:20px;padding:32px 20px;min-height:280px;display:flex;align-items:center;justify-content:center;color:rgba(110,231,183,0.4);font-size:14px;letter-spacing:2px;">${_bnStep >= 1 ? '— TAP NEXT —' : ''}</div>`}
                             
@@ -11458,7 +11566,10 @@
                                 colors: { bgFrom: 'rgba(239,68,68,0.2)', bgTo: 'rgba(239,68,68,0.05)', border: _isHighestScoreAllTimeHigh ? '#7c2d12' : (_isHighestScoreAllTimeLow ? '#16a34a' : 'rgba(239,68,68,0.4)'), label: '#fca5a5' },
                                 value: worstGross,
                                 suffixText: coursePar > 0 ? '+' + (worstGross - coursePar) + ' vs par' : 'gross',
-                                comparisonNode: _renderComparison(worstGross, _lastMetrics ? _lastMetrics.worst : null, _allTimeHighestSingle !== -Infinity ? _allTimeHighestSingle : null, false),
+                                lastVal: _lastMetrics ? _lastMetrics.worst : null,
+                                allTimeVal: _allTimeHighestSingle !== -Infinity ? _allTimeHighestSingle : null,
+                                lowerIsBetter: false,
+                                isAlreadyAnimated: false, // card 3 is always the just-revealed one (or not yet revealed)
                                 recordBanner: _renderRecordBanner(false, _isHighestScoreAllTimeHigh, _isHighestScoreAllTimeLow)
                             }) : `<div style="border:2px dashed rgba(239,68,68,0.25);border-radius:20px;padding:32px 20px;min-height:280px;display:flex;align-items:center;justify-content:center;color:rgba(252,165,165,0.4);font-size:14px;letter-spacing:2px;">${_bnStep >= 2 ? '— TAP NEXT —' : ''}</div>`}
                         </div>
@@ -11474,44 +11585,187 @@
                 // killing the rest of the JavaScript on the page.)
                 presentationState._bnNeedsCountUp = true;
             } else if (currentSlide === biggestMomentsSlideIndex) {
-                // BIGGEST MOMENTS SLIDE
-                html += `
-                    <div style="animation:slideUp 0.8s ease-out;max-width:1100px;width:100%;">
-                        <h1 style="color:white;font-size:48px;margin:0 0 30px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
-                            ⚡ Biggest Moments
-                        </h1>
-                        
-                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px;">
-                            ${analytics.biggestMoments.slice(0, 6).map(moment => `
-                                <div style="background:linear-gradient(135deg, rgba(245,158,11,0.2) 0%, rgba(245,158,11,0.1) 100%);border:3px solid #f59e0b;border-radius:16px;padding:24px;position:relative;overflow:hidden;">
-                                    <div style="position:absolute;top:-20px;right:-20px;font-size:120px;opacity:0.1;">${moment.icon}</div>
-                                    <div style="position:relative;z-index:1;">
-                                        <div style="font-size:48px;margin-bottom:12px;">${moment.icon}</div>
-                                        <div style="color:white;font-size:20px;font-weight:700;margin-bottom:8px;">
-                                            ${moment.player}
-                                        </div>
-                                        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
-                                            <div style="width:8px;height:8px;border-radius:50%;background:${moment.teamColor};"></div>
-                                            <div style="color:#a5b4fc;font-size:14px;">${moment.team}</div>
-                                        </div>
-                                        <div style="color:#fbbf24;font-size:36px;font-weight:700;margin-bottom:8px;">
-                                            ${moment.description}
-                                        </div>
-                                        <div style="color:#818cf8;font-size:12px;text-transform:uppercase;letter-spacing:1px;">
-                                            ${moment.type === 'high_score' ? 'Amazing Total' : moment.type === 'multi_ctp' ? 'Closest to Pin Master' : 'Outstanding'}
-                                        </div>
+                // ─── HOLE PERFORMANCE (best & worst single holes of the day) ───
+                // 4 sub-stages:
+                //   0 = best single-hole performance (one player highlighted)
+                //   1 = + every player's score on that hole
+                //   2 = worst single-hole performance (one player highlighted)
+                //   3 = + every player's score on that hole
+                const _hpStep = presentationState.holePerfRevealStep || 0;
+                
+                // Compute every player's per-hole net-to-par, then find the single best and worst.
+                // "best" = lowest net-to-par on any one hole; "worst" = highest net-to-par on any one hole.
+                const _holePerfs = [];
+                if (mostRecentRound && Array.isArray(mostRecentRound.pars) && Array.isArray(mostRecentRound.teams)) {
+                    mostRecentRound.teams.forEach(team => {
+                        const stateTeam = state.teams.find(t => t.id === team.teamId);
+                        const teamColor = stateTeam ? (stateTeam.color || '#3b82f6') : '#3b82f6';
+                        const teamName = stateTeam ? stateTeam.name : '';
+                        if (!Array.isArray(team.players)) return;
+                        team.players.forEach(pl => {
+                            if (!Array.isArray(pl.scores)) return;
+                            pl.scores.forEach((raw, holeIdx) => {
+                                const gross = parseInt(raw);
+                                if (isNaN(gross) || gross <= 0) return;
+                                const par = mostRecentRound.pars[holeIdx];
+                                const hi = mostRecentRound.handicaps[holeIdx];
+                                let strokes = 0;
+                                if (pl.handicap >= hi) strokes = 1;
+                                if (pl.handicap >= hi + 18) strokes = 2;
+                                const net = gross - strokes;
+                                _holePerfs.push({
+                                    playerName: pl.name,
+                                    teamName, teamColor,
+                                    holeIdx, par, gross, net, strokes,
+                                    netToPar: net - par
+                                });
+                            });
+                        });
+                    });
+                }
+                
+                // Best = lowest netToPar (ties → lower gross, then earlier hole)
+                const _bestPerf = _holePerfs.length > 0
+                    ? _holePerfs.slice().sort((a, b) => a.netToPar - b.netToPar || a.gross - b.gross || a.holeIdx - b.holeIdx)[0]
+                    : null;
+                // Worst = highest netToPar (ties → higher gross, then earlier hole)
+                const _worstPerf = _holePerfs.length > 0
+                    ? _holePerfs.slice().sort((a, b) => b.netToPar - a.netToPar || b.gross - a.gross || a.holeIdx - b.holeIdx)[0]
+                    : null;
+                
+                // Build the "all players on this hole" table for a given hole index
+                const _allScoresOnHole = (holeIdx) => {
+                    const rows = _holePerfs
+                        .filter(h => h.holeIdx === holeIdx)
+                        .sort((a, b) => a.netToPar - b.netToPar || a.gross - b.gross);
+                    return rows;
+                };
+                
+                // Net-to-par → color + label
+                const _ntpColor = (ntp) => {
+                    if (ntp <= -2) return '#a78bfa';
+                    if (ntp === -1) return '#10b981';
+                    if (ntp === 0) return '#3b82f6';
+                    if (ntp === 1) return '#f59e0b';
+                    return '#ef4444';
+                };
+                const _ntpLabel = (ntp) => {
+                    if (ntp <= -3) return 'Albatross';
+                    if (ntp === -2) return 'Eagle';
+                    if (ntp === -1) return 'Birdie';
+                    if (ntp === 0) return 'Par';
+                    if (ntp === 1) return 'Bogey';
+                    if (ntp === 2) return 'Double';
+                    return `+${ntp}`;
+                };
+                
+                // Hero card for a single performance (best or worst)
+                const _perfHero = (perf, isBest) => {
+                    if (!perf) return '';
+                    const accent = isBest ? '#10b981' : '#ef4444';
+                    const accentBg = isBest ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)';
+                    const ntpColor = _ntpColor(perf.netToPar);
+                    const ntpLabel = _ntpLabel(perf.netToPar);
+                    const sp = state.players.find(p => p.name === perf.playerName);
+                    return `
+                        <div style="background:linear-gradient(135deg, ${accentBg}, rgba(0,0,0,0.3));border:3px solid ${accent};border-radius:20px;padding:30px 36px;max-width:640px;margin:0 auto;box-shadow:0 12px 40px ${accent}40;animation:scaleIn 0.6s ease-out;">
+                            <div style="color:${accent};font-size:15px;font-weight:800;letter-spacing:3px;text-transform:uppercase;margin-bottom:18px;">
+                                ${isBest ? '🌟 Best Hole of the Day' : '😬 Roughest Hole of the Day'}
+                            </div>
+                            <div style="display:flex;align-items:center;gap:20px;justify-content:center;">
+                                ${sp ? `<div style="border:3px solid ${accent};border-radius:50%;padding:3px;flex-shrink:0;">${renderAvatar(sp, 80)}</div>` : ''}
+                                <div style="text-align:left;">
+                                    <div style="color:white;font-size:30px;font-weight:800;line-height:1.1;">${perf.playerName}</div>
+                                    <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+                                        <div style="width:10px;height:10px;border-radius:50%;background:${perf.teamColor};"></div>
+                                        <div style="color:rgba(255,255,255,0.8);font-size:14px;">${perf.teamName}</div>
                                     </div>
                                 </div>
-                            `).join('')}
-                            
-                            ${analytics.biggestMoments.length === 0 ? `
-                                <div style="grid-column:1/-1;background:rgba(255,255,255,0.05);border:2px solid rgba(255,255,255,0.1);border-radius:16px;padding:40px;text-align:center;">
-                                    <p style="color:#818cf8;font-size:20px;margin:0;">
-                                        Every hole was a battle today!
-                                    </p>
+                            </div>
+                            <div style="display:flex;align-items:center;justify-content:center;gap:30px;margin-top:24px;">
+                                <div style="text-align:center;">
+                                    <div style="color:rgba(255,255,255,0.55);font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;">Hole</div>
+                                    <div style="color:white;font-size:52px;font-weight:900;line-height:1;">${perf.holeIdx + 1}</div>
+                                    <div style="color:rgba(255,255,255,0.5);font-size:13px;">Par ${perf.par}</div>
                                 </div>
-                            ` : ''}
+                                <div style="width:1px;height:70px;background:rgba(255,255,255,0.2);"></div>
+                                <div style="text-align:center;">
+                                    <div style="color:rgba(255,255,255,0.55);font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;">Score</div>
+                                    <div style="color:${ntpColor};font-size:52px;font-weight:900;line-height:1;">${perf.gross}</div>
+                                    <div style="color:rgba(255,255,255,0.6);font-size:13px;">net ${perf.net}${perf.strokes > 0 ? ` · ${perf.strokes} stroke${perf.strokes > 1 ? 's' : ''}` : ''}</div>
+                                </div>
+                                <div style="width:1px;height:70px;background:rgba(255,255,255,0.2);"></div>
+                                <div style="text-align:center;">
+                                    <div style="background:${ntpColor};color:white;padding:8px 18px;border-radius:10px;font-size:22px;font-weight:900;letter-spacing:1px;box-shadow:0 4px 16px ${ntpColor}66;">${ntpLabel}</div>
+                                </div>
+                            </div>
                         </div>
+                    `;
+                };
+                
+                // "Everyone on this hole" table
+                const _allScoresTable = (holeIdx, accent) => {
+                    const rows = _allScoresOnHole(holeIdx);
+                    if (rows.length === 0) return '';
+                    return `
+                        <div style="max-width:720px;margin:24px auto 0;animation:slideUp 0.5s ease-out;">
+                            <div style="color:${accent};font-size:13px;font-weight:800;letter-spacing:2px;text-transform:uppercase;text-align:center;margin-bottom:14px;">
+                                📋 Everyone on Hole ${holeIdx + 1} (Par ${mostRecentRound.pars[holeIdx]})
+                            </div>
+                            <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(150px, 1fr));gap:10px;">
+                                ${rows.map(r => {
+                                    const c = _ntpColor(r.netToPar);
+                                    return `
+                                        <div style="background:rgba(255,255,255,0.06);border:1px solid ${c}88;border-radius:10px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                                            <div style="min-width:0;">
+                                                <div style="color:white;font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${r.playerName.split(' ')[0]}</div>
+                                                <div style="color:rgba(255,255,255,0.5);font-size:11px;">net ${r.net}</div>
+                                            </div>
+                                            <div style="color:${c};font-size:28px;font-weight:900;line-height:1;flex-shrink:0;">${r.gross}</div>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                        </div>
+                    `;
+                };
+                
+                // Compose the slide based on current sub-stage
+                let _hpBody = '';
+                if (!_bestPerf) {
+                    _hpBody = `
+                        <div style="grid-column:1/-1;background:rgba(255,255,255,0.05);border:2px solid rgba(255,255,255,0.1);border-radius:16px;padding:40px;text-align:center;">
+                            <p style="color:#818cf8;font-size:20px;margin:0;">No hole data available for this round.</p>
+                        </div>
+                    `;
+                } else if (_hpStep === 0) {
+                    _hpBody = _perfHero(_bestPerf, true);
+                } else if (_hpStep === 1) {
+                    _hpBody = _perfHero(_bestPerf, true) + _allScoresTable(_bestPerf.holeIdx, '#10b981');
+                } else if (_hpStep === 2) {
+                    _hpBody = _perfHero(_worstPerf, false);
+                } else {
+                    _hpBody = _perfHero(_worstPerf, false) + _allScoresTable(_worstPerf.holeIdx, '#ef4444');
+                }
+                
+                // Progress hint
+                const _hpHint = (() => {
+                    if (!_bestPerf) return '';
+                    if (_hpStep === 0) return `Tap "Next →" to see everyone's score on hole ${_bestPerf.holeIdx + 1}`;
+                    if (_hpStep === 1) return `Tap "Next →" for the roughest hole of the day`;
+                    if (_hpStep === 2) return `Tap "Next →" to see everyone's score on hole ${_worstPerf.holeIdx + 1}`;
+                    return '';
+                })();
+                
+                html += `
+                    <div style="animation:fadeIn 0.6s ease-out;max-width:1100px;width:100%;">
+                        <h1 style="color:white;font-size:48px;margin:0 0 30px;text-shadow:0 4px 20px rgba(0,0,0,0.5);text-align:center;">
+                            ⚡ Hole Performances
+                        </h1>
+                        ${_hpBody}
+                        <p style="color:#818cf8;font-size:16px;margin-top:32px;font-style:italic;text-align:center;min-height:24px;">
+                            ${_hpHint}
+                        </p>
                     </div>
                 `;
             } else if (currentSlide === perfIntroSlideIndex) {
@@ -12051,21 +12305,40 @@
                     
                     // Compute bounce-back holes for this player (par-or-better immediately after a bogey-or-worse)
                     const computeBounceBackHoles = () => {
+                        // Returns the hole indices that scored points under the new bounce back rules:
+                        // a stretch of 2+ net bogey-or-worse holes followed by 2+ net par-or-better holes.
+                        // Only the recovery (good) holes are highlighted (up to 3 per qualifying stretch).
                         const out = [];
                         if (!player.scorecard || !mostRecentRound || !Array.isArray(mostRecentRound.pars)) return out;
-                        for (let i = 1; i < player.scorecard.length; i++) {
-                            const prev = parseInt(player.scorecard[i - 1]);
-                            const curr = parseInt(player.scorecard[i]);
-                            if (isNaN(prev) || isNaN(curr)) continue;
-                            const prevPar = mostRecentRound.pars[i - 1];
-                            const currPar = mostRecentRound.pars[i];
-                            const prevHi = mostRecentRound.handicaps[i - 1];
-                            const currHi = mostRecentRound.handicaps[i];
-                            let pStrokes = 0; if (player.handicap >= prevHi) pStrokes = 1; if (player.handicap >= prevHi + 18) pStrokes = 2;
-                            let cStrokes = 0; if (player.handicap >= currHi) cStrokes = 1; if (player.handicap >= currHi + 18) cStrokes = 2;
-                            const prevNet = prev - pStrokes;
-                            const currNet = curr - cStrokes;
-                            if ((prevNet - prevPar >= 1) && (currNet - currPar <= 0)) out.push(i);
+                        // Build per-hole state array
+                        const holeStates = [];
+                        for (let i = 0; i < player.scorecard.length; i++) {
+                            const score = parseInt(player.scorecard[i]);
+                            if (isNaN(score)) { holeStates.push('unscored'); continue; }
+                            const par = mostRecentRound.pars[i];
+                            const hi = mostRecentRound.handicaps[i];
+                            let s = 0; if (player.handicap >= hi) s = 1; if (player.handicap >= hi + 18) s = 2;
+                            const net = score - s;
+                            holeStates.push(net <= par ? 'good' : 'bad');
+                        }
+                        let i = 0;
+                        while (i < holeStates.length) {
+                            if (holeStates[i] === 'bad') {
+                                let badStart = i;
+                                while (i < holeStates.length && holeStates[i] === 'bad') i++;
+                                if ((i - badStart) >= 2 && i < holeStates.length && holeStates[i] === 'good') {
+                                    let goodStart = i;
+                                    while (i < holeStates.length && holeStates[i] === 'good') i++;
+                                    const goodLen = i - goodStart;
+                                    if (goodLen >= 2) {
+                                        // Push the first min(goodLen, 3) recovery hole indices
+                                        const pointCount = Math.min(goodLen, 3);
+                                        for (let k = 0; k < pointCount; k++) out.push(goodStart + k);
+                                    }
+                                }
+                            } else {
+                                i++;
+                            }
                         }
                         return out;
                     };
@@ -12132,7 +12405,10 @@
                     } else if (award.type === 'bounceBack') {
                         displayMode = 'fullScorecard';
                         relevantHoles = computeBounceBackHoles();
-                        highlightLabel = `Bounce-back holes`;
+                        const n = relevantHoles.length;
+                        highlightLabel = n === 0
+                            ? `No qualifying recoveries`
+                            : `${n} recovery point${n === 1 ? '' : 's'}`;
                     } else if (award.type === 'onFire') {
                         displayMode = 'fullScorecard';
                         const streak = computeOnFireStreak();
@@ -12309,7 +12585,6 @@
                                     <div style="font-size:72px;line-height:1;margin-bottom:8px;animation:ex9-sway 2.2s ease-in-out infinite;">💰</div>
                                     <div style="color:#fbbf24;font-size:13px;font-weight:800;letter-spacing:3px;text-transform:uppercase;">Money in the Bank</div>
                                     <div style="color:white;font-size:54px;font-weight:900;line-height:1;margin-top:6px;letter-spacing:-1px;text-shadow:0 4px 18px rgba(0,0,0,0.5);">EXTRA 9 WINNER</div>
-                                    ${holeNumberDisplay ? `<div style="color:rgba(255,255,255,0.92);font-size:18px;font-weight:600;margin-top:8px;">Closest on Hole ${holeNumberDisplay} · Cash collected 💵</div>` : `<div style="color:rgba(255,255,255,0.92);font-size:16px;font-weight:600;margin-top:8px;">Side bet · Cash collected 💵</div>`}
                                 </div>
                             </div>
                         `;
@@ -12706,8 +12981,53 @@
                             }, 250); // small delay so it lands with the visual reveal
                         }
                         
+                        // ELIMINATION sound — only when the loser is actually eliminated from the bracket.
+                        // Plays AFTER the balloon animation begins so it punctuates the dramatic moment.
+                        const _elimSoundFlag = '_elimSoundPlayed_match' + matchIdx;
+                        if (loserEliminated && !presentationState[_elimSoundFlag]) {
+                            presentationState[_elimSoundFlag] = true;
+                            setTimeout(() => {
+                                if (typeof playEliminatedSound === 'function') {
+                                    try { playEliminatedSound(); } catch (e) {}
+                                }
+                            }, 2400); // synced with the balloon-pop keyframe peak
+                        }
+                        
                         const winnerGlow = championshipWinner ? '0 0 60px rgba(251,191,36,0.8), 0 0 120px rgba(251,191,36,0.4)' : '0 4px 30px rgba(16,185,129,0.5)';
+                        // Photo sizes — start dramatic, settle to balanced
+                        // Animation timeline:
+                        //   0.0s: winner photo huge (320px), loser photo tiny (80px)
+                        //   1.5s: photos animate to balanced sizing (winner 150px, loser 90px)
+                        //   2.4s (if eliminated): loser balloons to 220px with red glow + ELIMINATED overlay
+                        //   3.4s: loser settles back to demoted size, opacity drops
                         html += `
+                            <style>
+                                @keyframes mp-winner-shrink {
+                                    0%   { transform: scale(2.4); }
+                                    100% { transform: scale(1); }
+                                }
+                                @keyframes mp-loser-grow {
+                                    0%   { transform: scale(0.55); opacity: 0.4; }
+                                    100% { transform: scale(1); opacity: ${loserEliminated ? '0.85' : '0.55'}; }
+                                }
+                                @keyframes mp-elim-balloon {
+                                    0%   { transform: scale(1); filter: drop-shadow(0 0 0 transparent); opacity: 0.85; }
+                                    35%  { transform: scale(2.3); filter: drop-shadow(0 0 40px rgba(239,68,68,0.9)); opacity: 1; }
+                                    55%  { transform: scale(2.3); filter: drop-shadow(0 0 60px rgba(239,68,68,1)); opacity: 1; }
+                                    100% { transform: scale(1); filter: drop-shadow(0 0 0 transparent); opacity: 0.35; }
+                                }
+                                @keyframes mp-elim-text-pop {
+                                    0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.3) rotate(-12deg); }
+                                    25%  { opacity: 1; transform: translate(-50%, -50%) scale(1.2) rotate(-3deg); }
+                                    45%  { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(0deg); }
+                                    85%  { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(0deg); }
+                                    100% { opacity: 0; transform: translate(-50%, -50%) scale(0.85) rotate(2deg); }
+                                }
+                                @keyframes mp-badge-fade {
+                                    0%   { opacity: 0; transform: translateY(20px); }
+                                    100% { opacity: 1; transform: translateY(0); }
+                                }
+                            </style>
                             <div style="animation:slideUp 0.5s ease-out;max-width:1300px;width:100%;">
                                 <div style="text-align:center;margin-bottom:14px;">
                                     <div style="color:rgba(255,255,255,0.7);font-size:16px;font-weight:600;letter-spacing:3px;">
@@ -12723,34 +13043,48 @@
                                 ` : ''}
                                 
                                 <div style="display:flex;justify-content:center;align-items:center;gap:30px;margin-bottom:24px;flex-wrap:wrap;">
-                                    <div style="text-align:center;animation:scaleIn 0.5s ease-out;">
-                                        <div style="margin:0 auto 10px;filter:drop-shadow(${winnerGlow});">${renderAvatar(winnerPlayer, championshipWinner ? 150 : 130)}</div>
+                                    <!-- WINNER: starts oversized via scale(2.4), shrinks to 1x over 1.5s -->
+                                    <div style="text-align:center;">
+                                        <div style="margin:0 auto 10px;filter:drop-shadow(${winnerGlow});transform-origin:center bottom;animation:mp-winner-shrink 1.5s 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;">
+                                            ${renderAvatar(winnerPlayer, championshipWinner ? 150 : 130)}
+                                        </div>
                                         <div style="color:white;font-size:${championshipWinner ? '40' : '34'}px;font-weight:800;line-height:1.1;text-shadow:0 2px 10px rgba(0,0,0,0.5);">
                                             ${winnerPlayer.name} ${championshipWinner ? '👑' : '🏆'}
                                         </div>
                                         <div style="color:${championshipWinner ? '#fbbf24' : '#10b981'};font-size:14px;margin-top:4px;font-weight:700;">${championshipWinner ? 'TOURNAMENT CHAMPION' : 'WINNER'} · HCP ${winnerHcap}</div>
                                     </div>
-                                    <div style="font-size:24px;color:rgba(255,255,255,0.4);">defeats</div>
-                                    <div style="text-align:center;opacity:0.55;">
-                                        <div style="margin:0 auto 10px;">${renderAvatar(loserPlayer, 90)}</div>
+                                    <div style="font-size:24px;color:rgba(255,255,255,0.4);animation:mp-badge-fade 0.5s 1.2s ease-out backwards;">defeats</div>
+                                    <!-- LOSER: starts tiny via scale(0.55), grows to 1x. If eliminated, balloons later. -->
+                                    <div style="text-align:center;position:relative;">
+                                        <div style="margin:0 auto 10px;transform-origin:center bottom;${loserEliminated
+                                            ? `animation:mp-loser-grow 1.5s 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) backwards, mp-elim-balloon 1.6s 2.4s ease-in-out forwards;`
+                                            : `animation:mp-loser-grow 1.5s 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;`}">
+                                            ${renderAvatar(loserPlayer, 90)}
+                                        </div>
                                         <div style="color:white;font-size:24px;font-weight:600;">${loserPlayer.name}</div>
                                         <div style="color:rgba(255,255,255,0.6);font-size:13px;margin-top:2px;">HCP ${loserHcap}</div>
+                                        ${loserEliminated ? `
+                                            <!-- ELIMINATED text overlay that pops in over the loser photo during balloon -->
+                                            <div style="position:absolute;top:80px;left:50%;transform:translate(-50%, -50%);color:#ef4444;font-size:46px;font-weight:900;letter-spacing:6px;text-shadow:0 4px 20px rgba(0,0,0,0.95), 0 0 30px rgba(239,68,68,0.85);pointer-events:none;animation:mp-elim-text-pop 2.4s 2.5s ease-out backwards;white-space:nowrap;z-index:5;">
+                                                ELIMINATED
+                                            </div>
+                                        ` : ''}
                                     </div>
                                 </div>
                                 
-                                <div style="text-align:center;margin-bottom:20px;animation:slideUp 0.5s 0.15s ease-out backwards;">
+                                <div style="text-align:center;margin-bottom:20px;animation:mp-badge-fade 0.6s 1.5s ease-out backwards;">
                                     <div style="display:inline-block;background:linear-gradient(135deg,#fbbf24 0%,#f59e0b 100%);color:#1f2937;padding:14px 36px;border-radius:14px;box-shadow:0 8px 30px rgba(251,191,36,0.4);">
                                         <div style="font-size:36px;font-weight:900;letter-spacing:2px;line-height:1;">${tagline}</div>
                                         <div style="font-size:15px;margin-top:6px;font-weight:600;opacity:0.8;">${taglineSubtext}</div>
                                     </div>
                                 </div>
                                 
-                                <div style="text-align:center;color:rgba(255,255,255,0.85);font-size:18px;font-weight:600;">
+                                <div style="text-align:center;color:rgba(255,255,255,0.85);font-size:18px;font-weight:600;animation:mp-badge-fade 0.6s 1.8s ease-out backwards;">
                                     Final: ${winnerIsP1 ? detail.totals.slot1Wins : detail.totals.slot2Wins}–${winnerIsP1 ? detail.totals.slot2Wins : detail.totals.slot1Wins} with ${detail.totals.halved} halved
                                     ${match.tiebreakerNote ? ` · <span style="color:#fbbf24;">${match.tiebreakerNote}</span>` : ''}
                                 </div>
                                 
-                                <div style="margin-top:30px;text-align:center;color:rgba(255,255,255,0.5);font-size:16px;font-style:italic;">
+                                <div style="margin-top:30px;text-align:center;color:rgba(255,255,255,0.5);font-size:16px;font-style:italic;animation:mp-badge-fade 0.6s ${loserEliminated ? '4.5' : '2.2'}s ease-out backwards;">
                                     Tap "Next →" for details and what's next
                                 </div>
                             </div>
@@ -15563,23 +15897,37 @@
             
             // ─── SLIDE TRANSITION FADE-IN ───
             // Apply a quick fade-in to the new slide so transitions don't feel like a snap-cut.
-            // Half a cross-fade: the old slide is already gone (removed above), but the new one
-            // eases in over 200ms. Cheap and reads as much more cinematic.
+            // BUT: only fade when the actual slide index changed. Sub-stage transitions (count-up
+            // reveals, award progressions, etc.) should not trigger a full-screen flash — they're
+            // micro-interactions within a slide, not slide changes.
             const _newSlide = document.getElementById('presentationMode');
-            if (_newSlide) {
+            const _currentSlideForFade = presentationState.currentSlide;
+            const _isActualSlideChange = (presentationState._lastRenderedSlide !== _currentSlideForFade);
+            presentationState._lastRenderedSlide = _currentSlideForFade;
+            
+            if (_newSlide && _isActualSlideChange) {
                 // Set initial state synchronously, then transition to final state on the next frame.
                 _newSlide.style.opacity = '0';
                 _newSlide.style.transition = 'opacity 200ms ease-out';
                 requestAnimationFrame(() => {
                     requestAnimationFrame(() => {
                         _newSlide.style.opacity = '1';
-                        // If the just-rendered slide is "By The Numbers" and any of its counter
-                        // elements are new (not yet animated), kick off the count-up animation.
+                        // Kick off the By The Numbers count-up if this slide just landed with counters.
                         if (presentationState._bnNeedsCountUp && typeof window.runByNumbersCountUp === 'function') {
                             window.runByNumbersCountUp();
                             presentationState._bnNeedsCountUp = false;
                         }
                     });
+                });
+            } else if (_newSlide) {
+                // Sub-stage re-render: keep opacity at 1 (no flash) but still run the count-up if a new
+                // counter element appeared in this re-render.
+                _newSlide.style.opacity = '1';
+                requestAnimationFrame(() => {
+                    if (presentationState._bnNeedsCountUp && typeof window.runByNumbersCountUp === 'function') {
+                        window.runByNumbersCountUp();
+                        presentationState._bnNeedsCountUp = false;
+                    }
                 });
             }
             
@@ -15680,6 +16028,15 @@
                 return;
             }
             
+            // Hole Performance progressive reveal: 4 sub-stages.
+            //   0 best → 1 best+all → 2 worst → 3 worst+all → (next tap) next slide
+            const holePerfIdx = presentationState._holePerfSlideIndex;
+            if (!_navOnPhoto && holePerfIdx >= 0 && _navContentIdx === holePerfIdx && (presentationState.holePerfRevealStep || 0) < 3) {
+                presentationState.holePerfRevealStep = (presentationState.holePerfRevealStep || 0) + 1;
+                renderPresentation();
+                return;
+            }
+            
             // BBB Leaders top-5 reveal: advance sub-step until exhausted
             const bbbLeadersIdx = presentationState._bbbLeadersSlideIndex;
             const bbbLeadersCount = presentationState._bbbLeadersCount || 0;
@@ -15748,6 +16105,7 @@
             presentationState.bbbLeadersRevealStep = 0;
             presentationState.teamRevealStep = 0;
             presentationState.byNumbersRevealStep = 0;
+            presentationState.holePerfRevealStep = 0;
             presentationState._byNumbersRecordSoundPlayed = false;
             presentationState._teamIntroFanfarePlayed = false; // allow re-play on revisit
             presentationState._perfIntroSoundPlayed = false;
@@ -15867,6 +16225,13 @@
                     presentationState.byNumbersRevealStep = 3;
                 } else {
                     presentationState.byNumbersRevealStep = 0;
+                }
+                // When entering Hole Performance via Back, jump to fully-revealed (worst + all scores)
+                const _holePerfIdx2 = presentationState._holePerfSlideIndex;
+                if (!_newOnPhoto && _holePerfIdx2 >= 0 && _newContentIdx === _holePerfIdx2) {
+                    presentationState.holePerfRevealStep = 3;
+                } else {
+                    presentationState.holePerfRevealStep = 0;
                 }
                 // Reset the record-sound flag so it can replay if user returns
                 presentationState._byNumbersRecordSoundPlayed = false;
@@ -16690,30 +17055,152 @@
             }
         };
         
+        // ─── Eliminated sound ───
+        // Dramatic descending "you're out" stinger for match-play eliminations.
+        // Layered sound: a heavy bass thump + a descending sawtooth swoop + a brief noise crash.
+        // ~1.5 seconds total. Punchier and shorter than the sad trombone (which is for record-worsts).
+        window.playEliminatedSound = () => {
+            try {
+                if (window.__presentationMuted) return;
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (!AudioContext) return;
+                const ctx = new AudioContext();
+                const now = ctx.currentTime;
+                
+                const master = ctx.createGain();
+                master.gain.value = 0.38;
+                master.connect(ctx.destination);
+                
+                // 1) Heavy bass thump — low sine wave, quick decay
+                const thump = ctx.createOscillator();
+                thump.type = 'sine';
+                thump.frequency.setValueAtTime(120, now);
+                thump.frequency.exponentialRampToValueAtTime(40, now + 0.5);
+                const thumpGain = ctx.createGain();
+                thumpGain.gain.setValueAtTime(0, now);
+                thumpGain.gain.linearRampToValueAtTime(0.85, now + 0.02);
+                thumpGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.6);
+                thump.connect(thumpGain).connect(master);
+                thump.start(now);
+                thump.stop(now + 0.7);
+                
+                // 2) Descending swoop — sawtooth from A4 down to A2 over 1.2s
+                const swoop = ctx.createOscillator();
+                swoop.type = 'sawtooth';
+                swoop.frequency.setValueAtTime(440, now + 0.1);
+                swoop.frequency.exponentialRampToValueAtTime(110, now + 1.3);
+                const swoopGain = ctx.createGain();
+                swoopGain.gain.setValueAtTime(0, now + 0.1);
+                swoopGain.gain.linearRampToValueAtTime(0.35, now + 0.25);
+                swoopGain.gain.exponentialRampToValueAtTime(0.0001, now + 1.5);
+                const swoopFilter = ctx.createBiquadFilter();
+                swoopFilter.type = 'lowpass';
+                swoopFilter.frequency.value = 1400;
+                swoopFilter.Q.value = 2.5;
+                swoop.connect(swoopFilter).connect(swoopGain).connect(master);
+                swoop.start(now + 0.1);
+                swoop.stop(now + 1.55);
+                
+                // 3) Brief noise crash for impact at the start
+                const noiseBufferSize = 0.25 * ctx.sampleRate;
+                const noiseBuffer = ctx.createBuffer(1, noiseBufferSize, ctx.sampleRate);
+                const noiseData = noiseBuffer.getChannelData(0);
+                for (let i = 0; i < noiseBufferSize; i++) noiseData[i] = (Math.random() * 2 - 1) * (1 - i / noiseBufferSize);
+                const noise = ctx.createBufferSource();
+                noise.buffer = noiseBuffer;
+                const noiseGain = ctx.createGain();
+                noiseGain.gain.value = 0.45;
+                const noiseFilter = ctx.createBiquadFilter();
+                noiseFilter.type = 'bandpass';
+                noiseFilter.frequency.value = 800;
+                noiseFilter.Q.value = 0.7;
+                noise.connect(noiseFilter).connect(noiseGain).connect(master);
+                noise.start(now);
+                
+                setTimeout(() => { try { ctx.close(); } catch (e) {} }, 1700);
+            } catch (err) {
+                console.warn('Eliminated sound failed:', err);
+            }
+        };
+        
         // ─── By The Numbers count-up animator ───
-        // Called from the post-render hook in renderPresentation when the By The Numbers slide
-        // has new counter elements that haven't been animated yet. Each .bn-counter element holds
-        // a data-target (final integer) and an optional data-format ("comma" for thousands separators).
-        // Animation eases from 0 → target over 1.4 seconds using easeOutQuart for a slot-machine feel.
+        // Walks each .bn-counter element forward from 0 to data-target, slowing dramatically
+        // when crossing a milestone (last-round value, all-time best/worst). After landing on
+        // the final value, demotes the prominent "TARGET" pills to the small subtext rows.
+        //
+        // Slowdown mechanics: the function uses time-based animation with a milestone proximity
+        // multiplier — when the current value is within a small zone around a milestone, the
+        // animation's effective speed is reduced (we slow the easing progress). At the exact
+        // crossing frame, we hold briefly (~250ms) for an audible "tick" of suspense.
         window.runByNumbersCountUp = () => {
             document.querySelectorAll('.bn-counter').forEach(el => {
-                if (el.dataset.bnAnimated === '1') return; // already animated; skip
+                if (el.dataset.bnAnimated === '1') return; // already animated (either by this call earlier, or pre-stamped from a prior sub-stage)
                 el.dataset.bnAnimated = '1';
+                
                 const target = parseInt(el.dataset.target, 10) || 0;
                 const format = el.dataset.format || 'plain';
-                const duration = 1400; // ms
-                const start = performance.now();
+                const baseDuration = 1800; // ms — slightly longer to give room for milestone pauses
+                const milestonesRaw = (el.dataset.milestones || '').split(',').filter(s => s.length > 0);
+                const milestones = milestonesRaw
+                    .map(m => parseInt(m, 10))
+                    .filter(n => Number.isFinite(n) && n > 0 && n < target * 1.2)
+                    .sort((a, b) => a - b); // ascending
+                
+                const startedAt = performance.now();
+                const ms = milestones.slice(); // mutable queue of milestones still ahead
+                let pausedUntil = 0; // timestamp the animation should resume after a milestone pause
+                let lastCrossedValue = -1;
+                
+                // Find the card element containing this counter so we can flip prominent → subtle when done.
+                const card = el.closest('div[style*="border-radius:20px"]');
+                
+                const formatVal = (n) => format === 'comma' ? n.toLocaleString() : n;
+                
                 const step = (now) => {
-                    const t = Math.min(1, (now - start) / duration);
-                    // easeOutQuart — fast start, slow finish (the slot-machine landing feel)
+                    if (now < pausedUntil) {
+                        requestAnimationFrame(step);
+                        return;
+                    }
+                    const elapsed = now - startedAt - 0; // raw elapsed since start (pause time excluded already)
+                    const t = Math.min(1, elapsed / baseDuration);
+                    // easeOutQuart — fast start, slow finish
                     const eased = 1 - Math.pow(1 - t, 4);
                     const v = Math.round(target * eased);
-                    el.textContent = format === 'comma' ? v.toLocaleString() : v;
+                    el.textContent = formatVal(v);
+                    
+                    // Check if we just crossed (or landed on) a milestone — if so, pause briefly
+                    while (ms.length > 0 && v >= ms[0] && ms[0] > lastCrossedValue) {
+                        lastCrossedValue = ms[0];
+                        ms.shift();
+                        pausedUntil = now + 280; // 280ms hold per milestone
+                        break;
+                    }
+                    
                     if (t < 1) {
                         requestAnimationFrame(step);
                     } else {
-                        // Snap to exact target on the final frame to avoid any rounding drift
-                        el.textContent = format === 'comma' ? target.toLocaleString() : target;
+                        // Snap to exact target on the final frame
+                        el.textContent = formatVal(target);
+                        // Demote: hide the prominent target pills, show the subtle comparison text.
+                        if (card) {
+                            const prominent = card.querySelector('.bn-targets-prominent');
+                            const subtle = card.querySelector('.bn-targets-subtle');
+                            if (prominent) {
+                                // Fade out smoothly
+                                prominent.style.transition = 'opacity 0.4s ease-out, max-height 0.4s ease-out, margin 0.4s ease-out';
+                                prominent.style.opacity = '0';
+                                prominent.style.maxHeight = '0';
+                                prominent.style.marginBottom = '0';
+                                prominent.style.overflow = 'hidden';
+                                setTimeout(() => { prominent.style.display = 'none'; }, 400);
+                            }
+                            if (subtle) {
+                                setTimeout(() => {
+                                    subtle.style.display = 'block';
+                                    subtle.style.animation = 'fadeIn 0.5s ease-out';
+                                }, 300);
+                            }
+                        }
                     }
                 };
                 requestAnimationFrame(step);
