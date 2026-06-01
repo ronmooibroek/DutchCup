@@ -527,7 +527,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.05.30.10';
+        const APP_VERSION = '2026.05.30.11';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -12153,8 +12153,9 @@
                         presentationState._championIntroSoundPlayed = true;
                         presentationState.isWinnerSlide = true; // trigger confetti via existing hook
                         setTimeout(() => {
-                            if (typeof playChampionIntroFanfare === 'function') {
-                                try { playChampionIntroFanfare(); } catch (e) {}
+                            // Signature track for the Champion Golfer of the Day reveal.
+                            if (typeof playMp3File === 'function') {
+                                try { playMp3File('Sounds/All-I-do-is-win.mp3', 0.8); } catch (e) {}
                             }
                         }, 200);
                     }
@@ -17267,6 +17268,30 @@
                 }
             } catch (err) {
                 console.warn('Badge sound failed:', err);
+            }
+        };
+        
+        // ─── Generic MP3 player ───
+        // Plays an arbitrary MP3 by path (e.g. 'Sounds/All-I-do-is-win.mp3'), honoring the app-wide
+        // mute and caching the Audio element for replays. Used for slide-specific signature tracks.
+        window.playMp3File = (file, volume) => {
+            try {
+                if (window.__presentationMuted) return;
+                if (!file) return;
+                let audio = window.__badgeAudioCache[file];
+                if (!audio) {
+                    audio = new Audio(file);
+                    audio.preload = 'auto';
+                    window.__badgeAudioCache[file] = audio;
+                }
+                audio.volume = (typeof volume === 'number') ? volume : 0.7;
+                try { audio.currentTime = 0; } catch (e) {}
+                const p = audio.play();
+                if (p && typeof p.catch === 'function') {
+                    p.catch(err => console.warn('MP3 playback blocked:', err && err.message));
+                }
+            } catch (err) {
+                console.warn('MP3 play failed:', err);
             }
         };
         
