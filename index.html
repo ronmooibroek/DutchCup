@@ -527,7 +527,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.05.30.9';
+        const APP_VERSION = '2026.05.30.10';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -2091,7 +2091,7 @@
                     <div class="list-item" onclick="navigate('soundtest')">
                         <div>
                             <strong>🔊 Sound Test</strong><br>
-                            <small>Test MP3 files in the sounds/ folder</small>
+                            <small>Test MP3 files in the Sounds/ folder</small>
                         </div>
                         <span style="font-size:24px;">→</span>
                     </div>
@@ -5162,7 +5162,7 @@
         };
 
         // ─── SOUND TEST PAGE ───
-        // A staging area for verifying MP3 files uploaded to the GitHub sounds/ folder before
+        // A staging area for verifying MP3 files uploaded to the GitHub Sounds/ folder before
         // wiring them into the presentation. Enter a filename (or full path), tap Play, and see
         // whether it loaded and played. Known/likely files are offered as quick buttons.
         window._soundTestAudio = null;
@@ -5171,8 +5171,8 @@
             const setStatus = (msg, color) => { if (statusEl) { statusEl.textContent = msg; statusEl.style.color = color || '#374151'; } };
             if (!rawPath || !rawPath.trim()) { setStatus('Enter a filename first (e.g. applause.mp3)', '#b91c1c'); return; }
             let path = rawPath.trim();
-            // If they entered a bare filename, assume it lives in the sounds/ folder.
-            if (!path.includes('/')) path = 'sounds/' + path;
+            // If they entered a bare filename, assume it lives in the Sounds/ folder (capital S — matches GitHub).
+            if (!path.includes('/')) path = 'Sounds/' + path;
             // Stop anything currently playing
             try { if (window._soundTestAudio) { window._soundTestAudio.pause(); window._soundTestAudio = null; } } catch (e) {}
             setStatus('Loading ' + path + ' …', '#6b7280');
@@ -5181,7 +5181,7 @@
             audio.addEventListener('canplaythrough', () => setStatus('▶ Playing: ' + path, '#047857'), { once: true });
             audio.addEventListener('ended', () => setStatus('✓ Finished: ' + path, '#047857'), { once: true });
             audio.addEventListener('error', () => {
-                setStatus('✗ Could not load ' + path + ' — check the filename and that it is committed to the sounds/ folder.', '#b91c1c');
+                setStatus('✗ Could not load ' + path + ' — check the filename and that it is committed to the Sounds/ folder.', '#b91c1c');
             }, { once: true });
             audio.play().then(() => {
                 setStatus('▶ Playing: ' + path, '#047857');
@@ -5206,7 +5206,7 @@
             try {
                 if (window.__badgeSoundMap) Object.values(window.__badgeSoundMap).forEach(v => known.add(v));
             } catch (e) {}
-            known.add('sounds/you-win.mp3');
+            known.add('Sounds/you-win.mp3');
             const knownList = Array.from(known).sort();
             // Some common filenames Ron might be uploading — editable starting points.
             const suggestions = ['applause.mp3', 'cheer.mp3', 'drumroll.mp3', 'airhorn.mp3', 'fanfare.mp3', 'sad-trombone.mp3'];
@@ -5216,9 +5216,9 @@
                 <div class="card">
                     <h2>🔊 Sound Test</h2>
                     <p style="color:#6b7280;margin-bottom:16px;">
-                        Test MP3 files you've uploaded to the <code>sounds/</code> folder on GitHub before wiring
+                        Test MP3 files you've uploaded to the <code>Sounds/</code> folder on GitHub before wiring
                         them into the presentation. Type a filename and tap Play. A bare name like
-                        <code>applause.mp3</code> is looked up in <code>sounds/</code> automatically; you can also
+                        <code>applause.mp3</code> is looked up in <code>Sounds/</code> automatically; you can also
                         paste a full path or URL.
                     </p>
                     
@@ -5251,7 +5251,7 @@
                     
                     <div style="background:#fef9c3;border:1px solid #facc15;border-radius:8px;padding:14px;font-size:13px;color:#854d0e;">
                         <strong>Tips:</strong> filenames are case-sensitive and must match exactly what's in GitHub.
-                        If a file won't play, confirm it's committed to <code>sounds/</code> and the page has been
+                        If a file won't play, confirm it's committed to <code>Sounds/</code> and the page has been
                         refreshed. Some browsers need one tap on the page before audio is allowed — tapping Play counts.
                     </div>
                 </div>
@@ -12977,7 +12977,7 @@
                     // ── STAGE 1: result + tagline + final score ──
                     else if (stage === 1) {
                         // Play badge-specific MP3 sound on first land (gated by per-match flag so re-renders don't replay).
-                        // Sound file is looked up from window.__badgeSoundMap by tagline (e.g. "DOMINATION" → sounds/you-win.mp3).
+                        // Sound file is looked up from window.__badgeSoundMap by tagline (e.g. "DOMINATION" → Sounds/you-win.mp3).
                         const _badgeSoundFlag = '_badgeSoundPlayed_match' + matchIdx;
                         if (!presentationState[_badgeSoundFlag]) {
                             presentationState[_badgeSoundFlag] = true;
@@ -17107,27 +17107,27 @@
         };
         
         // ─── Badge sound effects via MP3 files hosted in the repo ───
-        // Maps each match-play tagline to an MP3 filename. Drop the MP3s into a `sounds/` folder
+        // Maps each match-play tagline to an MP3 filename. Drop the MP3s into a `Sounds/` folder
         // in the GitHub repo (alongside index.html) and they'll play when that badge appears.
         // Missing files fail silently — no broken UI, just no sound.
         window.__badgeSoundMap = {
             // Universal/default celebration sound — used if no specific mapping is found.
             // Set this to the Pixabay "You Win" MP3 you mentioned.
-            'DEFAULT':            'sounds/you-win.mp3',
+            'DEFAULT':            'Sounds/you-win.mp3',
             
             // Specific badge taglines → specific MP3s. Add filenames once you upload them.
             // The KEY here should match exactly what's in slide.tagline (uppercase).
-            'DOMINATION':         'sounds/you-win.mp3',
-            'WIRE-TO-WIRE':       'sounds/you-win.mp3',
-            'WIPEOUT':            'sounds/you-win.mp3',
-            'BIG COMEBACK':       'sounds/you-win.mp3',
-            'COMEBACK':           'sounds/you-win.mp3',
-            'NAILBITER':          'sounds/you-win.mp3',
-            'BACK-AND-FORTH':     'sounds/you-win.mp3',
-            'DECIDED ON LAST HOLE': 'sounds/you-win.mp3',
-            'CLINICAL':           'sounds/you-win.mp3',
-            'GRINDER':            'sounds/you-win.mp3',
-            'SOLID WIN':          'sounds/you-win.mp3'
+            'DOMINATION':         'Sounds/you-win.mp3',
+            'WIRE-TO-WIRE':       'Sounds/you-win.mp3',
+            'WIPEOUT':            'Sounds/you-win.mp3',
+            'BIG COMEBACK':       'Sounds/you-win.mp3',
+            'COMEBACK':           'Sounds/you-win.mp3',
+            'NAILBITER':          'Sounds/you-win.mp3',
+            'BACK-AND-FORTH':     'Sounds/you-win.mp3',
+            'DECIDED ON LAST HOLE': 'Sounds/you-win.mp3',
+            'CLINICAL':           'Sounds/you-win.mp3',
+            'GRINDER':            'Sounds/you-win.mp3',
+            'SOLID WIN':          'Sounds/you-win.mp3'
         };
         
         // Cache for Audio elements so they don't reload on every play
