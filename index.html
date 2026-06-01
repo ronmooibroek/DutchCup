@@ -527,7 +527,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.05.30.5';
+        const APP_VERSION = '2026.05.30.6';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -10093,7 +10093,17 @@
                         
                         // ── Tagline classifier ──
                         // Build the per-segment-hole differential trajectory (winner perspective)
-                        const winnerSlot = m.winner;          // 'slot1' or 'slot2'
+                        // IMPORTANT: derive the winner LIVE from the current round scores rather than
+                        // trusting the stored m.winner. Decided bracket matches are frozen and never
+                        // recomputed (to protect old rounds from edits), so if scores were edited after
+                        // the match was first decided, m.winner can be stale and contradict the scorecard.
+                        // Recomputing here guarantees the presentation's winner always matches its own
+                        // displayed hole-by-hole result. Falls back to the stored winner if scores are
+                        // incomplete (live recompute would be unreliable then).
+                        const _liveResult = computeMatchFromRound(p1.id, p2.id, matchRound, m.holeSegment || 'full');
+                        const winnerSlot = (_liveResult && _liveResult.winner) ? _liveResult.winner : m.winner;
+                        // Prefer the live tiebreaker note when we recomputed; otherwise keep the stored one.
+                        const _liveTiebreakerNote = (_liveResult && _liveResult.winner) ? _liveResult.tiebreakerNote : (m.tiebreakerNote || null);
                         const segmentHoles = detail.holes.filter(h => h.inSegment);
                         const trajectory = []; // signed: +N = winner ahead by N, -N = behind
                         let leadChanges = 0;
@@ -10214,6 +10224,10 @@
                         bracketMatchSlides.push({
                             match: m,
                             detail: detail,
+                            // Live-derived winner (recomputed from current scores), used by the stage renderer
+                            // instead of the potentially-stale match.winner.
+                            liveWinnerSlot: winnerSlot,
+                            liveTiebreakerNote: _liveTiebreakerNote,
                             p1: p1, p2: p2,
                             hcap1: hcap1, hcap2: hcap2,
                             winnerPlayer: winnerSlot === 'slot1' ? p1 : p2,
@@ -12866,9 +12880,12 @@
                             winnerPlayer, loserPlayer, winnerHcap, loserHcap, detail,
                             tagline, taglineSubtext, dramatic, trajectory,
                             loserEliminated, championshipWinner, runnerUp, isGrandFinal,
-                            winnerNextMatchInfo, loserNextMatchInfo } = slide;
+                            winnerNextMatchInfo, loserNextMatchInfo,
+                            liveWinnerSlot, liveTiebreakerNote } = slide;
                     
-                    const winnerSlot = match.winner;  // 'slot1' | 'slot2'
+                    // Use the live-derived winner (recomputed from current scores) so the displayed
+                    // winner can never contradict the displayed scorecard. Falls back to match.winner.
+                    const winnerSlot = liveWinnerSlot || match.winner;  // 'slot1' | 'slot2'
                     const winnerIsP1 = winnerSlot === 'slot1';
                     
                     // Trigger confetti for: dramatic taglines OR championship
@@ -13081,7 +13098,7 @@
                                 
                                 <div style="text-align:center;color:rgba(255,255,255,0.85);font-size:18px;font-weight:600;animation:mp-badge-fade 0.6s 1.8s ease-out backwards;">
                                     Final: ${winnerIsP1 ? detail.totals.slot1Wins : detail.totals.slot2Wins}–${winnerIsP1 ? detail.totals.slot2Wins : detail.totals.slot1Wins} with ${detail.totals.halved} halved
-                                    ${match.tiebreakerNote ? ` · <span style="color:#fbbf24;">${match.tiebreakerNote}</span>` : ''}
+                                    ${liveTiebreakerNote ? ` · <span style="color:#fbbf24;">${liveTiebreakerNote}</span>` : ''}
                                 </div>
                                 
                                 <div style="margin-top:30px;text-align:center;color:rgba(255,255,255,0.5);font-size:16px;font-style:italic;animation:mp-badge-fade 0.6s ${loserEliminated ? '4.5' : '2.2'}s ease-out backwards;">
@@ -13220,7 +13237,7 @@
                             } else if (finalState === 0) {
                                 // Match went all 18 (or all of segment) all-square. Resolved by tiebreaker.
                                 // Pull the actual tiebreaker rule from the match data if available.
-                                const tbNote = (match && match.tiebreakerNote) ? match.tiebreakerNote : null;
+                                const tbNote = liveTiebreakerNote || (match && match.tiebreakerNote ? match.tiebreakerNote : null);
                                 // Translate the stored notation into a player-readable sentence.
                                 let tbExplain = '';
                                 if (tbNote && tbNote.startsWith('Won on last')) {
@@ -19774,19 +19791,41 @@
         };
         
         // Re-resolve ALL matches for ALL rounds of an event (manual Recompute button).
+        // Unlike the auto-resolve path (which leaves decided matches frozen to protect old rounds),
+        // this explicit user action recomputes EVERY score-resolved match from the CURRENT scores.
+        // This fixes stale results when scores were edited after a match was first decided.
+        // Manual overrides (isManualOverride=true) are preserved — only score-resolved results reset.
         window.bracketRecomputeAll = (eventId) => {
             const event = state.events.find(e => e.id === eventId);
             if (!event || !event.bracket) return;
-            const maxRound = Math.max(0, ...Object.values(event.bracket.matches).map(m => m.roundNumber || 0));
+            
+            // Step 1: reset all score-resolved (non-override) decided matches back to pending so they
+            // re-resolve against current scores. Manual overrides stay put.
+            const resetMatches = { ...event.bracket.matches };
+            let anyReset = false;
+            Object.keys(resetMatches).forEach(id => {
+                const m = resetMatches[id];
+                if (m.status === 'decided' && !m.isManualOverride) {
+                    resetMatches[id] = { ...m, status: 'pending', winner: null, loser: null, holeWins: null, tiebreakerNote: null, resolvedAt: null };
+                    anyReset = true;
+                }
+            });
+            if (anyReset) {
+                saveBracket(eventId, { ...event.bracket, matches: resetMatches, status: 'locked' });
+            }
+            
+            // Step 2: resolve every round from current scores
+            const evFresh = state.events.find(e => e.id === eventId);
+            const maxRound = Math.max(0, ...Object.values(evFresh.bracket.matches).map(m => m.roundNumber || 0));
             const allNewlyDecided = [];
             for (let r = 1; r <= maxRound; r++) {
                 const decided = resolveBracketForRound(eventId, r);
                 allNewlyDecided.push(...decided);
             }
             if (allNewlyDecided.length > 0) {
-                notify(`✅ Resolved ${allNewlyDecided.length} match${allNewlyDecided.length === 1 ? '' : 'es'}`);
+                notify(`✅ Recomputed ${allNewlyDecided.length} match${allNewlyDecided.length === 1 ? '' : 'es'} from current scores`);
             } else {
-                notify('No new matches resolved');
+                notify('No matches to recompute');
             }
             render();
         };
