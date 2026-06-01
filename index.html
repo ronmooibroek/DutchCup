@@ -527,7 +527,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.05.30.8';
+        const APP_VERSION = '2026.05.30.9';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -10886,8 +10886,8 @@
             // true low-net leader is ineligible (already won): we show them first, then the eligible
             // winner with a note of who was skipped.
             presentationState._netTopCount = (presentationState.netTop5 || []).length
-                + (presentationAnalytics.netLeaderIneligible ? 1 : 0);
-            presentationState._netLeaderIneligible = !!presentationAnalytics.netLeaderIneligible;
+                + (presentationState.netLeaderIneligible ? 1 : 0);
+            presentationState._netLeaderIneligible = !!presentationState.netLeaderIneligible;
             // Disabled — BBB / CTP / Extra9 winner standalone slides also roll into per-player segments
             const bbbSlideIndex = -1;
             const ctpChampionSlideIndex = -1; // replaced by ctpLeadersSlideIndex (top-5 reveal)
