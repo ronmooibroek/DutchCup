@@ -527,7 +527,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.05.30.7';
+        const APP_VERSION = '2026.05.30.8';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -1874,6 +1874,8 @@
                 renderSettings();
             } else if (state.view === 'export') {
                 renderExport();
+            } else if (state.view === 'soundtest') {
+                renderSoundTest();
             }
         };
 
@@ -2083,6 +2085,13 @@
                         <div>
                             <strong>💾 Export/Import</strong><br>
                             <small>Backup & restore data</small>
+                        </div>
+                        <span style="font-size:24px;">→</span>
+                    </div>
+                    <div class="list-item" onclick="navigate('soundtest')">
+                        <div>
+                            <strong>🔊 Sound Test</strong><br>
+                            <small>Test MP3 files in the sounds/ folder</small>
                         </div>
                         <span style="font-size:24px;">→</span>
                     </div>
@@ -5152,6 +5161,103 @@
             `;
         };
 
+        // ─── SOUND TEST PAGE ───
+        // A staging area for verifying MP3 files uploaded to the GitHub sounds/ folder before
+        // wiring them into the presentation. Enter a filename (or full path), tap Play, and see
+        // whether it loaded and played. Known/likely files are offered as quick buttons.
+        window._soundTestAudio = null;
+        window.testPlaySound = (rawPath) => {
+            const statusEl = document.getElementById('soundTestStatus');
+            const setStatus = (msg, color) => { if (statusEl) { statusEl.textContent = msg; statusEl.style.color = color || '#374151'; } };
+            if (!rawPath || !rawPath.trim()) { setStatus('Enter a filename first (e.g. applause.mp3)', '#b91c1c'); return; }
+            let path = rawPath.trim();
+            // If they entered a bare filename, assume it lives in the sounds/ folder.
+            if (!path.includes('/')) path = 'sounds/' + path;
+            // Stop anything currently playing
+            try { if (window._soundTestAudio) { window._soundTestAudio.pause(); window._soundTestAudio = null; } } catch (e) {}
+            setStatus('Loading ' + path + ' …', '#6b7280');
+            const audio = new Audio(path);
+            window._soundTestAudio = audio;
+            audio.addEventListener('canplaythrough', () => setStatus('▶ Playing: ' + path, '#047857'), { once: true });
+            audio.addEventListener('ended', () => setStatus('✓ Finished: ' + path, '#047857'), { once: true });
+            audio.addEventListener('error', () => {
+                setStatus('✗ Could not load ' + path + ' — check the filename and that it is committed to the sounds/ folder.', '#b91c1c');
+            }, { once: true });
+            audio.play().then(() => {
+                setStatus('▶ Playing: ' + path, '#047857');
+            }).catch(err => {
+                setStatus('✗ Playback blocked or file missing: ' + (err && err.message ? err.message : path), '#b91c1c');
+            });
+        };
+        window.stopTestSound = () => {
+            try { if (window._soundTestAudio) { window._soundTestAudio.pause(); window._soundTestAudio.currentTime = 0; } } catch (e) {}
+            const statusEl = document.getElementById('soundTestStatus');
+            if (statusEl) { statusEl.textContent = 'Stopped.'; statusEl.style.color = '#6b7280'; }
+        };
+        window.testPlayFromInput = () => {
+            const inp = document.getElementById('soundTestInput');
+            window.testPlaySound(inp ? inp.value : '');
+        };
+        
+        const renderSoundTest = () => {
+            const app = document.getElementById('app');
+            // Gather the distinct filenames the app already references, so Ron can confirm those load.
+            const known = new Set();
+            try {
+                if (window.__badgeSoundMap) Object.values(window.__badgeSoundMap).forEach(v => known.add(v));
+            } catch (e) {}
+            known.add('sounds/you-win.mp3');
+            const knownList = Array.from(known).sort();
+            // Some common filenames Ron might be uploading — editable starting points.
+            const suggestions = ['applause.mp3', 'cheer.mp3', 'drumroll.mp3', 'airhorn.mp3', 'fanfare.mp3', 'sad-trombone.mp3'];
+            
+            app.innerHTML = `
+                <button class="back-btn" onclick="stopTestSound(); navigate('home')">← Back</button>
+                <div class="card">
+                    <h2>🔊 Sound Test</h2>
+                    <p style="color:#6b7280;margin-bottom:16px;">
+                        Test MP3 files you've uploaded to the <code>sounds/</code> folder on GitHub before wiring
+                        them into the presentation. Type a filename and tap Play. A bare name like
+                        <code>applause.mp3</code> is looked up in <code>sounds/</code> automatically; you can also
+                        paste a full path or URL.
+                    </p>
+                    
+                    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+                        <input id="soundTestInput" type="text" placeholder="applause.mp3"
+                               style="flex:1;min-width:200px;padding:12px;border:2px solid #d1d5db;border-radius:8px;font-size:16px;"
+                               onkeydown="if(event.key==='Enter'){testPlayFromInput();}">
+                        <button onclick="testPlayFromInput()" class="btn-primary" style="padding:12px 20px;font-weight:600;">▶ Play</button>
+                        <button onclick="stopTestSound()" class="btn-secondary" style="padding:12px 16px;">■ Stop</button>
+                    </div>
+                    
+                    <div id="soundTestStatus" style="min-height:24px;font-size:14px;font-weight:600;color:#6b7280;margin-bottom:20px;padding:8px 0;">
+                        Ready. Enter a filename and tap Play.
+                    </div>
+                    
+                    <h3 style="font-size:16px;margin:0 0 8px;color:#374151;">Already used in the app</h3>
+                    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px;">
+                        ${knownList.map(f => `
+                            <button onclick="testPlaySound('${f.replace(/'/g, "\\'")}')" class="btn-secondary" style="padding:8px 14px;font-size:13px;">▶ ${f}</button>
+                        `).join('')}
+                    </div>
+                    
+                    <h3 style="font-size:16px;margin:0 0 8px;color:#374151;">Quick-fill suggestions</h3>
+                    <p style="color:#9ca3af;font-size:13px;margin:0 0 8px;">Tap to drop the name into the box (then Play). These are just guesses — use your actual filenames.</p>
+                    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px;">
+                        ${suggestions.map(f => `
+                            <button onclick="document.getElementById('soundTestInput').value='${f}';" class="btn-secondary" style="padding:8px 14px;font-size:13px;background:#eef2ff;color:#3730a3;">${f}</button>
+                        `).join('')}
+                    </div>
+                    
+                    <div style="background:#fef9c3;border:1px solid #facc15;border-radius:8px;padding:14px;font-size:13px;color:#854d0e;">
+                        <strong>Tips:</strong> filenames are case-sensitive and must match exactly what's in GitHub.
+                        If a file won't play, confirm it's committed to <code>sounds/</code> and the page has been
+                        refreshed. Some browsers need one tap on the page before audio is allowed — tapping Play counts.
+                    </div>
+                </div>
+            `;
+        };
+        
         const renderExport = () => {
             const app = document.getElementById('app');
             const totalRecords = state.players.length + state.courses.length + state.teams.length + state.events.length + state.rounds.length;
@@ -8074,7 +8180,9 @@
                     }
                 });
                 
-                // Calculate net scores for today's round
+                // Calculate net scores for today's round — include EVERYONE, tagging eligibility.
+                // (Previous net winners are not eligible to win again, but we still want to SHOW them
+                // if they posted the lowest net, then award the trophy to the top eligible player.)
                 const todaysNetScores = [];
                 mostRecentRound.teams.forEach(team => {
                     // Look up team info from state
@@ -8083,23 +8191,23 @@
                     const teamColor = stateTeam ? (stateTeam.color || '#3b82f6') : '#3b82f6';
                     
                     team.players.forEach(player => {
-                        if (!previousNetWinners.has(player.id)) {
-                            // Calculate gross score (sum of all holes)
-                            const grossScore = sumScores(player.scores);
-                            const _statePlayer = state.players.find(sp => sp.id === player.id);
-                            const _effHc = getPlayerHandicapForRound(_statePlayer, mostRecentRound, player);
-                            const netScore = grossScore - (_effHc || 0);
-                            
-                            todaysNetScores.push({
-                                playerId: player.id,
-                                playerName: player.name,
-                                teamName: teamName,
-                                teamColor: teamColor,
-                                grossScore: grossScore,
-                                netScore: netScore,
-                                handicap: _effHc || 0
-                            });
-                        }
+                        // Calculate gross score (sum of all holes)
+                        const grossScore = sumScores(player.scores);
+                        if (grossScore <= 0) return; // skip players who didn't post a score
+                        const _statePlayer = state.players.find(sp => sp.id === player.id);
+                        const _effHc = getPlayerHandicapForRound(_statePlayer, mostRecentRound, player);
+                        const netScore = grossScore - (_effHc || 0);
+                        
+                        todaysNetScores.push({
+                            playerId: player.id,
+                            playerName: player.name,
+                            teamName: teamName,
+                            teamColor: teamColor,
+                            grossScore: grossScore,
+                            netScore: netScore,
+                            handicap: _effHc || 0,
+                            eligible: !previousNetWinners.has(player.id)
+                        });
                     });
                 });
                 
@@ -8109,8 +8217,16 @@
                     return (a.handicap || 0) - (b.handicap || 0);
                 });
                 
-                // Get ONLY ONE WINNER (lowest net score)
-                const netWinner = todaysNetScores.length > 0 ? todaysNetScores[0] : null;
+                // The true leader (lowest net of anyone) and the awarded winner (lowest net among ELIGIBLE).
+                const netLeader = todaysNetScores.length > 0 ? todaysNetScores[0] : null;
+                const netWinner = todaysNetScores.find(p => p.eligible) || null;
+                // Ineligible players who scored at or better than the awarded winner — i.e. those skipped
+                // for the trophy purely because they'd already won. Shown as a note.
+                const netSkippedIneligible = netWinner
+                    ? todaysNetScores.filter(p => !p.eligible && p.netScore <= netWinner.netScore)
+                    : todaysNetScores.filter(p => !p.eligible);
+                // Did the actual lowest-net player get skipped for ineligibility?
+                const netLeaderIneligible = !!(netLeader && netWinner && netLeader.playerId !== netWinner.playerId);
                 
                 // Get top 3 PLACES for display (using leaderboard logic for ties)
                 const netTop3 = [];
@@ -9760,9 +9876,23 @@
                         p.change = (prev != null) ? (prev - p.place) : null;
                     });
                     
-                    // Filter to top 5 places (includes all ties at each place)
-                    const top5 = currentRanked.filter(p => p.place <= 5);
-                    return top5;
+                    // Group into place buckets so tied players share ONE slot, and keep only the TOP 4 PLACES.
+                    // Each group: { place, total, today (summed), members: [ {playerId, playerName, teamName,
+                    // teamColor, today, previousPosition, change} ] }.
+                    const byPlace = new Map();
+                    currentRanked.forEach(p => {
+                        if (p.place > 4) return;
+                        if (!byPlace.has(p.place)) byPlace.set(p.place, { place: p.place, total: p.total, today: 0, members: [] });
+                        const g = byPlace.get(p.place);
+                        g.today += (p.today || 0);
+                        g.members.push({
+                            playerId: p.playerId, playerName: p.playerName,
+                            teamName: p.teamName, teamColor: p.teamColor,
+                            today: p.today || 0, previousPosition: p.previousPosition, change: p.change
+                        });
+                    });
+                    const groups = Array.from(byPlace.values()).sort((a, b) => a.place - b.place);
+                    return groups;
                 };
                 
                 const ctpLeadersTop5 = buildLeadersTop5(ctpEventTotals, ctpTodayCounts, ctpPreviousTotals);
@@ -10399,6 +10529,9 @@
                     scheduledRoundsCount: scheduledRounds.length,
                     // Individual awards
                     netWinner: netWinner,
+                    netLeader: netLeader,
+                    netLeaderIneligible: netLeaderIneligible,
+                    netSkippedIneligible: netSkippedIneligible,
                     netTop3: netTop3,
                     netTop5: netTop5,
                     previousNetWinners: previousNetWinnersInfo,
@@ -10749,7 +10882,12 @@
             const netSlideIndex = hasNetSlide ? slideIndex++ : -1;
             // Stash for nav handlers (B2 sub-step navigation)
             presentationState._netSlideIndex = netSlideIndex;
-            presentationState._netTopCount = (presentationState.netTop5 || []).length;
+            // Reveal step count = ranked positions, plus one extra "award reassignment" step when the
+            // true low-net leader is ineligible (already won): we show them first, then the eligible
+            // winner with a note of who was skipped.
+            presentationState._netTopCount = (presentationState.netTop5 || []).length
+                + (presentationAnalytics.netLeaderIneligible ? 1 : 0);
+            presentationState._netLeaderIneligible = !!presentationAnalytics.netLeaderIneligible;
             // Disabled — BBB / CTP / Extra9 winner standalone slides also roll into per-player segments
             const bbbSlideIndex = -1;
             const ctpChampionSlideIndex = -1; // replaced by ctpLeadersSlideIndex (top-5 reveal)
@@ -13145,11 +13283,14 @@
                             const winnerWonHole = h.result === winnerSlot;
                             const loserWonHole  = h.result && h.result !== 'halved' && h.result !== winnerSlot;
                             const halved = h.result === 'halved';
+                            const neitherPar = h.neitherMadePar; // tied because neither reached net par → grey out
                             // Winner row cell — highlight if won this hole
                             const winnerCellBg = winnerWonHole ? 'background:rgba(16,185,129,0.20);' : '';
                             // Loser row cell — highlight if won this hole
                             const loserCellBg = loserWonHole ? 'background:rgba(239,68,68,0.18);' : '';
                             const headerBg = halved ? 'background:rgba(148,163,184,0.18);' : '';
+                            // Grey wash applied to score rows when neither player reached net par (no-contest hole)
+                            const dimStyle = neitherPar ? 'opacity:0.4;filter:grayscale(0.8);' : '';
                             // Running match-play state after this hole (from winner's perspective)
                             const rs = formatRunningState(runningStates[i], h.holeIndex, totalSegHoles);
                             // Stroke index (handicap difficulty 1-18) for this hole
@@ -13167,16 +13308,16 @@
                                         <div style="font-size:9px;color:${siHighlight ? '#fbbf24' : 'rgba(255,255,255,0.35)'};font-weight:700;line-height:1;margin-top:2px;letter-spacing:0.5px;">SI ${si}</div>
                                     </div>
                                     <!-- Winner row -->
-                                    <div style="${winnerCellBg}text-align:center;padding:6px 4px;border-bottom:1px solid rgba(255,255,255,0.08);position:relative;">
+                                    <div style="${winnerCellBg}${dimStyle}text-align:center;padding:6px 4px;border-bottom:1px solid rgba(255,255,255,0.08);position:relative;">
                                         ${winnerDots ? `<div style="position:absolute;top:2px;left:3px;color:#fbbf24;font-size:14px;font-weight:900;line-height:1;letter-spacing:1px;">${winnerDots}</div>` : ''}
-                                        <div style="font-size:30px;font-weight:${winnerWonHole?'900':'700'};color:${winnerWonHole?'#10b981':'white'};line-height:1.05;">${winnerStr != null ? winnerStr : '–'}</div>
-                                        <div style="font-size:13px;color:${winnerWonHole?'rgba(16,185,129,0.85)':'rgba(255,255,255,0.5)'};font-weight:600;line-height:1;margin-top:2px;">net ${winnerNet != null ? winnerNet : '–'}</div>
+                                        <div style="font-size:30px;font-weight:${winnerWonHole?'900':'700'};color:${winnerWonHole?'#10b981':'white'};line-height:1.05;">${winnerNet != null ? winnerNet : '–'}</div>
+                                        <div style="font-size:13px;color:${winnerWonHole?'rgba(16,185,129,0.85)':'rgba(255,255,255,0.5)'};font-weight:600;line-height:1;margin-top:2px;">gross ${winnerStr != null ? winnerStr : '–'}</div>
                                     </div>
                                     <!-- Loser row -->
-                                    <div style="${loserCellBg}text-align:center;padding:6px 4px;border-bottom:1px solid rgba(255,255,255,0.08);position:relative;">
+                                    <div style="${loserCellBg}${dimStyle}text-align:center;padding:6px 4px;border-bottom:1px solid rgba(255,255,255,0.08);position:relative;">
                                         ${loserDots ? `<div style="position:absolute;top:2px;left:3px;color:#fbbf24;font-size:14px;font-weight:900;line-height:1;letter-spacing:1px;">${loserDots}</div>` : ''}
-                                        <div style="font-size:28px;font-weight:${loserWonHole?'900':'700'};color:${loserWonHole?'#ef4444':'rgba(255,255,255,0.7)'};line-height:1.05;">${loserStr != null ? loserStr : '–'}</div>
-                                        <div style="font-size:13px;color:${loserWonHole?'rgba(239,68,68,0.85)':'rgba(255,255,255,0.45)'};font-weight:600;line-height:1;margin-top:2px;">net ${loserNet != null ? loserNet : '–'}</div>
+                                        <div style="font-size:28px;font-weight:${loserWonHole?'900':'700'};color:${loserWonHole?'#ef4444':'rgba(255,255,255,0.7)'};line-height:1.05;">${loserNet != null ? loserNet : '–'}</div>
+                                        <div style="font-size:13px;color:${loserWonHole?'rgba(239,68,68,0.85)':'rgba(255,255,255,0.45)'};font-weight:600;line-height:1;margin-top:2px;">gross ${loserStr != null ? loserStr : '–'}</div>
                                     </div>
                                     <!-- Running match-play state after this hole -->
                                     <div style="background:${rs.bg};text-align:center;padding:6px 4px;">
@@ -13659,8 +13800,8 @@
                                             ${sp ? `<div>${renderAvatar(sp, 52)}</div>` : ''}
                                             <div style="color:white;font-size:14px;font-weight:600;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;">${r.playerName.split(' ')[0]}</div>
                                             <div style="display:flex;align-items:baseline;gap:6px;">
-                                                <span style="color:${c};font-size:30px;font-weight:900;line-height:1;">${r.gross}</span>
-                                                <span style="color:rgba(255,255,255,0.5);font-size:12px;">net ${r.net}</span>
+                                                <span style="color:${c};font-size:30px;font-weight:900;line-height:1;">${r.net}</span>
+                                                <span style="color:rgba(255,255,255,0.5);font-size:12px;">gross ${r.gross}</span>
                                             </div>
                                         </div>
                                     `;
@@ -14114,10 +14255,15 @@
                 //              e.g. for 5 players: step 1 → #5, step 2 → #4, ..., step 5 → #1 (winner full-bleed)
                 //              for 3 players: step 1 → #3, step 2 → #2, step 3 → #1
                 // ═══════════════════════════════════════════════════════
-                const { netWinner, netTop5, previousNetWinners } = presentationState;
+                const { netWinner, netLeader, netLeaderIneligible, netSkippedIneligible, netTop5, previousNetWinners } = presentationState;
                 const top5 = (netTop5 || []).slice().sort((a, b) => a.place - b.place);
                 const totalPositions = top5.length;
-                const step = Math.min(presentationState.netRevealStep || 0, totalPositions);
+                // When the true low-net leader is ineligible, there's one extra reveal step:
+                //   step totalPositions     → show the leader (acknowledged, but NOT the trophy)
+                //   step totalPositions + 1 → show the eligible winner with the trophy + ineligibility note
+                const extraStep = netLeaderIneligible ? 1 : 0;
+                const maxStep = totalPositions + extraStep;
+                const step = Math.min(presentationState.netRevealStep || 0, maxStep);
                 
                 // Tiebreaker text (fires only when winner shown and there's a true tie at place 1)
                 const tiedForFirst = top5.filter(p => p.place === 1).length > 1;
@@ -14133,53 +14279,96 @@
                 // Helper: look up state-side player record (for photo)
                 const getStatePlayer = (playerId) => state.players.find(sp => sp.id === playerId) || { id: playerId, name: '?' };
                 
-                // ── WINNER REVEAL (step === totalPositions, full-bleed) ─────────
-                if (step === totalPositions && totalPositions > 0) {
-                    const winner = top5.find(p => p.place === 1) || netWinner;
-                    const winnerStatePlayer = getStatePlayer(winner.playerId);
-                    const photoUrl = winnerStatePlayer.photoUrl;
-                    presentationState.isWinnerSlide = true; // for any downstream fanfare hooks
-                    
-                    html += `
-                        <div id="netWinnerReveal" style="position:fixed;inset:0;background:#000;display:flex;align-items:center;justify-content:center;animation:fadeIn 0.5s ease-in;">
+                // Renders the full-bleed featured-player panel (shared by leader + winner reveals).
+                const _renderNetReveal = (person, opts) => {
+                    const sp = getStatePlayer(person.playerId);
+                    const photoUrl = sp.photoUrl;
+                    const label = opts.label;
+                    const labelColor = opts.labelColor || '#fbbf24';
+                    const noteHtml = opts.note || '';
+                    return `
+                        <div style="position:fixed;inset:0;background:#000;display:flex;align-items:center;justify-content:center;animation:fadeIn 0.5s ease-in;">
                             ${photoUrl ? `
-                                <div style="position:absolute;inset:0;background-image:url('${photoUrl}');background-size:cover;background-position:center;opacity:0.55;"></div>
+                                <div style="position:absolute;inset:0;background-image:url('${photoUrl}');background-size:cover;background-position:center;opacity:${opts.dim ? '0.35' : '0.55'};"></div>
                                 <div style="position:absolute;inset:0;background:linear-gradient(180deg, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.85) 100%);"></div>
                             ` : `
-                                <div style="position:absolute;inset:0;background:linear-gradient(135deg, ${winner.teamColor || '#10b981'}, #000);"></div>
+                                <div style="position:absolute;inset:0;background:linear-gradient(135deg, ${person.teamColor || '#10b981'}, #000);"></div>
                             `}
                             <div style="position:relative;z-index:2;text-align:center;padding:40px;max-width:1100px;width:100%;">
-                                <div style="color:#fbbf24;font-size:24px;font-weight:700;letter-spacing:6px;text-transform:uppercase;margin-bottom:24px;text-shadow:0 2px 12px rgba(0,0,0,0.8);animation:slideUp 0.6s ease-out;">
-                                    🏆 Low Net Winner
+                                <div style="color:${labelColor};font-size:24px;font-weight:700;letter-spacing:6px;text-transform:uppercase;margin-bottom:24px;text-shadow:0 2px 12px rgba(0,0,0,0.8);animation:slideUp 0.6s ease-out;">
+                                    ${label}
                                 </div>
                                 <div style="color:white;font-size:clamp(60px, 12vw, 144px);font-weight:900;line-height:1;letter-spacing:-3px;text-shadow:0 6px 30px rgba(0,0,0,0.9);animation:slideUp 0.8s ease-out 0.2s both;">
-                                    ${winner.playerName}
+                                    ${person.playerName}
                                 </div>
-                                <div style="color:${winner.teamColor || '#10b981'};font-size:28px;font-weight:600;margin-top:16px;text-shadow:0 2px 12px rgba(0,0,0,0.8);animation:slideUp 0.8s ease-out 0.35s both;">
-                                    ${winner.teamName}
+                                <div style="color:${person.teamColor || '#10b981'};font-size:28px;font-weight:600;margin-top:16px;text-shadow:0 2px 12px rgba(0,0,0,0.8);animation:slideUp 0.8s ease-out 0.35s both;">
+                                    ${person.teamName}
                                 </div>
                                 <div style="margin-top:40px;display:flex;gap:48px;justify-content:center;flex-wrap:wrap;animation:slideUp 0.8s ease-out 0.5s both;">
                                     <div>
                                         <div style="color:#9ca3af;font-size:13px;text-transform:uppercase;letter-spacing:2px;margin-bottom:6px;">Net</div>
-                                        <div style="color:white;font-size:64px;font-weight:800;line-height:1;">${winner.netScore}</div>
+                                        <div style="color:white;font-size:64px;font-weight:800;line-height:1;">${person.netScore}</div>
                                     </div>
                                     <div>
                                         <div style="color:#9ca3af;font-size:13px;text-transform:uppercase;letter-spacing:2px;margin-bottom:6px;">Gross</div>
-                                        <div style="color:white;font-size:64px;font-weight:800;line-height:1;">${winner.grossScore}</div>
+                                        <div style="color:white;font-size:64px;font-weight:800;line-height:1;">${person.grossScore}</div>
                                     </div>
                                     <div>
                                         <div style="color:#9ca3af;font-size:13px;text-transform:uppercase;letter-spacing:2px;margin-bottom:6px;">HCP</div>
-                                        <div style="color:white;font-size:64px;font-weight:800;line-height:1;">${winner.handicap}</div>
+                                        <div style="color:white;font-size:64px;font-weight:800;line-height:1;">${person.handicap}</div>
                                     </div>
                                 </div>
-                                ${tiedForFirst ? `
-                                    <div style="color:#fbbf24;font-size:16px;font-style:italic;margin-top:24px;text-shadow:0 2px 8px rgba(0,0,0,0.8);">
-                                        ⚡ Won on handicap tiebreaker
-                                    </div>
-                                ` : ''}
+                                ${noteHtml}
                             </div>
                         </div>
                     `;
+                };
+                
+                // ── REVEALS (step >= totalPositions, full-bleed) ─────────
+                if (step >= totalPositions && totalPositions > 0) {
+                    presentationState.isWinnerSlide = true; // for any downstream fanfare hooks
+                    const leaderEntry = top5.find(p => p.place === 1) || netLeader || netWinner;
+                    
+                    if (!netLeaderIneligible) {
+                        // Simple case: the lowest-net player is eligible — they get the trophy.
+                        const winner = leaderEntry;
+                        html += _renderNetReveal(winner, {
+                            label: '🏆 Low Net Winner',
+                            note: tiedForFirst ? `
+                                <div style="color:#fbbf24;font-size:16px;font-style:italic;margin-top:24px;text-shadow:0 2px 8px rgba(0,0,0,0.8);">
+                                    ⚡ Won on handicap tiebreaker
+                                </div>
+                            ` : ''
+                        });
+                    } else if (step === totalPositions) {
+                        // The lowest net belongs to someone who already won — acknowledge them, no trophy.
+                        html += _renderNetReveal(netLeader || leaderEntry, {
+                            label: 'Lowest Net Today',
+                            labelColor: '#9ca3af',
+                            dim: true,
+                            note: `
+                                <div style="display:inline-block;margin-top:28px;background:rgba(239,68,68,0.18);border:2px solid rgba(239,68,68,0.5);border-radius:12px;padding:14px 22px;animation:slideUp 0.8s ease-out 0.6s both;">
+                                    <div style="color:#fca5a5;font-size:18px;font-weight:700;">🚫 Already a Low Net Winner — not eligible to win again</div>
+                                    <div style="color:rgba(255,255,255,0.8);font-size:15px;margin-top:6px;">Tap Next to see who takes the award →</div>
+                                </div>
+                            `
+                        });
+                    } else {
+                        // Extra step: award the trophy to the top ELIGIBLE player, noting who was skipped.
+                        const skipped = (netSkippedIneligible || []);
+                        const skippedNames = skipped.map(p => `${p.playerName} (${p.netScore})`).join(' · ');
+                        html += _renderNetReveal(netWinner || leaderEntry, {
+                            label: '🏆 Low Net Winner',
+                            note: `
+                                ${skippedNames ? `
+                                    <div style="display:inline-block;margin-top:28px;background:rgba(0,0,0,0.45);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:14px 22px;animation:slideUp 0.8s ease-out 0.6s both;">
+                                        <div style="color:#fca5a5;font-size:14px;font-weight:600;letter-spacing:1px;text-transform:uppercase;">Lower net, but already won (not eligible)</div>
+                                        <div style="color:white;font-size:17px;margin-top:6px;">${skippedNames}</div>
+                                    </div>
+                                ` : ''}
+                            `
+                        });
+                    }
                 } else {
                     // ── COUNTDOWN STATE (step 0..N-1) ───────────────────────
                     // Rows displayed bottom-up (5 → 4 → 3 → 2 → 1).
@@ -14248,7 +14437,9 @@
                                     ? `Tap Next to begin the countdown →`
                                     : (step < totalPositions - 1
                                         ? `Tap Next for the next reveal →`
-                                        : (totalPositions > 1 ? '🥁 Tap Next for the winner →' : 'Tap Next →'))}
+                                        : (netLeaderIneligible
+                                            ? '🥁 Tap Next for the lowest net →'
+                                            : (totalPositions > 1 ? '🥁 Tap Next for the winner →' : 'Tap Next →')))}
                             </div>
                         </div>
                     `;
@@ -14290,31 +14481,59 @@
                 const ctpIsRevealed = (idx) => idx >= (ctpTotalPositions - ctpStep);
                 const getStatePlayerCTP = (playerId) => state.players.find(sp => sp.id == playerId) || { id: playerId, name: '?' };
                 
-                // Movement indicator helper
-                const renderMovement = (p, accentColor) => {
-                    if (p.previousPosition == null) {
-                        return `<span style="color:#fbbf24;font-size:12px;font-weight:700;letter-spacing:1px;background:rgba(251,191,36,0.15);border:1px solid rgba(251,191,36,0.4);padding:2px 8px;border-radius:6px;">NEW</span>`;
+                // Movement indicator helper (per tied member)
+                const renderMovement = (m) => {
+                    if (m.previousPosition == null) {
+                        return `<span style="color:#fbbf24;font-size:11px;font-weight:700;letter-spacing:1px;background:rgba(251,191,36,0.15);border:1px solid rgba(251,191,36,0.4);padding:1px 6px;border-radius:6px;">NEW</span>`;
                     }
-                    if (p.change > 0) {
-                        return `<span style="color:#10b981;font-size:13px;font-weight:700;">⬆${p.change}</span>`;
+                    if (m.change > 0) return `<span style="color:#10b981;font-size:12px;font-weight:700;">⬆${m.change}</span>`;
+                    if (m.change < 0) return `<span style="color:#ef4444;font-size:12px;font-weight:700;">⬇${Math.abs(m.change)}</span>`;
+                    return `<span style="color:#9ca3af;font-size:12px;font-weight:700;">=</span>`;
+                };
+                
+                // Renders the member(s) inside a place slot. Single member shows a big avatar row;
+                // ties show each tied name compactly so they share the one slot.
+                const renderLeaderMembers = (g, accent) => {
+                    if (g.members.length === 1) {
+                        const m = g.members[0];
+                        const sp = getStatePlayerCTP(m.playerId);
+                        return `
+                            ${renderAvatar(sp, 56)}
+                            <div style="flex:1;text-align:left;">
+                                <div style="color:white;font-size:20px;font-weight:700;line-height:1.1;">${m.playerName}</div>
+                                <div style="display:flex;align-items:center;gap:10px;margin-top:4px;">
+                                    <div style="color:${m.teamColor || '#a5b4fc'};font-size:12px;font-weight:500;">${m.teamName}</div>
+                                    ${renderMovement(m)}
+                                </div>
+                            </div>
+                        `;
                     }
-                    if (p.change < 0) {
-                        return `<span style="color:#ef4444;font-size:13px;font-weight:700;">⬇${Math.abs(p.change)}</span>`;
-                    }
-                    return `<span style="color:#9ca3af;font-size:13px;font-weight:700;">=</span>`;
+                    // Tie: list all names in one slot
+                    return `
+                        <div style="flex:1;text-align:left;display:flex;flex-direction:column;gap:6px;">
+                            <div style="color:#fbbf24;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;">${g.members.length}-way tie</div>
+                            ${g.members.map(m => `
+                                <div style="display:flex;align-items:center;gap:8px;">
+                                    <div style="width:10px;height:10px;border-radius:50%;background:${m.teamColor || '#3b82f6'};flex-shrink:0;"></div>
+                                    <div style="color:white;font-size:17px;font-weight:600;">${m.playerName}</div>
+                                    <div style="color:#9ca3af;font-size:12px;">${m.teamName}</div>
+                                    ${renderMovement(m)}
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
                 };
                 
                 html += `
                     <div style="animation:slideUp 0.8s ease-out;max-width:900px;width:100%;margin:0 auto;">
                         <div style="font-size:64px;margin-bottom:8px;">🎯</div>
                         <h1 style="color:white;font-size:46px;margin:0 0 6px;font-weight:800;letter-spacing:1px;">CTP Leaders</h1>
-                        <p style="color:#a5b4fc;font-size:14px;margin:0 0 24px;font-weight:600;letter-spacing:2px;text-transform:uppercase;">Event Standings · Today's Round Changes</p>
+                        <p style="color:#a5b4fc;font-size:14px;margin:0 0 24px;font-weight:600;letter-spacing:2px;text-transform:uppercase;">Top 4 · Event Standings</p>
                         
                         <div style="display:flex;flex-direction:column;gap:12px;">
-                            ${ctpLeaders.map((p, idx) => {
+                            ${ctpLeaders.map((g, idx) => {
                                 const revealed = ctpIsRevealed(idx);
-                                const sp = getStatePlayerCTP(p.playerId);
-                                const medal = p.place === 1 ? '🥇' : p.place === 2 ? '🥈' : p.place === 3 ? '🥉' : `#${p.place}`;
+                                const medal = g.place === 1 ? '🥇' : g.place === 2 ? '🥈' : g.place === 3 ? '🥉' : `#${g.place}`;
                                 if (!revealed) {
                                     return `
                                         <div style="background:rgba(255,255,255,0.04);border:2px dashed rgba(255,255,255,0.15);border-radius:14px;padding:16px 18px;display:flex;align-items:center;gap:16px;opacity:0.55;">
@@ -14324,23 +14543,17 @@
                                         </div>
                                     `;
                                 }
+                                const accent = g.members[0].teamColor || '#3b82f6';
                                 return `
-                                    <div style="background:linear-gradient(90deg, ${p.teamColor || '#3b82f6'}25 0%, rgba(255,255,255,0.05) 100%);border:2px solid ${p.teamColor || '#3b82f6'};border-radius:14px;padding:16px 18px;display:flex;align-items:center;gap:16px;animation:slideUp 0.5s ease-out;">
+                                    <div style="background:linear-gradient(90deg, ${accent}25 0%, rgba(255,255,255,0.05) 100%);border:2px solid ${accent};border-radius:14px;padding:16px 18px;display:flex;align-items:center;gap:16px;animation:slideUp 0.5s ease-out;">
                                         <div style="font-size:24px;font-weight:700;min-width:54px;text-align:center;">${medal}</div>
-                                        ${renderAvatar(sp, 56)}
-                                        <div style="flex:1;text-align:left;">
-                                            <div style="color:white;font-size:20px;font-weight:700;line-height:1.1;">${p.playerName}</div>
-                                            <div style="display:flex;align-items:center;gap:10px;margin-top:4px;">
-                                                <div style="color:${p.teamColor || '#a5b4fc'};font-size:12px;font-weight:500;">${p.teamName}</div>
-                                                ${renderMovement(p, '#3b82f6')}
-                                            </div>
-                                        </div>
+                                        ${renderLeaderMembers(g, accent)}
                                         <div style="text-align:right;flex-shrink:0;">
-                                            <div style="color:white;font-size:32px;font-weight:800;line-height:1;">${p.total}</div>
+                                            <div style="color:white;font-size:32px;font-weight:800;line-height:1;">${g.total}</div>
                                             <div style="color:#9ca3af;font-size:10px;margin-top:3px;letter-spacing:1px;">TOTAL CTPs</div>
-                                            ${p.today > 0 ? `
+                                            ${g.today > 0 ? `
                                                 <div style="margin-top:6px;background:rgba(16,185,129,0.18);border:1px solid rgba(16,185,129,0.5);border-radius:6px;padding:2px 6px;color:#10b981;font-size:11px;font-weight:700;">
-                                                    +${p.today} today
+                                                    +${g.today} today
                                                 </div>
                                             ` : ''}
                                         </div>
@@ -14368,26 +14581,54 @@
                 const bbbIsRevealed = (idx) => idx >= (bbbTotalPositions - bbbStep);
                 const getStatePlayerBBB = (playerId) => state.players.find(sp => sp.id == playerId) || { id: playerId, name: '?' };
                 
-                const renderMovementBBB = (p) => {
-                    if (p.previousPosition == null) {
-                        return `<span style="color:#fbbf24;font-size:12px;font-weight:700;letter-spacing:1px;background:rgba(251,191,36,0.15);border:1px solid rgba(251,191,36,0.4);padding:2px 8px;border-radius:6px;">NEW</span>`;
+                const renderMovementBBB = (m) => {
+                    if (m.previousPosition == null) {
+                        return `<span style="color:#fbbf24;font-size:11px;font-weight:700;letter-spacing:1px;background:rgba(251,191,36,0.15);border:1px solid rgba(251,191,36,0.4);padding:1px 6px;border-radius:6px;">NEW</span>`;
                     }
-                    if (p.change > 0) return `<span style="color:#10b981;font-size:13px;font-weight:700;">⬆${p.change}</span>`;
-                    if (p.change < 0) return `<span style="color:#ef4444;font-size:13px;font-weight:700;">⬇${Math.abs(p.change)}</span>`;
-                    return `<span style="color:#9ca3af;font-size:13px;font-weight:700;">=</span>`;
+                    if (m.change > 0) return `<span style="color:#10b981;font-size:12px;font-weight:700;">⬆${m.change}</span>`;
+                    if (m.change < 0) return `<span style="color:#ef4444;font-size:12px;font-weight:700;">⬇${Math.abs(m.change)}</span>`;
+                    return `<span style="color:#9ca3af;font-size:12px;font-weight:700;">=</span>`;
+                };
+                const renderBBBMembers = (g) => {
+                    if (g.members.length === 1) {
+                        const m = g.members[0];
+                        const sp = getStatePlayerBBB(m.playerId);
+                        return `
+                            ${renderAvatar(sp, 56)}
+                            <div style="flex:1;text-align:left;">
+                                <div style="color:white;font-size:20px;font-weight:700;line-height:1.1;">${m.playerName}</div>
+                                <div style="display:flex;align-items:center;gap:10px;margin-top:4px;">
+                                    <div style="color:${m.teamColor || '#fde68a'};font-size:12px;font-weight:500;">${m.teamName}</div>
+                                    ${renderMovementBBB(m)}
+                                </div>
+                            </div>
+                        `;
+                    }
+                    return `
+                        <div style="flex:1;text-align:left;display:flex;flex-direction:column;gap:6px;">
+                            <div style="color:#fbbf24;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;">${g.members.length}-way tie</div>
+                            ${g.members.map(m => `
+                                <div style="display:flex;align-items:center;gap:8px;">
+                                    <div style="width:10px;height:10px;border-radius:50%;background:${m.teamColor || '#f59e0b'};flex-shrink:0;"></div>
+                                    <div style="color:white;font-size:17px;font-weight:600;">${m.playerName}</div>
+                                    <div style="color:#9ca3af;font-size:12px;">${m.teamName}</div>
+                                    ${renderMovementBBB(m)}
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
                 };
                 
                 html += `
                     <div style="animation:slideUp 0.8s ease-out;max-width:900px;width:100%;margin:0 auto;">
                         <div style="font-size:64px;margin-bottom:8px;">🎪</div>
                         <h1 style="color:white;font-size:46px;margin:0 0 6px;font-weight:800;letter-spacing:1px;">Bingo Bango Bongo</h1>
-                        <p style="color:#fde68a;font-size:14px;margin:0 0 24px;font-weight:600;letter-spacing:2px;text-transform:uppercase;">Event Leaders · Today's Round Changes</p>
+                        <p style="color:#fde68a;font-size:14px;margin:0 0 24px;font-weight:600;letter-spacing:2px;text-transform:uppercase;">Top 4 · Event Leaders</p>
                         
                         <div style="display:flex;flex-direction:column;gap:12px;">
-                            ${bbbLeaders.map((p, idx) => {
+                            ${bbbLeaders.map((g, idx) => {
                                 const revealed = bbbIsRevealed(idx);
-                                const sp = getStatePlayerBBB(p.playerId);
-                                const medal = p.place === 1 ? '🥇' : p.place === 2 ? '🥈' : p.place === 3 ? '🥉' : `#${p.place}`;
+                                const medal = g.place === 1 ? '🥇' : g.place === 2 ? '🥈' : g.place === 3 ? '🥉' : `#${g.place}`;
                                 if (!revealed) {
                                     return `
                                         <div style="background:rgba(255,255,255,0.04);border:2px dashed rgba(255,255,255,0.15);border-radius:14px;padding:16px 18px;display:flex;align-items:center;gap:16px;opacity:0.55;">
@@ -14397,23 +14638,17 @@
                                         </div>
                                     `;
                                 }
+                                const accent = g.members[0].teamColor || '#f59e0b';
                                 return `
-                                    <div style="background:linear-gradient(90deg, ${p.teamColor || '#f59e0b'}25 0%, rgba(255,255,255,0.05) 100%);border:2px solid ${p.teamColor || '#f59e0b'};border-radius:14px;padding:16px 18px;display:flex;align-items:center;gap:16px;animation:slideUp 0.5s ease-out;">
+                                    <div style="background:linear-gradient(90deg, ${accent}25 0%, rgba(255,255,255,0.05) 100%);border:2px solid ${accent};border-radius:14px;padding:16px 18px;display:flex;align-items:center;gap:16px;animation:slideUp 0.5s ease-out;">
                                         <div style="font-size:24px;font-weight:700;min-width:54px;text-align:center;">${medal}</div>
-                                        ${renderAvatar(sp, 56)}
-                                        <div style="flex:1;text-align:left;">
-                                            <div style="color:white;font-size:20px;font-weight:700;line-height:1.1;">${p.playerName}</div>
-                                            <div style="display:flex;align-items:center;gap:10px;margin-top:4px;">
-                                                <div style="color:${p.teamColor || '#fde68a'};font-size:12px;font-weight:500;">${p.teamName}</div>
-                                                ${renderMovementBBB(p)}
-                                            </div>
-                                        </div>
+                                        ${renderBBBMembers(g)}
                                         <div style="text-align:right;flex-shrink:0;">
-                                            <div style="color:white;font-size:32px;font-weight:800;line-height:1;">${p.total}</div>
+                                            <div style="color:white;font-size:32px;font-weight:800;line-height:1;">${g.total}</div>
                                             <div style="color:#9ca3af;font-size:10px;margin-top:3px;letter-spacing:1px;">TOTAL BBBs</div>
-                                            ${p.today > 0 ? `
+                                            ${g.today > 0 ? `
                                                 <div style="margin-top:6px;background:rgba(16,185,129,0.18);border:1px solid rgba(16,185,129,0.5);border-radius:6px;padding:2px 6px;color:#10b981;font-size:11px;font-weight:700;">
-                                                    +${p.today} today
+                                                    +${g.today} today
                                                 </div>
                                             ` : ''}
                                         </div>
@@ -16256,6 +16491,11 @@
         
         // Slide transition with sound effect
         window.playSlideTransition = () => {
+            // Disabled — the 8-bit zap between slides was distracting. Kept as a no-op so existing
+            // call sites don't error. Re-enable by restoring the synth body if ever wanted.
+            return;
+        };
+        window._playSlideTransition_DISABLED = () => {
             try {
                 // Create Web Audio API context
                 const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -17122,46 +17362,58 @@
                     .sort((a, b) => a - b); // ascending
                 
                 const startedAt = performance.now();
-                const ms = milestones.slice(); // mutable queue of milestones still ahead
-                let pausedUntil = 0; // timestamp the animation should resume after a milestone pause
-                let lastCrossedValue = -1;
                 
                 // Find the card element containing this counter so we can flip prominent → subtle when done.
                 const card = el.closest('div[style*="border-radius:20px"]');
-                
                 const formatVal = (n) => format === 'comma' ? n.toLocaleString() : n;
                 
+                // ─── Value-paced animation ───
+                // Blast up quickly until we get within 10 of a record, then CREEP at 1 unit/second so the
+                // "did we beat it?" moment is visible, finishing a few units past the record at the target.
+                //   - Records considered are milestones at or below the target (the ones we pass going up).
+                //   - Creep mode: fast → (minRecord - 10), then 1/sec to target. Used when the slow span is
+                //     small (the realistic case: target is only a few above the records).
+                //   - Band mode (fallback for unusual data where a record sits far below target): tick 1/sec
+                //     only within ±6 of each record, fast elsewhere, so it never crawls for 100+ seconds.
+                const recordsBelow = milestones.filter(m => m <= target);
+                const minRecord = recordsBelow.length > 0 ? Math.min(...recordsBelow) : null;
+                let slowFrom = (minRecord != null) ? Math.max(0, minRecord - 10) : (target + 1);
+                const slowSpan = target - slowFrom;
+                const creepMode = (minRecord != null) && slowSpan >= 0 && slowSpan <= 25;
+                
+                const SLOW_SPEED = 1;                       // 1 unit per second near records
+                const FAST_SPEED = Math.max(150, target / 0.7); // cover the bulk in ~0.7s
+                
+                const inSlowZone = (v) => {
+                    if (minRecord == null) return false;
+                    if (creepMode) return v >= slowFrom;     // creep all the way home once we're within 10 of the record
+                    // band mode: slow only right around each record
+                    return recordsBelow.some(m => v >= m - 6 && v <= m + 5);
+                };
+                
+                let currentValue = 0;
+                let lastNow = startedAt;
+                
                 const step = (now) => {
-                    if (now < pausedUntil) {
-                        requestAnimationFrame(step);
-                        return;
-                    }
-                    const elapsed = now - startedAt - 0; // raw elapsed since start (pause time excluded already)
-                    const t = Math.min(1, elapsed / baseDuration);
-                    // easeOutQuart — fast start, slow finish
-                    const eased = 1 - Math.pow(1 - t, 4);
-                    const v = Math.round(target * eased);
-                    el.textContent = formatVal(v);
+                    let dt = (now - lastNow) / 1000;
+                    lastNow = now;
+                    if (dt > 0.1) dt = 0.1;                  // clamp big frame gaps (tab switches etc.)
                     
-                    // Check if we just crossed (or landed on) a milestone — if so, pause briefly
-                    while (ms.length > 0 && v >= ms[0] && ms[0] > lastCrossedValue) {
-                        lastCrossedValue = ms[0];
-                        ms.shift();
-                        pausedUntil = now + 280; // 280ms hold per milestone
-                        break;
-                    }
+                    const speed = inSlowZone(currentValue) ? SLOW_SPEED : FAST_SPEED;
+                    currentValue += speed * dt;
+                    if (currentValue > target) currentValue = target;
                     
-                    if (t < 1) {
+                    el.textContent = formatVal(Math.round(currentValue));
+                    
+                    if (currentValue < target) {
                         requestAnimationFrame(step);
                     } else {
-                        // Snap to exact target on the final frame
                         el.textContent = formatVal(target);
                         // Demote: hide the prominent target pills, show the subtle comparison text.
                         if (card) {
                             const prominent = card.querySelector('.bn-targets-prominent');
                             const subtle = card.querySelector('.bn-targets-subtle');
                             if (prominent) {
-                                // Fade out smoothly
                                 prominent.style.transition = 'opacity 0.4s ease-out, max-height 0.4s ease-out, margin 0.4s ease-out';
                                 prominent.style.opacity = '0';
                                 prominent.style.maxHeight = '0';
@@ -19495,12 +19747,20 @@
                 
                 let result = null; // 'slot1' | 'slot2' | 'halved' | null (incomplete or out-of-segment)
                 let net1 = null, net2 = null;
+                let neitherMadePar = false; // true when the lower net failed to reach net par → hole halved + greyed
                 if (gross1 != null && gross1 > 0 && gross2 != null && gross2 > 0) {
                     net1 = gross1 - s1Strokes;
                     net2 = gross2 - s2Strokes;
                     // Only count toward the match if this hole is in the segment
                     if (segmentMember) {
-                        if (net1 < net2) { result = 'slot1'; runningSlot1++; }
+                        // NET-PAR-TO-WIN RULE: a hole can only be WON if the lower-net player made net par
+                        // or better (net <= par). If the better score is still over par, the hole is halved.
+                        const lowerNet = Math.min(net1, net2);
+                        if (lowerNet > par) {
+                            // Neither player reached net par — hole is tied regardless of who was lower.
+                            result = 'halved';
+                            neitherMadePar = true;
+                        } else if (net1 < net2) { result = 'slot1'; runningSlot1++; }
                         else if (net2 < net1) { result = 'slot2'; runningSlot2++; }
                         else result = 'halved';
                     }
@@ -19514,6 +19774,7 @@
                     strokes1: s1Strokes, strokes2: s2Strokes,
                     net1: net1, net2: net2,
                     result: result,
+                    neitherMadePar: neitherMadePar,
                     inSegment: segmentMember,
                     runningSlot1: runningSlot1,
                     runningSlot2: runningSlot2
@@ -19588,11 +19849,14 @@
             const holeResults = []; // results in segment order
             for (const i of segmentIndices) {
                 const holeHcap = (round.handicaps || [])[i] || (i + 1);
+                const par = (round.pars || [])[i] || 0;
                 const s1Strokes = getPlayerStrokesOnHole(p1, round, holeHcap);
                 const s2Strokes = getPlayerStrokesOnHole(p2, round, holeHcap);
                 const net1 = scores1[i] - s1Strokes;
                 const net2 = scores2[i] - s2Strokes;
-                if (net1 < net2) holeResults.push('slot1');
+                // NET-PAR-TO-WIN RULE: the hole can only be won if the lower net is net par or better.
+                if (Math.min(net1, net2) > par) holeResults.push('halved');
+                else if (net1 < net2) holeResults.push('slot1');
                 else if (net2 < net1) holeResults.push('slot2');
                 else holeResults.push('halved');
             }
