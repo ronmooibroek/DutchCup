@@ -481,6 +481,62 @@
                 padding-bottom: 80px;
             }
         }
+        /* ─── Presentation animation keyframes ───
+           Centralized here instead of inline <style> blocks inside render template literals,
+           so they're parsed once rather than re-parsed on every slide render. */
+        @keyframes mp-winner-shrink {
+            0%   { transform: scale(2.4); }
+            100% { transform: scale(1); }
+        }
+        @keyframes mp-loser-grow-elim {
+            0%   { transform: scale(0.55); opacity: 0.4; }
+            100% { transform: scale(1); opacity: 0.85; }
+        }
+        @keyframes mp-loser-grow-std {
+            0%   { transform: scale(0.55); opacity: 0.4; }
+            100% { transform: scale(1); opacity: 0.55; }
+        }
+        @keyframes mp-elim-balloon {
+            0%   { transform: scale(1); filter: drop-shadow(0 0 0 transparent); opacity: 0.85; }
+            35%  { transform: scale(2.3); filter: drop-shadow(0 0 40px rgba(239,68,68,0.9)); opacity: 1; }
+            55%  { transform: scale(2.3); filter: drop-shadow(0 0 60px rgba(239,68,68,1)); opacity: 1; }
+            100% { transform: scale(1); filter: drop-shadow(0 0 0 transparent); opacity: 0.35; }
+        }
+        @keyframes mp-elim-text-pop {
+            0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.3) rotate(-12deg); }
+            25%  { opacity: 1; transform: translate(-50%, -50%) scale(1.2) rotate(-3deg); }
+            45%  { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(0deg); }
+            85%  { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(0deg); }
+            100% { opacity: 0; transform: translate(-50%, -50%) scale(0.85) rotate(2deg); }
+        }
+        @keyframes mp-badge-fade {
+            0%   { opacity: 0; transform: translateY(20px); }
+            100% { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes bc-in-from-right {
+            0%   { opacity:0; transform: translateX(200px) scale(0.4); }
+            60%  { opacity:1; transform: translateX(-12px) scale(1.05); }
+            100% { opacity:1; transform: translateX(0) scale(1); }
+        }
+        @keyframes bc-in-from-left {
+            0%   { opacity:0; transform: translateX(-200px) scale(0.4); }
+            60%  { opacity:1; transform: translateX(12px) scale(1.05); }
+            100% { opacity:1; transform: translateX(0) scale(1); }
+        }
+        @keyframes bc-mike-pulse {
+            0%,100% { transform: scale(1); }
+            50%     { transform: scale(1.04); }
+        }
+        @keyframes ex9-fall {
+            0%   { transform: translateY(-120vh) rotate(0deg); opacity: 0; }
+            10%  { opacity: 1; }
+            90%  { opacity: 1; }
+            100% { transform: translateY(120vh) rotate(720deg); opacity: 0; }
+        }
+        @keyframes ex9-sway {
+            0%, 100% { transform: translateX(0) rotate(-5deg); }
+            50%      { transform: translateX(20px) rotate(5deg); }
+        }
     </style>
 </head>
 <body>
@@ -527,7 +583,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.05.30.11';
+        const APP_VERSION = '2026.05.31.2';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -7442,9 +7498,10 @@
         };
 
         // Presentation Mode
-        let presentationState = {
-            active: false,
-            currentSlide: 0,
+        // ─── Single source of truth for presentation reveal-step fields ───
+        // Add new progressive-reveal step fields HERE ONLY. Both presentationState inits
+        // (module default + presentation open) and the reset paths consume this.
+        const PRESENTATION_REVEAL_STEPS = () => ({
             netRevealStep: 0,
             bracketRevealStep: 0,
             playerRevealStep: 0,
@@ -7452,10 +7509,32 @@
             bbbLeadersRevealStep: 0,
             teamRevealStep: 0,
             byNumbersRevealStep: 0,
-            holePerfRevealStep: 0,
+            holePerfRevealStep: 0
+        });
+        
+        let presentationState = {
+            active: false,
+            currentSlide: 0,
+            ...PRESENTATION_REVEAL_STEPS(),
             teamStandings: [],
             eventName: ''
         };
+        
+        // ─── Uniform progressive-reveal registry ───
+        // Single-slide reveals that follow the standard pattern (tap Next to advance a sub-step,
+        // tap Back to rewind one, entering via Back lands fully revealed). To add a NEW reveal:
+        //   1. add its step field to PRESENTATION_REVEAL_STEPS above
+        //   2. stash its slide index on presentationState at slide-index allocation
+        //   3. add one entry here (maxStep for fixed counts, countKey for dynamic)
+        // Complex reveals (team/player/bracket ranges with sounds) keep their custom handlers.
+        const UNIFORM_REVEALS = [
+            { stepKey: 'netRevealStep',        indexKey: '_netSlideIndex',        countKey: '_netTopCount' },
+            { stepKey: 'ctpLeadersRevealStep', indexKey: '_ctpLeadersSlideIndex', countKey: '_ctpLeadersCount' },
+            { stepKey: 'bbbLeadersRevealStep', indexKey: '_bbbLeadersSlideIndex', countKey: '_bbbLeadersCount' },
+            { stepKey: 'byNumbersRevealStep',  indexKey: '_byNumbersSlideIndex',  maxStep: 3 },
+            { stepKey: 'holePerfRevealStep',   indexKey: '_holePerfSlideIndex',   maxStep: 3 }
+        ];
+        const uniformRevealMax = (r) => (r.maxStep != null) ? r.maxStep : (presentationState[r.countKey] || 0);
 
         window.openPresentationMode = () => {
             try {
@@ -8475,7 +8554,8 @@
                                     if (isNaN(score)) { holeStates.push('unscored'); continue; }
                                     const par = r.pars[i];
                                     const hi = r.handicaps[i];
-                                    let s = 0; if (player.handicap >= hi) s = 1; if (player.handicap >= hi + 18) s = 2;
+                                    // Route through the shared helper so the USGA setting is honored
+                                    const s = getPlayerStrokesOnHole(player, r, hi);
                                     const net = score - s;
                                     holeStates.push(net <= par ? 'good' : 'bad');
                                 }
@@ -8530,9 +8610,8 @@
                                 if (isNaN(score)) { holeStates.push('unscored'); continue; }
                                 const par = mostRecentRound.pars[i];
                                 const handicapIdx = mostRecentRound.handicaps[i];
-                                let strokes = 0;
-                                if (player.handicap >= handicapIdx) strokes = 1;
-                                if (player.handicap >= handicapIdx + 18) strokes = 2;
+                                // Route through the shared helper so the USGA setting is honored
+                                const strokes = getPlayerStrokesOnHole(player, mostRecentRound, handicapIdx);
                                 const net = score - strokes;
                                 if (net <= par) holeStates.push('good');
                                 else holeStates.push('bad');
@@ -10178,18 +10257,47 @@
                         .sort((a, b) => (a.timestamp || a.id) - (b.timestamp || b.id));
                     const _mostRecentEventRoundNum = _activeOrdered.findIndex(r => r.id === mostRecentRound.id) + 1;
                     
-                    // Filter: decided real matches (no byes, no manual overrides) in the most recent round
-                    const _decidedThisRound = Object.values(_bracket.matches).filter(m => {
-                        if (m.status !== 'decided') return false;
+                    // Build an "effective" view of the bracket where any most-recent-round match that is
+                    // fully scored (but maybe not saved as 'decided') is treated as decided using its LIVE
+                    // result. This lets a back-9 match resolve its players off the front-9 winners even if the
+                    // stored bracket wasn't auto-resolved — guaranteeing BOTH nine-hole matches of a split day
+                    // can be displayed. Multi-pass so front-9 → back-9 dependencies settle.
+                    const _effectiveMatches = { ..._bracket.matches };
+                    for (let _pass = 0; _pass < 4; _pass++) {
+                        let _changed = false;
+                        Object.keys(_effectiveMatches).forEach(mid => {
+                            const m = _effectiveMatches[mid];
+                            if (m.status === 'decided') return;
+                            if (m.isManualOverride) return;
+                            if (m.roundNumber !== _mostRecentEventRoundNum) return;
+                            const r1 = resolveSlotToPlayer(m.slot1, _bracket, _effectiveMatches);
+                            const r2 = resolveSlotToPlayer(m.slot2, _bracket, _effectiveMatches);
+                            if (!r1 || !r2 || r1.isBye || r2.isBye) return;
+                            const _mr = _activeOrdered[m.roundNumber - 1];
+                            if (!_mr) return;
+                            const _live = computeMatchFromRound(r1.playerId, r2.playerId, _mr, m.holeSegment || 'full');
+                            if (_live && _live.winner) {
+                                _effectiveMatches[mid] = { ...m, status: 'decided', winner: _live.winner,
+                                    loser: _live.loser, tiebreakerNote: _live.tiebreakerNote, _liveOnly: true };
+                                _changed = true;
+                            }
+                        });
+                        if (!_changed) break;
+                    }
+                    
+                    // Matches to show for the most recent round. Include a match if it is in this round,
+                    // has real (non-bye) players, and is decided in the effective view (stored OR live).
+                    // This is what makes BOTH nine-hole matches of a split day appear: on a 16-slot bracket the
+                    // front-9 (L3) and back-9 (L4) matches both live on round 4; the presentation recomputes
+                    // every winner live anyway, so a not-yet-saved back-9 result no longer hides the match.
+                    const _decidedThisRound = Object.values(_effectiveMatches).filter(m => {
                         if (m.roundNumber !== _mostRecentEventRoundNum) return false;
                         if (m.isManualOverride) return false;
-                        // Check both slots resolve to real players (skip byes)
-                        const r1 = resolveSlotToPlayer(m.slot1, _bracket, _bracket.matches);
-                        const r2 = resolveSlotToPlayer(m.slot2, _bracket, _bracket.matches);
+                        const r1 = resolveSlotToPlayer(m.slot1, _bracket, _effectiveMatches);
+                        const r2 = resolveSlotToPlayer(m.slot2, _bracket, _effectiveMatches);
                         if (!r1 || !r2 || r1.isBye || r2.isBye) return false;
-                        // Skip walkover-decided matches (their tiebreakerNote indicates auto-advance)
                         if (m.tiebreakerNote === 'Walkover (bye)' || m.tiebreakerNote === 'Both byes') return false;
-                        return true;
+                        return m.status === 'decided';
                     });
                     
                     // Order: L bracket → W bracket → GF/L-Final, ascending round within each
@@ -10206,8 +10314,8 @@
                     
                     // Build narrative data for each
                     _decidedThisRound.forEach(m => {
-                        const r1 = resolveSlotToPlayer(m.slot1, _bracket, _bracket.matches);
-                        const r2 = resolveSlotToPlayer(m.slot2, _bracket, _bracket.matches);
+                        const r1 = resolveSlotToPlayer(m.slot1, _bracket, _effectiveMatches);
+                        const r2 = resolveSlotToPlayer(m.slot2, _bracket, _effectiveMatches);
                         const p1 = state.players.find(p => p.id == r1.playerId);
                         const p2 = state.players.find(p => p.id == r2.playerId);
                         if (!p1 || !p2) return;
@@ -10510,14 +10618,7 @@
                 presentationState = {
                     active: true,
                     currentSlide: 0,
-                    netRevealStep: 0,
-                    bracketRevealStep: 0,
-                    playerRevealStep: 0,
-                    ctpLeadersRevealStep: 0,
-                    bbbLeadersRevealStep: 0,
-                    teamRevealStep: 0,
-                    byNumbersRevealStep: 0,
-                    holePerfRevealStep: 0,
+                    ...PRESENTATION_REVEAL_STEPS(),
                     totalSlides: totalSlides,
                     // Player performances
                     individualPlayerSlides: individualPlayerSlides,
@@ -10802,6 +10903,103 @@
             `;
         };
 
+        // ─── Shared leader-board slide renderer (CTP + BBB) ───
+        // Renders a top-4 progressive-reveal leader board. `leaders` is the grouped array from
+        // buildLeadersTop5 (one entry per PLACE; ties share a slot via .members[]).
+        // opts: { leaders, step, emoji, title, subtitle, subtitleColor, accentFallback, unitLabel }
+        const renderLeaderBoardSlideHTML = (opts) => {
+            const leaders = (opts.leaders || []).slice().sort((a, b) => a.place - b.place);
+            const totalPositions = leaders.length;
+            const step = Math.min(opts.step || 0, totalPositions);
+            const isRevealed = (idx) => idx >= (totalPositions - step);
+            const getSP = (playerId) => state.players.find(sp => sp.id == playerId) || { id: playerId, name: '?' };
+            
+            const movement = (m) => {
+                if (m.previousPosition == null) {
+                    return `<span style="color:#fbbf24;font-size:11px;font-weight:700;letter-spacing:1px;background:rgba(251,191,36,0.15);border:1px solid rgba(251,191,36,0.4);padding:1px 6px;border-radius:6px;">NEW</span>`;
+                }
+                if (m.change > 0) return `<span style="color:#10b981;font-size:12px;font-weight:700;">⬆${m.change}</span>`;
+                if (m.change < 0) return `<span style="color:#ef4444;font-size:12px;font-weight:700;">⬇${Math.abs(m.change)}</span>`;
+                return `<span style="color:#9ca3af;font-size:12px;font-weight:700;">=</span>`;
+            };
+            
+            const members = (g) => {
+                if (g.members.length === 1) {
+                    const m = g.members[0];
+                    return `
+                        ${renderAvatar(getSP(m.playerId), 56)}
+                        <div style="flex:1;text-align:left;">
+                            <div style="color:white;font-size:20px;font-weight:700;line-height:1.1;">${m.playerName}</div>
+                            <div style="display:flex;align-items:center;gap:10px;margin-top:4px;">
+                                <div style="color:${m.teamColor || opts.subtitleColor};font-size:12px;font-weight:500;">${m.teamName}</div>
+                                ${movement(m)}
+                            </div>
+                        </div>
+                    `;
+                }
+                return `
+                    <div style="flex:1;text-align:left;display:flex;flex-direction:column;gap:6px;">
+                        <div style="color:#fbbf24;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;">${g.members.length}-way tie</div>
+                        ${g.members.map(m => `
+                            <div style="display:flex;align-items:center;gap:8px;">
+                                <div style="width:10px;height:10px;border-radius:50%;background:${m.teamColor || opts.accentFallback};flex-shrink:0;"></div>
+                                <div style="color:white;font-size:17px;font-weight:600;">${m.playerName}</div>
+                                <div style="color:#9ca3af;font-size:12px;">${m.teamName}</div>
+                                ${movement(m)}
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            };
+            
+            return `
+                <div style="animation:slideUp 0.8s ease-out;max-width:900px;width:100%;margin:0 auto;">
+                    <div style="font-size:64px;margin-bottom:8px;">${opts.emoji}</div>
+                    <h1 style="color:white;font-size:46px;margin:0 0 6px;font-weight:800;letter-spacing:1px;">${opts.title}</h1>
+                    <p style="color:${opts.subtitleColor};font-size:14px;margin:0 0 24px;font-weight:600;letter-spacing:2px;text-transform:uppercase;">${opts.subtitle}</p>
+                    
+                    <div style="display:flex;flex-direction:column;gap:12px;">
+                        ${leaders.map((g, idx) => {
+                            const medal = g.place === 1 ? '🥇' : g.place === 2 ? '🥈' : g.place === 3 ? '🥉' : `#${g.place}`;
+                            if (!isRevealed(idx)) {
+                                return `
+                                    <div style="background:rgba(255,255,255,0.04);border:2px dashed rgba(255,255,255,0.15);border-radius:14px;padding:16px 18px;display:flex;align-items:center;gap:16px;opacity:0.55;">
+                                        <div style="font-size:24px;font-weight:700;color:#6b7280;min-width:54px;text-align:center;">${medal}</div>
+                                        <div style="width:56px;height:56px;border-radius:50%;background:#374151;display:flex;align-items:center;justify-content:center;color:#6b7280;font-size:28px;font-weight:700;">?</div>
+                                        <div style="flex:1;color:#6b7280;font-size:16px;font-style:italic;">— hidden —</div>
+                                    </div>
+                                `;
+                            }
+                            const accent = g.members[0].teamColor || opts.accentFallback;
+                            return `
+                                <div style="background:linear-gradient(90deg, ${accent}25 0%, rgba(255,255,255,0.05) 100%);border:2px solid ${accent};border-radius:14px;padding:16px 18px;display:flex;align-items:center;gap:16px;animation:slideUp 0.5s ease-out;">
+                                    <div style="font-size:24px;font-weight:700;min-width:54px;text-align:center;">${medal}</div>
+                                    ${members(g)}
+                                    <div style="text-align:right;flex-shrink:0;">
+                                        <div style="color:white;font-size:32px;font-weight:800;line-height:1;">${g.total}</div>
+                                        <div style="color:#9ca3af;font-size:10px;margin-top:3px;letter-spacing:1px;">${opts.unitLabel}</div>
+                                        ${g.today > 0 ? `
+                                            <div style="margin-top:6px;background:rgba(16,185,129,0.18);border:1px solid rgba(16,185,129,0.5);border-radius:6px;padding:2px 6px;color:#10b981;font-size:11px;font-weight:700;">
+                                                +${g.today} today
+                                            </div>
+                                        ` : ''}
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                    
+                    <div style="margin-top:28px;color:${opts.subtitleColor};font-size:14px;">
+                        ${step === 0
+                            ? `Tap Next to begin the countdown →`
+                            : (step < totalPositions
+                                ? `Tap Next for the next reveal →`
+                                : `🏆 All revealed`)}
+                    </div>
+                </div>
+            `;
+        };
+        
         window.renderPresentation = () => {
             try {
                 let { 
@@ -10872,12 +11070,8 @@
             const beatComparisonSlideIndex = hasBeatComparisonSlide ? slideIndex++ : -1;
             const scoringDistSlideIndex = hasScoringDistSlide ? slideIndex++ : -1;
             // Disabled — these awards now roll into per-player segments instead of standalone slides
-            const rollercoasterSlideIndex = -1;
-            const steadyEddieSlideIndex = -1;
-            const onFireSlideIndex = -1;
-            const grindSlideIndex = -1;
-            const dialedInSlideIndex = -1;
-            const par3SpecialistSlideIndex = -1;
+            // (Retired standalone award slides — rolled into per-player segments or replaced
+            //  by the top-4 leader reveals. Their render branches were removed in the cleanup.)
             const photosSlideIndex = hasPhotosSlide ? slideIndex++ : -1;
             const netSlideIndex = hasNetSlide ? slideIndex++ : -1;
             // Stash for nav handlers (B2 sub-step navigation)
@@ -10889,11 +11083,6 @@
                 + (presentationState.netLeaderIneligible ? 1 : 0);
             presentationState._netLeaderIneligible = !!presentationState.netLeaderIneligible;
             // Disabled — BBB / CTP / Extra9 winner standalone slides also roll into per-player segments
-            const bbbSlideIndex = -1;
-            const ctpChampionSlideIndex = -1; // replaced by ctpLeadersSlideIndex (top-5 reveal)
-            const bounceBackSlideIndex = -1;  // rolled into per-player awards
-            const clutchSlideIndex = -1;      // rolled into per-player awards
-            const wildCardSlideIndex = -1;    // removed entirely per user request
             // NEW: CTP and BBB Leaders top-5 progressive reveals
             const ctpLeadersSlideIndex = hasCTPLeadersSlide ? slideIndex++ : -1;
             const bbbLeadersSlideIndex = hasBBBLeadersSlide ? slideIndex++ : -1;
@@ -10902,8 +11091,6 @@
             presentationState._ctpLeadersCount = (presentationState.ctpLeadersTop5 || []).length;
             presentationState._bbbLeadersSlideIndex = bbbLeadersSlideIndex;
             presentationState._bbbLeadersCount = (presentationState.bbbLeadersTop5 || []).length;
-            const extra9SlideIndex = -1;
-            const ctpSlideIndex = -1;
             const weeklyAchievementsSlideIndex = hasWeeklyAchievementsSlide ? slideIndex++ : -1;
             // Team-standings intro: cinematic anticipation slide right before the team countdown reveal.
             // Only shown when there are actually teams to reveal.
@@ -10923,7 +11110,6 @@
             const milestonesSlideIndex = hasMilestonesSlide ? slideIndex++ : -1;
             const handicapSlideIndex = hasHandicapSlide ? slideIndex++ : -1;
             const extra9TeamsSlideIndex = hasExtra9TeamsSlide ? slideIndex++ : -1;
-            const bbbLeaderboardSlideIndex = -1; // replaced by bbbLeadersSlideIndex (top-5 reveal, moved up)
             const nextRoundSlideIndex = hasNextRoundSlide ? slideIndex++ : -1;
             // Closing collage: photo mosaic + sign-off message. Only shown when there are photos.
             const hasClosingSlide = roundPhotos && roundPhotos.length > 0;
@@ -12561,18 +12747,6 @@
                     if (displayMode === 'extra9Money') {
                         const holeNumberDisplay = award.holeIdx != null && Number.isFinite(award.holeIdx) ? (award.holeIdx + 1) : null;
                         extra9MoneyHTML = `
-                            <style>
-                                @keyframes ex9-fall {
-                                    0%   { transform: translateY(-120vh) rotate(0deg); opacity: 0; }
-                                    10%  { opacity: 1; }
-                                    90%  { opacity: 1; }
-                                    100% { transform: translateY(120vh) rotate(720deg); opacity: 0; }
-                                }
-                                @keyframes ex9-sway {
-                                    0%, 100% { transform: translateX(0) rotate(-5deg); }
-                                    50%      { transform: translateX(20px) rotate(5deg); }
-                                }
-                            </style>
                             <!-- Falling cash backdrop -->
                             <div style="position:absolute;inset:0;pointer-events:none;overflow:hidden;">
                                 ${Array.from({ length: 18 }, (_, i) => {
@@ -13009,33 +13183,6 @@
                         //   2.4s (if eliminated): loser balloons to 220px with red glow + ELIMINATED overlay
                         //   3.4s: loser settles back to demoted size, opacity drops
                         html += `
-                            <style>
-                                @keyframes mp-winner-shrink {
-                                    0%   { transform: scale(2.4); }
-                                    100% { transform: scale(1); }
-                                }
-                                @keyframes mp-loser-grow {
-                                    0%   { transform: scale(0.55); opacity: 0.4; }
-                                    100% { transform: scale(1); opacity: ${loserEliminated ? '0.85' : '0.55'}; }
-                                }
-                                @keyframes mp-elim-balloon {
-                                    0%   { transform: scale(1); filter: drop-shadow(0 0 0 transparent); opacity: 0.85; }
-                                    35%  { transform: scale(2.3); filter: drop-shadow(0 0 40px rgba(239,68,68,0.9)); opacity: 1; }
-                                    55%  { transform: scale(2.3); filter: drop-shadow(0 0 60px rgba(239,68,68,1)); opacity: 1; }
-                                    100% { transform: scale(1); filter: drop-shadow(0 0 0 transparent); opacity: 0.35; }
-                                }
-                                @keyframes mp-elim-text-pop {
-                                    0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.3) rotate(-12deg); }
-                                    25%  { opacity: 1; transform: translate(-50%, -50%) scale(1.2) rotate(-3deg); }
-                                    45%  { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(0deg); }
-                                    85%  { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(0deg); }
-                                    100% { opacity: 0; transform: translate(-50%, -50%) scale(0.85) rotate(2deg); }
-                                }
-                                @keyframes mp-badge-fade {
-                                    0%   { opacity: 0; transform: translateY(20px); }
-                                    100% { opacity: 1; transform: translateY(0); }
-                                }
-                            </style>
                             <div style="animation:slideUp 0.5s ease-out;max-width:1300px;width:100%;">
                                 <div style="text-align:center;margin-bottom:14px;">
                                     <div style="color:rgba(255,255,255,0.7);font-size:16px;font-weight:600;letter-spacing:3px;">
@@ -13065,8 +13212,8 @@
                                     <!-- LOSER: starts tiny via scale(0.55), grows to 1x. If eliminated, balloons later. -->
                                     <div style="text-align:center;position:relative;">
                                         <div style="margin:0 auto 10px;transform-origin:center bottom;${loserEliminated
-                                            ? `animation:mp-loser-grow 1.5s 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) backwards, mp-elim-balloon 1.6s 2.4s ease-in-out forwards;`
-                                            : `animation:mp-loser-grow 1.5s 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;`}">
+                                            ? `animation:mp-loser-grow-elim 1.5s 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) backwards, mp-elim-balloon 1.6s 2.4s ease-in-out forwards;`
+                                            : `animation:mp-loser-grow-std 1.5s 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;`}">
                                             ${renderAvatar(loserPlayer, 90)}
                                         </div>
                                         <div style="color:white;font-size:24px;font-weight:600;">${loserPlayer.name}</div>
@@ -13910,22 +14057,6 @@
                 };
 
                 html += `
-                    <style>
-                        @keyframes bc-in-from-right {
-                            0%   { opacity:0; transform: translateX(200px) scale(0.4); }
-                            60%  { opacity:1; transform: translateX(-12px) scale(1.05); }
-                            100% { opacity:1; transform: translateX(0) scale(1); }
-                        }
-                        @keyframes bc-in-from-left {
-                            0%   { opacity:0; transform: translateX(-200px) scale(0.4); }
-                            60%  { opacity:1; transform: translateX(12px) scale(1.05); }
-                            100% { opacity:1; transform: translateX(0) scale(1); }
-                        }
-                        @keyframes bc-mike-pulse {
-                            0%,100% { transform: scale(1); }
-                            50%     { transform: scale(1.04); }
-                        }
-                    </style>
                     <div style="animation:fadeIn 0.6s ease-out;max-width:1500px;width:100%;">
                         <h1 style="color:white;font-size:42px;margin:0 0 6px;text-shadow:0 4px 20px rgba(0,0,0,0.5);text-align:center;">
                             ⚔️ Who Beat ${_bc.targetPlayer}?
@@ -14026,164 +14157,6 @@
                         </div>
                     </div>
                 `;
-            } else if (currentSlide === rollercoasterSlideIndex) {
-                // ROLLERCOASTER AWARD SLIDE
-                const winner = analytics.awards.rollercoaster[0];
-                const ties = analytics.awards.rollercoaster.slice(1);
-                const winnerData = {
-                    playerName: winner.player,
-                    teamName: winner.team,
-                    teamColor: winner.teamColor,
-                    variance: winner.variance
-                };
-                html += renderAwardSlide({
-                    titleEmoji: '🎢',
-                    titleText: 'Rollercoaster',
-                    subtitleLine1: `${mostRecentRound.courseName} - ${mostRecentRound.date}`,
-                    subtitleLine2: 'Biggest variance in net scores — most ups and downs',
-                    accentColor: '#f59e0b',
-                    accentColorRgba: 'rgba(245,158,11',
-                    winner: winnerData,
-                    winnerLabel: '🏆 Winner',
-                    winnerExtraText: ties.length > 0 ? `Also tied: ${ties.map(w => w.player).join(', ')}` : '',
-                    valueAccessor: (p) => p.variance,
-                    valueColor: '#f59e0b',
-                    valueSubtext: () => 'Variance',
-                    buttonGradient: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-                    buttonShadow: 'rgba(245,158,11,0.4)'
-                });
-            } else if (currentSlide === steadyEddieSlideIndex) {
-                // STEADY EDDIE AWARD SLIDE
-                const winner = analytics.awards.steadyEddie[0];
-                const ties = analytics.awards.steadyEddie.slice(1);
-                const winnerData = {
-                    playerName: winner.player,
-                    teamName: winner.team,
-                    teamColor: winner.teamColor,
-                    variance: winner.variance
-                };
-                html += renderAwardSlide({
-                    titleEmoji: '⚖️',
-                    titleText: 'Steady Eddie',
-                    subtitleLine1: `${mostRecentRound.courseName} - ${mostRecentRound.date}`,
-                    subtitleLine2: 'Lowest variance — most consistent play',
-                    accentColor: '#3b82f6',
-                    accentColorRgba: 'rgba(59,130,246',
-                    winner: winnerData,
-                    winnerLabel: '🏆 Most Consistent',
-                    winnerExtraText: ties.length > 0 ? `Also tied: ${ties.map(w => w.player).join(', ')}` : '',
-                    valueAccessor: (p) => p.variance,
-                    valueColor: '#3b82f6',
-                    valueSubtext: () => 'Variance',
-                    buttonGradient: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
-                    buttonShadow: 'rgba(59,130,246,0.4)'
-                });
-            } else if (currentSlide === onFireSlideIndex) {
-                // ON FIRE AWARD SLIDE
-                const winner = analytics.awards.onFire[0];
-                const ties = analytics.awards.onFire.slice(1);
-                const winnerData = {
-                    playerName: winner.player,
-                    teamName: winner.team,
-                    teamColor: winner.teamColor,
-                    streak: winner.streak
-                };
-                html += renderAwardSlide({
-                    titleEmoji: '🔥',
-                    titleText: 'On Fire',
-                    subtitleLine1: `${mostRecentRound.courseName} - ${mostRecentRound.date}`,
-                    subtitleLine2: 'Longest streak of par or better',
-                    accentColor: '#ef4444',
-                    accentColorRgba: 'rgba(239,68,68',
-                    winner: winnerData,
-                    winnerLabel: '🏆 Best Streak',
-                    winnerExtraText: ties.length > 0 ? `Also tied: ${ties.map(w => w.player).join(', ')}` : '',
-                    valueAccessor: (p) => p.streak,
-                    valueColor: '#ef4444',
-                    valueSubtext: () => 'in a row',
-                    buttonGradient: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
-                    buttonShadow: 'rgba(239,68,68,0.4)'
-                });
-            } else if (currentSlide === grindSlideIndex) {
-                // THE GRIND AWARD SLIDE
-                const winner = analytics.awards.grind[0];
-                const ties = analytics.awards.grind.slice(1);
-                const winnerData = {
-                    playerName: winner.player,
-                    teamName: winner.team,
-                    teamColor: winner.teamColor,
-                    count: winner.count
-                };
-                html += renderAwardSlide({
-                    titleEmoji: '💪',
-                    titleText: 'The Grind',
-                    subtitleLine1: `${mostRecentRound.courseName} - ${mostRecentRound.date}`,
-                    subtitleLine2: 'Fewest holes with bogey or worse',
-                    accentColor: '#10b981',
-                    accentColorRgba: 'rgba(16,185,129',
-                    winner: winnerData,
-                    winnerLabel: '🏆 Steadiest Card',
-                    winnerExtraText: ties.length > 0 ? `Also tied: ${ties.map(w => w.player).join(', ')}` : '',
-                    valueAccessor: (p) => p.count,
-                    valueColor: '#10b981',
-                    valueSubtext: (p) => `bogey${p.count === 1 ? '' : 's'}`,
-                    buttonGradient: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                    buttonShadow: 'rgba(16,185,129,0.4)'
-                });
-            } else if (currentSlide === dialedInSlideIndex) {
-                // DIALED IN (CLOSEST TO HANDICAP) AWARD SLIDE
-                const winner = analytics.awards.closestToHandicap[0];
-                const ties = analytics.awards.closestToHandicap.slice(1);
-                const winnerData = {
-                    playerName: winner.player,
-                    teamName: winner.team,
-                    teamColor: winner.teamColor,
-                    diff: winner.diff,
-                    grossScore: winner.grossScore
-                };
-                html += renderAwardSlide({
-                    titleEmoji: '🎯',
-                    titleText: 'Dialed In',
-                    subtitleLine1: `${mostRecentRound.courseName} - ${mostRecentRound.date}`,
-                    subtitleLine2: 'Closest to expected score (Par + Handicap)',
-                    accentColor: '#a855f7',
-                    accentColorRgba: 'rgba(168,85,247',
-                    winner: winnerData,
-                    winnerLabel: '🏆 Met Expectations',
-                    winnerExtraText: ties.length > 0 ? `Also tied: ${ties.map(w => w.player).join(', ')}` : '',
-                    valueAccessor: (p) => p.diff === 0 ? 'Perfect!' : p.diff,
-                    valueColor: '#a855f7',
-                    valueSubtext: (p) => p.diff === 0 ? `Shot ${p.grossScore}` : `strokes off · Shot ${p.grossScore}`,
-                    buttonGradient: 'linear-gradient(135deg, #a855f7 0%, #9333ea 100%)',
-                    buttonShadow: 'rgba(168,85,247,0.4)'
-                });
-            } else if (currentSlide === par3SpecialistSlideIndex) {
-                // PAR 3 SPECIALIST AWARD SLIDE
-                const winner = analytics.awards.par3Specialist[0];
-                const ties = analytics.awards.par3Specialist.slice(1);
-                const winnerData = {
-                    playerName: winner.player,
-                    teamName: winner.team,
-                    teamColor: winner.teamColor,
-                    average: winner.average,
-                    count: winner.count
-                };
-                html += renderAwardSlide({
-                    titleEmoji: '3️⃣',
-                    titleText: 'Par 3 Specialist',
-                    subtitleLine1: `${mostRecentRound.courseName} - ${mostRecentRound.date}`,
-                    subtitleLine2: 'Best average net score on par 3 holes',
-                    accentColor: '#22d3ee',
-                    accentColorRgba: 'rgba(34,211,238',
-                    winner: winnerData,
-                    winnerLabel: '🏆 Short-Game Star',
-                    winnerExtraText: ties.length > 0 ? `Also tied: ${ties.map(w => w.player).join(', ')}` : '',
-                    valueAccessor: (p) => p.average,
-                    valueColor: '#22d3ee',
-                    valueSubtext: (p) => `avg net · ${p.count} hole${p.count === 1 ? '' : 's'}`,
-                    buttonGradient: 'linear-gradient(135deg, #22d3ee 0%, #0891b2 100%)',
-                    buttonShadow: 'rgba(34,211,238,0.4)'
-                });
             } else if (currentSlide === photosSlideIndex) {
                 // ─── PHOTOS OF THE DAY ───
                 // Gallery view of all round photos + button to launch fullscreen slideshow.
@@ -14445,422 +14418,30 @@
                         </div>
                     `;
                 }
-            } else if (currentSlide === bbbSlideIndex) {
-                // BBB WINNER SLIDE
-                const { bbbWinner, bbbTop3, previousBBBWinners } = presentationState;
-                html += renderAwardSlide({
-                    titleEmoji: '🎪',
-                    titleText: 'BBB Champion',
-                    subtitleLine1: `${mostRecentRound.courseName} - ${mostRecentRound.date}`,
-                    accentColor: '#f59e0b',
-                    accentColorRgba: 'rgba(245,158,11',
-                    winner: bbbWinner,
-                    winnerLabel: '🏆 Winner',
-                    valueAccessor: (p) => p.bbbCount,
-                    valueColor: '#f59e0b',
-                    valueSubtext: (p) => `BBB${p.bbbCount !== 1 ? 's' : ''}`,
-                    top3: bbbTop3,
-                    top3ValueColor: '#f59e0b',
-                    top3ValueFormatter: (p) => p.bbbCount,
-                    top3ValueSubtext: (p) => `BBB${p.bbbCount !== 1 ? 's' : ''}`,
-                    top3MedalSource: 'place',
-                    top3Heading: 'Top 3 Places',
-                    previousWinners: previousBBBWinners,
-                    buttonGradient: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-                    buttonShadow: 'rgba(245,158,11,0.4)'
-                });
             } else if (currentSlide === ctpLeadersSlideIndex) {
-                // ═══════════════════════════════════════════════════════
-                // CTP LEADERS TOP-5 — Progressive Reveal
-                // step 0: silhouettes for top 5
-                // step 1..N: reveal in reverse order (lowest place first), ending on #1
-                // Each entry shows: event total, today's count, movement vs previous standings
-                // ═══════════════════════════════════════════════════════
-                const ctpLeaders = (presentationState.ctpLeadersTop5 || []).slice().sort((a, b) => a.place - b.place);
-                const ctpTotalPositions = ctpLeaders.length;
-                const ctpStep = Math.min(presentationState.ctpLeadersRevealStep || 0, ctpTotalPositions);
-                const ctpIsRevealed = (idx) => idx >= (ctpTotalPositions - ctpStep);
-                const getStatePlayerCTP = (playerId) => state.players.find(sp => sp.id == playerId) || { id: playerId, name: '?' };
-                
-                // Movement indicator helper (per tied member)
-                const renderMovement = (m) => {
-                    if (m.previousPosition == null) {
-                        return `<span style="color:#fbbf24;font-size:11px;font-weight:700;letter-spacing:1px;background:rgba(251,191,36,0.15);border:1px solid rgba(251,191,36,0.4);padding:1px 6px;border-radius:6px;">NEW</span>`;
-                    }
-                    if (m.change > 0) return `<span style="color:#10b981;font-size:12px;font-weight:700;">⬆${m.change}</span>`;
-                    if (m.change < 0) return `<span style="color:#ef4444;font-size:12px;font-weight:700;">⬇${Math.abs(m.change)}</span>`;
-                    return `<span style="color:#9ca3af;font-size:12px;font-weight:700;">=</span>`;
-                };
-                
-                // Renders the member(s) inside a place slot. Single member shows a big avatar row;
-                // ties show each tied name compactly so they share the one slot.
-                const renderLeaderMembers = (g, accent) => {
-                    if (g.members.length === 1) {
-                        const m = g.members[0];
-                        const sp = getStatePlayerCTP(m.playerId);
-                        return `
-                            ${renderAvatar(sp, 56)}
-                            <div style="flex:1;text-align:left;">
-                                <div style="color:white;font-size:20px;font-weight:700;line-height:1.1;">${m.playerName}</div>
-                                <div style="display:flex;align-items:center;gap:10px;margin-top:4px;">
-                                    <div style="color:${m.teamColor || '#a5b4fc'};font-size:12px;font-weight:500;">${m.teamName}</div>
-                                    ${renderMovement(m)}
-                                </div>
-                            </div>
-                        `;
-                    }
-                    // Tie: list all names in one slot
-                    return `
-                        <div style="flex:1;text-align:left;display:flex;flex-direction:column;gap:6px;">
-                            <div style="color:#fbbf24;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;">${g.members.length}-way tie</div>
-                            ${g.members.map(m => `
-                                <div style="display:flex;align-items:center;gap:8px;">
-                                    <div style="width:10px;height:10px;border-radius:50%;background:${m.teamColor || '#3b82f6'};flex-shrink:0;"></div>
-                                    <div style="color:white;font-size:17px;font-weight:600;">${m.playerName}</div>
-                                    <div style="color:#9ca3af;font-size:12px;">${m.teamName}</div>
-                                    ${renderMovement(m)}
-                                </div>
-                            `).join('')}
-                        </div>
-                    `;
-                };
-                
-                html += `
-                    <div style="animation:slideUp 0.8s ease-out;max-width:900px;width:100%;margin:0 auto;">
-                        <div style="font-size:64px;margin-bottom:8px;">🎯</div>
-                        <h1 style="color:white;font-size:46px;margin:0 0 6px;font-weight:800;letter-spacing:1px;">CTP Leaders</h1>
-                        <p style="color:#a5b4fc;font-size:14px;margin:0 0 24px;font-weight:600;letter-spacing:2px;text-transform:uppercase;">Top 4 · Event Standings</p>
-                        
-                        <div style="display:flex;flex-direction:column;gap:12px;">
-                            ${ctpLeaders.map((g, idx) => {
-                                const revealed = ctpIsRevealed(idx);
-                                const medal = g.place === 1 ? '🥇' : g.place === 2 ? '🥈' : g.place === 3 ? '🥉' : `#${g.place}`;
-                                if (!revealed) {
-                                    return `
-                                        <div style="background:rgba(255,255,255,0.04);border:2px dashed rgba(255,255,255,0.15);border-radius:14px;padding:16px 18px;display:flex;align-items:center;gap:16px;opacity:0.55;">
-                                            <div style="font-size:24px;font-weight:700;color:#6b7280;min-width:54px;text-align:center;">${medal}</div>
-                                            <div style="width:56px;height:56px;border-radius:50%;background:#374151;display:flex;align-items:center;justify-content:center;color:#6b7280;font-size:28px;font-weight:700;">?</div>
-                                            <div style="flex:1;color:#6b7280;font-size:16px;font-style:italic;">— hidden —</div>
-                                        </div>
-                                    `;
-                                }
-                                const accent = g.members[0].teamColor || '#3b82f6';
-                                return `
-                                    <div style="background:linear-gradient(90deg, ${accent}25 0%, rgba(255,255,255,0.05) 100%);border:2px solid ${accent};border-radius:14px;padding:16px 18px;display:flex;align-items:center;gap:16px;animation:slideUp 0.5s ease-out;">
-                                        <div style="font-size:24px;font-weight:700;min-width:54px;text-align:center;">${medal}</div>
-                                        ${renderLeaderMembers(g, accent)}
-                                        <div style="text-align:right;flex-shrink:0;">
-                                            <div style="color:white;font-size:32px;font-weight:800;line-height:1;">${g.total}</div>
-                                            <div style="color:#9ca3af;font-size:10px;margin-top:3px;letter-spacing:1px;">TOTAL CTPs</div>
-                                            ${g.today > 0 ? `
-                                                <div style="margin-top:6px;background:rgba(16,185,129,0.18);border:1px solid rgba(16,185,129,0.5);border-radius:6px;padding:2px 6px;color:#10b981;font-size:11px;font-weight:700;">
-                                                    +${g.today} today
-                                                </div>
-                                            ` : ''}
-                                        </div>
-                                    </div>
-                                `;
-                            }).join('')}
-                        </div>
-                        
-                        <div style="margin-top:28px;color:#a5b4fc;font-size:14px;">
-                            ${ctpStep === 0
-                                ? `Tap Next to begin the countdown →`
-                                : (ctpStep < ctpTotalPositions
-                                    ? `Tap Next for the next reveal →`
-                                    : `🏆 All revealed`)}
-                        </div>
-                    </div>
-                `;
+                // CTP LEADERS TOP-4 — progressive reveal via shared leader-board renderer
+                html += renderLeaderBoardSlideHTML({
+                    leaders: presentationState.ctpLeadersTop5,
+                    step: presentationState.ctpLeadersRevealStep || 0,
+                    emoji: '🎯',
+                    title: 'CTP Leaders',
+                    subtitle: 'Top 4 · Event Standings',
+                    subtitleColor: '#a5b4fc',
+                    accentFallback: '#3b82f6',
+                    unitLabel: 'TOTAL CTPs'
+                });
             } else if (currentSlide === bbbLeadersSlideIndex) {
-                // ═══════════════════════════════════════════════════════
-                // BBB LEADERS TOP-5 — Progressive Reveal (same pattern as CTP)
-                // ═══════════════════════════════════════════════════════
-                const bbbLeaders = (presentationState.bbbLeadersTop5 || []).slice().sort((a, b) => a.place - b.place);
-                const bbbTotalPositions = bbbLeaders.length;
-                const bbbStep = Math.min(presentationState.bbbLeadersRevealStep || 0, bbbTotalPositions);
-                const bbbIsRevealed = (idx) => idx >= (bbbTotalPositions - bbbStep);
-                const getStatePlayerBBB = (playerId) => state.players.find(sp => sp.id == playerId) || { id: playerId, name: '?' };
-                
-                const renderMovementBBB = (m) => {
-                    if (m.previousPosition == null) {
-                        return `<span style="color:#fbbf24;font-size:11px;font-weight:700;letter-spacing:1px;background:rgba(251,191,36,0.15);border:1px solid rgba(251,191,36,0.4);padding:1px 6px;border-radius:6px;">NEW</span>`;
-                    }
-                    if (m.change > 0) return `<span style="color:#10b981;font-size:12px;font-weight:700;">⬆${m.change}</span>`;
-                    if (m.change < 0) return `<span style="color:#ef4444;font-size:12px;font-weight:700;">⬇${Math.abs(m.change)}</span>`;
-                    return `<span style="color:#9ca3af;font-size:12px;font-weight:700;">=</span>`;
-                };
-                const renderBBBMembers = (g) => {
-                    if (g.members.length === 1) {
-                        const m = g.members[0];
-                        const sp = getStatePlayerBBB(m.playerId);
-                        return `
-                            ${renderAvatar(sp, 56)}
-                            <div style="flex:1;text-align:left;">
-                                <div style="color:white;font-size:20px;font-weight:700;line-height:1.1;">${m.playerName}</div>
-                                <div style="display:flex;align-items:center;gap:10px;margin-top:4px;">
-                                    <div style="color:${m.teamColor || '#fde68a'};font-size:12px;font-weight:500;">${m.teamName}</div>
-                                    ${renderMovementBBB(m)}
-                                </div>
-                            </div>
-                        `;
-                    }
-                    return `
-                        <div style="flex:1;text-align:left;display:flex;flex-direction:column;gap:6px;">
-                            <div style="color:#fbbf24;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;">${g.members.length}-way tie</div>
-                            ${g.members.map(m => `
-                                <div style="display:flex;align-items:center;gap:8px;">
-                                    <div style="width:10px;height:10px;border-radius:50%;background:${m.teamColor || '#f59e0b'};flex-shrink:0;"></div>
-                                    <div style="color:white;font-size:17px;font-weight:600;">${m.playerName}</div>
-                                    <div style="color:#9ca3af;font-size:12px;">${m.teamName}</div>
-                                    ${renderMovementBBB(m)}
-                                </div>
-                            `).join('')}
-                        </div>
-                    `;
-                };
-                
-                html += `
-                    <div style="animation:slideUp 0.8s ease-out;max-width:900px;width:100%;margin:0 auto;">
-                        <div style="font-size:64px;margin-bottom:8px;">🎪</div>
-                        <h1 style="color:white;font-size:46px;margin:0 0 6px;font-weight:800;letter-spacing:1px;">Bingo Bango Bongo</h1>
-                        <p style="color:#fde68a;font-size:14px;margin:0 0 24px;font-weight:600;letter-spacing:2px;text-transform:uppercase;">Top 4 · Event Leaders</p>
-                        
-                        <div style="display:flex;flex-direction:column;gap:12px;">
-                            ${bbbLeaders.map((g, idx) => {
-                                const revealed = bbbIsRevealed(idx);
-                                const medal = g.place === 1 ? '🥇' : g.place === 2 ? '🥈' : g.place === 3 ? '🥉' : `#${g.place}`;
-                                if (!revealed) {
-                                    return `
-                                        <div style="background:rgba(255,255,255,0.04);border:2px dashed rgba(255,255,255,0.15);border-radius:14px;padding:16px 18px;display:flex;align-items:center;gap:16px;opacity:0.55;">
-                                            <div style="font-size:24px;font-weight:700;color:#6b7280;min-width:54px;text-align:center;">${medal}</div>
-                                            <div style="width:56px;height:56px;border-radius:50%;background:#374151;display:flex;align-items:center;justify-content:center;color:#6b7280;font-size:28px;font-weight:700;">?</div>
-                                            <div style="flex:1;color:#6b7280;font-size:16px;font-style:italic;">— hidden —</div>
-                                        </div>
-                                    `;
-                                }
-                                const accent = g.members[0].teamColor || '#f59e0b';
-                                return `
-                                    <div style="background:linear-gradient(90deg, ${accent}25 0%, rgba(255,255,255,0.05) 100%);border:2px solid ${accent};border-radius:14px;padding:16px 18px;display:flex;align-items:center;gap:16px;animation:slideUp 0.5s ease-out;">
-                                        <div style="font-size:24px;font-weight:700;min-width:54px;text-align:center;">${medal}</div>
-                                        ${renderBBBMembers(g)}
-                                        <div style="text-align:right;flex-shrink:0;">
-                                            <div style="color:white;font-size:32px;font-weight:800;line-height:1;">${g.total}</div>
-                                            <div style="color:#9ca3af;font-size:10px;margin-top:3px;letter-spacing:1px;">TOTAL BBBs</div>
-                                            ${g.today > 0 ? `
-                                                <div style="margin-top:6px;background:rgba(16,185,129,0.18);border:1px solid rgba(16,185,129,0.5);border-radius:6px;padding:2px 6px;color:#10b981;font-size:11px;font-weight:700;">
-                                                    +${g.today} today
-                                                </div>
-                                            ` : ''}
-                                        </div>
-                                    </div>
-                                `;
-                            }).join('')}
-                        </div>
-                        
-                        <div style="margin-top:28px;color:#fde68a;font-size:14px;">
-                            ${bbbStep === 0
-                                ? `Tap Next to begin the countdown →`
-                                : (bbbStep < bbbTotalPositions
-                                    ? `Tap Next for the next reveal →`
-                                    : `🏆 All revealed`)}
-                        </div>
-                    </div>
-                `;
-            } else if (currentSlide === ctpChampionSlideIndex) {
-                // CTP CHAMPION SLIDE (Event-Wide)
-                const { ctpChampion, ctpChampionTop3 } = presentationState;
-                const ctpTitle = hasScheduledRounds ? 'CTP Leader' : 'CTP Champion';
-                const ctpWinnerLabel = hasScheduledRounds ? 'Leader' : 'Champion';
-                html += renderAwardSlide({
-                    titleEmoji: '🎯',
-                    titleText: ctpTitle,
-                    subtitleLine1: `${eventName} - ${totalRounds} Round${totalRounds !== 1 ? 's' : ''}${hasScheduledRounds ? ` (${scheduledRoundsCount} more to play)` : ''}`,
-                    subtitleLine2: 'Most Closest to the Pins across entire event',
-                    accentColor: '#3b82f6',
-                    accentColorRgba: 'rgba(59,130,246',
-                    winner: ctpChampion,
-                    winnerLabel: `🏆 ${ctpWinnerLabel}`,
-                    valueAccessor: (p) => p.ctpCount,
-                    valueColor: '#3b82f6',
-                    valueSubtext: (p) => `CTP${p.ctpCount !== 1 ? 's' : ''}`,
-                    top3: ctpChampionTop3,
-                    top3ValueColor: '#3b82f6',
-                    top3ValueFormatter: (p) => p.ctpCount,
-                    top3ValueSubtext: (p) => `CTP${p.ctpCount !== 1 ? 's' : ''}`,
-                    top3MedalSource: 'place',
-                    top3Heading: 'Top 3 Places',
-                    buttonGradient: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
-                    buttonShadow: 'rgba(59,130,246,0.4)'
+                // BBB LEADERS TOP-4 — progressive reveal via shared leader-board renderer
+                html += renderLeaderBoardSlideHTML({
+                    leaders: presentationState.bbbLeadersTop5,
+                    step: presentationState.bbbLeadersRevealStep || 0,
+                    emoji: '🎪',
+                    title: 'Bingo Bango Bongo',
+                    subtitle: 'Top 4 · Event Leaders',
+                    subtitleColor: '#fde68a',
+                    accentFallback: '#f59e0b',
+                    unitLabel: 'TOTAL BBBs'
                 });
-            } else if (currentSlide === bounceBackSlideIndex) {
-                // BOUNCE BACK AWARD SLIDE
-                const { bounceBackWinner, bounceBackTop3 } = presentationState;
-                html += renderAwardSlide({
-                    titleEmoji: '🔥',
-                    titleText: 'Bounce Back Award',
-                    subtitleLine1: `${mostRecentRound.courseName} - ${mostRecentRound.date}`,
-                    subtitleLine2: 'Most pars or better immediately after a bogey+',
-                    accentColor: '#ef4444',
-                    accentColorRgba: 'rgba(239,68,68',
-                    winner: bounceBackWinner,
-                    winnerLabel: '🏆 Mental Toughness Champion',
-                    valueAccessor: (p) => p.count,
-                    valueColor: '#ef4444',
-                    valueSubtext: (p) => `Bounce Back${p.count !== 1 ? 's' : ''}`,
-                    top3: bounceBackTop3,
-                    top3ValueColor: '#ef4444',
-                    top3ValueFormatter: (p) => p.count,
-                    top3MedalSource: 'idx',
-                    top3Heading: 'Top 3',
-                    top3MinCount: 2,
-                    showNoDataFallback: true,
-                    noDataText: 'No bounce backs recorded today',
-                    buttonGradient: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
-                    buttonShadow: 'rgba(239,68,68,0.4)'
-                });
-            } else if (currentSlide === clutchSlideIndex) {
-                // CLUTCH PLAYER AWARD SLIDE
-                const { clutchWinner, clutchTop3 } = presentationState;
-                html += renderAwardSlide({
-                    titleEmoji: '🎯',
-                    titleText: 'Clutch Player',
-                    subtitleLine1: `${mostRecentRound.courseName} - ${mostRecentRound.date}`,
-                    subtitleLine2: 'Best net score on final 3 holes (16, 17, 18)',
-                    accentColor: '#3b82f6',
-                    accentColorRgba: 'rgba(59,130,246',
-                    winner: clutchWinner,
-                    winnerLabel: '🏆 Finish Strong Champion',
-                    valueAccessor: (p) => `${p.score > 0 ? '+' : ''}${p.score}`,
-                    valueColor: '#3b82f6',
-                    valueSubtext: () => 'Net to Par',
-                    top3: clutchTop3,
-                    top3ValueColor: '#3b82f6',
-                    top3ValueFormatter: (p) => `${p.score > 0 ? '+' : ''}${p.score}`,
-                    top3MedalSource: 'idx',
-                    top3Heading: 'Top 3',
-                    top3MinCount: 2,
-                    buttonGradient: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
-                    buttonShadow: 'rgba(59,130,246,0.4)'
-                });
-            } else if (currentSlide === wildCardSlideIndex) {
-                // WILD CARD AWARD SLIDE
-                const { wildCardWinner, wildCardTop3 } = presentationState;
-                html += renderAwardSlide({
-                    titleEmoji: '🎲',
-                    titleText: 'Wild Card',
-                    subtitleLine1: `${mostRecentRound.courseName} - ${mostRecentRound.date}`,
-                    subtitleLine2: 'Most unique scores on scorecard',
-                    accentColor: '#a855f7',
-                    accentColorRgba: 'rgba(168,85,247',
-                    winner: wildCardWinner,
-                    winnerLabel: '🏆 Most Unpredictable',
-                    extraContent: wildCardWinner ? `
-                        <div style="font-size:14px;color:#a5b4fc;font-family:monospace;">
-                            Scores: ${wildCardWinner.scoreList}
-                        </div>
-                    ` : null,
-                    valueAccessor: (p) => p.count,
-                    valueColor: '#a855f7',
-                    valueSubtext: () => 'Unique Scores',
-                    top3: wildCardTop3,
-                    top3ValueColor: '#a855f7',
-                    top3ValueFormatter: (p) => p.count,
-                    top3MedalSource: 'idx',
-                    top3Heading: 'Top 3',
-                    top3MinCount: 2,
-                    buttonGradient: 'linear-gradient(135deg, #a855f7 0%, #9333ea 100%)',
-                    buttonShadow: 'rgba(168,85,247,0.4)'
-                });
-            } else if (currentSlide === extra9SlideIndex) {
-                // EXTRA 9 WINNERS SLIDE
-                html += `
-                    <div style="animation:slideUp 0.8s ease-out;max-width:800px;width:100%;">
-                        <h1 style="color:white;font-size:36px;margin:0 0 12px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
-                            🎯 Extra 9 Winners
-                        </h1>
-                        <p style="color:#a5b4fc;font-size:16px;margin:0 0 24px;">
-                            ${mostRecentRound.courseName} - ${mostRecentRound.date}
-                        </p>
-                        
-                        <div style="background:rgba(249,115,22,0.15);border:3px solid rgba(249,115,22,0.4);border-radius:16px;padding:30px;box-shadow:0 20px 60px rgba(0,0,0,0.4);">
-                            <h2 style="color:#fb923c;font-size:28px;margin:0 0 20px;">
-                                🏆 Today's Winners
-                            </h2>
-                            ${extra9Winners.map((winner, idx) => `
-                                <div style="background:linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 100%);border-left:6px solid ${winner.teamColor};border-radius:12px;padding:20px;margin-bottom:12px;">
-                                    <div style="display:flex;align-items:center;justify-content:space-between;">
-                                        <div>
-                                            <div style="font-size:${idx === 0 ? '32px' : '28px'};color:white;font-weight:600;">
-                                                ${winner.playerName}
-                                            </div>
-                                            <div style="font-size:16px;color:${winner.teamColor};font-weight:500;margin-top:4px;">
-                                                ${winner.teamName}
-                                            </div>
-                                        </div>
-                                        <div style="font-size:48px;">
-                                            🎯
-                                        </div>
-                                    </div>
-                                </div>
-                            `).join('')}
-                        </div>
-                        
-                        <button onclick="nextPresentationSlide()" 
-                                class="btn-primary" 
-                                style="padding:16px 32px;font-size:20px;margin-top:24px;background:linear-gradient(135deg, #10b981 0%, #059669 100%);box-shadow:0 8px 24px rgba(16,185,129,0.4);">
-                            Next Award →
-                        </button>
-                    </div>
-                `;
-            } else if (currentSlide === ctpSlideIndex) {
-                // CTP WINNERS SLIDE
-                html += `
-                    <div style="animation:slideUp 0.8s ease-out;max-width:800px;width:100%;">
-                        <h1 style="color:white;font-size:36px;margin:0 0 12px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
-                            📍 Closest to Pin Winners
-                        </h1>
-                        <p style="color:#a5b4fc;font-size:16px;margin:0 0 24px;">
-                            ${mostRecentRound.courseName} - ${mostRecentRound.date}
-                        </p>
-                        
-                        <div style="background:rgba(59,130,246,0.15);border:3px solid rgba(59,130,246,0.4);border-radius:16px;padding:30px;box-shadow:0 20px 60px rgba(0,0,0,0.4);">
-                            <h2 style="color:#60a5fa;font-size:28px;margin:0 0 20px;">
-                                🏆 Today's Winners
-                            </h2>
-                            ${ctpWinners.map((winner, idx) => `
-                                <div style="background:linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 100%);border-left:6px solid ${winner.teamColor};border-radius:12px;padding:20px;margin-bottom:12px;">
-                                    <div style="display:flex;align-items:center;justify-content:space-between;">
-                                        <div>
-                                            <div style="font-size:${idx === 0 ? '32px' : '28px'};color:white;font-weight:600;">
-                                                ${winner.playerName}
-                                            </div>
-                                            <div style="font-size:16px;color:${winner.teamColor};font-weight:500;margin-top:4px;">
-                                                ${winner.teamName}
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <div style="font-size:48px;">
-                                                📍
-                                            </div>
-                                            ${winner.count > 1 ? `
-                                                <div style="color:#60a5fa;font-size:12px;font-weight:600;text-align:center;">
-                                                    ×${winner.count}
-                                                </div>
-                                            ` : ''}
-                                        </div>
-                                    </div>
-                                </div>
-                            `).join('')}
-                        </div>
-                        
-                        <button onclick="nextPresentationSlide()" 
-                                class="btn-primary" 
-                                style="padding:16px 32px;font-size:20px;margin-top:24px;background:linear-gradient(135deg, #10b981 0%, #059669 100%);box-shadow:0 8px 24px rgba(16,185,129,0.4);">
-                            Team Standings →
-                        </button>
-                    </div>
-                `;
             } else if (currentSlide === teamIntroSlideIndex) {
                 // ═══════════════════════════════════════════════════════
                 // TEAM STANDINGS INTRO — cinematic anticipation moment
@@ -15789,70 +15370,6 @@
                         </div>
                     </div>
                 `;
-            } else if (currentSlide === bbbLeaderboardSlideIndex) {
-                // BBB LEADERBOARD SLIDE - Total BBB scores
-                html += `
-                    <div style="animation:slideUp 0.8s ease-out;max-width:900px;width:100%;">
-                        <h1 style="color:white;font-size:48px;margin:0 0 16px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
-                            🔥 Bingo Bango Bongo Leaderboard
-                        </h1>
-                        <p style="color:#a5b4fc;font-size:18px;margin:0 0 8px;">
-                            Total BBBs Across All Rounds
-                        </p>
-                        
-                        <div style="background:linear-gradient(135deg, rgba(239,68,68,0.2) 0%, rgba(239,68,68,0.1) 100%);border:4px solid rgba(239,68,68,0.4);border-radius:20px;padding:20px;box-shadow:0 20px 60px rgba(0,0,0,0.4);">
-                            ${analytics.bbbLeaderboard.length > 0 ? `
-                                <div style="display:grid;grid-template-columns:${analytics.bbbLeaderboard.length > 4 ? 'repeat(2, 1fr)' : '1fr'};gap:10px;">
-                                    ${analytics.bbbLeaderboard.map((player, idx) => {
-                                        const isFirst = idx === 0;
-                                        const isSecond = idx === 1;
-                                        const isThird = idx === 2;
-                                        const medal = isFirst ? '🥇' : isSecond ? '🥈' : isThird ? '🥉' : '';
-                                        const rankBg = isFirst ? 'rgba(251,191,36,0.3)' : isSecond ? 'rgba(192,192,192,0.3)' : isThird ? 'rgba(205,127,50,0.3)' : 'rgba(255,255,255,0.05)';
-                                        const rankBorder = isFirst ? '#fbbf24' : isSecond ? '#d4d4d4' : isThird ? '#cd7f32' : 'rgba(255,255,255,0.1)';
-                                        
-                                        return `
-                                            <div style="background:${rankBg};border:2px solid ${rankBorder};border-radius:12px;padding:12px;">
-                                                <div style="display:flex;justify-content:space-between;align-items:center;">
-                                                    <div style="display:flex;align-items:center;gap:10px;flex:1;">
-                                                        ${medal ? `<div style="font-size:28px;">${medal}</div>` : `<div style="color:#64748b;font-size:18px;font-weight:700;min-width:24px;">#${idx + 1}</div>`}
-                                                        <div style="flex:1;">
-                                                            <div style="color:white;font-size:${isFirst ? '22px' : '18px'};font-weight:700;margin-bottom:2px;">
-                                                                ${player.name}
-                                                            </div>
-                                                            <div style="display:flex;align-items:center;gap:6px;">
-                                                                <div style="width:8px;height:8px;border-radius:50%;background:${player.teamColor};"></div>
-                                                                <div style="color:#a5b4fc;font-size:12px;">${player.teamName}</div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                    <div style="text-align:right;">
-                                                        <div style="color:#fbbf24;font-size:${isFirst ? '36px' : '32px'};font-weight:700;line-height:1;">
-                                                            ${player.bbbCount}
-                                                        </div>
-                                                        <div style="color:#a5b4fc;font-size:11px;">
-                                                            ${player.bbbCount === 1 ? 'BBB' : 'BBBs'}
-                                                        </div>
-                                                        <div style="color:#10b981;font-size:13px;font-weight:600;margin-top:2px;">
-                                                            +${player.bbbPoints}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        `;
-                                    }).join('')}
-                                </div>
-                            ` : `
-                                <div style="text-align:center;padding:30px;">
-                                    <div style="font-size:40px;margin-bottom:12px;">😔</div>
-                                    <p style="color:#818cf8;font-size:18px;margin:0;">
-                                        No BBBs this round
-                                    </p>
-                                </div>
-                            `}
-                        </div>
-                    </div>
-                `;
             } else if (currentSlide === nextRoundSlideIndex) {
                 // NEXT ROUND DETAILS SLIDE — single-page no-scroll layout
                 const roundDate = new Date(nextRound.timestamp);
@@ -16212,49 +15729,15 @@
             const _navContentIdx = (_navEntry && _navEntry.kind === 'content') ? _navEntry.value : -1;
             const _navOnPhoto = _navEntry && _navEntry.kind === 'photo';
             
-            // B2: if on the net slide and there are reveal positions still hidden, advance the sub-step instead
-            const netIdx = presentationState._netSlideIndex;
-            const netCount = presentationState._netTopCount || 0;
-            if (!_navOnPhoto && netIdx >= 0 && _navContentIdx === netIdx && (presentationState.netRevealStep || 0) < netCount) {
-                presentationState.netRevealStep = (presentationState.netRevealStep || 0) + 1;
-                renderPresentation();
-                return;
-            }
-            
-            // CTP Leaders top-5 reveal: advance sub-step until exhausted
-            const ctpLeadersIdx = presentationState._ctpLeadersSlideIndex;
-            const ctpLeadersCount = presentationState._ctpLeadersCount || 0;
-            if (!_navOnPhoto && ctpLeadersIdx >= 0 && _navContentIdx === ctpLeadersIdx && (presentationState.ctpLeadersRevealStep || 0) < ctpLeadersCount) {
-                presentationState.ctpLeadersRevealStep = (presentationState.ctpLeadersRevealStep || 0) + 1;
-                renderPresentation();
-                return;
-            }
-            
-            // By The Numbers progressive reveal: 3 sub-stages (one per card).
-            // Each tap reveals the next card. After stage 3, the next tap moves to the next slide.
-            const byNumbersIdx = presentationState._byNumbersSlideIndex;
-            if (!_navOnPhoto && byNumbersIdx >= 0 && _navContentIdx === byNumbersIdx && (presentationState.byNumbersRevealStep || 0) < 3) {
-                presentationState.byNumbersRevealStep = (presentationState.byNumbersRevealStep || 0) + 1;
-                renderPresentation();
-                return;
-            }
-            
-            // Hole Performance progressive reveal: 4 sub-stages.
-            //   0 best → 1 best+all → 2 worst → 3 worst+all → (next tap) next slide
-            const holePerfIdx = presentationState._holePerfSlideIndex;
-            if (!_navOnPhoto && holePerfIdx >= 0 && _navContentIdx === holePerfIdx && (presentationState.holePerfRevealStep || 0) < 3) {
-                presentationState.holePerfRevealStep = (presentationState.holePerfRevealStep || 0) + 1;
-                renderPresentation();
-                return;
-            }
-            
-            // BBB Leaders top-5 reveal: advance sub-step until exhausted
-            const bbbLeadersIdx = presentationState._bbbLeadersSlideIndex;
-            const bbbLeadersCount = presentationState._bbbLeadersCount || 0;
-            if (!_navOnPhoto && bbbLeadersIdx >= 0 && _navContentIdx === bbbLeadersIdx && (presentationState.bbbLeadersRevealStep || 0) < bbbLeadersCount) {
-                presentationState.bbbLeadersRevealStep = (presentationState.bbbLeadersRevealStep || 0) + 1;
-                renderPresentation();
-                return;
+            // Uniform progressive reveals (registry-driven): if on one of these slides with
+            // hidden sub-steps remaining, advance the sub-step instead of changing slide.
+            for (const r of UNIFORM_REVEALS) {
+                const idx = presentationState[r.indexKey];
+                if (!_navOnPhoto && idx >= 0 && _navContentIdx === idx && (presentationState[r.stepKey] || 0) < uniformRevealMax(r)) {
+                    presentationState[r.stepKey] = (presentationState[r.stepKey] || 0) + 1;
+                    renderPresentation();
+                    return;
+                }
             }
             
             // Team reveal sub-stages — applies to ALL team slides now:
@@ -16309,14 +15792,11 @@
             const previousSlide = presentationState.currentSlide;
             presentationState.currentSlide++;
             // Reset sub-step states when we leave their slides
-            presentationState.netRevealStep = 0;
+            // Reset all uniform reveal steps (registry-driven), then the custom ones.
+            for (const r of UNIFORM_REVEALS) presentationState[r.stepKey] = 0;
             presentationState.bracketRevealStep = 0;
             presentationState.playerRevealStep = 0;
-            presentationState.ctpLeadersRevealStep = 0;
-            presentationState.bbbLeadersRevealStep = 0;
             presentationState.teamRevealStep = 0;
-            presentationState.byNumbersRevealStep = 0;
-            presentationState.holePerfRevealStep = 0;
             presentationState._byNumbersRecordSoundPlayed = false;
             presentationState._teamIntroFanfarePlayed = false; // allow re-play on revisit
             presentationState._perfIntroSoundPlayed = false;
@@ -16346,28 +15826,14 @@
             const _contentIdxPre = (_entryPre && _entryPre.kind === 'content') ? _entryPre.value : -1;
             const _onPhotoPre = _entryPre && _entryPre.kind === 'photo';
             
-            // B2: if on the net slide and we're past step 0, rewind sub-step instead of changing slide
-            const netIdx = presentationState._netSlideIndex;
-            if (!_onPhotoPre && netIdx >= 0 && _contentIdxPre === netIdx && (presentationState.netRevealStep || 0) > 0) {
-                presentationState.netRevealStep = (presentationState.netRevealStep || 0) - 1;
-                renderPresentation();
-                return;
-            }
-            
-            // CTP Leaders top-5: rewind sub-step before changing slide
-            const ctpLeadersIdx = presentationState._ctpLeadersSlideIndex;
-            if (!_onPhotoPre && ctpLeadersIdx >= 0 && _contentIdxPre === ctpLeadersIdx && (presentationState.ctpLeadersRevealStep || 0) > 0) {
-                presentationState.ctpLeadersRevealStep = (presentationState.ctpLeadersRevealStep || 0) - 1;
-                renderPresentation();
-                return;
-            }
-            
-            // BBB Leaders top-5: rewind sub-step before changing slide
-            const bbbLeadersIdx = presentationState._bbbLeadersSlideIndex;
-            if (!_onPhotoPre && bbbLeadersIdx >= 0 && _contentIdxPre === bbbLeadersIdx && (presentationState.bbbLeadersRevealStep || 0) > 0) {
-                presentationState.bbbLeadersRevealStep = (presentationState.bbbLeadersRevealStep || 0) - 1;
-                renderPresentation();
-                return;
+            // Uniform progressive reveals (registry-driven): rewind one sub-step before changing slide.
+            for (const r of UNIFORM_REVEALS) {
+                const idx = presentationState[r.indexKey];
+                if (!_onPhotoPre && idx >= 0 && _contentIdxPre === idx && (presentationState[r.stepKey] || 0) > 0) {
+                    presentationState[r.stepKey] = (presentationState[r.stepKey] || 0) - 1;
+                    renderPresentation();
+                    return;
+                }
             }
             
             // Team reveal sub-stages: rewind step before changing slide (applies to ALL team slides).
@@ -16412,37 +15878,15 @@
                 const _newContentIdx = (_newEntry && _newEntry.kind === 'content') ? _newEntry.value : -1;
                 const _newOnPhoto = _newEntry && _newEntry.kind === 'photo';
                 
-                // When entering the net slide via Back, jump straight to the fully-revealed state
-                if (!_newOnPhoto && _newContentIdx === netIdx) {
-                    presentationState.netRevealStep = presentationState._netTopCount || 0;
-                } else {
-                    presentationState.netRevealStep = 0;
-                }
-                // When entering CTP Leaders via Back, jump straight to the fully-revealed state
-                if (!_newOnPhoto && ctpLeadersIdx >= 0 && _newContentIdx === ctpLeadersIdx) {
-                    presentationState.ctpLeadersRevealStep = presentationState._ctpLeadersCount || 0;
-                } else {
-                    presentationState.ctpLeadersRevealStep = 0;
-                }
-                // When entering BBB Leaders via Back, jump straight to the fully-revealed state
-                if (!_newOnPhoto && bbbLeadersIdx >= 0 && _newContentIdx === bbbLeadersIdx) {
-                    presentationState.bbbLeadersRevealStep = presentationState._bbbLeadersCount || 0;
-                } else {
-                    presentationState.bbbLeadersRevealStep = 0;
-                }
-                // When entering By The Numbers via Back, jump to fully-revealed (all 3 cards)
-                const _byNumIdx = presentationState._byNumbersSlideIndex;
-                if (!_newOnPhoto && _byNumIdx >= 0 && _newContentIdx === _byNumIdx) {
-                    presentationState.byNumbersRevealStep = 3;
-                } else {
-                    presentationState.byNumbersRevealStep = 0;
-                }
-                // When entering Hole Performance via Back, jump to fully-revealed (worst + all scores)
-                const _holePerfIdx2 = presentationState._holePerfSlideIndex;
-                if (!_newOnPhoto && _holePerfIdx2 >= 0 && _newContentIdx === _holePerfIdx2) {
-                    presentationState.holePerfRevealStep = 3;
-                } else {
-                    presentationState.holePerfRevealStep = 0;
+                // Uniform reveals: entering one of these slides via Back lands fully revealed;
+                // leaving them resets the step to 0. Registry-driven.
+                for (const r of UNIFORM_REVEALS) {
+                    const idx = presentationState[r.indexKey];
+                    if (!_newOnPhoto && idx >= 0 && _newContentIdx === idx) {
+                        presentationState[r.stepKey] = uniformRevealMax(r);
+                    } else {
+                        presentationState[r.stepKey] = 0;
+                    }
                 }
                 // Reset the record-sound flag so it can replay if user returns
                 presentationState._byNumbersRecordSoundPlayed = false;
@@ -16495,58 +15939,6 @@
             // Disabled — the 8-bit zap between slides was distracting. Kept as a no-op so existing
             // call sites don't error. Re-enable by restoring the synth body if ever wanted.
             return;
-        };
-        window._playSlideTransition_DISABLED = () => {
-            try {
-                // Create Web Audio API context
-                const AudioContext = window.AudioContext || window.webkitAudioContext;
-                const audioContext = new AudioContext();
-                
-                // Create a short "whoosh" sound effect
-                const duration = 0.3;
-                const sampleRate = audioContext.sampleRate;
-                const buffer = audioContext.createBuffer(1, duration * sampleRate, sampleRate);
-                const data = buffer.getChannelData(0);
-                
-                // Generate whoosh sound (descending frequency sweep with noise)
-                for (let i = 0; i < buffer.length; i++) {
-                    const t = i / sampleRate;
-                    const frequency = 800 - (t / duration) * 600; // Sweep from 800Hz to 200Hz
-                    const envelope = Math.exp(-t * 8); // Quick decay
-                    const noise = (Math.random() * 2 - 1) * 0.3; // Add noise
-                    const tone = Math.sin(2 * Math.PI * frequency * t);
-                    data[i] = (tone * 0.7 + noise * 0.3) * envelope * 0.3; // Mix and reduce volume
-                }
-                
-                // Play the sound
-                const source = audioContext.createBufferSource();
-                source.buffer = buffer;
-                source.connect(audioContext.destination);
-                source.start();
-                
-                // Add visual whoosh effect
-                const presentationDiv = document.getElementById('presentationMode');
-                if (presentationDiv) {
-                    const whoosh = document.createElement('div');
-                    whoosh.style.cssText = `
-                        position: fixed;
-                        top: 0;
-                        left: -100%;
-                        width: 100%;
-                        height: 100%;
-                        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
-                        pointer-events: none;
-                        z-index: 9999;
-                        animation: whoosh 0.5s ease-out;
-                    `;
-                    presentationDiv.appendChild(whoosh);
-                    
-                    // Remove whoosh after animation
-                    setTimeout(() => whoosh.remove(), 500);
-                }
-            } catch (err) {
-                // Silently fail - not critical
-            }
         };
 
         // Team-standings intro fanfare: rising brass-like sequence + drumroll rumble + held chord.
@@ -22321,8 +21713,11 @@
                         const currPar = round.pars[i];
                         const prevHandicap = round.handicaps[i-1];
                         const currHandicap = round.handicaps[i];
-                        let prevStrokes = 0; if (player.handicap >= prevHandicap) prevStrokes = 1; if (player.handicap >= prevHandicap + 18) prevStrokes = 2;
-                        let currStrokes = 0; if (player.handicap >= currHandicap) currStrokes = 1; if (player.handicap >= currHandicap + 18) currStrokes = 2;
+                        // Route strokes through the shared helper so the USGA setting is honored.
+                        // (Note: this legacy calculator still uses the OLD bounce-back rule — single
+                        // bogey→par. The presentation uses the newer 2+/2+ rule. Rule unchanged here.)
+                        const prevStrokes = getPlayerStrokesOnHole(player, round, prevHandicap);
+                        const currStrokes = getPlayerStrokesOnHole(player, round, currHandicap);
                         const prevNet = prevScore - prevStrokes;
                         const currNet = currScore - currStrokes;
                         if ((prevNet - prevPar >= 1) && (currNet - currPar <= 0)) {
