@@ -624,7 +624,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.06.10.1';
+        const APP_VERSION = '2026.06.10.2';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -10763,10 +10763,13 @@
                     bracketFallbackSlideCount: bracketFallbackSlideCount,
                     hasBracketOverviewSlides: hasBracketOverviewSlides,
                     bracketForOverview: bracketForOverview,
-                    // Round photos for backdrop use across slides
-                    roundPhotos: (mostRecentRound && Array.isArray(mostRecentRound.photos))
-                        ? mostRecentRound.photos.map(ph => typeof ph === 'string' ? ph : (ph && ph.url ? ph.url : null)).filter(Boolean)
-                        : []
+                    // Round photos for backdrop use across slides — topped up from the default
+                    // pool (repo Photos/ folder) when the round itself has too few.
+                    roundPhotos: buildEffectivePhotoSet(
+                        (mostRecentRound && Array.isArray(mostRecentRound.photos))
+                            ? mostRecentRound.photos.map(ph => typeof ph === 'string' ? ph : (ph && ph.url ? ph.url : null)).filter(Boolean)
+                            : []
+                    )
                 };
                 
                 // Setup keyboard navigation
@@ -10946,6 +10949,37 @@
             `;
         };
 
+        // ─── Default photo pool ───
+        // Stock photos for nights with too few round photos. Ron drops images into the
+        // repo's Photos/ folder (same workflow as Sounds/); we list it via the public GitHub
+        // API at startup and cache the download URLs. Failure is silent — pool stays empty.
+        window.__defaultPhotoPool = [];
+        (function loadDefaultPhotoPool() {
+            try {
+                fetch('https://api.github.com/repos/ronmooibroek/DutchCup/contents/Photos')
+                    .then(r => r.ok ? r.json() : [])
+                    .then(items => {
+                        if (Array.isArray(items)) {
+                            window.__defaultPhotoPool = items
+                                .filter(i => i && i.type === 'file' && /\.(jpe?g|png|webp|gif)$/i.test(i.name))
+                                .map(i => i.download_url)
+                                .filter(Boolean);
+                        }
+                    })
+                    .catch(() => {});
+            } catch (e) {}
+        })();
+        
+        // Merge a round's own photos with the default pool. Round photos always come first
+        // (they're the real night); defaults only top up when the round has fewer than MIN.
+        const buildEffectivePhotoSet = (ownPhotos) => {
+            const own = Array.isArray(ownPhotos) ? ownPhotos : [];
+            const MIN_PHOTOS = 4, TARGET = 6;
+            if (own.length >= MIN_PHOTOS) return own;
+            const defaults = (window.__defaultPhotoPool || []).filter(u => !own.includes(u));
+            return own.concat(defaults.slice(0, Math.max(0, TARGET - own.length)));
+        };
+        
         // ─── Presentation data drawer ───
         // "Headline on the slide, receipts one tap away." Slides register their backing-data
         // HTML under a key (window.__dataDrawers), and render a small ⓘ button that opens it
@@ -11144,80 +11178,63 @@
             const hasTeaserSlide = _teaserShow.length >= 2;
             const teaserSlideIndex = hasTeaserSlide ? slideIndex++ : -1;
             
+            // ─── SLIDE ORDER: THE CLIMAX ARC ───
+            // Analytics first → individual honors → match-play drama → the team battle → wrap-up.
+            // Emotional peaks (champion intro, bracket final, winning team) sit near the end
+            // (peak-end rule); lighter data segments warm the room up front.
+            
+            // ── Act 1: the numbers ──
             const fieldSlideIndex = hasFieldSlide ? slideIndex++ : -1;
             const byNumbersSlideIndex = hasByNumbersSlide ? slideIndex++ : -1;
-            // Stash for nav handlers — 3 sub-stages of progressive reveal on this slide
             presentationState._byNumbersSlideIndex = byNumbersSlideIndex;
             const biggestMomentsSlideIndex = hasBiggestMomentsSlide ? slideIndex++ : -1;
-            const perfIntroSlideIndex = hasPerfIntroSlide ? slideIndex++ : -1;
-            // Champion intro is implemented as a sub-stage 0 of the #1 player's slide,
-            // not as a separate slot. No slide allocation needed here.
-            // ── CHAPTER DIVIDERS ──
-            // Full-bleed round photos with captions at segment boundaries: pacing breathers that
-            // weave the night's photos through the deck instead of clustering them at the end.
+            const holeAnalysisSlideIndex = hasHoleAnalysisSlide ? slideIndex++ : -1;
+            presentationState._holePerfSlideIndex = holeAnalysisSlideIndex;
+            const beatComparisonSlideIndex = hasBeatComparisonSlide ? slideIndex++ : -1;
+            presentationState._beatComparisonSlideIndex = beatComparisonSlideIndex;
+            const scoringDistSlideIndex = hasScoringDistSlide ? slideIndex++ : -1;
+            const ctpLeadersSlideIndex = hasCTPLeadersSlide ? slideIndex++ : -1;
+            const bbbLeadersSlideIndex = hasBBBLeadersSlide ? slideIndex++ : -1;
+            presentationState._ctpLeadersSlideIndex = ctpLeadersSlideIndex;
+            presentationState._ctpLeadersCount = (presentationState.ctpLeadersTop5 || []).length;
+            presentationState._bbbLeadersSlideIndex = bbbLeadersSlideIndex;
+            presentationState._bbbLeadersCount = (presentationState.bbbLeadersTop5 || []).length;
+            const weeklyAchievementsSlideIndex = hasWeeklyAchievementsSlide ? slideIndex++ : -1;
+            
+            // ── Act 2: individual honors (divider → low net crown → players, champion last) ──
             const _hasPhotos = Array.isArray(roundPhotos) && roundPhotos.length > 0;
             const hasDividerAwards = _hasPhotos && individualPlayerSlides.length > 0;
             const dividerAwardsSlideIndex = hasDividerAwards ? slideIndex++ : -1;
-            
+            const netSlideIndex = hasNetSlide ? slideIndex++ : -1;
+            presentationState._netSlideIndex = netSlideIndex;
+            presentationState._netTopCount = (presentationState.netTop5 || []).length
+                + (presentationState.netLeaderIneligible ? 1 : 0);
+            presentationState._netLeaderIneligible = !!presentationState.netLeaderIneligible;
+            const perfIntroSlideIndex = hasPerfIntroSlide ? slideIndex++ : -1;
             const individualPlayerSlidesStart = slideIndex;
             slideIndex += individualPlayerSlides.length; // One slide per player
+            presentationState._playerSlidesStart = individualPlayerSlidesStart;
+            presentationState._playerSlidesCount = individualPlayerSlides.length;
             
-            // Bracket dramatic reveal indices (immediately after individual player slides per Q-spec)
+            // ── Act 3: match-play drama ──
             const hasDividerMatches = _hasPhotos && (hasBracketIntroSlide || bracketCombinedSlideCount > 0);
             const dividerMatchesSlideIndex = hasDividerMatches ? slideIndex++ : -1;
             const bracketIntroSlideIndex   = hasBracketIntroSlide  ? slideIndex++ : -1;
             const bracketCombinedSlideStart = bracketCombinedSlideCount > 0 ? slideIndex : -1;
             slideIndex += bracketCombinedSlideCount; // ONE slide per match — sub-step reveal inside
             const bracketFallbackSlideIndex = bracketHasFallback ? slideIndex++ : -1;
-            // Bracket overview slides — current state of the bracket(s)
             const bracketWOverviewSlideIndex = hasBracketOverviewSlides ? slideIndex++ : -1;
             const bracketLOverviewSlideIndex = hasBracketOverviewSlides ? slideIndex++ : -1;
-            
-            // Stash for nav handlers if needed later
             presentationState._bracketCombinedStart = bracketCombinedSlideStart;
             presentationState._bracketMatchCount   = bracketCombinedSlideCount;
-            presentationState._playerSlidesStart = individualPlayerSlidesStart;
-            presentationState._playerSlidesCount = individualPlayerSlides.length;
-            const holeAnalysisSlideIndex = hasHoleAnalysisSlide ? slideIndex++ : -1;
-            // Stash for nav handlers — the hole-analysis slide has a 4 sub-stage reveal
-            // (easiest hole → all players on it → hardest hole → all players on it)
-            presentationState._holePerfSlideIndex = holeAnalysisSlideIndex;
-            const beatComparisonSlideIndex = hasBeatComparisonSlide ? slideIndex++ : -1;
-            // Stash for nav handlers — 2-stage reveal (guess → fly-in answer)
-            presentationState._beatComparisonSlideIndex = beatComparisonSlideIndex;
-            const scoringDistSlideIndex = hasScoringDistSlide ? slideIndex++ : -1;
-            // Disabled — these awards now roll into per-player segments instead of standalone slides
-            // (Retired standalone award slides — rolled into per-player segments or replaced
-            //  by the top-4 leader reveals. Their render branches were removed in the cleanup.)
-            const photosSlideIndex = hasPhotosSlide ? slideIndex++ : -1;
-            const netSlideIndex = hasNetSlide ? slideIndex++ : -1;
-            // Stash for nav handlers (B2 sub-step navigation)
-            presentationState._netSlideIndex = netSlideIndex;
-            // Reveal step count = ranked positions, plus one extra "award reassignment" step when the
-            // true low-net leader is ineligible (already won): we show them first, then the eligible
-            // winner with a note of who was skipped.
-            presentationState._netTopCount = (presentationState.netTop5 || []).length
-                + (presentationState.netLeaderIneligible ? 1 : 0);
-            presentationState._netLeaderIneligible = !!presentationState.netLeaderIneligible;
-            // Disabled — BBB / CTP / Extra9 winner standalone slides also roll into per-player segments
-            // NEW: CTP and BBB Leaders top-5 progressive reveals
-            const ctpLeadersSlideIndex = hasCTPLeadersSlide ? slideIndex++ : -1;
-            const bbbLeadersSlideIndex = hasBBBLeadersSlide ? slideIndex++ : -1;
-            // Stash for nav handlers (top-5 progressive reveal sub-step navigation)
-            presentationState._ctpLeadersSlideIndex = ctpLeadersSlideIndex;
-            presentationState._ctpLeadersCount = (presentationState.ctpLeadersTop5 || []).length;
-            presentationState._bbbLeadersSlideIndex = bbbLeadersSlideIndex;
-            presentationState._bbbLeadersCount = (presentationState.bbbLeadersTop5 || []).length;
-            const weeklyAchievementsSlideIndex = hasWeeklyAchievementsSlide ? slideIndex++ : -1;
-            // Team-standings intro: cinematic anticipation slide right before the team countdown reveal.
-            // Only shown when there are actually teams to reveal.
+            
+            // ── Act 4: the team battle ──
             const hasTeamIntroSlide = teamStandings.length > 0;
             const hasDividerTeams = _hasPhotos && hasTeamIntroSlide;
             const dividerTeamsSlideIndex = hasDividerTeams ? slideIndex++ : -1;
             const teamIntroSlideIndex = hasTeamIntroSlide ? slideIndex++ : -1;
             const teamSlidesStartIndex = slideIndex;
             slideIndex += teamStandings.length; // Team slides
-            // Stash for nav handlers (first team slide has a 2-stage reveal: full-bleed → regular page)
             presentationState._teamSlidesStart = teamSlidesStartIndex;
             presentationState._teamSlidesCount = teamStandings.length;
             // The FIRST team in reverse-order display is at slide index (teamSlidesStartIndex + teamStandings.length - 1).
@@ -11225,10 +11242,13 @@
             presentationState._winningTeamSlideIndex = teamStandings.length > 0
                 ? teamSlidesStartIndex + teamStandings.length - 1
                 : -1;
+            
+            // ── Act 5: wrap-up (season context → photo gallery as the credits roll → closing) ──
             const eventNetSlideIndex = hasEventNetSlide ? slideIndex++ : -1;
             const milestonesSlideIndex = hasMilestonesSlide ? slideIndex++ : -1;
             const handicapSlideIndex = hasHandicapSlide ? slideIndex++ : -1;
             const extra9TeamsSlideIndex = hasExtra9TeamsSlide ? slideIndex++ : -1;
+            const photosSlideIndex = hasPhotosSlide ? slideIndex++ : -1;
             const nextRoundSlideIndex = hasNextRoundSlide ? slideIndex++ : -1;
             // Closing collage: photo mosaic + sign-off message. Only shown when there are photos.
             const hasClosingSlide = roundPhotos && roundPhotos.length > 0;
@@ -11487,6 +11507,12 @@
                     
                     <!-- Exit + Mute Buttons (Top Right) -->
                     <div style="position:absolute;top:20px;right:20px;z-index:10;display:flex;gap:8px;align-items:center;">
+                        <button id="presentationQuickToggle"
+                                onclick="togglePresentationQuickMode()"
+                                title="${window.__quickRecapMode ? 'Quick Recap ON — reveals land fully shown' : 'Quick Recap OFF — full reveal sequences'}"
+                                style="background:${window.__quickRecapMode ? 'rgba(251,191,36,0.85)' : 'rgba(15,23,42,0.75)'};color:${window.__quickRecapMode ? '#1f2937' : 'white'};border:1px solid rgba(255,255,255,0.2);padding:8px 12px;border-radius:6px;cursor:pointer;font-size:14px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,0.2);">
+                            ⚡${window.__quickRecapMode ? ' QUICK' : ''}
+                        </button>
                         <button id="presentationMuteToggle" 
                                 onclick="togglePresentationMute()" 
                                 title="${window.__presentationMuted ? 'Unmute presentation audio' : 'Mute presentation audio'}"
@@ -12633,6 +12659,17 @@
                                         🥇 ${player.totalPoints} POINTS · ${player.grossScore} GROSS
                                     </div>
                                 </div>
+                                
+                                <!-- The night in pictures: photo strip under the champion -->
+                                ${(roundPhotos && roundPhotos.length > 0) ? `
+                                    <div style="display:flex;gap:18px;justify-content:center;margin-top:26px;">
+                                        ${roundPhotos.slice(0, 3).map((ph, i) => `
+                                            <div style="background:white;padding:6px 6px 18px;border-radius:4px;box-shadow:0 10px 30px rgba(0,0,0,0.55);transform:rotate(${[-4, 2, -2][i % 3]}deg);animation:ch-entranceUp 0.7s ${1.25 + i * 0.18}s ease-out backwards;">
+                                                <img src="${ph}" style="width:120px;height:90px;object-fit:cover;display:block;border-radius:2px;" alt="">
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                ` : ''}
                                 
                                 <!-- Tap hint -->
                                 <div style="margin-top:32px;color:${DUTCH_ORANGE};font-size:14px;font-weight:600;letter-spacing:2px;animation:ch-entranceUp 0.7s 1.4s ease-out backwards;">
@@ -16047,7 +16084,8 @@
             presentationState.currentSlide++;
             // Reset sub-step states when we leave their slides
             // Reset all uniform reveal steps (registry-driven), then the custom ones.
-            for (const r of UNIFORM_REVEALS) presentationState[r.stepKey] = 0;
+            // In Quick Recap mode, land slides FULLY revealed instead of starting hidden.
+            for (const r of UNIFORM_REVEALS) presentationState[r.stepKey] = window.__quickRecapMode ? uniformRevealMax(r) : 0;
             presentationState.bracketRevealStep = 0;
             presentationState.playerRevealStep = 0;
             presentationState.teamRevealStep = 0;
@@ -16456,6 +16494,20 @@
         };
         
         // Toggle mute state for presentation audio (persists for the duration of the presentation only)
+        // ─── Quick Recap mode ───
+        // When ON, uniform progressive reveals land fully shown (no tap-through), trimming the
+        // deck for casual nights. The climax moments (champion intro, match-play drama) keep
+        // their full sequences either way. Applies on the NEXT slide change after toggling.
+        window.__quickRecapMode = false;
+        window.togglePresentationQuickMode = () => {
+            window.__quickRecapMode = !window.__quickRecapMode;
+            // If turning ON mid-slide, land the current slide fully revealed too.
+            if (window.__quickRecapMode) {
+                for (const r of UNIFORM_REVEALS) presentationState[r.stepKey] = uniformRevealMax(r);
+            }
+            renderPresentation();
+        };
+        
         window.togglePresentationMute = () => {
             window.__presentationMuted = !window.__presentationMuted;
             // Update the toggle button label if it's currently rendered
