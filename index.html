@@ -537,6 +537,47 @@
             0%, 100% { transform: translateX(0) rotate(-5deg); }
             50%      { transform: translateX(20px) rotate(5deg); }
         }
+        /* ─── Presentation data drawer (background data on demand) ─── */
+        .pres-drawer-backdrop {
+            position: fixed; inset: 0; z-index: 9000;
+            background: rgba(0,0,0,0.72);
+            display: flex; align-items: center; justify-content: center;
+            animation: fadeIn 0.25s ease-out;
+        }
+        .pres-drawer-panel {
+            background: linear-gradient(160deg, #1e1b4b 0%, #0f0d2e 100%);
+            border: 2px solid rgba(165,180,252,0.35);
+            border-radius: 18px;
+            max-width: 760px; width: calc(100% - 48px);
+            max-height: 78vh; overflow-y: auto;
+            padding: 26px 28px;
+            box-shadow: 0 24px 80px rgba(0,0,0,0.7);
+            animation: slideUp 0.3s ease-out;
+        }
+        .pres-drawer-panel h3 { color: white; font-size: 22px; margin: 0 0 16px; }
+        .pres-drawer-table { width: 100%; border-collapse: collapse; }
+        .pres-drawer-table th {
+            color: #a5b4fc; font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px;
+            text-align: left; padding: 6px 10px; border-bottom: 1px solid rgba(255,255,255,0.2);
+        }
+        .pres-drawer-table td {
+            color: white; font-size: 15px; padding: 7px 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.07);
+        }
+        .pres-drawer-table tr:last-child td { border-bottom: none; }
+        .pres-info-btn {
+            position: absolute; top: 14px; right: 14px; z-index: 50;
+            width: 34px; height: 34px; border-radius: 50%;
+            background: rgba(165,180,252,0.14); border: 1px solid rgba(165,180,252,0.45);
+            color: #a5b4fc; font-size: 17px; font-weight: 700; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .pres-info-btn:active { background: rgba(165,180,252,0.3); }
+        /* ─── Chapter divider Ken Burns ─── */
+        @keyframes kb-zoom {
+            0%   { transform: scale(1) translate(0, 0); }
+            100% { transform: scale(1.1) translate(-1.5%, -1%); }
+        }
     </style>
 </head>
 <body>
@@ -583,7 +624,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.05.31.2';
+        const APP_VERSION = '2026.06.10.1';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -7509,7 +7550,8 @@
             bbbLeadersRevealStep: 0,
             teamRevealStep: 0,
             byNumbersRevealStep: 0,
-            holePerfRevealStep: 0
+            holePerfRevealStep: 0,
+            beatCompRevealStep: 0
         });
         
         let presentationState = {
@@ -7532,7 +7574,8 @@
             { stepKey: 'ctpLeadersRevealStep', indexKey: '_ctpLeadersSlideIndex', countKey: '_ctpLeadersCount' },
             { stepKey: 'bbbLeadersRevealStep', indexKey: '_bbbLeadersSlideIndex', countKey: '_bbbLeadersCount' },
             { stepKey: 'byNumbersRevealStep',  indexKey: '_byNumbersSlideIndex',  maxStep: 3 },
-            { stepKey: 'holePerfRevealStep',   indexKey: '_holePerfSlideIndex',   maxStep: 3 }
+            { stepKey: 'holePerfRevealStep',   indexKey: '_holePerfSlideIndex',   maxStep: 4 },
+            { stepKey: 'beatCompRevealStep',   indexKey: '_beatComparisonSlideIndex', maxStep: 1 }
         ];
         const uniformRevealMax = (r) => (r.maxStep != null) ? r.maxStep : (presentationState[r.countKey] || 0);
 
@@ -10903,6 +10946,40 @@
             `;
         };
 
+        // ─── Presentation data drawer ───
+        // "Headline on the slide, receipts one tap away." Slides register their backing-data
+        // HTML under a key (window.__dataDrawers), and render a small ⓘ button that opens it
+        // in an overlay WITHOUT advancing the slide. Tap outside or × to close.
+        window.__dataDrawers = {};
+        window.openDataDrawerKey = (key) => {
+            const d = window.__dataDrawers[key];
+            if (d) window.openDataDrawer(d.title, d.body);
+        };
+        window.openDataDrawer = (title, bodyHtml) => {
+            window.closeDataDrawer();
+            const wrap = document.createElement('div');
+            wrap.className = 'pres-drawer-backdrop';
+            wrap.id = 'presDataDrawer';
+            wrap.onclick = (e) => { if (e.target === wrap) window.closeDataDrawer(); };
+            wrap.innerHTML = `
+                <div class="pres-drawer-panel" onclick="event.stopPropagation()">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+                        <h3>${title}</h3>
+                        <button onclick="closeDataDrawer()" style="background:none;border:none;color:#a5b4fc;font-size:26px;cursor:pointer;line-height:1;padding:0 4px;">×</button>
+                    </div>
+                    ${bodyHtml}
+                </div>
+            `;
+            document.body.appendChild(wrap);
+        };
+        window.closeDataDrawer = () => {
+            const el = document.getElementById('presDataDrawer');
+            if (el) el.remove();
+        };
+        // Small ⓘ button for slide corners. stopPropagation so it never advances the slide.
+        const dataDrawerButton = (key) =>
+            `<button class="pres-info-btn" onclick="event.stopPropagation();openDataDrawerKey('${key}')" title="Show the data behind this slide">ⓘ</button>`;
+        
         // ─── Shared leader-board slide renderer (CTP + BBB) ───
         // Renders a top-4 progressive-reveal leader board. `leaders` is the grouped array from
         // buildLeadersTop5 (one entry per PLACE; ties share a slot via .members[]).
@@ -11038,6 +11115,35 @@
                 
             // Calculate slide indices - NEW ORDER
             let slideIndex = 1; // Start after title (0)
+            
+            // ── COLD OPEN TEASER ──
+            // A 3-beat "tonight's episode" hook built from the night's data, names withheld.
+            // Beats are picked by drama priority; the champion beat always closes. Shown only
+            // when at least 2 beats exist (a 1-beat teaser is weaker than no teaser).
+            const _teaserBeats = [];
+            const _tbMatches = bracketMatchSlides || [];
+            if (_tbMatches.some(s => /COMEBACK/i.test(s.tagline || ''))) {
+                _teaserBeats.push({ icon: '🔄', text: 'One comeback shocked everyone…' });
+            }
+            if (_tbMatches.some(s => s.loserEliminated)) {
+                _teaserBeats.push({ icon: '💀', text: 'Someone went home eliminated…' });
+            }
+            if (_teaserBeats.length < 2 && _tbMatches.some(s => /NAILBITER|BACK-AND-FORTH|WIRE/i.test(s.tagline || ''))) {
+                _teaserBeats.push({ icon: '😬', text: 'One match came down to the very last hole…' });
+            }
+            if (_teaserBeats.length < 2 && analytics && analytics.worstHole && analytics.worstHole.toPar >= 1) {
+                _teaserBeats.push({ icon: '⛳', text: 'One hole ate the entire field alive…' });
+            }
+            // Closing beat: champion (bracket) or low-net crown
+            if (_tbMatches.some(s => s.championshipWinner)) {
+                _teaserBeats.push({ icon: '👑', text: 'And one golfer left as Champion.' });
+            } else if (presentationState.netWinner) {
+                _teaserBeats.push({ icon: '🏆', text: 'And one golfer was crowned tonight.' });
+            }
+            const _teaserShow = _teaserBeats.slice(0, 3);
+            const hasTeaserSlide = _teaserShow.length >= 2;
+            const teaserSlideIndex = hasTeaserSlide ? slideIndex++ : -1;
+            
             const fieldSlideIndex = hasFieldSlide ? slideIndex++ : -1;
             const byNumbersSlideIndex = hasByNumbersSlide ? slideIndex++ : -1;
             // Stash for nav handlers — 3 sub-stages of progressive reveal on this slide
@@ -11046,10 +11152,19 @@
             const perfIntroSlideIndex = hasPerfIntroSlide ? slideIndex++ : -1;
             // Champion intro is implemented as a sub-stage 0 of the #1 player's slide,
             // not as a separate slot. No slide allocation needed here.
+            // ── CHAPTER DIVIDERS ──
+            // Full-bleed round photos with captions at segment boundaries: pacing breathers that
+            // weave the night's photos through the deck instead of clustering them at the end.
+            const _hasPhotos = Array.isArray(roundPhotos) && roundPhotos.length > 0;
+            const hasDividerAwards = _hasPhotos && individualPlayerSlides.length > 0;
+            const dividerAwardsSlideIndex = hasDividerAwards ? slideIndex++ : -1;
+            
             const individualPlayerSlidesStart = slideIndex;
             slideIndex += individualPlayerSlides.length; // One slide per player
             
             // Bracket dramatic reveal indices (immediately after individual player slides per Q-spec)
+            const hasDividerMatches = _hasPhotos && (hasBracketIntroSlide || bracketCombinedSlideCount > 0);
+            const dividerMatchesSlideIndex = hasDividerMatches ? slideIndex++ : -1;
             const bracketIntroSlideIndex   = hasBracketIntroSlide  ? slideIndex++ : -1;
             const bracketCombinedSlideStart = bracketCombinedSlideCount > 0 ? slideIndex : -1;
             slideIndex += bracketCombinedSlideCount; // ONE slide per match — sub-step reveal inside
@@ -11068,6 +11183,8 @@
             // (easiest hole → all players on it → hardest hole → all players on it)
             presentationState._holePerfSlideIndex = holeAnalysisSlideIndex;
             const beatComparisonSlideIndex = hasBeatComparisonSlide ? slideIndex++ : -1;
+            // Stash for nav handlers — 2-stage reveal (guess → fly-in answer)
+            presentationState._beatComparisonSlideIndex = beatComparisonSlideIndex;
             const scoringDistSlideIndex = hasScoringDistSlide ? slideIndex++ : -1;
             // Disabled — these awards now roll into per-player segments instead of standalone slides
             // (Retired standalone award slides — rolled into per-player segments or replaced
@@ -11095,6 +11212,8 @@
             // Team-standings intro: cinematic anticipation slide right before the team countdown reveal.
             // Only shown when there are actually teams to reveal.
             const hasTeamIntroSlide = teamStandings.length > 0;
+            const hasDividerTeams = _hasPhotos && hasTeamIntroSlide;
+            const dividerTeamsSlideIndex = hasDividerTeams ? slideIndex++ : -1;
             const teamIntroSlideIndex = hasTeamIntroSlide ? slideIndex++ : -1;
             const teamSlidesStartIndex = slideIndex;
             slideIndex += teamStandings.length; // Team slides
@@ -11532,6 +11651,45 @@
                         </button>
                     </div>
                 `;
+            } else if (currentSlide === teaserSlideIndex) {
+                // ── COLD OPEN: "Tonight…" ──
+                // Beats fade in one by one via staggered CSS delays; no taps needed inside.
+                html += `
+                    <div style="animation:fadeIn 0.8s ease-in;max-width:1000px;width:100%;text-align:center;">
+                        <div style="color:#fbbf24;font-size:22px;font-weight:800;letter-spacing:10px;text-transform:uppercase;margin-bottom:50px;animation:slideUp 0.8s ease-out;">
+                            Tonight
+                        </div>
+                        <div style="display:flex;flex-direction:column;gap:36px;align-items:center;">
+                            ${_teaserShow.map((b, i) => `
+                                <div style="display:flex;align-items:center;gap:20px;animation:slideUp 0.9s ${0.8 + i * 1.4}s ease-out both;">
+                                    <div style="font-size:52px;">${b.icon}</div>
+                                    <div style="color:white;font-size:${i === _teaserShow.length - 1 ? '42' : '34'}px;font-weight:${i === _teaserShow.length - 1 ? '900' : '600'};text-shadow:0 4px 20px rgba(0,0,0,0.6);${i === _teaserShow.length - 1 ? 'color:#fbbf24;' : ''}">${b.text}</div>
+                                </div>
+                            `).join('')}
+                        </div>
+                        <p style="color:#818cf8;font-size:15px;font-style:italic;margin-top:60px;animation:fadeIn 1s ${0.8 + _teaserShow.length * 1.4}s ease-out both;">
+                            No names yet. Tap "Next →" to begin.
+                        </p>
+                    </div>
+                `;
+            } else if (currentSlide === dividerAwardsSlideIndex || currentSlide === dividerMatchesSlideIndex || currentSlide === dividerTeamsSlideIndex) {
+                // ── CHAPTER DIVIDER: full-bleed round photo + caption, subtle Ken Burns ──
+                const _len = roundPhotos.length;
+                const _div = currentSlide === dividerAwardsSlideIndex
+                    ? { photo: roundPhotos[0 % _len], caption: 'On to the individual honors…' }
+                    : currentSlide === dividerMatchesSlideIndex
+                        ? { photo: roundPhotos[1 % _len], caption: 'Time for the matches…' }
+                        : { photo: roundPhotos[2 % _len], caption: 'And now — the team battle…' };
+                html += `
+                    <div style="position:fixed;inset:0;background:#000;overflow:hidden;">
+                        <div style="position:absolute;inset:-4%;background-image:url('${_div.photo}');background-size:cover;background-position:center;animation:kb-zoom 14s ease-in-out forwards;"></div>
+                        <div style="position:absolute;inset:0;background:linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.05) 45%, rgba(0,0,0,0.75) 100%);"></div>
+                        <div style="position:absolute;left:6%;bottom:9%;animation:slideUp 1s 0.5s ease-out both;">
+                            <div style="color:white;font-size:clamp(30px, 5vw, 56px);font-weight:800;font-style:italic;text-shadow:0 6px 30px rgba(0,0,0,0.9);letter-spacing:0.5px;">${_div.caption}</div>
+                        </div>
+                        <div style="position:absolute;right:5%;bottom:6%;color:rgba(255,255,255,0.55);font-size:22px;animation:fadeIn 1s 2s ease-out both;">→</div>
+                    </div>
+                `;
             } else if (currentSlide === fieldSlideIndex) {
                 // TODAY'S FIELD — grid of player avatars to set the human tone
                 // Look up state-side player records to get photoUrl + canonical name
@@ -11636,6 +11794,20 @@
                 const bestGross = grossScores.length > 0 ? Math.min(...grossScores) : 0;
                 const worstGross = grossScores.length > 0 ? Math.max(...grossScores) : 0;
                 const coursePar = (mostRecentRound.pars || []).reduce((s, p) => s + (parseInt(p) || 0), 0);
+                
+                // Register the backing data for the ⓘ drawer: every player's gross today, sorted best-first.
+                window.__dataDrawers['byNumbers'] = {
+                    title: '📊 Tonight, player by player',
+                    body: `<table class="pres-drawer-table">
+                        <tr><th>Player</th><th>Gross</th><th>vs Par</th></tr>
+                        ${playersWhoPlayed
+                            .map(p => ({ name: p.name, gross: sumScores(p.scores) }))
+                            .filter(x => x.gross > 0)
+                            .sort((x, y) => x.gross - y.gross)
+                            .map(x => `<tr><td>${x.name}</td><td><strong>${x.gross}</strong></td><td>${x.gross - coursePar >= 0 ? '+' : ''}${x.gross - coursePar}</td></tr>`)
+                            .join('')}
+                    </table>`
+                };
                 
                 // ── Historical comparison data ──
                 // Walk every prior round in the Dutch Cup history (any event), compute the same metrics,
@@ -11858,7 +12030,8 @@
                 }
                 
                 html += `
-                    <div style="animation:fadeIn 0.8s ease-in;max-width:1100px;width:100%;">
+                    <div style="animation:fadeIn 0.8s ease-in;max-width:1100px;width:100%;position:relative;">
+                        ${dataDrawerButton('byNumbers')}
                         <h1 style="color:white;font-size:48px;margin:0 0 8px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
                             📊 By The Numbers
                         </h1>
@@ -13874,6 +14047,17 @@
                 // Easiest/hardest are by GROUP AVERAGE (analytics.bestHole / worstHole), not any one
                 // player's single best/worst hole.
                 const _haStep = presentationState.holePerfRevealStep || 0;
+                
+                // Register backing data for the ⓘ drawer: the full 18-hole difficulty table.
+                window.__dataDrawers['holeAnalysis'] = {
+                    title: '⛳ Every hole, by the numbers',
+                    body: `<table class="pres-drawer-table">
+                        <tr><th>Hole</th><th>Par</th><th>Group avg vs par</th></tr>
+                        ${(analytics.allHoles || []).slice().sort((a, b) => a.hole - b.hole)
+                            .map(h => `<tr><td>#${h.hole}</td><td>${h.par}</td><td style="color:${h.toPar <= 0 ? '#10b981' : (h.toPar <= 0.6 ? '#f59e0b' : '#ef4444')};font-weight:700;">${h.toPar > 0 ? '+' : ''}${h.toPar.toFixed(1)}</td></tr>`)
+                            .join('')}
+                    </table>`
+                };
                 const _easiest = analytics.bestHole;   // { hole (1-idx), par, toPar, ... }
                 const _hardest = analytics.worstHole;
 
@@ -13967,6 +14151,28 @@
                 } else if (_haStep === 1) {
                     _haBody = _holeHero(_easiest, true) + _allOnHole(_easiest.hole, '#10b981');
                 } else if (_haStep === 2) {
+                    // ── GUESS STAGE: audience participation before the toughest-hole reveal ──
+                    // Show the three hardest candidates (by group average), sorted by hole number
+                    // so the answer's position gives nothing away. The room shouts a guess; the
+                    // next tap reveals the answer.
+                    const _candidates = (analytics.allHoles || []).slice(-3)
+                        .sort((a, b) => a.hole - b.hole);
+                    _haBody = `
+                        <div style="text-align:center;animation:scaleIn 0.5s ease-out;">
+                            <div style="color:#ef4444;font-size:16px;font-weight:800;letter-spacing:3px;text-transform:uppercase;margin-bottom:10px;">Audience Challenge</div>
+                            <h2 style="color:white;font-size:38px;font-weight:900;margin:0 0 30px;">Which hole played the TOUGHEST tonight?</h2>
+                            <div style="display:flex;gap:24px;justify-content:center;flex-wrap:wrap;">
+                                ${_candidates.map((h, i) => `
+                                    <div style="background:rgba(239,68,68,0.10);border:3px dashed rgba(239,68,68,0.55);border-radius:18px;padding:26px 38px;min-width:160px;animation:slideUp 0.5s ${0.2 + i * 0.25}s ease-out both;">
+                                        <div style="color:white;font-size:64px;font-weight:900;line-height:1;">#${h.hole}</div>
+                                        <div style="color:#a5b4fc;font-size:16px;margin-top:8px;">Par ${h.par}</div>
+                                        <div style="color:rgba(255,255,255,0.45);font-size:26px;margin-top:10px;">?</div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    `;
+                } else if (_haStep === 3) {
                     _haBody = _holeHero(_hardest, false);
                 } else {
                     _haBody = _holeHero(_hardest, false) + _allOnHole(_hardest.hole, '#ef4444');
@@ -13995,13 +14201,15 @@
                 const _haHint = (() => {
                     if (!_easiest || !_hardest) return '';
                     if (_haStep === 0) return `Tap "Next \u2192" to see everyone's score on hole ${_easiest.hole}`;
-                    if (_haStep === 1) return `Tap "Next \u2192" for the toughest hole`;
-                    if (_haStep === 2) return `Tap "Next \u2192" to see everyone's score on hole ${_hardest.hole}`;
+                    if (_haStep === 1) return `Tap "Next \u2192" — and get ready to guess the toughest hole…`;
+                    if (_haStep === 2) return `Shout your guess! Then tap "Next \u2192" to reveal the answer`;
+                    if (_haStep === 3) return `Tap "Next \u2192" to see everyone's score on hole ${_hardest.hole}`;
                     return '';
                 })();
 
                 html += `
-                    <div style="animation:fadeIn 0.6s ease-out;max-width:1500px;width:100%;">
+                    <div style="animation:fadeIn 0.6s ease-out;max-width:1500px;width:100%;position:relative;">
+                        ${dataDrawerButton('holeAnalysis')}
                         <h1 style="color:white;font-size:42px;margin:0 0 24px;text-shadow:0 4px 20px rgba(0,0,0,0.5);text-align:center;">
                             \u26f3 Hole Performance
                         </h1>
@@ -14011,13 +14219,38 @@
                     </div>
                 `;
             } else if (currentSlide === beatComparisonSlideIndex) {
-                // BEAT COMPARISON SLIDE — target player (Mike Bennett) centered; every other player
-                // flies in one at a time (random order, 2s apart) and lands on the LEFT (beat Mike)
-                // or RIGHT (did not beat Mike). Photos + scores, driven purely by staggered CSS
-                // animation-delays so no JS timer is needed (delay = revealIndex * 2s).
+                // BEAT COMPARISON SLIDE — 2-stage:
+                //   stage 0: GUESS — target player centered with the score to beat; the room guesses
+                //            how many players topped it before anything is revealed.
+                //   stage 1: ANSWER — every other player flies in one at a time (random order, 2s
+                //            apart) and lands LEFT (beat the target) or RIGHT (didn't). Photos +
+                //            scores, staggered CSS delays (delay = revealIndex * 2s).
+                const _bcStep = presentationState.beatCompRevealStep || 0;
                 const _bc = analytics.beatComparison;
                 const _mike = state.players.find(p => p.id === _bc.targetPlayerId);
                 const _firstName = (_bc.targetPlayer || '').split(' ')[0];
+                
+                if (_bcStep === 0) {
+                    html += `
+                        <div style="animation:fadeIn 0.6s ease-out;max-width:900px;width:100%;text-align:center;">
+                            <div style="color:#ef4444;font-size:16px;font-weight:800;letter-spacing:3px;text-transform:uppercase;margin-bottom:8px;animation:slideUp 0.5s ease-out;">Audience Challenge</div>
+                            <h1 style="color:white;font-size:42px;margin:0 0 36px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">How many players beat ${_firstName} tonight?</h1>
+                            <div style="display:flex;flex-direction:column;align-items:center;animation:scaleIn 0.6s 0.3s ease-out both;">
+                                <div style="filter:drop-shadow(0 0 40px rgba(251,191,36,0.5));">
+                                    <div style="border:5px solid #fbbf24;border-radius:50%;padding:4px;">
+                                        ${_mike ? renderAvatar(_mike, 170) : ''}
+                                    </div>
+                                </div>
+                                <div style="color:white;font-size:30px;font-weight:800;margin-top:18px;">${_bc.targetPlayer}</div>
+                                <div style="color:#fbbf24;font-size:64px;font-weight:900;line-height:1;margin-top:10px;">${_bc.targetScore}</div>
+                                <div style="color:rgba(255,255,255,0.6);font-size:15px;margin-top:4px;">points — the score to beat</div>
+                            </div>
+                            <p style="color:#818cf8;font-size:16px;font-style:italic;margin-top:44px;animation:fadeIn 0.8s 1s ease-out both;">
+                                Shout a number! Then tap "Next \u2192" for the answer
+                            </p>
+                        </div>
+                    `;
+                } else {
                 const beatList = _bc.playersBeatTarget || [];
                 const missList = _bc.playersDidNotBeat || [];
                 const STEP_MS = 2000;
@@ -14094,6 +14327,7 @@
                         </div>
                     </div>
                 `;
+                }
             } else if (currentSlide === scoringDistSlideIndex) {
                 // SCORING DISTRIBUTION SLIDE
                 const maxScore = Math.max(
@@ -14231,6 +14465,25 @@
                 // ═══════════════════════════════════════════════════════
                 const { netWinner, netLeader, netLeaderIneligible, netSkippedIneligible, netTop5, previousNetWinners } = presentationState;
                 const top5 = (netTop5 || []).slice().sort((a, b) => a.place - b.place);
+                
+                // Register backing data for the ⓘ drawer: the full ranked net field.
+                window.__dataDrawers['netField'] = {
+                    title: '🏆 The full net field tonight',
+                    body: `<table class="pres-drawer-table">
+                        <tr><th>#</th><th>Player</th><th>Gross</th><th>HCP</th><th>Net</th><th></th></tr>
+                        ${top5.map(p => {
+                            const skipped = (netSkippedIneligible || []).some(s => s.playerId === p.playerId);
+                            return `<tr>
+                                <td>${p.place}</td>
+                                <td>${p.playerName}</td>
+                                <td>${p.grossScore}</td>
+                                <td>${p.handicap}</td>
+                                <td><strong>${p.netScore}</strong></td>
+                                <td style="color:#fca5a5;font-size:12px;">${skipped ? 'prior winner — not eligible' : ''}</td>
+                            </tr>`;
+                        }).join('')}
+                    </table>`
+                };
                 const totalPositions = top5.length;
                 // When the true low-net leader is ineligible, there's one extra reveal step:
                 //   step totalPositions     → show the leader (acknowledged, but NOT the trophy)
@@ -14357,7 +14610,8 @@
                     }
                     
                     html += `
-                        <div style="animation:fadeIn 0.4s ease-in;max-width:900px;width:100%;">
+                        <div style="animation:fadeIn 0.4s ease-in;max-width:900px;width:100%;position:relative;">
+                            ${dataDrawerButton('netField')}
                             <div style="color:#fbbf24;font-size:18px;font-weight:700;letter-spacing:4px;text-transform:uppercase;margin-bottom:8px;">
                                 🏌️ Low Net Score
                             </div>
