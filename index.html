@@ -624,7 +624,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.06.10.2';
+        const APP_VERSION = '2026.06.10.3';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -10769,7 +10769,20 @@
                         (mostRecentRound && Array.isArray(mostRecentRound.photos))
                             ? mostRecentRound.photos.map(ph => typeof ph === 'string' ? ph : (ph && ph.url ? ph.url : null)).filter(Boolean)
                             : []
-                    )
+                    ),
+                    // Photo → tagged-player-ids map (from score-entry tagging). Lets player slides
+                    // and the champion strip prefer photos the players are actually in.
+                    photoTags: (() => {
+                        const map = {};
+                        if (mostRecentRound && Array.isArray(mostRecentRound.photos)) {
+                            mostRecentRound.photos.forEach(ph => {
+                                if (ph && typeof ph === 'object' && ph.url && Array.isArray(ph.playerIds) && ph.playerIds.length > 0) {
+                                    map[ph.url] = ph.playerIds;
+                                }
+                            });
+                        }
+                        return map;
+                    })()
                 };
                 
                 // Setup keyboard navigation
@@ -10925,7 +10938,7 @@
             
             return `
                 <div style="animation:slideUp 0.8s ease-out;max-width:800px;width:100%;">
-                    <h1 style="color:white;font-size:36px;margin:0 0 12px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
+                    <h1 style="color:white;font-size:clamp(34px, 4.5vw, 46px);margin:0 0 12px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
                         ${titleEmoji} ${titleText}
                     </h1>
                     <p style="color:#a5b4fc;font-size:16px;margin:0 0 ${subtitleLine2 ? '8' : '20'}px;">
@@ -11066,7 +11079,7 @@
             return `
                 <div style="animation:slideUp 0.8s ease-out;max-width:900px;width:100%;margin:0 auto;">
                     <div style="font-size:64px;margin-bottom:8px;">${opts.emoji}</div>
-                    <h1 style="color:white;font-size:46px;margin:0 0 6px;font-weight:800;letter-spacing:1px;">${opts.title}</h1>
+                    <h1 style="color:white;font-size:clamp(34px, 4.5vw, 46px);margin:0 0 6px;font-weight:800;letter-spacing:1px;">${opts.title}</h1>
                     <p style="color:${opts.subtitleColor};font-size:14px;margin:0 0 24px;font-weight:600;letter-spacing:2px;text-transform:uppercase;">${opts.subtitle}</p>
                     
                     <div style="display:flex;flex-direction:column;gap:12px;">
@@ -11735,7 +11748,7 @@
                         <div style="position:absolute;inset:0;background:linear-gradient(135deg, rgba(0,0,0,0.55), rgba(0,0,0,0.8));z-index:1;"></div>
                     ` : ''}
                     <div style="animation:fadeIn 0.8s ease-in;max-width:1300px;width:100%;position:relative;z-index:2;">
-                        <h1 style="color:white;font-size:48px;margin:0 0 8px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
+                        <h1 style="color:white;font-size:clamp(34px, 4.5vw, 46px);margin:0 0 8px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
                             👋 Today's Field
                         </h1>
                         <p style="color:#a5b4fc;font-size:20px;margin:0 0 28px;">
@@ -12058,7 +12071,7 @@
                 html += `
                     <div style="animation:fadeIn 0.8s ease-in;max-width:1100px;width:100%;position:relative;">
                         ${dataDrawerButton('byNumbers')}
-                        <h1 style="color:white;font-size:48px;margin:0 0 8px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
+                        <h1 style="color:white;font-size:clamp(34px, 4.5vw, 46px);margin:0 0 8px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
                             📊 By The Numbers
                         </h1>
                         <p style="color:#a5b4fc;font-size:18px;margin:0 0 40px;font-style:italic;">
@@ -12120,7 +12133,7 @@
                 // BIGGEST MOMENTS SLIDE
                 html += `
                     <div style="animation:slideUp 0.8s ease-out;max-width:1100px;width:100%;">
-                        <h1 style="color:white;font-size:48px;margin:0 0 30px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
+                        <h1 style="color:white;font-size:clamp(34px, 4.5vw, 46px);margin:0 0 30px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
                             ⚡ Biggest Moments
                         </h1>
                         
@@ -12663,7 +12676,13 @@
                                 <!-- The night in pictures: photo strip under the champion -->
                                 ${(roundPhotos && roundPhotos.length > 0) ? `
                                     <div style="display:flex;gap:18px;justify-content:center;margin-top:26px;">
-                                        ${roundPhotos.slice(0, 3).map((ph, i) => `
+                                        ${(() => {
+                                            // Champion-tagged photos lead the strip; the rest fill in.
+                                            const t = presentationState.photoTags || {};
+                                            const mine = roundPhotos.filter(u => Array.isArray(t[u]) && t[u].some(id => id == player.playerId));
+                                            const rest = roundPhotos.filter(u => !mine.includes(u));
+                                            return mine.concat(rest).slice(0, 3);
+                                        })().map((ph, i) => `
                                             <div style="background:white;padding:6px 6px 18px;border-radius:4px;box-shadow:0 10px 30px rgba(0,0,0,0.55);transform:rotate(${[-4, 2, -2][i % 3]}deg);animation:ch-entranceUp 0.7s ${1.25 + i * 0.18}s ease-out backwards;">
                                                 <img src="${ph}" style="width:120px;height:90px;object-fit:cover;display:block;border-radius:2px;" alt="">
                                             </div>
@@ -13055,12 +13074,16 @@
                     `;
                 } else {
                     // ─── STAGE 0: full player page (no sub-step gating, no award badges) ───
-                    // Background: round photo as faded backdrop. Adds round atmosphere without
-                    // claiming the photo is OF this player (we can't identify faces). The photo
-                    // rotates per player so different slides show different photos for variety.
-                    const _photoBg = (roundPhotos && roundPhotos.length > 0)
-                        ? roundPhotos[playerIndex % roundPhotos.length]
-                        : null;
+                    // Background: prefer a photo TAGGED with this player (via score-entry tagging);
+                    // otherwise rotate through the round photos for ambient variety.
+                    const _tags = presentationState.photoTags || {};
+                    const _taggedForPlayer = (roundPhotos || []).filter(u =>
+                        Array.isArray(_tags[u]) && _tags[u].some(id => id == player.playerId));
+                    const _photoBg = _taggedForPlayer.length > 0
+                        ? _taggedForPlayer[playerIndex % _taggedForPlayer.length]
+                        : ((roundPhotos && roundPhotos.length > 0)
+                            ? roundPhotos[playerIndex % roundPhotos.length]
+                            : null);
                     
                     html += `
                     <div style="animation:slideUp 0.8s ease-out;width:100%;height:100%;padding:16px;box-sizing:border-box;overflow:hidden;position:relative;" data-player-stage="${playerStage}">
@@ -13956,7 +13979,7 @@
                         html += `
                             <div style="animation:slideUp 0.7s ease-out;width:100%;height:100%;padding:20px 24px;box-sizing:border-box;display:flex;flex-direction:column;">
                                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
-                                    <h1 style="color:white;font-size:38px;margin:0;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
+                                    <h1 style="color:white;font-size:clamp(34px, 4.5vw, 46px);margin:0;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
                                         🏆 Winner's Bracket
                                     </h1>
                                     <div style="background:rgba(16,185,129,0.18);border:1px solid #10b981;color:white;padding:6px 14px;border-radius:8px;font-size:13px;font-weight:700;">
@@ -14053,7 +14076,7 @@
                         html += `
                             <div style="animation:slideUp 0.7s ease-out;width:100%;height:100%;padding:20px 24px;box-sizing:border-box;display:flex;flex-direction:column;">
                                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
-                                    <h1 style="color:white;font-size:38px;margin:0;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
+                                    <h1 style="color:white;font-size:clamp(34px, 4.5vw, 46px);margin:0;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
                                         💔 Loser's Bracket
                                     </h1>
                                     <div style="background:rgba(239,68,68,0.18);border:1px solid #ef4444;color:white;padding:6px 14px;border-radius:8px;font-size:13px;font-weight:700;">
@@ -14247,7 +14270,7 @@
                 html += `
                     <div style="animation:fadeIn 0.6s ease-out;max-width:1500px;width:100%;position:relative;">
                         ${dataDrawerButton('holeAnalysis')}
-                        <h1 style="color:white;font-size:42px;margin:0 0 24px;text-shadow:0 4px 20px rgba(0,0,0,0.5);text-align:center;">
+                        <h1 style="color:white;font-size:clamp(34px, 4.5vw, 46px);margin:0 0 24px;text-shadow:0 4px 20px rgba(0,0,0,0.5);text-align:center;">
                             \u26f3 Hole Performance
                         </h1>
                         ${_haBody}
@@ -14271,7 +14294,7 @@
                     html += `
                         <div style="animation:fadeIn 0.6s ease-out;max-width:900px;width:100%;text-align:center;">
                             <div style="color:#ef4444;font-size:16px;font-weight:800;letter-spacing:3px;text-transform:uppercase;margin-bottom:8px;animation:slideUp 0.5s ease-out;">Audience Challenge</div>
-                            <h1 style="color:white;font-size:42px;margin:0 0 36px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">How many players beat ${_firstName} tonight?</h1>
+                            <h1 style="color:white;font-size:clamp(34px, 4.5vw, 46px);margin:0 0 36px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">How many players beat ${_firstName} tonight?</h1>
                             <div style="display:flex;flex-direction:column;align-items:center;animation:scaleIn 0.6s 0.3s ease-out both;">
                                 <div style="filter:drop-shadow(0 0 40px rgba(251,191,36,0.5));">
                                     <div style="border:5px solid #fbbf24;border-radius:50%;padding:4px;">
@@ -14328,7 +14351,7 @@
 
                 html += `
                     <div style="animation:fadeIn 0.6s ease-out;max-width:1500px;width:100%;">
-                        <h1 style="color:white;font-size:42px;margin:0 0 6px;text-shadow:0 4px 20px rgba(0,0,0,0.5);text-align:center;">
+                        <h1 style="color:white;font-size:clamp(34px, 4.5vw, 46px);margin:0 0 6px;text-shadow:0 4px 20px rgba(0,0,0,0.5);text-align:center;">
                             ⚔️ Who Beat ${_bc.targetPlayer}?
                         </h1>
                         <p style="color:#a5b4fc;font-size:18px;margin:0 0 24px;text-align:center;">
@@ -14378,7 +14401,7 @@
                 
                 html += `
                     <div style="animation:slideUp 0.8s ease-out;max-width:1000px;width:100%;">
-                        <h1 style="color:white;font-size:48px;margin:0 0 30px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
+                        <h1 style="color:white;font-size:clamp(34px, 4.5vw, 46px);margin:0 0 30px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
                             📊 How Everyone Scored Today
                         </h1>
                         
@@ -14441,7 +14464,7 @@
                     html += `
                         <div style="animation:fadeIn 0.8s ease-in;width:100%;max-width:900px;text-align:center;padding:60px 20px;">
                             <div style="font-size:96px;margin-bottom:18px;opacity:0.5;">📷</div>
-                            <h1 style="color:white;font-size:42px;margin:0 0 12px;font-weight:800;">No Photos Today</h1>
+                            <h1 style="color:white;font-size:clamp(34px, 4.5vw, 46px);margin:0 0 12px;font-weight:800;">No Photos Today</h1>
                             <p style="color:rgba(255,255,255,0.65);font-size:18px;">Photos uploaded during the round will appear here.</p>
                         </div>
                     `;
@@ -14453,7 +14476,7 @@
                             <!-- Header with title + slideshow button -->
                             <div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0;margin-bottom:16px;padding:0 8px;">
                                 <div>
-                                    <h1 style="color:white;font-size:38px;margin:0;text-shadow:0 4px 20px rgba(0,0,0,0.5);font-weight:800;">
+                                    <h1 style="color:white;font-size:clamp(34px, 4.5vw, 46px);margin:0;text-shadow:0 4px 20px rgba(0,0,0,0.5);font-weight:800;">
                                         📸 Photos of the Day
                                     </h1>
                                     <div style="color:#a5b4fc;font-size:14px;margin-top:4px;font-weight:500;">
@@ -14652,7 +14675,7 @@
                             <div style="color:#fbbf24;font-size:18px;font-weight:700;letter-spacing:4px;text-transform:uppercase;margin-bottom:8px;">
                                 🏌️ Low Net Score
                             </div>
-                            <h1 style="color:white;font-size:40px;margin:0 0 8px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
+                            <h1 style="color:white;font-size:clamp(34px, 4.5vw, 46px);margin:0 0 8px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
                                 ${mostRecentRound.courseName}
                             </h1>
                             <p style="color:#a5b4fc;font-size:14px;margin:0 0 28px;">
@@ -15303,7 +15326,7 @@
                 // EVENT NET SCORES SLIDE - Top 3 lowest net scores across entire event
                 html += `
                     <div style="animation:slideUp 0.8s ease-out;max-width:900px;width:100%;">
-                        <h1 style="color:white;font-size:48px;margin:0 0 16px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
+                        <h1 style="color:white;font-size:clamp(34px, 4.5vw, 46px);margin:0 0 16px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
                             🏆 Event Champions
                         </h1>
                         <p style="color:#a5b4fc;font-size:24px;margin:0 0 12px;">
@@ -15359,7 +15382,7 @@
                 // MILESTONES SLIDE
                 html += `
                     <div style="animation:fadeIn 1s ease-in;max-width:1000px;width:100%;">
-                        <h1 style="color:white;font-size:48px;margin:0 0 30px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
+                        <h1 style="color:white;font-size:clamp(34px, 4.5vw, 46px);margin:0 0 30px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
                             🎉 Milestones Achieved!
                         </h1>
                         
@@ -15401,7 +15424,7 @@
                 
                 html += `
                     <div style="animation:slideUp 0.8s ease-out;max-width:1200px;width:100%;display:flex;flex-direction:column;height:100%;box-sizing:border-box;padding:8px 0;">
-                        <h1 style="color:white;font-size:36px;margin:0 0 4px;text-shadow:0 4px 20px rgba(0,0,0,0.5);flex-shrink:0;">
+                        <h1 style="color:white;font-size:clamp(34px, 4.5vw, 46px);margin:0 0 4px;text-shadow:0 4px 20px rgba(0,0,0,0.5);flex-shrink:0;">
                             📊 Handicap Changes
                         </h1>
                         <p style="color:#a5b4fc;font-size:14px;margin:0 0 14px;flex-shrink:0;">
@@ -15449,7 +15472,7 @@
                 // WEEKLY ACHIEVEMENTS SLIDE - Only when event is complete
                 html += `
                     <div style="animation:slideUp 0.8s ease-out;max-width:1100px;width:100%;">
-                        <h1 style="color:white;font-size:48px;margin:0 0 30px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
+                        <h1 style="color:white;font-size:clamp(34px, 4.5vw, 46px);margin:0 0 30px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
                             🏆 Weekly Champions
                         </h1>
                         
@@ -15611,7 +15634,7 @@
                 // EXTRA 9 TEAMS SLIDE - Snake draft based on gross scores
                 html += `
                     <div style="animation:slideUp 0.8s ease-out;max-width:1100px;width:100%;">
-                        <h1 style="color:white;font-size:48px;margin:0 0 16px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
+                        <h1 style="color:white;font-size:clamp(34px, 4.5vw, 46px);margin:0 0 16px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
                             🎯 Extra 9 Teams
                         </h1>
                         <p style="color:#a5b4fc;font-size:20px;margin:0 0 12px;">
