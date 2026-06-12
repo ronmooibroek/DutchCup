@@ -324,6 +324,19 @@ button, input, select { font-family: inherit; }
 .foot-note { color: #9ca3af; font-size: 11px; text-align: center; padding: 16px 0 32px; }
 button { -webkit-tap-highlight-color: transparent; }
 input, select { -webkit-tap-highlight-color: transparent; }
+/* ─── Photo player-tag chips ─── */
+.photo-tag-row {
+    display: flex; flex-wrap: wrap; gap: 4px;
+    padding: 6px 4px 4px;
+}
+.photo-tag-chip {
+    border: 1px solid #cbd5e1; background: #f8fafc; color: #475569;
+    font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 999px;
+    cursor: pointer; line-height: 1.2;
+}
+.photo-tag-chip.on {
+    background: #2563eb; border-color: #2563eb; color: white;
+}
 </style>
 </head>
 <body>
@@ -1197,6 +1210,21 @@ function buildPhotoCard(round) {
             const btn = el('button', { class: 'photo-remove', onclick: `removeRoundPhoto(${idx})`, type: 'button' }, '✕');
             tile.appendChild(img);
             tile.appendChild(btn);
+            // ── Player tag chips: tap a name to tag/untag this photo with a player.
+            // Tagged photos surface on that player's slide in the presentation.
+            const taggedIds = (photo && typeof photo === 'object' && Array.isArray(photo.playerIds)) ? photo.playerIds : [];
+            const tagRow = el('div', { class: 'photo-tag-row' });
+            (round.teams || []).forEach(team => {
+                (team.players || []).forEach(pl => {
+                    const isOn = taggedIds.some(id => idsEqual(id, pl.id));
+                    tagRow.appendChild(el('button', {
+                        class: 'photo-tag-chip' + (isOn ? ' on' : ''),
+                        type: 'button',
+                        onclick: `togglePhotoTag(${idx}, '${String(pl.id).replace(/'/g, "")}')`
+                    }, (pl.name || '?').split(' ')[0]));
+                });
+            });
+            tile.appendChild(tagRow);
             grid.appendChild(tile);
         });
         body.appendChild(grid);
@@ -1222,7 +1250,7 @@ function buildPhotoCard(round) {
             '⚠️ Photo upload unavailable (Firebase Storage not configured)'));
     } else {
         body.appendChild(el('div', { class: 'photo-hint' },
-            'Photos appear in the presentation'));
+            'Tap a name under a photo to tag players — tagged photos feature on their slide in the presentation'));
     }
     
     wrap.appendChild(body);
@@ -1761,6 +1789,38 @@ async function removeRoundPhoto(index) {
     } catch (err) {
         console.error('Remove photo failed:', err);
         setStatus('Failed to remove photo', 'error');
+    }
+}
+
+async function togglePhotoTag(index, playerId) {
+    const roundId = state.selectedRoundId;
+    if (!roundId) return;
+    setStatus('Saving tag…', 'saving');
+    try {
+        await firestoreDb.runTransaction(async (tx) => {
+            const snap = await tx.get(roundsRef);
+            if (!snap.exists) throw new Error('Rounds doc missing');
+            const data = snap.data();
+            const rounds = Array.isArray(data.value) ? JSON.parse(JSON.stringify(data.value)) : [];
+            const r = rounds.find(r => idsEqual(r.id, roundId));
+            if (!r || !Array.isArray(r.photos) || !r.photos[index]) return;
+            let photo = r.photos[index];
+            // Legacy string photo → object so it can carry tags
+            if (typeof photo === 'string') photo = { url: photo };
+            if (!Array.isArray(photo.playerIds)) photo.playerIds = [];
+            const pos = photo.playerIds.findIndex(id => idsEqual(id, playerId));
+            if (pos >= 0) photo.playerIds.splice(pos, 1);
+            else photo.playerIds.push(playerId);
+            r.photos[index] = photo;
+            tx.set(roundsRef, {
+                value: rounds,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        });
+        setStatus('Tag saved ✓', 'saved');
+    } catch (err) {
+        console.error('Tag toggle failed:', err);
+        setStatus('Failed to save tag', 'error');
     }
 }
 
