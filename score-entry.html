@@ -11,346 +11,322 @@
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-storage-compat.js"></script>
 <style>
+/* ═══ DUTCH CUP SCORECARD — design system ═══
+   Grounded in the paper scorecard: cream card stock, fairway green, flag red.
+   Built for sunlight, one hand, and big thumbs. No keyboard, ever. */
 *, *::before, *::after { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
+:root {
+    --card: #FDFBF3;        /* scorecard cream */
+    --ink: #1E2A20;         /* deep pine ink */
+    --ink-soft: #5A6B5E;
+    --fairway: #2E7D4F;     /* primary green */
+    --fairway-dk: #1F5C39;
+    --flag: #D64541;        /* flag red */
+    --sand: #E8DFC8;        /* bunker sand: dividers */
+    --sky: #EFF5F0;         /* page background */
+    --birdie: #1B7F4B;
+    --eagle: #B8860B;
+    --bogey: #C97B2D;
+    --dbl: #C0392B;
+    --radius: 14px;
+    --shadow: 0 2px 10px rgba(30,42,32,0.10);
+}
 html, body {
     margin: 0; padding: 0;
+    background: var(--sky);
+    color: var(--ink);
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: #f3f4f6; color: #1f2937;
-    -webkit-tap-highlight-color: transparent;
-    overscroll-behavior-y: contain;
+    -webkit-font-smoothing: antialiased;
+    font-size: 17px;
 }
-body {
-    min-height: 100vh;
-    padding-bottom: env(safe-area-inset-bottom);
-}
-button, input, select { font-family: inherit; }
+button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
 
-/* Header */
-.header {
-    background: linear-gradient(135deg, #065f46 0%, #047857 100%);
-    color: white; padding: 10px 14px;
-    padding-top: calc(10px + env(safe-area-inset-top));
-    position: sticky; top: 0; z-index: 50;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+/* ─── Header ─── */
+.app-header {
+    background: var(--card);
+    border-bottom: 3px solid var(--fairway);
+    padding: 12px 16px 10px;
+    position: sticky; top: 0; z-index: 100;
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
 }
-.header-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.header-info { min-width: 0; flex: 1; }
-.header h1 { margin: 0; font-size: 16px; font-weight: 700; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.header .subtitle { font-size: 11px; opacity: 0.9; margin-top: 2px; }
-.header-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+.header-text { min-width: 0; }
+#header-title { font-size: 19px; font-weight: 800; margin: 0; letter-spacing: -0.2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#header-subtitle { font-size: 13px; color: var(--ink-soft); margin: 1px 0 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.header-actions { display: flex; gap: 6px; flex-shrink: 0; align-items: center; }
+.hdr-btn {
+    background: none; border: 1.5px solid var(--sand); color: var(--ink-soft);
+    font-size: 13px; font-weight: 700; padding: 7px 11px; border-radius: 999px; cursor: pointer;
+}
 .save-status {
-    font-size: 11px; padding: 4px 10px; border-radius: 999px;
-    background: rgba(255,255,255,0.2); white-space: nowrap; transition: background 0.2s;
+    display: none; font-size: 12px; font-weight: 700; padding: 5px 10px; border-radius: 999px;
+    background: var(--sand); color: var(--ink-soft);
 }
-.save-status.saving { background: rgba(251, 191, 36, 0.95); color: #78350f; }
-.save-status.saved { background: rgba(134, 239, 172, 0.95); color: #065f46; }
-.save-status.error { background: rgba(252, 165, 165, 0.95); color: #7f1d1d; }
-.btn-link {
-    background: rgba(255,255,255,0.18); color: white; border: none;
-    padding: 7px 11px; border-radius: 8px; font-size: 13px; cursor: pointer; font-weight: 500;
-}
-.btn-link:active { background: rgba(255,255,255,0.32); }
+.save-status.saving { background: #FFF3D6; color: #8a6d1a; }
+.save-status.saved  { background: #DDF0E4; color: var(--fairway-dk); }
+.save-status.error  { background: #FBDEDC; color: var(--dbl); }
 
-/* Container */
-.container { padding: 12px; max-width: 540px; margin: 0 auto; }
+/* ─── App shell ─── */
+#app { max-width: 560px; margin: 0 auto; padding: 12px 12px 120px; }
 .card {
-    background: white; border-radius: 12px; padding: 14px;
-    margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
+    padding: 18px; margin-bottom: 12px;
 }
-.card h2 { margin: 0 0 10px; font-size: 16px; color: #065f46; font-weight: 700; }
-.card p.muted { color: #6b7280; font-size: 14px; margin: 8px 0; line-height: 1.4; }
+.card h2 { margin: 0 0 6px; font-size: 20px; }
+.muted { color: var(--ink-soft); font-size: 14px; margin: 0 0 10px; }
 
-.center-state { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; padding: 24px; text-align: center; }
-.spinner { width: 36px; height: 36px; border: 3px solid #e5e7eb; border-top-color: #10b981; border-radius: 50%; animation: spin 0.8s linear infinite; }
+/* ─── Round picker ─── */
+.round-option {
+    display: block; width: 100%; text-align: left;
+    background: white; border: 2px solid var(--sand); border-radius: var(--radius);
+    padding: 16px; margin-top: 10px; cursor: pointer;
+}
+.round-option:active { border-color: var(--fairway); background: #F4FAF6; }
+.round-date { font-size: 17px; font-weight: 800; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.round-meta { font-size: 13px; color: var(--ink-soft); margin-top: 3px; }
+.round-status { font-size: 11px; font-weight: 800; letter-spacing: 0.6px; padding: 3px 8px; border-radius: 999px; text-transform: uppercase; }
+.round-status.in-progress { background: #DDF0E4; color: var(--fairway-dk); }
+.round-status.today    { background: #FFF3D6; color: #8a6d1a; }
+.round-status.scheduled { background: var(--sand); color: var(--ink-soft); }
+.round-status.past     { background: #EEE; color: #888; }
+
+/* ─── Player picker ─── */
+.group-card {
+    background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
+    padding: 14px; margin-bottom: 12px;
+}
+.group-title { font-size: 13px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; color: var(--fairway-dk); margin-bottom: 8px; }
+.player-btn {
+    display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+    background: white; border: 2px solid var(--sand); border-radius: 12px;
+    padding: 16px 14px; margin-top: 8px; cursor: pointer;
+    font-size: 18px; font-weight: 700; color: var(--ink); min-height: 58px;
+}
+.player-btn:active { border-color: var(--fairway); background: #F4FAF6; }
+.player-btn .hcp { font-size: 13px; font-weight: 600; color: var(--ink-soft); }
+.player-btn .team { margin-left: auto; font-size: 12px; color: var(--ink-soft); }
+
+/* ─── "Scoring as" identity bar ─── */
+.me-bar {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    background: #F4FAF6; border: 1.5px solid #CBE3D4; border-radius: 999px;
+    padding: 8px 8px 8px 16px; margin-bottom: 12px; font-size: 14px; font-weight: 600;
+}
+.me-bar .not-you {
+    background: none; border: none; color: var(--fairway-dk); font-size: 13px;
+    font-weight: 800; cursor: pointer; padding: 6px 10px;
+}
+
+/* ─── TEE SIGN: hole header (the signature) ─── */
+.hole-nav {
+    background: linear-gradient(170deg, var(--fairway) 0%, var(--fairway-dk) 100%);
+    border-radius: 18px; box-shadow: 0 4px 18px rgba(31,92,57,0.35);
+    padding: 16px 14px 12px; margin-bottom: 12px; color: white;
+}
+.hole-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.hole-arrow {
+    background: rgba(255,255,255,0.14); border: none; color: white;
+    width: 54px; height: 54px; border-radius: 14px; font-size: 28px; font-weight: 700; cursor: pointer;
+    flex-shrink: 0;
+}
+.hole-arrow:disabled { opacity: 0.3; }
+.hole-arrow:active:not(:disabled) { background: rgba(255,255,255,0.3); }
+.hole-info { text-align: center; flex: 1; }
+.hole-info .num {
+    font-size: 52px; font-weight: 900; line-height: 1; letter-spacing: -1px;
+    font-variant-numeric: tabular-nums;
+}
+.hole-info .num small { font-size: 17px; font-weight: 700; opacity: 0.85; letter-spacing: 1px; }
+.hole-info .meta { font-size: 15px; font-weight: 700; opacity: 0.95; margin-top: 4px; }
+.par3-pill {
+    background: #FFD95E; color: #6b4e00; font-size: 11px; font-weight: 900;
+    padding: 2px 8px; border-radius: 999px; margin-left: 8px; letter-spacing: 0.5px;
+}
+/* progress track along the sign's base */
+.dots-strip {
+    display: grid; grid-template-columns: repeat(18, 1fr); gap: 3px;
+    margin-top: 14px;
+}
+.dot {
+    height: 34px; border: none; border-radius: 7px; cursor: pointer;
+    background: rgba(255,255,255,0.16); color: rgba(255,255,255,0.85);
+    font-size: 11px; font-weight: 800; padding: 0;
+    font-variant-numeric: tabular-nums;
+}
+.dot.partial  { background: #FFD95E; color: #6b4e00; }
+.dot.complete { background: white; color: var(--fairway-dk); }
+.dot.current  { outline: 3px solid white; outline-offset: 1px; }
+
+/* ─── Score rows ─── */
+.score-list { margin-bottom: 12px; }
+.score-row {
+    background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
+    padding: 12px 14px; margin-bottom: 8px;
+    border-left: 5px solid transparent;
+}
+.score-row.is-me { border-left-color: var(--fairway); }
+.score-row-top { display: flex; align-items: center; gap: 10px; cursor: pointer; min-height: 52px; }
+.player-info { flex: 1; min-width: 0; }
+.player-name { font-size: 18px; font-weight: 800; display: flex; align-items: center; gap: 6px; }
+.me-tag {
+    background: var(--fairway); color: white; font-size: 10px; font-weight: 900;
+    letter-spacing: 0.8px; padding: 2px 7px; border-radius: 999px;
+}
+.player-meta { font-size: 12.5px; color: var(--ink-soft); margin-top: 2px; }
+.stroke-dots { color: var(--fairway-dk); font-weight: 900; letter-spacing: 1px; }
+.score-cell {
+    width: 62px; height: 62px; border-radius: 14px; flex-shrink: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: white; border: 2.5px dashed var(--sand);
+    font-size: 30px; font-weight: 900; font-variant-numeric: tabular-nums;
+    color: var(--ink);
+}
+.score-cell .word { font-size: 9px; font-weight: 800; letter-spacing: 0.6px; text-transform: uppercase; }
+.score-cell.empty { color: #B9C4BC; }
+.score-cell.birdie { border-style: solid; border-color: var(--birdie); color: var(--birdie); background: #EDF7F1; }
+.score-cell.eagle { border-style: solid; border-color: var(--eagle); color: var(--eagle); background: #FBF4E1; }
+.score-cell.par-score { border-style: solid; border-color: var(--fairway); color: var(--fairway-dk); background: #F4FAF6; }
+.score-cell.albatross { border-style: solid; border-color: var(--eagle); color: var(--eagle); background: #FBF4E1; }
+.score-cell.bogey  { border-style: solid; border-color: var(--bogey); color: var(--bogey); background: #FBF2E7; }
+.score-cell.double, .score-cell.worse { border-style: solid; border-color: var(--dbl); color: var(--dbl); background: #FBEBE9; }
+
+/* ─── SCORE PAD (the other signature): tap the golf word ─── */
+.scorepad { margin-top: 12px; border-top: 2px solid var(--sand); padding-top: 12px; }
+.scorepad-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.pad-btn {
+    border: 2px solid var(--sand); background: white; border-radius: 12px;
+    min-height: 64px; cursor: pointer; padding: 6px 2px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+}
+.pad-btn .n { font-size: 26px; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; }
+.pad-btn .w { font-size: 10px; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase; color: var(--ink-soft); }
+.pad-btn:active { transform: scale(0.96); }
+.pad-btn.hint-par { border-color: var(--fairway); background: #F4FAF6; }
+.pad-btn.hint-par .w { color: var(--fairway-dk); }
+.pad-btn.picked { border-color: var(--fairway-dk); background: var(--fairway); }
+.pad-btn.picked .n, .pad-btn.picked .w { color: white; }
+.pad-btn.util { background: var(--sky); }
+.pad-btn.util .n { font-size: 15px; font-weight: 800; color: var(--ink-soft); }
+
+/* ─── Side cards (BBB / CTP / Balls) ─── */
+.pick-card {
+    background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
+    padding: 14px; margin-bottom: 10px;
+}
+.pick-card h3 { margin: 0 0 4px; font-size: 15px; font-weight: 800; }
+.pick-card .sub { font-size: 12.5px; color: var(--ink-soft); margin: 0 0 10px; }
+.pick-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.pick-chip {
+    border: 2px solid var(--sand); background: white; border-radius: 999px;
+    padding: 12px 16px; font-size: 15px; font-weight: 700; cursor: pointer; min-height: 48px;
+}
+.pick-chip.on { background: var(--fairway); border-color: var(--fairway-dk); color: white; }
+.balls-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--sand); }
+.balls-row:last-child { border-bottom: none; }
+.balls-controls { display: flex; align-items: center; gap: 10px; }
+.balls-btn {
+    width: 48px; height: 48px; border-radius: 12px; border: 2px solid var(--sand);
+    background: white; font-size: 22px; font-weight: 800; cursor: pointer;
+}
+.balls-count { font-size: 22px; font-weight: 900; min-width: 30px; text-align: center; font-variant-numeric: tabular-nums; }
+
+/* ─── Photos ─── */
+.photo-card-header {
+    display: flex; justify-content: space-between; align-items: center; cursor: pointer;
+    font-size: 15px; font-weight: 800; padding: 2px 0;
+}
+.photo-card-caret { color: var(--ink-soft); }
+.photo-card-body { padding-top: 10px; }
+.photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-bottom: 10px; }
+.photo-tile { position: relative; border-radius: 10px; overflow: hidden; background: var(--sand); }
+.photo-tile img { width: 100%; height: 100px; object-fit: cover; display: block; }
+.photo-remove {
+    position: absolute; top: 6px; right: 6px; width: 30px; height: 30px; border-radius: 50%;
+    border: none; background: rgba(30,42,32,0.75); color: white; font-size: 14px; cursor: pointer;
+}
+.photo-add-row { display: flex; }
+.photo-add-btn {
+    flex: 1; border: 2px dashed var(--fairway); background: #F4FAF6; color: var(--fairway-dk);
+    border-radius: 12px; padding: 14px; font-size: 15px; font-weight: 800; cursor: pointer; min-height: 52px;
+}
+.photo-warning, .photo-hint { font-size: 12.5px; color: var(--ink-soft); margin-top: 8px; }
+.photo-tag-row { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 4px 4px; }
+.photo-tag-chip {
+    border: 1px solid var(--sand); background: white; color: var(--ink-soft);
+    font-size: 11px; font-weight: 700; padding: 4px 9px; border-radius: 999px; cursor: pointer; min-height: 28px;
+}
+.photo-tag-chip.on { background: var(--fairway); border-color: var(--fairway-dk); color: white; }
+
+/* ─── Footer nav: one giant obvious Next ─── */
+.foot-nav {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+    background: var(--card); border-top: 2px solid var(--sand);
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+    display: flex; gap: 10px; max-width: 560px; margin: 0 auto;
+}
+.foot-btn {
+    border: none; border-radius: 14px; cursor: pointer; font-weight: 800;
+    display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 58px;
+}
+.foot-btn.prev { flex: 1; background: var(--sky); color: var(--ink-soft); font-size: 15px; border: 2px solid var(--sand); }
+.foot-btn.next { flex: 2.2; background: var(--fairway); color: white; font-size: 18px; box-shadow: 0 3px 12px rgba(46,125,79,0.4); }
+.foot-btn.next:active { background: var(--fairway-dk); }
+.foot-btn.next.pulse { animation: nextPulse 1.2s ease-in-out infinite; }
+.foot-btn:disabled { opacity: 0.35; }
+@keyframes nextPulse {
+    0%, 100% { box-shadow: 0 3px 12px rgba(46,125,79,0.4); }
+    50% { box-shadow: 0 3px 26px rgba(46,125,79,0.85); }
+}
+
+.error-msg { color: var(--dbl); font-weight: 700; font-size: 15px; }
+
+/* ─── Loading state ─── */
+.center-state { text-align: center; padding: 60px 20px; }
+.spinner {
+    width: 38px; height: 38px; margin: 0 auto;
+    border: 4px solid var(--sand); border-top-color: var(--fairway);
+    border-radius: 50%; animation: spin 0.9s linear infinite;
+}
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* Player picker */
-.group-card { background: white; border-radius: 12px; padding: 14px; margin-bottom: 10px; border: 1px solid #e5e7eb; }
-.group-title { font-size: 12px; font-weight: 700; color: #065f46; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; }
-.player-btn {
-    display: block; width: 100%; text-align: left;
-    background: #f9fafb; border: 2px solid #e5e7eb;
-    border-radius: 12px; padding: 16px 18px;
-    margin-bottom: 8px; font-size: 17px; font-weight: 600;
-    color: #1f2937; cursor: pointer; min-height: 56px;
-    transition: transform 0.1s, background 0.15s, border-color 0.15s;
+/* ─── Section cards kept from v1 (BBB / CTP / Balls) ─── */
+.section-header { font-size: 15px; font-weight: 800; margin: 0 0 2px; }
+.section-header .accent { color: var(--fairway-dk); }
+.badge { font-size: 11px; font-weight: 800; background: var(--sand); color: var(--ink-soft); padding: 2px 8px; border-radius: 999px; margin-left: 6px; }
+.pick-label { font-size: 12.5px; color: var(--ink-soft); display: block; margin-bottom: 6px; }
+.pick-card select, .pick-row select {
+    width: 100%; min-height: 52px; font-size: 17px; font-weight: 700;
+    border: 2px solid var(--sand); border-radius: 12px; background: white; color: var(--ink);
+    padding: 10px 12px; appearance: none; -webkit-appearance: none;
 }
-.player-btn:active { background: #d1fae5; border-color: #10b981; transform: scale(0.99); }
-.player-btn .hcp { font-size: 13px; color: #6b7280; font-weight: 400; margin-left: 8px; }
-.player-btn .team { font-size: 12px; color: #9ca3af; font-weight: 400; display: block; margin-top: 3px; }
+.pick-card select.has-value { border-color: var(--fairway); background: #F4FAF6; }
+.bbb-card .pick-row { display: grid; grid-template-columns: 1fr; gap: 8px; }
+.balls-card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px; margin-bottom: 10px; }
+.balls-name { font-size: 16px; font-weight: 700; }
+.balls-btns { display: flex; gap: 8px; align-items: center; }
+.balls-pips { display: flex; gap: 3px; margin-top: 3px; }
+.pip { width: 10px; height: 10px; border-radius: 50%; background: var(--sand); }
+.pip.full { background: var(--fairway); }
 
-/* Hole nav */
-.hole-nav {
-    background: white; border-radius: 12px; padding: 10px 12px;
-    margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-    position: sticky; top: 60px; z-index: 40;
-}
-.dots-strip { display: flex; gap: 3px; margin-bottom: 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; padding: 2px 0; }
-.dots-strip::-webkit-scrollbar { display: none; }
-.dot {
-    flex: 0 0 auto; width: 26px; height: 26px;
-    border-radius: 50%; background: #e5e7eb; color: #6b7280;
-    font-size: 11px; font-weight: 600;
-    display: flex; align-items: center; justify-content: center;
-    border: none; cursor: pointer; padding: 0;
-    transition: background 0.15s, transform 0.1s;
-}
-.dot:active { transform: scale(0.92); }
-.dot.complete { background: #86efac; color: #065f46; }
-.dot.partial { background: #fde68a; color: #78350f; }
-.dot.current { background: #065f46; color: white; box-shadow: 0 0 0 2px #065f46; transform: scale(1.15); }
+/* ─── Fatal error surface ─── */
+.fatal { background: #FBEBE9; border: 2px solid var(--dbl); border-radius: var(--radius); padding: 16px; margin: 12px; }
+.fatal h2 { color: var(--dbl); margin: 0 0 6px; font-size: 17px; }
+.fatal pre { font-size: 11px; overflow-x: auto; color: var(--ink-soft); }
 
-.hole-bar { display: flex; align-items: center; gap: 8px; }
-.hole-arrow {
-    flex: 0 0 auto; width: 44px; height: 44px;
-    border-radius: 12px;
-    background: #f3f4f6; color: #065f46;
-    border: none; font-size: 22px; font-weight: 700; cursor: pointer;
-}
-.hole-arrow:disabled { opacity: 0.3; cursor: not-allowed; }
-.hole-arrow:not(:disabled):active { background: #d1fae5; }
-.hole-info {
-    flex: 1; text-align: center;
-    background: linear-gradient(135deg, #065f46 0%, #047857 100%);
-    color: white; padding: 8px 10px;
-    border-radius: 12px; min-height: 44px;
-    display: flex; flex-direction: column; justify-content: center;
-}
-.hole-info .num { font-size: 20px; font-weight: 800; line-height: 1.0; }
-.hole-info .meta { font-size: 11px; opacity: 0.9; margin-top: 2px; font-weight: 500; }
-.par3-pill { display: inline-block; background: rgba(255,255,255,0.25); padding: 1px 6px; border-radius: 4px; margin-left: 4px; font-size: 10px; font-weight: 700; }
-
-/* Score list */
-.score-list { background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.06); margin-bottom: 10px; }
-.score-row {
-    display: flex; align-items: center;
-    padding: 10px 12px;
-    border-bottom: 1px solid #f3f4f6;
-    transition: background 0.15s;
-    min-height: 76px;
-}
-.score-row:last-child { border-bottom: none; }
-.score-row.is-me { background: #f0fdf4; }
-.player-info { flex: 1; min-width: 0; padding-right: 10px; }
-.player-name { font-size: 16px; font-weight: 600; color: #1f2937; line-height: 1.2; }
-.player-name .me-tag { font-size: 11px; color: #047857; margin-left: 6px; font-weight: 700; text-transform: uppercase; }
-.player-meta { font-size: 12px; color: #6b7280; margin-top: 3px; }
-.player-meta .total { font-weight: 600; color: #065f46; }
-
-.score-input-wrap {
-    flex: 0 0 auto; width: 76px; height: 56px;
-    border-radius: 12px;
-    border: 2px solid #e5e7eb;
-    background: white;
-    transition: all 0.15s;
-    overflow: hidden;
-    position: relative;
-}
-.score-input {
-    width: 100%; height: 100%;
-    border: none; outline: none; background: transparent;
-    text-align: center; font-size: 28px; font-weight: 700;
-    color: #1f2937; font-family: inherit; padding: 0;
-    -moz-appearance: textfield;
-}
-.score-input::-webkit-outer-spin-button,
-.score-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-.score-input-wrap:focus-within { border-color: #10b981; background: #ecfdf5; box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15); }
-
-.score-input-wrap.albatross { background: #000000 !important; border-color: #000000; }
-.score-input-wrap.albatross .score-input { color: #ffffff; }
-.score-input-wrap.eagle { background: #065f46 !important; border-color: #065f46; }
-.score-input-wrap.eagle .score-input { color: #ffffff; }
-.score-input-wrap.birdie { background: #86efac !important; border-color: #4ade80; }
-.score-input-wrap.birdie .score-input { color: #065f46; }
-.score-input-wrap.par-score { background: #f3f4f6 !important; border-color: #d1d5db; }
-.score-input-wrap.bogey { background: #fed7aa !important; border-color: #fdba74; }
-.score-input-wrap.bogey .score-input { color: #9a3412; }
-.score-input-wrap.double { background: #fecaca !important; border-color: #fca5a5; }
-.score-input-wrap.double .score-input { color: #991b1b; }
-.score-input-wrap.worse { background: #fca5a5 !important; border-color: #f87171; }
-.score-input-wrap.worse .score-input { color: #7f1d1d; }
-
-.score-pts { position: absolute; bottom: 1px; right: 4px; font-size: 10px; font-weight: 700; opacity: 0.7; pointer-events: none; }
-
-/* Section title */
-.section-title {
-    font-size: 11px; font-weight: 700; color: #6b7280;
-    text-transform: uppercase; letter-spacing: 0.6px;
-    margin: 14px 4px 6px;
-    display: flex; align-items: center; gap: 6px;
-}
-
-/* Generic select used for BBB and CTP */
-.pick-card {
-    background: white; border-radius: 12px;
-    padding: 12px 12px;
-    margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-}
-.pick-row {
-    display: flex; align-items: center; gap: 10px;
-    padding: 6px 0;
-    min-height: 52px;
-}
-.pick-row + .pick-row { border-top: 1px solid #f3f4f6; }
-.pick-label {
-    flex: 0 0 auto;
-    width: 78px;
-    font-size: 13px; font-weight: 700; color: #374151;
-    display: flex; align-items: center; gap: 6px;
-}
-.pick-label .badge {
-    width: 22px; height: 22px; border-radius: 50%;
-    display: inline-flex; align-items: center; justify-content: center;
-    font-size: 11px; font-weight: 800; color: white;
-}
-.pick-label.bingo .badge { background: #f59e0b; }
-.pick-label.bango .badge { background: #10b981; }
-.pick-label.bongo .badge { background: #ef4444; }
-.pick-label.ctp .badge { background: #6366f1; }
-
-.pick-select {
-    flex: 1; min-width: 0; height: 44px;
-    border: 2px solid #e5e7eb; border-radius: 10px;
-    background: white; font-size: 15px; font-weight: 600;
-    color: #1f2937; padding: 0 32px 0 12px;
-    appearance: none; -webkit-appearance: none;
-    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3e%3cpath fill='%236b7280' d='M6 8L0 0h12z'/%3e%3c/svg%3e");
-    background-repeat: no-repeat; background-position: right 12px center;
-    width: 100%; /* iOS quirk */
-}
-.pick-select:focus { border-color: #10b981; outline: none; }
-.pick-select.has-value { border-color: #a7f3d0; background-color: #f0fdf4; }
-
-.bbb-card { background: linear-gradient(180deg, #fffbeb 0%, #ffffff 70%); }
-.ctp-card { background: linear-gradient(180deg, #eef2ff 0%, #ffffff 70%); }
-.photo-card { background: linear-gradient(180deg, #f0f9ff 0%, #ffffff 70%); padding: 0; overflow: hidden; }
-.photo-card-header {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 12px 14px; cursor: pointer; user-select: none;
-    font-size: 14px; font-weight: 700; color: #1e40af;
-}
-.photo-card-header:active { background: rgba(59, 130, 246, 0.06); }
-.photo-card-caret { font-size: 14px; color: #64748b; transition: transform 0.15s; }
-.photo-card-body { padding: 0 14px 14px; }
-.photo-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
-    margin-bottom: 12px;
-}
-.photo-tile {
-    position: relative; aspect-ratio: 1;
-    border-radius: 8px; overflow: hidden;
-    background: #e5e7eb;
-}
-.photo-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.photo-remove {
-    position: absolute; top: 4px; right: 4px;
-    width: 24px; height: 24px; border-radius: 50%;
-    background: rgba(239, 68, 68, 0.92); color: white;
-    border: none; cursor: pointer;
-    font-size: 12px; font-weight: 700;
-    display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.3);
-}
-.photo-remove:active { background: rgba(220, 38, 38, 1); }
-.photo-add-row { display: flex; gap: 8px; }
-.photo-add-btn {
-    flex: 1; min-height: 48px;
-    background: #3b82f6; color: white;
-    border: none; border-radius: 10px;
-    font-size: 15px; font-weight: 700;
-    cursor: pointer;
-}
-.photo-add-btn:active { background: #2563eb; transform: scale(0.98); }
-.photo-hint {
-    color: #64748b; font-size: 12px;
-    margin-top: 8px; text-align: center;
-}
-.photo-warning {
-    color: #b45309; font-size: 12px;
-    margin-top: 8px; text-align: center;
-    background: #fef3c7; padding: 8px; border-radius: 6px;
-}
-
-.section-header {
-    font-size: 13px; font-weight: 800; color: #065f46;
-    margin: 0 0 8px; padding: 0 4px;
-    display: flex; align-items: center; gap: 8px;
-}
-.section-header .accent { font-size: 10px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; }
-
-/* Balls card (hole 18 only) */
-.balls-card { background: white; border-radius: 12px; padding: 12px 12px 8px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); border: 2px solid #fcd34d; }
-.balls-row { display: flex; align-items: center; padding: 8px 4px; border-bottom: 1px solid #f3f4f6; min-height: 48px; }
-.balls-row:last-child { border-bottom: none; }
-.balls-name { flex: 1; font-size: 14px; font-weight: 600; color: #1f2937; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 8px; }
-.balls-pips { flex: 0 0 auto; display: flex; gap: 4px; margin-right: 8px; }
-.pip { width: 14px; height: 14px; border-radius: 50%; background: #d1d5db; transition: background 0.2s; }
-.pip.full { background: linear-gradient(135deg, #fef3c7, #f59e0b); box-shadow: inset 0 -1px 2px rgba(120,53,15,0.3); }
-.balls-count { flex: 0 0 auto; font-size: 14px; font-weight: 700; color: #6b7280; min-width: 24px; text-align: center; }
-.balls-btns { flex: 0 0 auto; display: flex; gap: 4px; }
-.balls-btn { width: 36px; height: 36px; border-radius: 10px; border: none; background: #f3f4f6; color: #065f46; font-size: 18px; font-weight: 700; cursor: pointer; }
-.balls-btn:active { background: #d1fae5; }
-.balls-btn:disabled { opacity: 0.3; cursor: not-allowed; }
-
-/* Footer nav */
-.foot-nav { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 4px; }
-.foot-btn {
-    height: 56px; border-radius: 12px;
-    border: none; font-size: 16px; font-weight: 700; cursor: pointer;
-    display: flex; align-items: center; justify-content: center; gap: 6px;
-}
-.foot-btn.prev { background: #f3f4f6; color: #065f46; }
-.foot-btn.next { background: #065f46; color: white; }
-.foot-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.foot-btn:not(:disabled):active { transform: scale(0.98); }
-.foot-btn.prev:not(:disabled):active { background: #d1fae5; }
-
-/* Round picker */
-.round-option { display: block; width: 100%; text-align: left; background: white; border: 2px solid #e5e7eb; border-radius: 12px; padding: 14px 16px; margin-bottom: 8px; cursor: pointer; min-height: 56px; }
-.round-option:active { border-color: #10b981; background: #f0fdf4; }
-.round-option .round-date { font-weight: 700; color: #065f46; font-size: 16px; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-.round-option .round-meta { font-size: 13px; color: #6b7280; margin-top: 3px; }
-.round-option .round-status { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; }
-.round-option .round-status.scheduled { background: #dbeafe; color: #1e40af; }
-.round-option .round-status.today { background: #fef3c7; color: #92400e; }
-.round-option .round-status.in-progress { background: #d1fae5; color: #065f46; animation: pulse-progress 2s ease-in-out infinite; }
-@keyframes pulse-progress { 0%, 100% { background: #d1fae5; } 50% { background: #a7f3d0; } }
-
-.error-msg { background: #fee2e2; color: #991b1b; padding: 12px; border-radius: 8px; margin: 8px 0; font-size: 14px; word-break: break-word; }
-.foot-note { color: #9ca3af; font-size: 11px; text-align: center; padding: 16px 0 32px; }
-button { -webkit-tap-highlight-color: transparent; }
-input, select { -webkit-tap-highlight-color: transparent; }
-/* ─── Photo player-tag chips ─── */
-.photo-tag-row {
-    display: flex; flex-wrap: wrap; gap: 4px;
-    padding: 6px 4px 4px;
-}
-.photo-tag-chip {
-    border: 1px solid #cbd5e1; background: #f8fafc; color: #475569;
-    font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 999px;
-    cursor: pointer; line-height: 1.2;
-}
-.photo-tag-chip.on {
-    background: #2563eb; border-color: #2563eb; color: white;
+@media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
 }
 </style>
 </head>
 <body>
 
-<header class="header">
-    <div class="header-row">
-        <div class="header-info">
-            <h1 id="header-title">Dutch Cup</h1>
-            <div class="subtitle" id="header-subtitle">Connecting…</div>
-        </div>
-        <div class="header-actions">
-            <span class="save-status" id="save-status" style="display:none;"></span>
-            <button class="btn-link" id="switch-btn" style="display:none;" onclick="window.__switchPlayer && window.__switchPlayer()">⤺ Switch</button>
-        </div>
+<header class="app-header">
+    <div class="header-text">
+        <h1 id="header-title">Dutch Cup</h1>
+        <div id="header-subtitle">Connecting…</div>
+    </div>
+    <div class="header-actions">
+        <span class="save-status" id="save-status" style="display:none;"></span>
+        <button class="hdr-btn" id="switch-btn" style="display:none;" onclick="window.__switchPlayer && window.__switchPlayer()">Switch player</button>
     </div>
 </header>
 
@@ -474,6 +450,9 @@ async function deletePhotoAtPath(storagePath) {
     }
 }
 
+const SE_VERSION = '2.0.0'; // scorecard redesign: tap pad, remembered identity, tee-sign UI
+console.log('Dutch Cup Score Entry v' + SE_VERSION);
+
 // ─── State ──────────────────────────────────────────────────────────────
 const state = {
     allRounds: [],
@@ -484,6 +463,8 @@ const state = {
     unsubscribe: null,
     pendingTimer: null,
     autoAdvanceTimer: null,
+    activePadPlayerId: null,   // which player's score pad is open
+    padExpanded: false,        // pad showing the full 1–12 grid instead of par-relative
     pendingEdits: {
         scores: {},        // { playerIdStr: { holeIdx: scoreStr } }
         ctpWinners: {},    // { holeIdxStr: playerIdStr|'' }
@@ -752,7 +733,26 @@ function handleRoundsSnapshot(doc) {
 
         const selectable = getSelectableRounds(state.allRounds);
         if (selectable.length === 0) { renderNoRound(); return; }
-        if (selectable.length === 1) { state.selectedRoundId = idStr(selectable[0].id); renderPlayerPicker(); return; }
+        if (selectable.length === 1) {
+            state.selectedRoundId = idStr(selectable[0].id);
+            // If this device remembers who you are and you're in this round,
+            // skip the name picker entirely — straight to scoring.
+            let rememberedId = null;
+            try { rememberedId = localStorage.getItem('dcScoreMe'); } catch (e) {}
+            if (rememberedId) {
+                const _r = getRoundById(state.selectedRoundId);
+                const grp = _r ? findGroupForPlayer(_r, rememberedId) : null;
+                if (grp) {
+                    state.currentPlayerId = idStr(rememberedId);
+                    state.groupNumber = grp;
+                    state.currentHole = firstUnscoredHole(_r, grp);
+                    renderScoreEntry();
+                    return;
+                }
+            }
+            renderPlayerPicker();
+            return;
+        }
         renderRoundPicker(selectable);
         return;
     }
@@ -783,7 +783,26 @@ function handleRoundsSnapshot(doc) {
         // Re-render with fresh state
         const selectable = getSelectableRounds(state.allRounds);
         if (selectable.length === 0) { renderNoRound(); return; }
-        if (selectable.length === 1) { state.selectedRoundId = idStr(selectable[0].id); renderPlayerPicker(); return; }
+        if (selectable.length === 1) {
+            state.selectedRoundId = idStr(selectable[0].id);
+            // If this device remembers who you are and you're in this round,
+            // skip the name picker entirely — straight to scoring.
+            let rememberedId = null;
+            try { rememberedId = localStorage.getItem('dcScoreMe'); } catch (e) {}
+            if (rememberedId) {
+                const _r = getRoundById(state.selectedRoundId);
+                const grp = _r ? findGroupForPlayer(_r, rememberedId) : null;
+                if (grp) {
+                    state.currentPlayerId = idStr(rememberedId);
+                    state.groupNumber = grp;
+                    state.currentHole = firstUnscoredHole(_r, grp);
+                    renderScoreEntry();
+                    return;
+                }
+            }
+            renderPlayerPicker();
+            return;
+        }
         renderRoundPicker(selectable);
         return;
     }
@@ -899,6 +918,8 @@ function renderPlayerPicker() {
 function selectPlayer(playerId, groupNumber) {
     state.currentPlayerId = idStr(playerId);
     state.groupNumber = groupNumber;
+    // Remember who you are on this device so next visit skips straight to scoring.
+    try { localStorage.setItem('dcScoreMe', idStr(playerId)); } catch (e) {}
     const round = getRoundById(state.selectedRoundId);
     state.currentHole = firstUnscoredHole(round, groupNumber);
     renderScoreEntry();
@@ -906,7 +927,9 @@ function selectPlayer(playerId, groupNumber) {
 
 window.__switchPlayer = function() {
     if (state.pendingTimer) { clearTimeout(state.pendingTimer); flushPendingEdits(); }
+    try { localStorage.removeItem('dcScoreMe'); } catch (e) {}
     state.currentPlayerId = null; state.groupNumber = null;
+    state.activePadPlayerId = null; state.padExpanded = false;
     state.pendingEdits = { scores: {}, ctpWinners: {}, balls: {}, bbb: {} };
     setStatus('', '');
     renderPlayerPicker();
@@ -964,9 +987,11 @@ function buildHoleNav(round, groupPlayers) {
         disabled: state.currentHole === 0 ? '' : null
     }, '‹'));
     const info = el('div', { class: 'hole-info' });
-    const num = el('div', { class: 'num' }, `Hole ${state.currentHole + 1}`);
+    const num = el('div', { class: 'num' });
+    num.appendChild(el('small', null, 'HOLE '));
+    num.appendChild(document.createTextNode(String(state.currentHole + 1)));
     info.appendChild(num);
-    const meta = el('div', { class: 'meta' }, `Par ${par ?? '?'} · SI ${si ?? '?'}`);
+    const meta = el('div', { class: 'meta' }, `Par ${par ?? '?'} · Stroke index ${si ?? '?'}`);
     if (par === 3) meta.appendChild(el('span', { class: 'par3-pill' }, 'CTP'));
     info.appendChild(meta);
     bar.appendChild(info);
@@ -993,62 +1018,162 @@ function holeStatus(round, groupPlayers, holeIdx) {
 
 function buildScoresList(round, groupPlayers) {
     const list = el('div', { class: 'score-list', id: 'score-list' });
+    const par = (round.pars || [])[state.currentHole];
+    const holeHc = (round.handicaps || [])[state.currentHole];
 
-    groupPlayers.forEach((p, idx) => {
+    // Default active pad: the first player without a score on this hole.
+    if (state.activePadPlayerId == null ||
+        !groupPlayers.some(p => idsEqual(p.id, state.activePadPlayerId))) {
+        const firstEmpty = groupPlayers.find(p => {
+            const s = effectiveScore(round, p.id, state.currentHole);
+            return s === '' || s == null;
+        });
+        state.activePadPlayerId = firstEmpty ? idStr(firstEmpty.id) : null;
+    }
+
+    groupPlayers.forEach(p => {
+        const pid = idStr(p.id);
         const isMe = idsEqual(p.id, state.currentPlayerId);
+        const hc = parseInt(p.handicap, 10) || 0;
+        const strokes = strokesOnHole(hc, holeHc);
+        const currentScore = effectiveScore(round, p.id, state.currentHole);
+        const cls = classForScore(currentScore, par, strokes);
+        const totals = computePlayerTotals(round, p);
+
         const row = el('div', { class: 'score-row' + (isMe ? ' is-me' : '') });
 
-        const totals = computePlayerTotals(round, p);
-        row.appendChild(el('div', { class: 'player-info' },
+        // Tap anywhere on the row to open this player's pad
+        const top = el('div', { class: 'score-row-top', onclick: () => {
+            state.activePadPlayerId = pid;
+            state.padExpanded = false;
+            renderScoreEntry();
+        }});
+
+        top.appendChild(el('div', { class: 'player-info' },
             el('div', { class: 'player-name' },
                 document.createTextNode(p.name || '?'),
                 isMe ? el('span', { class: 'me-tag' }, 'YOU') : null
             ),
             el('div', { class: 'player-meta' },
-                document.createTextNode(`HCP ${p.handicap ?? '—'} · `),
-                el('span', { class: 'total' }, `Thru ${totals.thru}: ${totals.gross || '—'} (${totals.points} pts)`)
+                document.createTextNode(`HCP ${p.handicap ?? '—'}`),
+                strokes > 0 ? el('span', { class: 'stroke-dots' }, ' ' + '●'.repeat(strokes) + ` stroke${strokes > 1 ? 's' : ''} here`) : null,
+                document.createTextNode(` · Thru ${totals.thru}: ${totals.gross || '—'} (${totals.points} pts)`)
             )
         ));
 
-        const par = (round.pars || [])[state.currentHole];
-        const holeHc = (round.handicaps || [])[state.currentHole];
-        const hc = parseInt(p.handicap, 10) || 0;
-        const strokes = strokesOnHole(hc, holeHc);
-        const currentScore = effectiveScore(round, p.id, state.currentHole);
-        const cls = classForScore(currentScore, par, strokes);
-
-        const inputWrap = el('div', { class: 'score-input-wrap' + (cls ? ' ' + cls : ''), 'data-player-id': idStr(p.id) });
-        const input = document.createElement('input');
-        input.type = 'number';
-        input.inputMode = 'numeric';
-        input.pattern = '[0-9]*';
-        input.min = '1'; input.max = '15';
-        input.className = 'score-input';
-        input.dataset.playerId = idStr(p.id);
-        input.dataset.playerIdx = String(idx);
-        input.value = currentScore;
-        input.placeholder = '–';
-        input.addEventListener('input', onScoreInput);
-        input.addEventListener('blur', onScoreBlur);
-        input.addEventListener('focus', () => {
-            // Cancel pending auto-advance if user manually focuses an input
-            if (state.autoAdvanceTimer) { clearTimeout(state.autoAdvanceTimer); state.autoAdvanceTimer = null; }
-        });
-        inputWrap.appendChild(input);
-
+        // Big score cell: the number plus its golf word
+        const cell = el('div', { class: 'score-cell ' + (currentScore !== '' ? (cls || '') : 'empty') });
         if (currentScore !== '') {
+            cell.appendChild(el('span', null, String(currentScore)));
             const n = parseInt(currentScore, 10);
-            if (!isNaN(n)) {
-                const pts = getPoints((n - strokes) - par);
-                inputWrap.appendChild(el('span', { class: 'score-pts' }, `${pts}p`));
-            }
+            if (!isNaN(n) && par) cell.appendChild(el('span', { class: 'word' }, grossWord(n, par)));
+        } else {
+            cell.appendChild(el('span', null, '–'));
+            cell.appendChild(el('span', { class: 'word' }, 'tap'));
+        }
+        top.appendChild(cell);
+        row.appendChild(top);
+
+        // The pad lives inline under the active player's row
+        if (state.activePadPlayerId === pid) {
+            row.appendChild(buildScorePad(round, p, par));
         }
 
-        row.appendChild(inputWrap);
         list.appendChild(row);
     });
 
     return list;
+}
+
+// The gross-relative golf word for a score: what golfers actually say.
+function grossWord(gross, par) {
+    const d = gross - par;
+    if (d <= -3) return 'albatross';
+    if (d === -2) return 'eagle';
+    if (d === -1) return 'birdie';
+    if (d === 0)  return 'par';
+    if (d === 1)  return 'bogey';
+    if (d === 2)  return 'double';
+    if (d === 3)  return 'triple';
+    return '+' + d;
+}
+
+// ─── SCORE PAD: one tap per score, no keyboard ───
+function buildScorePad(round, player, par) {
+    const pid = idStr(player.id);
+    const currentScore = effectiveScore(round, player.id, state.currentHole);
+    const pad = el('div', { class: 'scorepad' });
+    const grid = el('div', { class: 'scorepad-grid' });
+
+    let values;
+    if (state.padExpanded || !par) {
+        values = [1,2,3,4,5,6,7,8,9,10,11,12];
+    } else {
+        values = [];
+        for (let v = Math.max(1, par - 2); v <= par + 4; v++) values.push(v);
+    }
+
+    values.forEach(v => {
+        const picked = currentScore !== '' && parseInt(currentScore, 10) === v;
+        const isPar = par && v === par;
+        const btn = el('button', {
+            class: 'pad-btn' + (picked ? ' picked' : (isPar ? ' hint-par' : '')),
+            type: 'button',
+            onclick: () => setScoreTap(pid, v)
+        },
+            el('span', { class: 'n' }, String(v)),
+            par ? el('span', { class: 'w' }, grossWord(v, par)) : null
+        );
+        grid.appendChild(btn);
+    });
+
+    // Utility buttons: full-range toggle + clear
+    grid.appendChild(el('button', {
+        class: 'pad-btn util', type: 'button',
+        onclick: () => { state.padExpanded = !state.padExpanded; renderScoreEntry(); }
+    }, el('span', { class: 'n' }, state.padExpanded ? 'Back' : 'Other')));
+    grid.appendChild(el('button', {
+        class: 'pad-btn util', type: 'button',
+        onclick: () => setScoreTap(pid, null)
+    }, el('span', { class: 'n' }, 'Clear')));
+
+    pad.appendChild(grid);
+    return pad;
+}
+
+// One tap: record the score, advance to the next unscored player,
+// and when the hole is complete, move on to the next hole.
+function setScoreTap(playerId, value) {
+    const pid = idStr(playerId);
+    const val = value == null ? '' : String(value);
+
+    if (!state.pendingEdits.scores[pid]) state.pendingEdits.scores[pid] = {};
+    state.pendingEdits.scores[pid][state.currentHole] = val;
+
+    setStatus('Saving…', 'saving');
+    if (state.pendingTimer) clearTimeout(state.pendingTimer);
+    state.pendingTimer = setTimeout(flushPendingEdits, 600);
+
+    const round = getRoundById(state.selectedRoundId);
+    const groupPlayers = getGroupPlayers(round, state.groupNumber);
+
+    // Next unscored player on this hole (if any) becomes active
+    const next = groupPlayers.find(p => {
+        const s = effectiveScore(round, p.id, state.currentHole);
+        return s === '' || s == null;
+    });
+    state.activePadPlayerId = next ? idStr(next.id) : null;
+    state.padExpanded = false;
+    renderScoreEntry();
+
+    // Hole complete → confirm and roll to the next hole
+    if (!next && val !== '') {
+        setStatus(`Hole ${state.currentHole + 1} done ✓`, 'saved');
+        if (state.currentHole < 17) {
+            if (state.autoAdvanceTimer) clearTimeout(state.autoAdvanceTimer);
+            state.autoAdvanceTimer = setTimeout(() => goToHole(state.currentHole + 1), 1100);
+        }
+    }
 }
 
 // ─── BBB card ───────────────────────────────────────────────────────────
@@ -1259,16 +1384,20 @@ function buildPhotoCard(round) {
 
 function buildFooterNav() {
     const wrap = el('div', { class: 'foot-nav' });
+    // Pulse the Next button once every score on this hole is in — the obvious next step.
+    const round = getRoundById(state.selectedRoundId);
+    const gp = getGroupPlayers(round, state.groupNumber);
+    const holeDone = holeStatus(round, gp, state.currentHole) === 'complete';
     wrap.appendChild(el('button', {
         class: 'foot-btn prev',
         onclick: () => goToHole(state.currentHole - 1),
         disabled: state.currentHole === 0 ? '' : null
     }, el('span', null, '←'), el('span', null, 'Prev hole')));
     wrap.appendChild(el('button', {
-        class: 'foot-btn next',
+        class: 'foot-btn next' + (holeDone && state.currentHole < 17 ? ' pulse' : ''),
         onclick: () => goToHole(state.currentHole + 1),
         disabled: state.currentHole === 17 ? '' : null
-    }, el('span', null, 'Next hole'), el('span', null, '→')));
+    }, el('span', null, holeDone && state.currentHole < 17 ? 'Hole done — next' : 'Next hole'), el('span', null, '→')));
     return wrap;
 }
 
@@ -1280,6 +1409,8 @@ function goToHole(holeIdx) {
         flushPendingEdits();
     }
     state.currentHole = holeIdx;
+    state.activePadPlayerId = null;   // recompute: first unscored player on the new hole
+    state.padExpanded = false;
     renderScoreEntry();
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -1630,25 +1761,14 @@ function updateDotsLive() {
 }
 
 function refreshScoreEntryFromServer() {
-    const focusedEl = document.activeElement;
-    const isEditingScore = focusedEl && focusedEl.classList && focusedEl.classList.contains('score-input');
-    const focusedPlayerId = isEditingScore ? focusedEl.dataset.playerId : null;
-
     const round = getRoundById(state.selectedRoundId);
     if (!round) return;
     const groupPlayers = getGroupPlayers(round, state.groupNumber);
 
-    // Scores
-    groupPlayers.forEach(p => {
-        const pid = idStr(p.id);
-        const input = document.querySelector(`.score-input[data-player-id="${cssEscape(pid)}"]`);
-        if (!input) return;
-        if (focusedPlayerId === pid) return;
-        if (state.pendingEdits.scores[pid] && state.pendingEdits.scores[pid][state.currentHole] !== undefined) return;
-        const newVal = effectiveScore(round, p.id, state.currentHole);
-        if (input.value !== newVal) input.value = newVal;
-        updateCellLiveColor(pid, newVal);
-    });
+    // Scores — rebuild the score list in place. The tap-based pad has no keyboard focus
+    // to preserve, and effectiveScore overlays any pending local edits, so this is safe.
+    const oldList = document.getElementById('score-list');
+    if (oldList) oldList.replaceWith(buildScoresList(round, groupPlayers));
 
     // CTP
     const ctpSel = document.getElementById('ctp-select');
