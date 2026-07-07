@@ -177,7 +177,7 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
     padding: 0 8px; border-radius: 999px; cursor: pointer; flex-shrink: 0;
     min-height: 40px; min-width: 58px;
 }
-.bbb-pill.on { background: #FFD95E; border-color: #E3B93E; color: #6b4e00; }
+.bbb-pill.on { background: #FFD95E; border-color: #E3B93E; color: #6b4e00; font-size: 17px; }
 .player-info { flex: 1; min-width: 0; }
 .player-name { font-size: 16px; font-weight: 800; display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; }
 .me-tag {
@@ -476,7 +476,13 @@ async function deletePhotoAtPath(storagePath) {
     }
 }
 
-const SE_VERSION = '2.2.0'; // one-screen layout: BBB pills on rows, bottom-sheet pad, CTP dropdown, BBB-aware completion
+// Safety net: flush collected edits if the app is backgrounded or closed mid-hole.
+window.addEventListener('pagehide', () => { try { if (hasPendingEdits()) flushPendingEdits(); } catch (e) {} });
+document.addEventListener('visibilitychange', () => {
+    try { if (document.visibilityState === 'hidden' && hasPendingEdits()) flushPendingEdits(); } catch (e) {}
+});
+
+const SE_VERSION = '2.3.0'; // manual advance, save-on-hole-change, race-proof flush
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
@@ -953,7 +959,8 @@ function selectPlayer(playerId, groupNumber) {
 }
 
 window.__switchPlayer = function() {
-    if (state.pendingTimer) { clearTimeout(state.pendingTimer); flushPendingEdits(); }
+    if (state.pendingTimer) clearTimeout(state.pendingTimer);
+    if (hasPendingEdits()) flushPendingEdits();
     try { localStorage.removeItem('dcScoreMe'); } catch (e) {}
     state.currentPlayerId = null; state.groupNumber = null;
     state.sheetPlayerId = null; state.padExpanded = false;
@@ -1090,7 +1097,7 @@ function buildScoresList(round, groupPlayers) {
             class: 'bbb-pill' + (myBBB > 0 ? ' on' : ''),
             type: 'button',
             onclick: () => tapBBBPill(pid)
-        }, myBBB > 0 ? `BBB \u00d7${myBBB}` : 'BBB'));
+        }, myBBB > 0 ? String(myBBB) : 'BBB'));
 
         // Score cell: tap to open the score sheet
         const cell = el('div', {
@@ -1161,9 +1168,7 @@ function tapBBBPill(playerId) {
     state.pendingEdits.bbb[String(state.currentHole)] = {
         bingo: arr[0] || '', bango: arr[1] || '', bongo: arr[2] || ''
     };
-    setStatus('Saving\u2026', 'saving');
-    if (state.pendingTimer) clearTimeout(state.pendingTimer);
-    state.pendingTimer = setTimeout(flushPendingEdits, 400);
+    markUnsaved();
 
     renderScoreEntry();
     maybeCelebrateHoleComplete();
@@ -1229,9 +1234,7 @@ function setScoreTap(playerId, value) {
     if (!state.pendingEdits.scores[pid]) state.pendingEdits.scores[pid] = {};
     state.pendingEdits.scores[pid][state.currentHole] = val;
 
-    setStatus('Saving\u2026', 'saving');
-    if (state.pendingTimer) clearTimeout(state.pendingTimer);
-    state.pendingTimer = setTimeout(flushPendingEdits, 600);
+    markUnsaved();
 
     const round = getRoundById(state.selectedRoundId);
     const groupPlayers = getGroupPlayers(round, state.groupNumber);
@@ -1257,15 +1260,13 @@ function holeFullyComplete(round, groupPlayers) {
 }
 
 function maybeCelebrateHoleComplete() {
+    // No auto-advance: scorers validate the hole, then tap Next themselves.
+    // The pulsing Next button and this status are the only cues.
     const round = getRoundById(state.selectedRoundId);
     if (!round) return;
     const groupPlayers = getGroupPlayers(round, state.groupNumber);
     if (!holeFullyComplete(round, groupPlayers)) return;
-    setStatus(`Hole ${state.currentHole + 1} done \u2713`, 'saved');
-    if (state.currentHole < 17) {
-        if (state.autoAdvanceTimer) clearTimeout(state.autoAdvanceTimer);
-        state.autoAdvanceTimer = setTimeout(() => goToHole(state.currentHole + 1), 1200);
-    }
+    setStatus(`Hole ${state.currentHole + 1} done \u2713 \u2014 tap Next when ready`, 'saved');
 }
 
 // ─── CTP: slim optional dropdown (all groups' players; rarely used, so kept small) ───
@@ -1449,6 +1450,8 @@ function goToHole(holeIdx) {
     state.currentHole = holeIdx;
     state.sheetPlayerId = null;       // close any open score sheet on hole change
     state.padExpanded = false;
+    // This is THE save moment: edits collected on the hole flush now.
+    if (hasPendingEdits()) { setStatus('Saving…', 'saving'); flushPendingEdits(); }
     renderScoreEntry();
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -1494,9 +1497,7 @@ function onScoreInput(e) {
     updatePlayerTotalsLive();
     updateDotsLive();
 
-    setStatus('Saving…', 'saving');
-    if (state.pendingTimer) clearTimeout(state.pendingTimer);
-    state.pendingTimer = setTimeout(flushPendingEdits, 600);
+    markUnsaved();
 
     // Auto-advance: 300ms after last keystroke, move focus to next score input on this hole
     if (state.autoAdvanceTimer) clearTimeout(state.autoAdvanceTimer);
@@ -1531,9 +1532,7 @@ function onScoreBlur() {
 function onCTPChange(e) {
     state.pendingEdits.ctpWinners[String(state.currentHole)] = e.target.value || '';
     e.target.classList.toggle('has-value', !!e.target.value);
-    setStatus('Saving…', 'saving');
-    if (state.pendingTimer) clearTimeout(state.pendingTimer);
-    state.pendingTimer = setTimeout(flushPendingEdits, 400);
+    markUnsaved();
 }
 
 function onBBBChange(e) {
@@ -1546,9 +1545,7 @@ function onBBBChange(e) {
     }
     state.pendingEdits.bbb[h][slot] = e.target.value || '';
     e.target.classList.toggle('has-value', !!e.target.value);
-    setStatus('Saving…', 'saving');
-    if (state.pendingTimer) clearTimeout(state.pendingTimer);
-    state.pendingTimer = setTimeout(flushPendingEdits, 400);
+    markUnsaved();
 }
 
 function adjustBalls(playerId, delta) {
@@ -1569,9 +1566,7 @@ function adjustBalls(playerId, delta) {
         if (btns[1]) btns[1].disabled = (next >= 9);
     }
 
-    setStatus('Saving…', 'saving');
-    if (state.pendingTimer) clearTimeout(state.pendingTimer);
-    state.pendingTimer = setTimeout(flushPendingEdits, 400);
+    markUnsaved();
 }
 
 function hasPendingEdits() {
@@ -1584,12 +1579,47 @@ function hasPendingEdits() {
 // ═══════════════════════════════════════════════════════════════════════
 // SAVE — Firestore transaction (last-save-wins)
 // ═══════════════════════════════════════════════════════════════════════
+// Taps no longer trigger a per-tap save. Edits collect locally and flush on hole
+// change (plus app-background and player/round switch), which eliminates the
+// tap-during-save race entirely on the course.
+function markUnsaved() {
+    setStatus('Unsaved \u270e', 'saving');
+}
+
+// Remove from pendingEdits exactly the leaf values a successful flush wrote —
+// but keep any key the user re-edited while the save was in flight.
+function prunePendingEdits(saved) {
+    Object.keys(saved.scores || {}).forEach(pid => {
+        Object.keys(saved.scores[pid]).forEach(h => {
+            if (state.pendingEdits.scores[pid] && state.pendingEdits.scores[pid][h] === saved.scores[pid][h]) {
+                delete state.pendingEdits.scores[pid][h];
+            }
+        });
+        if (state.pendingEdits.scores[pid] && Object.keys(state.pendingEdits.scores[pid]).length === 0) {
+            delete state.pendingEdits.scores[pid];
+        }
+    });
+    Object.keys(saved.ctpWinners || {}).forEach(h => {
+        if (state.pendingEdits.ctpWinners[h] === saved.ctpWinners[h]) delete state.pendingEdits.ctpWinners[h];
+    });
+    Object.keys(saved.balls || {}).forEach(pid => {
+        if (state.pendingEdits.balls[pid] === saved.balls[pid]) delete state.pendingEdits.balls[pid];
+    });
+    Object.keys(saved.bbb || {}).forEach(h => {
+        if (state.pendingEdits.bbb[h] && JSON.stringify(state.pendingEdits.bbb[h]) === JSON.stringify(saved.bbb[h])) {
+            delete state.pendingEdits.bbb[h];
+        }
+    });
+}
+
 async function flushPendingEdits() {
     if (state.saving) { state.pendingTimer = setTimeout(flushPendingEdits, 400); return; }
     if (!hasPendingEdits()) { setStatus('', ''); return; }
 
-    const edits = state.pendingEdits;
-    state.pendingEdits = { scores: {}, ctpWinners: {}, balls: {}, bbb: {} };
+    // Snapshot WITHOUT clearing. Taps that land while this save is in flight stay in
+    // state.pendingEdits (so effective* keeps showing them) and get their own flush.
+    // On success we prune only the keys whose values match this snapshot.
+    const edits = JSON.parse(JSON.stringify(state.pendingEdits));
     state.saving = true;
     state.pendingTimer = null;
 
@@ -1689,6 +1719,9 @@ async function flushPendingEdits() {
 
         state.saving = false;
 
+        // Prune exactly what this flush saved; anything re-edited mid-flight survives.
+        prunePendingEdits(edits);
+
         if (hasPendingEdits()) {
             flushPendingEdits();
         } else {
@@ -1718,16 +1751,7 @@ async function flushPendingEdits() {
             return;
         }
         setStatus('Save failed — retrying', 'error');
-        Object.keys(edits.scores).forEach(pid => {
-            if (!state.pendingEdits.scores[pid]) state.pendingEdits.scores[pid] = {};
-            Object.assign(state.pendingEdits.scores[pid], edits.scores[pid]);
-        });
-        Object.assign(state.pendingEdits.ctpWinners, edits.ctpWinners);
-        Object.assign(state.pendingEdits.balls, edits.balls);
-        Object.keys(edits.bbb).forEach(h => {
-            if (!state.pendingEdits.bbb[h]) state.pendingEdits.bbb[h] = {};
-            Object.assign(state.pendingEdits.bbb[h], edits.bbb[h]);
-        });
+        // pendingEdits was never cleared, so everything is still queued — just retry.
         state.pendingTimer = setTimeout(flushPendingEdits, 2500);
     }
 }
