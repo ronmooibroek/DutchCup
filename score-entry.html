@@ -482,7 +482,7 @@ document.addEventListener('visibilitychange', () => {
     try { if (document.visibilityState === 'hidden' && hasPendingEdits()) flushPendingEdits(); } catch (e) {}
 });
 
-const SE_VERSION = '2.3.0'; // manual advance, save-on-hole-change, race-proof flush
+const SE_VERSION = '2.3.1'; // photo-upload errors surfaced with real cause
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
@@ -1880,6 +1880,7 @@ async function uploadRoundPhotos(fileList) {
     setStatus(`📸 Uploading ${files.length} photo${files.length === 1 ? '' : 's'}…`, 'saving');
     
     let succeeded = 0;
+    let lastErr = null;
     for (let i = 0; i < files.length; i++) {
         const file = files[i];
         try {
@@ -1908,13 +1909,24 @@ async function uploadRoundPhotos(fileList) {
             succeeded++;
         } catch (err) {
             console.error(`Photo ${i + 1} upload failed:`, err);
+            lastErr = err;
         } finally {
             _photoUploadingCount--;
         }
     }
     
     if (succeeded === 0) {
-        setStatus('Photo upload failed', 'error');
+        // Surface the REAL reason so failures are diagnosable on the course.
+        const code = lastErr && (lastErr.code || lastErr.name) || '';
+        if (code === 'storage/unauthorized' || code === 'storage/unauthenticated') {
+            setStatus('Upload blocked — Storage rules expired (check Firebase console)', 'error');
+        } else if (code === 'storage/quota-exceeded') {
+            setStatus('Upload blocked — Storage quota exceeded', 'error');
+        } else if (code === 'storage/retry-limit-exceeded' || code === 'storage/canceled') {
+            setStatus('Upload failed — poor connection, try again', 'error');
+        } else {
+            setStatus('Photo upload failed' + (code ? ` (${code})` : (lastErr && lastErr.message ? ` (${String(lastErr.message).slice(0, 60)})` : '')), 'error');
+        }
     } else if (succeeded < files.length) {
         setStatus(`⚠️ ${succeeded} of ${files.length} uploaded`, 'saved');
         setTimeout(() => setStatus('Saved ✓', 'saved'), 2000);
