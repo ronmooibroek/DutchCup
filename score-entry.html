@@ -228,6 +228,7 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
     background: white; font-size: 22px; font-weight: 800; cursor: pointer;
 }
 .balls-count { font-size: 22px; font-weight: 900; min-width: 30px; text-align: center; font-variant-numeric: tabular-nums; }
+.balls-count.has { color: var(--fairway-dk); }
 
 /* ─── Photos ─── */
 .photo-card-header {
@@ -450,7 +451,7 @@ async function deletePhotoAtPath(storagePath) {
     }
 }
 
-const SE_VERSION = '2.0.0'; // scorecard redesign: tap pad, remembered identity, tee-sign UI
+const SE_VERSION = '2.1.0'; // scorecard redesign: tap pad, remembered identity, tee-sign UI
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
@@ -1178,59 +1179,80 @@ function setScoreTap(playerId, value) {
 
 // ─── BBB card ───────────────────────────────────────────────────────────
 function buildBBBCard(round, groupPlayers) {
-    const wrap = el('div', { class: 'pick-card bbb-card' });
+    // BBB, simplified: we only track HOW MANY of the hole's 3 points each player got —
+    // not which of Bingo/Bango/Bongo. Storage still uses the three named slots (so the
+    // main app's scoring is untouched); this UI just fills them in arbitrary order.
+    const wrap = el('div', { class: 'pick-card bbb-card', id: 'bbb-card' });
+
+    const slots = effectiveBBB(round, state.currentHole);
+    const assigned = [slots.bingo, slots.bango, slots.bongo].filter(v => v !== '' && v != null);
+    const used = assigned.length;
+
     wrap.appendChild(el('div', { class: 'section-header' },
-        el('span', null, '🎯 Bingo Bango Bongo'),
-        el('span', { class: 'accent' }, '3 awarded · group only')
+        el('span', null, '\ud83c\udfaa BBB points'),
+        el('span', { class: 'badge' }, `${used} of 3 given`)
     ));
+    wrap.appendChild(el('p', { class: 'sub' }, 'Tap + for each point a player won on this hole.'));
 
-    const current = effectiveBBB(round, state.currentHole);
-
-    const slots = [
-        { key: 'bingo', label: 'Bingo', cls: 'bingo', char: 'B', desc: 'First on green' },
-        { key: 'bango', label: 'Bango', cls: 'bango', char: 'B', desc: 'Closest on green' },
-        { key: 'bongo', label: 'Bongo', cls: 'bongo', char: 'B', desc: 'First in cup' }
-    ];
-
-    slots.forEach(slot => {
-        const row = el('div', { class: 'pick-row' });
-        row.appendChild(el('div', { class: `pick-label ${slot.cls}` },
-            el('span', { class: 'badge' }, slot.char),
-            document.createTextNode(slot.label)
-        ));
-        const select = document.createElement('select');
-        select.className = 'pick-select' + (current[slot.key] ? ' has-value' : '');
-        select.dataset.bbbSlot = slot.key;
-        select.addEventListener('change', onBBBChange);
-
-        const noneOpt = document.createElement('option');
-        noneOpt.value = ''; noneOpt.textContent = `— ${slot.desc} —`;
-        select.appendChild(noneOpt);
-        groupPlayers.forEach(p => {
-            const opt = document.createElement('option');
-            opt.value = idStr(p.id);
-            opt.textContent = p.name;
-            select.appendChild(opt);
-        });
-        select.value = idStr(current[slot.key] || '');
-        row.appendChild(select);
+    groupPlayers.forEach(p => {
+        const pid = idStr(p.id);
+        const count = assigned.filter(id => idsEqual(id, pid)).length;
+        const row = el('div', { class: 'balls-row' });
+        row.appendChild(el('div', { class: 'balls-name' }, p.name || '?'));
+        const controls = el('div', { class: 'balls-controls' });
+        const minus = el('button', { class: 'balls-btn', type: 'button', onclick: () => tapBBB(pid, -1) }, '\u2212');
+        if (count <= 0) minus.disabled = true;
+        const plus = el('button', { class: 'balls-btn', type: 'button', onclick: () => tapBBB(pid, +1) }, '+');
+        if (used >= 3) plus.disabled = true;
+        controls.appendChild(minus);
+        controls.appendChild(el('div', { class: 'balls-count' + (count > 0 ? ' has' : '') }, String(count)));
+        controls.appendChild(plus);
+        row.appendChild(controls);
         wrap.appendChild(row);
     });
 
     return wrap;
 }
 
-// ─── CTP card (all players in round, grouped) ──────────────────────────
-function buildCTPCard(round) {
-    const wrap = el('div', { class: 'pick-card ctp-card' });
-    wrap.appendChild(el('div', { class: 'section-header' },
-        el('span', null, '⛳ Closest to Pin'),
-        el('span', { class: 'accent' }, 'all groups')
-    ));
+// Adjust a player's BBB point count for the current hole by +1/−1, mapping the counts
+// back onto the stored bingo/bango/bongo slots (order is arbitrary and irrelevant).
+function tapBBB(playerId, delta) {
+    const round = getRoundById(state.selectedRoundId);
+    if (!round) return;
+    const slots = effectiveBBB(round, state.currentHole);
+    let arr = [slots.bingo, slots.bango, slots.bongo].filter(v => v !== '' && v != null);
 
+    if (delta > 0) {
+        if (arr.length >= 3) return;
+        arr.push(idStr(playerId));
+    } else {
+        const pos = arr.findIndex(id => idsEqual(id, playerId));
+        if (pos < 0) return;
+        arr.splice(pos, 1);
+    }
+
+    state.pendingEdits.bbb[String(state.currentHole)] = {
+        bingo: arr[0] || '', bango: arr[1] || '', bongo: arr[2] || ''
+    };
+    setStatus('Saving\u2026', 'saving');
+    if (state.pendingTimer) clearTimeout(state.pendingTimer);
+    state.pendingTimer = setTimeout(flushPendingEdits, 400);
+
+    const card = document.getElementById('bbb-card');
+    if (card) card.replaceWith(buildBBBCard(round, getGroupPlayers(round, state.groupNumber)));
+}
+
+// ─── CTP card (all players in round, tap chips) ─────────────────────────
+function buildCTPCard(round) {
+    const wrap = el('div', { class: 'pick-card ctp-card', id: 'ctp-card' });
     const current = idStr(effectiveCTP(round, state.currentHole));
 
-    // Build grouped option list: by groupNumber, then by name
+    wrap.appendChild(el('div', { class: 'section-header' },
+        el('span', null, '\u26f3 Closest to the pin'),
+        current ? el('span', { class: 'badge' }, 'set \u2713') : null
+    ));
+    wrap.appendChild(el('p', { class: 'sub' }, 'Par 3 \u2014 tap the winner. Tap again to clear.'));
+
     const allPlayers = getAllRoundPlayers(round);
     const grouped = {};
     allPlayers.forEach(p => {
@@ -1240,38 +1262,40 @@ function buildCTPCard(round) {
     });
     const groupKeys = Object.keys(grouped).map(Number).sort((a,b) => a - b);
 
-    const row = el('div', { class: 'pick-row' });
-    row.appendChild(el('div', { class: 'pick-label ctp' },
-        el('span', { class: 'badge' }, '⛳'),
-        document.createTextNode('Winner')
-    ));
-
-    const select = document.createElement('select');
-    select.className = 'pick-select' + (current ? ' has-value' : '');
-    select.id = 'ctp-select';
-    select.addEventListener('change', onCTPChange);
-
-    const noneOpt = document.createElement('option');
-    noneOpt.value = ''; noneOpt.textContent = '— Select winner —';
-    select.appendChild(noneOpt);
-
     groupKeys.forEach(g => {
-        const og = document.createElement('optgroup');
-        og.label = g === 0 ? 'No group' : `Group ${g}`;
+        if (groupKeys.length > 1) {
+            wrap.appendChild(el('div', { class: 'pick-label' }, g === 0 ? 'No group' : `Group ${g}`));
+        }
+        const row = el('div', { class: 'pick-row' });
         const sorted = [...grouped[g]].sort((a,b) => (a.name || '').localeCompare(b.name || ''));
         sorted.forEach(p => {
-            const opt = document.createElement('option');
-            opt.value = idStr(p.id);
-            opt.textContent = p.name;
-            og.appendChild(opt);
+            const pid = idStr(p.id);
+            const on = current !== '' && idsEqual(pid, current);
+            row.appendChild(el('button', {
+                class: 'pick-chip' + (on ? ' on' : ''),
+                type: 'button',
+                onclick: () => tapCTP(pid)
+            }, p.name || '?'));
         });
-        select.appendChild(og);
+        wrap.appendChild(row);
     });
 
-    select.value = current;
-    row.appendChild(select);
-    wrap.appendChild(row);
     return wrap;
+}
+
+// Tap the CTP winner: single-select, tapping the current winner clears it.
+function tapCTP(playerId) {
+    const round = getRoundById(state.selectedRoundId);
+    if (!round) return;
+    const current = idStr(effectiveCTP(round, state.currentHole));
+    const next = idsEqual(current, playerId) ? '' : idStr(playerId);
+    state.pendingEdits.ctpWinners[String(state.currentHole)] = next;
+    setStatus('Saving\u2026', 'saving');
+    if (state.pendingTimer) clearTimeout(state.pendingTimer);
+    state.pendingTimer = setTimeout(flushPendingEdits, 400);
+
+    const card = document.getElementById('ctp-card');
+    if (card) card.replaceWith(buildCTPCard(round));
 }
 
 // ─── Balls card (hole 18 only) ─────────────────────────────────────────
@@ -1770,26 +1794,11 @@ function refreshScoreEntryFromServer() {
     const oldList = document.getElementById('score-list');
     if (oldList) oldList.replaceWith(buildScoresList(round, groupPlayers));
 
-    // CTP
-    const ctpSel = document.getElementById('ctp-select');
-    if (ctpSel && document.activeElement !== ctpSel
-        && state.pendingEdits.ctpWinners[String(state.currentHole)] === undefined) {
-        const v = idStr(effectiveCTP(round, state.currentHole));
-        if (ctpSel.value !== v) ctpSel.value = v;
-        ctpSel.classList.toggle('has-value', !!v);
-    }
-
-    // BBB
-    const bbb = effectiveBBB(round, state.currentHole);
-    document.querySelectorAll('select[data-bbb-slot]').forEach(sel => {
-        if (document.activeElement === sel) return;
-        const slot = sel.dataset.bbbSlot;
-        if (state.pendingEdits.bbb[String(state.currentHole)]
-            && state.pendingEdits.bbb[String(state.currentHole)][slot] !== undefined) return;
-        const v = idStr(bbb[slot] || '');
-        if (sel.value !== v) sel.value = v;
-        sel.classList.toggle('has-value', !!v);
-    });
+    // CTP + BBB — rebuild the tap-chip cards in place; effective* overlays pending edits.
+    const ctpCard = document.getElementById('ctp-card');
+    if (ctpCard) ctpCard.replaceWith(buildCTPCard(round));
+    const bbbCard = document.getElementById('bbb-card');
+    if (bbbCard) bbbCard.replaceWith(buildBBBCard(round, groupPlayers));
 
     // Balls (only present on hole 18)
     if (state.currentHole === 17) {
