@@ -66,7 +66,11 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
 .save-status.error  { background: #FBDEDC; color: var(--dbl); }
 
 /* ─── App shell ─── */
-#app { max-width: 560px; margin: 0 auto; padding: 12px 12px 120px; }
+#app { max-width: 560px; margin: 0 auto; padding: 8px 10px 96px; }
+.ctp-slim { display: flex; align-items: center; gap: 10px; padding: 10px 12px; }
+.ctp-slim .lbl { font-size: 13px; font-weight: 800; white-space: nowrap; }
+.ctp-slim .lbl small { display: block; font-weight: 600; color: var(--ink-soft); font-size: 10.5px; }
+.ctp-slim select { flex: 1; min-height: 44px; }
 .card {
     background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
     padding: 18px; margin-bottom: 12px;
@@ -119,35 +123,37 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
 /* ─── TEE SIGN: hole header (the signature) ─── */
 .hole-nav {
     background: linear-gradient(170deg, var(--fairway) 0%, var(--fairway-dk) 100%);
-    border-radius: 18px; box-shadow: 0 4px 18px rgba(31,92,57,0.35);
-    padding: 16px 14px 12px; margin-bottom: 12px; color: white;
+    border-radius: 16px; box-shadow: 0 4px 18px rgba(31,92,57,0.35);
+    padding: 10px 12px 9px; margin-bottom: 8px; color: white;
 }
 .hole-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .hole-arrow {
     background: rgba(255,255,255,0.14); border: none; color: white;
-    width: 54px; height: 54px; border-radius: 14px; font-size: 28px; font-weight: 700; cursor: pointer;
+    width: 46px; height: 46px; border-radius: 12px; font-size: 24px; font-weight: 700; cursor: pointer;
     flex-shrink: 0;
 }
 .hole-arrow:disabled { opacity: 0.3; }
 .hole-arrow:active:not(:disabled) { background: rgba(255,255,255,0.3); }
 .hole-info { text-align: center; flex: 1; }
 .hole-info .num {
-    font-size: 52px; font-weight: 900; line-height: 1; letter-spacing: -1px;
+    font-size: 36px; font-weight: 900; line-height: 1; letter-spacing: -0.5px;
     font-variant-numeric: tabular-nums;
 }
-.hole-info .num small { font-size: 17px; font-weight: 700; opacity: 0.85; letter-spacing: 1px; }
-.hole-info .meta { font-size: 15px; font-weight: 700; opacity: 0.95; margin-top: 4px; }
+.hole-info .num small { font-size: 13px; font-weight: 700; opacity: 0.85; letter-spacing: 1px; }
+.hole-info .meta { font-size: 13px; font-weight: 700; opacity: 0.95; margin-top: 2px; }
+.bbb-meta { background: rgba(255,255,255,0.18); padding: 1px 8px; border-radius: 999px; margin-left: 6px; }
+.bbb-meta.done { background: #FFD95E; color: #6b4e00; }
 .par3-pill {
     background: #FFD95E; color: #6b4e00; font-size: 11px; font-weight: 900;
     padding: 2px 8px; border-radius: 999px; margin-left: 8px; letter-spacing: 0.5px;
 }
 /* progress track along the sign's base */
 .dots-strip {
-    display: grid; grid-template-columns: repeat(18, 1fr); gap: 3px;
-    margin-top: 14px;
+    display: grid; grid-template-columns: repeat(18, 1fr); gap: 2px;
+    margin-top: 9px;
 }
 .dot {
-    height: 34px; border: none; border-radius: 7px; cursor: pointer;
+    height: 26px; border: none; border-radius: 6px; cursor: pointer;
     background: rgba(255,255,255,0.16); color: rgba(255,255,255,0.85);
     font-size: 11px; font-weight: 800; padding: 0;
     font-variant-numeric: tabular-nums;
@@ -157,27 +163,34 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
 .dot.current  { outline: 3px solid white; outline-offset: 1px; }
 
 /* ─── Score rows ─── */
-.score-list { margin-bottom: 12px; }
+.score-list { margin-bottom: 8px; }
 .score-row {
-    background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
-    padding: 12px 14px; margin-bottom: 8px;
-    border-left: 5px solid transparent;
+    background: var(--card); border-radius: 12px; box-shadow: var(--shadow);
+    padding: 7px 10px; margin-bottom: 6px;
+    border-left: 4px solid transparent;
 }
 .score-row.is-me { border-left-color: var(--fairway); }
-.score-row-top { display: flex; align-items: center; gap: 10px; cursor: pointer; min-height: 52px; }
+.score-row-top { display: flex; align-items: center; gap: 8px; }
+.bbb-pill {
+    border: 2px solid var(--sand); background: white; color: #A8B3AA;
+    font-size: 11px; font-weight: 900; letter-spacing: 0.4px;
+    padding: 0 8px; border-radius: 999px; cursor: pointer; flex-shrink: 0;
+    min-height: 40px; min-width: 58px;
+}
+.bbb-pill.on { background: #FFD95E; border-color: #E3B93E; color: #6b4e00; }
 .player-info { flex: 1; min-width: 0; }
-.player-name { font-size: 18px; font-weight: 800; display: flex; align-items: center; gap: 6px; }
+.player-name { font-size: 16px; font-weight: 800; display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; }
 .me-tag {
     background: var(--fairway); color: white; font-size: 10px; font-weight: 900;
     letter-spacing: 0.8px; padding: 2px 7px; border-radius: 999px;
 }
-.player-meta { font-size: 12.5px; color: var(--ink-soft); margin-top: 2px; }
+.player-meta { font-size: 11.5px; color: var(--ink-soft); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .stroke-dots { color: var(--fairway-dk); font-weight: 900; letter-spacing: 1px; }
 .score-cell {
-    width: 62px; height: 62px; border-radius: 14px; flex-shrink: 0;
+    width: 54px; height: 54px; border-radius: 12px; flex-shrink: 0; cursor: pointer;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     background: white; border: 2.5px dashed var(--sand);
-    font-size: 30px; font-weight: 900; font-variant-numeric: tabular-nums;
+    font-size: 26px; font-weight: 900; font-variant-numeric: tabular-nums;
     color: var(--ink);
 }
 .score-cell .word { font-size: 9px; font-weight: 800; letter-spacing: 0.6px; text-transform: uppercase; }
@@ -189,8 +202,20 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
 .score-cell.bogey  { border-style: solid; border-color: var(--bogey); color: var(--bogey); background: #FBF2E7; }
 .score-cell.double, .score-cell.worse { border-style: solid; border-color: var(--dbl); color: var(--dbl); background: #FBEBE9; }
 
-/* ─── SCORE PAD (the other signature): tap the golf word ─── */
-.scorepad { margin-top: 12px; border-top: 2px solid var(--sand); padding-top: 12px; }
+/* ─── SCORE SHEET: bottom sheet with the tap pad — rows never move ─── */
+.sheet-backdrop {
+    position: fixed; inset: 0; z-index: 300; background: rgba(30,42,32,0.45);
+}
+.score-sheet {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 301;
+    background: var(--card); border-radius: 20px 20px 0 0;
+    box-shadow: 0 -8px 40px rgba(30,42,32,0.35);
+    padding: 14px 14px calc(16px + env(safe-area-inset-bottom));
+    max-width: 560px; margin: 0 auto;
+}
+.sheet-title { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.sheet-title .who { font-size: 19px; font-weight: 900; }
+.sheet-title .ctx { font-size: 12.5px; color: var(--ink-soft); font-weight: 600; }
 .scorepad-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 .pad-btn {
     border: 2px solid var(--sand); background: white; border-radius: 12px;
@@ -265,8 +290,8 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
     display: flex; gap: 10px; max-width: 560px; margin: 0 auto;
 }
 .foot-btn {
-    border: none; border-radius: 14px; cursor: pointer; font-weight: 800;
-    display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 58px;
+    border: none; border-radius: 12px; cursor: pointer; font-weight: 800;
+    display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 50px;
 }
 .foot-btn.prev { flex: 1; background: var(--sky); color: var(--ink-soft); font-size: 15px; border: 2px solid var(--sand); }
 .foot-btn.next { flex: 2.2; background: var(--fairway); color: white; font-size: 18px; box-shadow: 0 3px 12px rgba(46,125,79,0.4); }
@@ -451,7 +476,7 @@ async function deletePhotoAtPath(storagePath) {
     }
 }
 
-const SE_VERSION = '2.1.0'; // scorecard redesign: tap pad, remembered identity, tee-sign UI
+const SE_VERSION = '2.2.0'; // one-screen layout: BBB pills on rows, bottom-sheet pad, CTP dropdown, BBB-aware completion
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
@@ -464,8 +489,8 @@ const state = {
     unsubscribe: null,
     pendingTimer: null,
     autoAdvanceTimer: null,
-    activePadPlayerId: null,   // which player's score pad is open
-    padExpanded: false,        // pad showing the full 1–12 grid instead of par-relative
+    sheetPlayerId: null,       // whose score sheet (bottom sheet pad) is open
+    padExpanded: false,        // sheet showing the full 1–12 grid instead of par-relative
     pendingEdits: {
         scores: {},        // { playerIdStr: { holeIdx: scoreStr } }
         ctpWinners: {},    // { holeIdxStr: playerIdStr|'' }
@@ -814,8 +839,9 @@ function handleRoundsSnapshot(doc) {
 function firstUnscoredHole(round, groupNumber) {
     const players = getGroupPlayers(round, groupNumber);
     for (let h = 0; h < 18; h++) {
-        const allHave = players.every(p => p.scores && p.scores[h] !== '' && p.scores[h] != null);
-        if (!allHave) return h;
+        // "Incomplete" = a score missing OR the hole's 3 BBB points not yet given,
+        // so re-opening the app lands you exactly where the job stopped.
+        if (holeStatus(round, players, h) !== 'complete') return h;
     }
     return 0;
 }
@@ -930,7 +956,7 @@ window.__switchPlayer = function() {
     if (state.pendingTimer) { clearTimeout(state.pendingTimer); flushPendingEdits(); }
     try { localStorage.removeItem('dcScoreMe'); } catch (e) {}
     state.currentPlayerId = null; state.groupNumber = null;
-    state.activePadPlayerId = null; state.padExpanded = false;
+    state.sheetPlayerId = null; state.padExpanded = false;
     state.pendingEdits = { scores: {}, ctpWinners: {}, balls: {}, bbb: {} };
     setStatus('', '');
     renderPlayerPicker();
@@ -952,7 +978,7 @@ function renderScoreEntry() {
     appEl.innerHTML = '';
     appEl.appendChild(buildHoleNav(round, groupPlayers));
     appEl.appendChild(buildScoresList(round, groupPlayers));
-    appEl.appendChild(buildBBBCard(round, groupPlayers));
+    // BBB lives on each player's score row now (the pill) — no separate card.
 
     const par = (round.pars || [])[state.currentHole];
     if (par === 3) appEl.appendChild(buildCTPCard(round));
@@ -963,6 +989,12 @@ function renderScoreEntry() {
     appEl.appendChild(buildPhotoCard(round));
 
     appEl.appendChild(buildFooterNav());
+
+    // Score sheet (bottom sheet pad) if a player's score box is active
+    if (state.sheetPlayerId != null) {
+        const sheet = buildScoreSheet(round, groupPlayers);
+        if (sheet) appEl.appendChild(sheet);
+    }
 }
 
 function buildHoleNav(round, groupPlayers) {
@@ -992,7 +1024,10 @@ function buildHoleNav(round, groupPlayers) {
     num.appendChild(el('small', null, 'HOLE '));
     num.appendChild(document.createTextNode(String(state.currentHole + 1)));
     info.appendChild(num);
-    const meta = el('div', { class: 'meta' }, `Par ${par ?? '?'} · Stroke index ${si ?? '?'}`);
+    const meta = el('div', { class: 'meta' }, `Par ${par ?? '?'} · SI ${si ?? '?'}`);
+    const _bbbUsed = bbbTotalUsed(bbbCountsForHole(round, state.currentHole));
+    meta.appendChild(el('span', { class: 'bbb-meta' + (_bbbUsed >= 3 ? ' done' : '') },
+        `BBB ${_bbbUsed}/3`));
     if (par === 3) meta.appendChild(el('span', { class: 'par3-pill' }, 'CTP'));
     info.appendChild(meta);
     bar.appendChild(info);
@@ -1012,8 +1047,10 @@ function holeStatus(round, groupPlayers, holeIdx) {
         const s = effectiveScore(round, p.id, holeIdx);
         if (s !== '' && s != null) filled++;
     });
-    if (filled === 0) return '';
-    if (filled === groupPlayers.length) return 'complete';
+    const bbbUsed = bbbTotalUsed(bbbCountsForHole(round, holeIdx));
+    if (filled === 0 && bbbUsed === 0) return '';
+    // A hole is only COMPLETE when every score is in AND all 3 BBB points are given.
+    if (filled === groupPlayers.length && bbbUsed >= 3) return 'complete';
     return 'partial';
 }
 
@@ -1021,16 +1058,8 @@ function buildScoresList(round, groupPlayers) {
     const list = el('div', { class: 'score-list', id: 'score-list' });
     const par = (round.pars || [])[state.currentHole];
     const holeHc = (round.handicaps || [])[state.currentHole];
-
-    // Default active pad: the first player without a score on this hole.
-    if (state.activePadPlayerId == null ||
-        !groupPlayers.some(p => idsEqual(p.id, state.activePadPlayerId))) {
-        const firstEmpty = groupPlayers.find(p => {
-            const s = effectiveScore(round, p.id, state.currentHole);
-            return s === '' || s == null;
-        });
-        state.activePadPlayerId = firstEmpty ? idStr(firstEmpty.id) : null;
-    }
+    const bbbCounts = bbbCountsForHole(round, state.currentHole);
+    const bbbUsed = bbbTotalUsed(bbbCounts);
 
     groupPlayers.forEach(p => {
         const pid = idStr(p.id);
@@ -1040,46 +1069,44 @@ function buildScoresList(round, groupPlayers) {
         const currentScore = effectiveScore(round, p.id, state.currentHole);
         const cls = classForScore(currentScore, par, strokes);
         const totals = computePlayerTotals(round, p);
+        const myBBB = bbbCounts[pid] || 0;
 
         const row = el('div', { class: 'score-row' + (isMe ? ' is-me' : '') });
-
-        // Tap anywhere on the row to open this player's pad
-        const top = el('div', { class: 'score-row-top', onclick: () => {
-            state.activePadPlayerId = pid;
-            state.padExpanded = false;
-            renderScoreEntry();
-        }});
+        const top = el('div', { class: 'score-row-top' });
 
         top.appendChild(el('div', { class: 'player-info' },
             el('div', { class: 'player-name' },
                 document.createTextNode(p.name || '?'),
-                isMe ? el('span', { class: 'me-tag' }, 'YOU') : null
+                isMe ? el('span', { class: 'me-tag' }, 'YOU') : null,
+                strokes > 0 ? el('span', { class: 'stroke-dots' }, ' ' + '\u25cf'.repeat(strokes)) : null
             ),
             el('div', { class: 'player-meta' },
-                document.createTextNode(`HCP ${p.handicap ?? '—'}`),
-                strokes > 0 ? el('span', { class: 'stroke-dots' }, ' ' + '●'.repeat(strokes) + ` stroke${strokes > 1 ? 's' : ''} here`) : null,
-                document.createTextNode(` · Thru ${totals.thru}: ${totals.gross || '—'} (${totals.points} pts)`)
-            )
+                `HCP ${p.handicap ?? '\u2014'} \u00b7 Thru ${totals.thru}: ${totals.gross || '\u2014'} (${totals.points} pts)`)
         ));
 
-        // Big score cell: the number plus its golf word
-        const cell = el('div', { class: 'score-cell ' + (currentScore !== '' ? (cls || '') : 'empty') });
+        // BBB pill: tap to cycle this player's BBB points (0\u21921\u21922\u21923\u21920),
+        // capped so the hole never gives out more than 3 in total.
+        top.appendChild(el('button', {
+            class: 'bbb-pill' + (myBBB > 0 ? ' on' : ''),
+            type: 'button',
+            onclick: () => tapBBBPill(pid)
+        }, myBBB > 0 ? `BBB \u00d7${myBBB}` : 'BBB'));
+
+        // Score cell: tap to open the score sheet
+        const cell = el('div', {
+            class: 'score-cell ' + (currentScore !== '' ? (cls || '') : 'empty'),
+            onclick: () => { state.sheetPlayerId = pid; state.padExpanded = false; renderScoreEntry(); }
+        });
         if (currentScore !== '') {
             cell.appendChild(el('span', null, String(currentScore)));
             const n = parseInt(currentScore, 10);
             if (!isNaN(n) && par) cell.appendChild(el('span', { class: 'word' }, grossWord(n, par)));
         } else {
-            cell.appendChild(el('span', null, '–'));
+            cell.appendChild(el('span', null, '\u2013'));
             cell.appendChild(el('span', { class: 'word' }, 'tap'));
         }
         top.appendChild(cell);
         row.appendChild(top);
-
-        // The pad lives inline under the active player's row
-        if (state.activePadPlayerId === pid) {
-            row.appendChild(buildScorePad(round, p, par));
-        }
-
         list.appendChild(row);
     });
 
@@ -1099,137 +1126,37 @@ function grossWord(gross, par) {
     return '+' + d;
 }
 
-// ─── SCORE PAD: one tap per score, no keyboard ───
-function buildScorePad(round, player, par) {
-    const pid = idStr(player.id);
-    const currentScore = effectiveScore(round, player.id, state.currentHole);
-    const pad = el('div', { class: 'scorepad' });
-    const grid = el('div', { class: 'scorepad-grid' });
-
-    let values;
-    if (state.padExpanded || !par) {
-        values = [1,2,3,4,5,6,7,8,9,10,11,12];
-    } else {
-        values = [];
-        for (let v = Math.max(1, par - 2); v <= par + 4; v++) values.push(v);
-    }
-
-    values.forEach(v => {
-        const picked = currentScore !== '' && parseInt(currentScore, 10) === v;
-        const isPar = par && v === par;
-        const btn = el('button', {
-            class: 'pad-btn' + (picked ? ' picked' : (isPar ? ' hint-par' : '')),
-            type: 'button',
-            onclick: () => setScoreTap(pid, v)
-        },
-            el('span', { class: 'n' }, String(v)),
-            par ? el('span', { class: 'w' }, grossWord(v, par)) : null
-        );
-        grid.appendChild(btn);
+// ─── BBB helpers: per-player counts derived from the stored 3 slots ───
+function bbbCountsForHole(round, holeIdx) {
+    const slots = effectiveBBB(round, holeIdx);
+    const counts = {};
+    [slots.bingo, slots.bango, slots.bongo].forEach(id => {
+        if (id !== '' && id != null) counts[idStr(id)] = (counts[idStr(id)] || 0) + 1;
     });
-
-    // Utility buttons: full-range toggle + clear
-    grid.appendChild(el('button', {
-        class: 'pad-btn util', type: 'button',
-        onclick: () => { state.padExpanded = !state.padExpanded; renderScoreEntry(); }
-    }, el('span', { class: 'n' }, state.padExpanded ? 'Back' : 'Other')));
-    grid.appendChild(el('button', {
-        class: 'pad-btn util', type: 'button',
-        onclick: () => setScoreTap(pid, null)
-    }, el('span', { class: 'n' }, 'Clear')));
-
-    pad.appendChild(grid);
-    return pad;
+    return counts;
+}
+function bbbTotalUsed(counts) {
+    return Object.values(counts).reduce((s, n) => s + n, 0);
 }
 
-// One tap: record the score, advance to the next unscored player,
-// and when the hole is complete, move on to the next hole.
-function setScoreTap(playerId, value) {
-    const pid = idStr(playerId);
-    const val = value == null ? '' : String(value);
-
-    if (!state.pendingEdits.scores[pid]) state.pendingEdits.scores[pid] = {};
-    state.pendingEdits.scores[pid][state.currentHole] = val;
-
-    setStatus('Saving…', 'saving');
-    if (state.pendingTimer) clearTimeout(state.pendingTimer);
-    state.pendingTimer = setTimeout(flushPendingEdits, 600);
-
-    const round = getRoundById(state.selectedRoundId);
-    const groupPlayers = getGroupPlayers(round, state.groupNumber);
-
-    // Next unscored player on this hole (if any) becomes active
-    const next = groupPlayers.find(p => {
-        const s = effectiveScore(round, p.id, state.currentHole);
-        return s === '' || s == null;
-    });
-    state.activePadPlayerId = next ? idStr(next.id) : null;
-    state.padExpanded = false;
-    renderScoreEntry();
-
-    // Hole complete → confirm and roll to the next hole
-    if (!next && val !== '') {
-        setStatus(`Hole ${state.currentHole + 1} done ✓`, 'saved');
-        if (state.currentHole < 17) {
-            if (state.autoAdvanceTimer) clearTimeout(state.autoAdvanceTimer);
-            state.autoAdvanceTimer = setTimeout(() => goToHole(state.currentHole + 1), 1100);
-        }
-    }
-}
-
-// ─── BBB card ───────────────────────────────────────────────────────────
-function buildBBBCard(round, groupPlayers) {
-    // BBB, simplified: we only track HOW MANY of the hole's 3 points each player got —
-    // not which of Bingo/Bango/Bongo. Storage still uses the three named slots (so the
-    // main app's scoring is untouched); this UI just fills them in arbitrary order.
-    const wrap = el('div', { class: 'pick-card bbb-card', id: 'bbb-card' });
-
-    const slots = effectiveBBB(round, state.currentHole);
-    const assigned = [slots.bingo, slots.bango, slots.bongo].filter(v => v !== '' && v != null);
-    const used = assigned.length;
-
-    wrap.appendChild(el('div', { class: 'section-header' },
-        el('span', null, '\ud83c\udfaa BBB points'),
-        el('span', { class: 'badge' }, `${used} of 3 given`)
-    ));
-    wrap.appendChild(el('p', { class: 'sub' }, 'Tap + for each point a player won on this hole.'));
-
-    groupPlayers.forEach(p => {
-        const pid = idStr(p.id);
-        const count = assigned.filter(id => idsEqual(id, pid)).length;
-        const row = el('div', { class: 'balls-row' });
-        row.appendChild(el('div', { class: 'balls-name' }, p.name || '?'));
-        const controls = el('div', { class: 'balls-controls' });
-        const minus = el('button', { class: 'balls-btn', type: 'button', onclick: () => tapBBB(pid, -1) }, '\u2212');
-        if (count <= 0) minus.disabled = true;
-        const plus = el('button', { class: 'balls-btn', type: 'button', onclick: () => tapBBB(pid, +1) }, '+');
-        if (used >= 3) plus.disabled = true;
-        controls.appendChild(minus);
-        controls.appendChild(el('div', { class: 'balls-count' + (count > 0 ? ' has' : '') }, String(count)));
-        controls.appendChild(plus);
-        row.appendChild(controls);
-        wrap.appendChild(row);
-    });
-
-    return wrap;
-}
-
-// Adjust a player's BBB point count for the current hole by +1/−1, mapping the counts
-// back onto the stored bingo/bango/bongo slots (order is arbitrary and irrelevant).
-function tapBBB(playerId, delta) {
+// Tap a player's BBB pill: cycle their count up; if the 3-point pool is exhausted,
+// the tap wraps that player back to 0 (so a mis-tap is fixed by tapping through).
+function tapBBBPill(playerId) {
     const round = getRoundById(state.selectedRoundId);
     if (!round) return;
-    const slots = effectiveBBB(round, state.currentHole);
-    let arr = [slots.bingo, slots.bango, slots.bongo].filter(v => v !== '' && v != null);
+    const pid = idStr(playerId);
+    const counts = bbbCountsForHole(round, state.currentHole);
+    const mine = counts[pid] || 0;
+    const others = bbbTotalUsed(counts) - mine;
+    const next = (others + mine + 1 > 3) ? 0 : mine + 1;
 
-    if (delta > 0) {
-        if (arr.length >= 3) return;
-        arr.push(idStr(playerId));
-    } else {
-        const pos = arr.findIndex(id => idsEqual(id, playerId));
-        if (pos < 0) return;
-        arr.splice(pos, 1);
-    }
+    // Rebuild the slot array: other players keep their points, this player gets `next`.
+    const arr = [];
+    Object.keys(counts).forEach(id => {
+        if (id === pid) return;
+        for (let i = 0; i < counts[id]; i++) arr.push(id);
+    });
+    for (let i = 0; i < next; i++) arr.push(pid);
 
     state.pendingEdits.bbb[String(state.currentHole)] = {
         bingo: arr[0] || '', bango: arr[1] || '', bongo: arr[2] || ''
@@ -1238,20 +1165,126 @@ function tapBBB(playerId, delta) {
     if (state.pendingTimer) clearTimeout(state.pendingTimer);
     state.pendingTimer = setTimeout(flushPendingEdits, 400);
 
-    const card = document.getElementById('bbb-card');
-    if (card) card.replaceWith(buildBBBCard(round, getGroupPlayers(round, state.groupNumber)));
+    renderScoreEntry();
+    maybeCelebrateHoleComplete();
 }
 
-// ─── CTP card (all players in round, tap chips) ─────────────────────────
+// ─── SCORE SHEET: bottom sheet with the tap pad ───
+function buildScoreSheet(round, groupPlayers) {
+    const pid = state.sheetPlayerId;
+    const player = groupPlayers.find(p => idsEqual(p.id, pid));
+    if (!player) { state.sheetPlayerId = null; return null; }
+    const par = (round.pars || [])[state.currentHole];
+    const currentScore = effectiveScore(round, player.id, state.currentHole);
+
+    const frag = document.createDocumentFragment();
+    frag.appendChild(el('div', { class: 'sheet-backdrop', onclick: () => { state.sheetPlayerId = null; renderScoreEntry(); } }));
+
+    const sheet = el('div', { class: 'score-sheet' });
+    sheet.appendChild(el('div', { class: 'sheet-title' },
+        el('span', { class: 'who' }, player.name || '?'),
+        el('span', { class: 'ctx' }, `Hole ${state.currentHole + 1} \u00b7 Par ${par ?? '?'}`)
+    ));
+
+    const grid = el('div', { class: 'scorepad-grid' });
+    let values;
+    if (state.padExpanded || !par) {
+        values = [1,2,3,4,5,6,7,8,9,10,11,12];
+    } else {
+        values = [];
+        for (let v = Math.max(1, par - 2); v <= par + 4; v++) values.push(v);
+    }
+    values.forEach(v => {
+        const picked = currentScore !== '' && parseInt(currentScore, 10) === v;
+        const isPar = par && v === par;
+        grid.appendChild(el('button', {
+            class: 'pad-btn' + (picked ? ' picked' : (isPar ? ' hint-par' : '')),
+            type: 'button',
+            onclick: () => setScoreTap(idStr(player.id), v)
+        },
+            el('span', { class: 'n' }, String(v)),
+            par ? el('span', { class: 'w' }, grossWord(v, par)) : null
+        ));
+    });
+    grid.appendChild(el('button', {
+        class: 'pad-btn util', type: 'button',
+        onclick: () => { state.padExpanded = !state.padExpanded; renderScoreEntry(); }
+    }, el('span', { class: 'n' }, state.padExpanded ? 'Back' : 'Other')));
+    grid.appendChild(el('button', {
+        class: 'pad-btn util', type: 'button',
+        onclick: () => setScoreTap(idStr(player.id), null)
+    }, el('span', { class: 'n' }, 'Clear')));
+    sheet.appendChild(grid);
+
+    frag.appendChild(sheet);
+    return frag;
+}
+
+// One tap: record the score, then move the sheet to the next unscored player,
+// or close it when everyone on the hole has a score.
+function setScoreTap(playerId, value) {
+    const pid = idStr(playerId);
+    const val = value == null ? '' : String(value);
+
+    if (!state.pendingEdits.scores[pid]) state.pendingEdits.scores[pid] = {};
+    state.pendingEdits.scores[pid][state.currentHole] = val;
+
+    setStatus('Saving\u2026', 'saving');
+    if (state.pendingTimer) clearTimeout(state.pendingTimer);
+    state.pendingTimer = setTimeout(flushPendingEdits, 600);
+
+    const round = getRoundById(state.selectedRoundId);
+    const groupPlayers = getGroupPlayers(round, state.groupNumber);
+    const next = groupPlayers.find(p => {
+        const s = effectiveScore(round, p.id, state.currentHole);
+        return s === '' || s == null;
+    });
+    state.sheetPlayerId = next ? idStr(next.id) : null;   // advance the sheet, or close it
+    state.padExpanded = false;
+    renderScoreEntry();
+    maybeCelebrateHoleComplete();
+}
+
+// The hole is DONE when every player has a score AND all 3 BBB points are given.
+// (CTP is optional and never gates completion.) Confirm and roll to the next hole.
+function holeFullyComplete(round, groupPlayers) {
+    const scoresDone = groupPlayers.every(p => {
+        const s = effectiveScore(round, p.id, state.currentHole);
+        return s !== '' && s != null;
+    });
+    if (!scoresDone) return false;
+    return bbbTotalUsed(bbbCountsForHole(round, state.currentHole)) >= 3;
+}
+
+function maybeCelebrateHoleComplete() {
+    const round = getRoundById(state.selectedRoundId);
+    if (!round) return;
+    const groupPlayers = getGroupPlayers(round, state.groupNumber);
+    if (!holeFullyComplete(round, groupPlayers)) return;
+    setStatus(`Hole ${state.currentHole + 1} done \u2713`, 'saved');
+    if (state.currentHole < 17) {
+        if (state.autoAdvanceTimer) clearTimeout(state.autoAdvanceTimer);
+        state.autoAdvanceTimer = setTimeout(() => goToHole(state.currentHole + 1), 1200);
+    }
+}
+
+// ─── CTP: slim optional dropdown (all groups' players; rarely used, so kept small) ───
 function buildCTPCard(round) {
-    const wrap = el('div', { class: 'pick-card ctp-card', id: 'ctp-card' });
+    const wrap = el('div', { class: 'pick-card ctp-slim', id: 'ctp-card' });
     const current = idStr(effectiveCTP(round, state.currentHole));
 
-    wrap.appendChild(el('div', { class: 'section-header' },
-        el('span', null, '\u26f3 Closest to the pin'),
-        current ? el('span', { class: 'badge' }, 'set \u2713') : null
-    ));
-    wrap.appendChild(el('p', { class: 'sub' }, 'Par 3 \u2014 tap the winner. Tap again to clear.'));
+    const lbl = el('div', { class: 'lbl' }, '\u26f3 CTP');
+    lbl.appendChild(el('small', null, 'optional'));
+    wrap.appendChild(lbl);
+
+    const select = document.createElement('select');
+    select.className = current ? 'has-value' : '';
+    select.id = 'ctp-select';
+    select.addEventListener('change', onCTPChange);
+
+    const noneOpt = document.createElement('option');
+    noneOpt.value = ''; noneOpt.textContent = '\u2014 Closest to the pin \u2014';
+    select.appendChild(noneOpt);
 
     const allPlayers = getAllRoundPlayers(round);
     const grouped = {};
@@ -1260,42 +1293,21 @@ function buildCTPCard(round) {
         if (!grouped[g]) grouped[g] = [];
         grouped[g].push(p);
     });
-    const groupKeys = Object.keys(grouped).map(Number).sort((a,b) => a - b);
-
-    groupKeys.forEach(g => {
-        if (groupKeys.length > 1) {
-            wrap.appendChild(el('div', { class: 'pick-label' }, g === 0 ? 'No group' : `Group ${g}`));
-        }
-        const row = el('div', { class: 'pick-row' });
-        const sorted = [...grouped[g]].sort((a,b) => (a.name || '').localeCompare(b.name || ''));
-        sorted.forEach(p => {
-            const pid = idStr(p.id);
-            const on = current !== '' && idsEqual(pid, current);
-            row.appendChild(el('button', {
-                class: 'pick-chip' + (on ? ' on' : ''),
-                type: 'button',
-                onclick: () => tapCTP(pid)
-            }, p.name || '?'));
+    Object.keys(grouped).map(Number).sort((a,b) => a - b).forEach(g => {
+        const og = document.createElement('optgroup');
+        og.label = g === 0 ? 'No group' : `Group ${g}`;
+        [...grouped[g]].sort((a,b) => (a.name || '').localeCompare(b.name || '')).forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = idStr(p.id);
+            opt.textContent = p.name;
+            og.appendChild(opt);
         });
-        wrap.appendChild(row);
+        select.appendChild(og);
     });
 
+    select.value = current;
+    wrap.appendChild(select);
     return wrap;
-}
-
-// Tap the CTP winner: single-select, tapping the current winner clears it.
-function tapCTP(playerId) {
-    const round = getRoundById(state.selectedRoundId);
-    if (!round) return;
-    const current = idStr(effectiveCTP(round, state.currentHole));
-    const next = idsEqual(current, playerId) ? '' : idStr(playerId);
-    state.pendingEdits.ctpWinners[String(state.currentHole)] = next;
-    setStatus('Saving\u2026', 'saving');
-    if (state.pendingTimer) clearTimeout(state.pendingTimer);
-    state.pendingTimer = setTimeout(flushPendingEdits, 400);
-
-    const card = document.getElementById('ctp-card');
-    if (card) card.replaceWith(buildCTPCard(round));
 }
 
 // ─── Balls card (hole 18 only) ─────────────────────────────────────────
@@ -1346,7 +1358,9 @@ function buildPhotoCard(round) {
     wrap.appendChild(header);
     
     const body = el('div', { id: 'photo-card-body', class: 'photo-card-body' });
-    body.style.display = photos.length > 0 ? 'block' : 'none';
+    // Collapsed by default to keep the hole screen to one viewport — the header
+    // shows the count, one tap opens it.
+    body.style.display = 'none';
     
     if (photos.length > 0) {
         const grid = el('div', { class: 'photo-grid' });
@@ -1433,7 +1447,7 @@ function goToHole(holeIdx) {
         flushPendingEdits();
     }
     state.currentHole = holeIdx;
-    state.activePadPlayerId = null;   // recompute: first unscored player on the new hole
+    state.sheetPlayerId = null;       // close any open score sheet on hole change
     state.padExpanded = false;
     renderScoreEntry();
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1794,11 +1808,15 @@ function refreshScoreEntryFromServer() {
     const oldList = document.getElementById('score-list');
     if (oldList) oldList.replaceWith(buildScoresList(round, groupPlayers));
 
-    // CTP + BBB — rebuild the tap-chip cards in place; effective* overlays pending edits.
-    const ctpCard = document.getElementById('ctp-card');
-    if (ctpCard) ctpCard.replaceWith(buildCTPCard(round));
-    const bbbCard = document.getElementById('bbb-card');
-    if (bbbCard) bbbCard.replaceWith(buildBBBCard(round, groupPlayers));
+    // CTP — update the dropdown in place unless the user is mid-selection
+    const ctpSel = document.getElementById('ctp-select');
+    if (ctpSel && document.activeElement !== ctpSel
+        && state.pendingEdits.ctpWinners[String(state.currentHole)] === undefined) {
+        const v = idStr(effectiveCTP(round, state.currentHole));
+        if (ctpSel.value !== v) ctpSel.value = v;
+        ctpSel.classList.toggle('has-value', !!v);
+    }
+    // (BBB pills live on the score rows, already rebuilt above.)
 
     // Balls (only present on hole 18)
     if (state.currentHole === 17) {
