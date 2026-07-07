@@ -272,8 +272,9 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
 .photo-add-row { display: flex; }
 .photo-add-btn {
     flex: 1; border: 2px dashed var(--fairway); background: #F4FAF6; color: var(--fairway-dk);
-    border-radius: 12px; padding: 14px; font-size: 15px; font-weight: 800; cursor: pointer; min-height: 52px;
+    border-radius: 12px; padding: 10px; font-size: 15px; font-weight: 800; cursor: pointer; min-height: 46px;
 }
+.photo-card .photo-add-row { margin-bottom: 8px; }
 .photo-warning, .photo-hint { font-size: 12.5px; color: var(--ink-soft); margin-top: 8px; }
 .photo-tag-row { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 4px 4px; }
 .photo-tag-chip {
@@ -482,7 +483,7 @@ document.addEventListener('visibilitychange', () => {
     try { if (document.visibilityState === 'hidden' && hasPendingEdits()) flushPendingEdits(); } catch (e) {}
 });
 
-const SE_VERSION = '2.3.1'; // photo-upload errors surfaced with real cause
+const SE_VERSION = '2.4.0'; // always-visible camera button above the photo accordion
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
@@ -1352,6 +1353,19 @@ function buildPhotoCard(round) {
     const photos = Array.isArray(round.photos) ? round.photos : [];
     const wrap = el('div', { class: 'pick-card photo-card' });
     
+    // Camera button — ALWAYS visible, above the accordion, never buried.
+    // (The hidden file input lives here too so the button works with the body collapsed.)
+    const camRow = el('div', { class: 'photo-add-row' });
+    camRow.appendChild(el('input', {
+        type: 'file', accept: 'image/*', multiple: '', capture: 'environment',
+        id: 'photo-file-input', style: 'display:none;', onchange: 'onPhotoFileSelected(event)'
+    }));
+    camRow.appendChild(el('button', {
+        class: 'photo-add-btn', type: 'button',
+        onclick: "document.getElementById('photo-file-input').click()"
+    }, '📷 Add photo'));
+    wrap.appendChild(camRow);
+    
     // Collapsible header
     const header = el('div', { class: 'photo-card-header', onclick: 'togglePhotoCard()' });
     header.appendChild(el('span', null, `📸 Round Photos${photos.length > 0 ? ` (${photos.length})` : ''}`));
@@ -1393,21 +1407,6 @@ function buildPhotoCard(round) {
         });
         body.appendChild(grid);
     }
-    
-    // Add Photo button — uses native file input with camera capture preferred on mobile
-    const addRow = el('div', { class: 'photo-add-row' });
-    const input = el('input', {
-        type: 'file', accept: 'image/*', multiple: '', capture: 'environment',
-        id: 'photo-file-input', style: 'display:none;', onchange: 'onPhotoFileSelected(event)'
-    });
-    const addBtn = el('button', {
-        class: 'photo-add-btn', type: 'button',
-        onclick: "document.getElementById('photo-file-input').click()"
-    }, photos.length > 0 ? '📷 Add More' : '📷 Add Photo');
-    
-    addRow.appendChild(input);
-    addRow.appendChild(addBtn);
-    body.appendChild(addRow);
     
     if (!firebaseStorage) {
         body.appendChild(el('div', { class: 'photo-warning' },
