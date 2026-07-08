@@ -624,7 +624,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.07.08.1';
+        const APP_VERSION = '2026.07.08.2';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -7574,8 +7574,7 @@
             { stepKey: 'ctpLeadersRevealStep', indexKey: '_ctpLeadersSlideIndex', countKey: '_ctpLeadersCount' },
             { stepKey: 'bbbLeadersRevealStep', indexKey: '_bbbLeadersSlideIndex', countKey: '_bbbLeadersCount' },
             { stepKey: 'byNumbersRevealStep',  indexKey: '_byNumbersSlideIndex',  maxStep: 3 },
-            { stepKey: 'holePerfRevealStep',   indexKey: '_holePerfSlideIndex',   maxStep: 4 },
-            { stepKey: 'beatCompRevealStep',   indexKey: '_beatComparisonSlideIndex', maxStep: 1 }
+            { stepKey: 'holePerfRevealStep',   indexKey: '_holePerfSlideIndex',   maxStep: 1 }
         ];
         const uniformRevealMax = (r) => (r.maxStep != null) ? r.maxStep : (presentationState[r.countKey] || 0);
 
@@ -10626,7 +10625,7 @@
                 if (hasScoringDistSlide) totalSlides++;
                 // Achievement award slides (rollercoaster, steady eddie, on fire, grind, dialed in, par3 specialist)
                 // are now rolled into per-player segments — skip totalSlides increments
-                if (hasPhotosSlide) totalSlides++;
+                // photos gallery slide retired — closing slideshow covers photos
                 if (hasNetSlide) totalSlides++;
                 // BBB / CTP / Extra9 winner standalone slides are also rolled into per-player segments
                 // (BBB Leaderboard, CTP Champion, BounceBack, Clutch, WildCard are now removed or replaced)
@@ -11203,8 +11202,6 @@
             const biggestMomentsSlideIndex = hasBiggestMomentsSlide ? slideIndex++ : -1;
             const holeAnalysisSlideIndex = hasHoleAnalysisSlide ? slideIndex++ : -1;
             presentationState._holePerfSlideIndex = holeAnalysisSlideIndex;
-            const beatComparisonSlideIndex = hasBeatComparisonSlide ? slideIndex++ : -1;
-            presentationState._beatComparisonSlideIndex = beatComparisonSlideIndex;
             const scoringDistSlideIndex = hasScoringDistSlide ? slideIndex++ : -1;
             const ctpLeadersSlideIndex = hasCTPLeadersSlide ? slideIndex++ : -1;
             const bbbLeadersSlideIndex = hasBBBLeadersSlide ? slideIndex++ : -1;
@@ -11228,6 +11225,10 @@
             slideIndex += individualPlayerSlides.length; // One slide per player
             presentationState._playerSlidesStart = individualPlayerSlidesStart;
             presentationState._playerSlidesCount = individualPlayerSlides.length;
+            // "Who beat <target>?" plays right AFTER everyone's individual scores are known —
+            // a fun capstone before the matches begin.
+            const beatComparisonSlideIndex = hasBeatComparisonSlide ? slideIndex++ : -1;
+            presentationState._beatComparisonSlideIndex = beatComparisonSlideIndex;
             
             // ── Act 3: match-play drama ──
             const hasDividerMatches = _hasPhotos && (hasBracketIntroSlide || bracketCombinedSlideCount > 0);
@@ -11261,7 +11262,7 @@
             const milestonesSlideIndex = hasMilestonesSlide ? slideIndex++ : -1;
             const handicapSlideIndex = hasHandicapSlide ? slideIndex++ : -1;
             const extra9TeamsSlideIndex = hasExtra9TeamsSlide ? slideIndex++ : -1;
-            const photosSlideIndex = hasPhotosSlide ? slideIndex++ : -1;
+            const photosSlideIndex = -1; // retired — the closing slideshow IS the photo moment
             const nextRoundSlideIndex = hasNextRoundSlide ? slideIndex++ : -1;
             // Closing collage: photo mosaic + sign-off message. Only shown when there are photos.
             const hasClosingSlide = roundPhotos && roundPhotos.length > 0;
@@ -11787,7 +11788,7 @@
                                             <div style="display:flex;flex-direction:column;align-items:center;gap:10px;">
                                                 <div style="border:3px solid ${entry.teamColor};border-radius:50%;padding:3px;">${renderAvatar(entry.player, 96)}</div>
                                                 <div style="color:white;font-size:15px;font-weight:600;text-align:center;line-height:1.2;">${entry.player.name}</div>
-                                                <div style="color:${entry.teamColor};font-size:11px;font-weight:500;text-align:center;text-transform:uppercase;letter-spacing:0.5px;">${entry.teamName}</div>
+                                                <div style="color:white;font-size:11px;font-weight:600;text-align:center;text-transform:uppercase;letter-spacing:0.5px;opacity:0.9;">${entry.teamName}</div>
                                             </div>
                                         `).join('')}
                                     </div>
@@ -11808,7 +11809,7 @@
                                                 <div style="display:flex;flex-direction:column;align-items:center;gap:8px;min-width:130px;">
                                                     <div style="border:3px solid ${entry.teamColor};border-radius:50%;padding:3px;">${renderAvatar(entry.player, 88)}</div>
                                                     <div style="color:white;font-size:14px;font-weight:600;text-align:center;line-height:1.2;">${entry.player.name}</div>
-                                                    <div style="color:${entry.teamColor};font-size:10px;font-weight:500;text-align:center;text-transform:uppercase;letter-spacing:0.5px;">${entry.teamName}</div>
+                                                    <div style="color:white;font-size:10px;font-weight:600;text-align:center;text-transform:uppercase;letter-spacing:0.5px;opacity:0.9;">${entry.teamName}</div>
                                                 </div>
                                             `).join('')}
                                         </div>
@@ -13077,22 +13078,10 @@
                     // ─── STAGE 0: full player page (no sub-step gating, no award badges) ───
                     // Background: prefer a photo TAGGED with this player (via score-entry tagging);
                     // otherwise rotate through the round photos for ambient variety.
-                    const _tags = presentationState.photoTags || {};
-                    const _taggedForPlayer = (roundPhotos || []).filter(u =>
-                        Array.isArray(_tags[u]) && _tags[u].some(id => id == player.playerId));
-                    const _photoBg = _taggedForPlayer.length > 0
-                        ? _taggedForPlayer[playerIndex % _taggedForPlayer.length]
-                        : ((roundPhotos && roundPhotos.length > 0)
-                            ? roundPhotos[playerIndex % roundPhotos.length]
-                            : null);
-                    
+                    // (Photo backdrops removed from player pages — they competed with the data.
+                    //  Photos live in the chapter dividers and the closing slideshow instead.)
                     html += `
                     <div style="animation:slideUp 0.8s ease-out;width:100%;height:100%;padding:16px;box-sizing:border-box;overflow:hidden;position:relative;" data-player-stage="${playerStage}">
-                        ${_photoBg ? `
-                            <!-- Photo backdrop: ambient round atmosphere, heavily darkened so content stays readable -->
-                            <div style="position:absolute;inset:0;background-image:url('${_photoBg}');background-size:cover;background-position:center;opacity:0.18;z-index:0;pointer-events:none;"></div>
-                            <div style="position:absolute;inset:0;background:linear-gradient(180deg, rgba(30,27,75,0.55) 0%, rgba(49,46,129,0.75) 100%);z-index:0;pointer-events:none;"></div>
-                        ` : ''}
                         <div style="display:grid;grid-template-columns:300px 1fr;gap:16px;height:100%;position:relative;z-index:1;">
                             
                             <!-- LEFT COLUMN -->
@@ -14208,34 +14197,10 @@
                 if (!_easiest || !_hardest) {
                     _haBody = `<div style="background:rgba(255,255,255,0.05);border:2px solid rgba(255,255,255,0.1);border-radius:16px;padding:40px;text-align:center;"><p style="color:#818cf8;font-size:20px;margin:0;">No hole data yet.</p></div>`;
                 } else if (_haStep === 0) {
-                    _haBody = _holeHero(_easiest, true);
-                } else if (_haStep === 1) {
+                    // Straight to the money: easiest hole WITH everyone's score on it.
                     _haBody = _holeHero(_easiest, true) + _allOnHole(_easiest.hole, '#10b981');
-                } else if (_haStep === 2) {
-                    // ── GUESS STAGE: audience participation before the toughest-hole reveal ──
-                    // Show the three hardest candidates (by group average), sorted by hole number
-                    // so the answer's position gives nothing away. The room shouts a guess; the
-                    // next tap reveals the answer.
-                    const _candidates = (analytics.allHoles || []).slice(-3)
-                        .sort((a, b) => a.hole - b.hole);
-                    _haBody = `
-                        <div style="text-align:center;animation:scaleIn 0.5s ease-out;">
-                            <div style="color:#ef4444;font-size:16px;font-weight:800;letter-spacing:3px;text-transform:uppercase;margin-bottom:10px;">Audience Challenge</div>
-                            <h2 style="color:white;font-size:38px;font-weight:900;margin:0 0 30px;">Which hole played the TOUGHEST tonight?</h2>
-                            <div style="display:flex;gap:24px;justify-content:center;flex-wrap:wrap;">
-                                ${_candidates.map((h, i) => `
-                                    <div style="background:rgba(239,68,68,0.10);border:3px dashed rgba(239,68,68,0.55);border-radius:18px;padding:26px 38px;min-width:160px;animation:slideUp 0.5s ${0.2 + i * 0.25}s ease-out both;">
-                                        <div style="color:white;font-size:64px;font-weight:900;line-height:1;">#${h.hole}</div>
-                                        <div style="color:#a5b4fc;font-size:16px;margin-top:8px;">Par ${h.par}</div>
-                                        <div style="color:rgba(255,255,255,0.45);font-size:26px;margin-top:10px;">?</div>
-                                    </div>
-                                `).join('')}
-                            </div>
-                        </div>
-                    `;
-                } else if (_haStep === 3) {
-                    _haBody = _holeHero(_hardest, false);
                 } else {
+                    // Toughest hole WITH everyone's score on it.
                     _haBody = _holeHero(_hardest, false) + _allOnHole(_hardest.hole, '#ef4444');
                 }
 
@@ -14261,10 +14226,7 @@
 
                 const _haHint = (() => {
                     if (!_easiest || !_hardest) return '';
-                    if (_haStep === 0) return `Tap "Next \u2192" to see everyone's score on hole ${_easiest.hole}`;
-                    if (_haStep === 1) return `Tap "Next \u2192" — and get ready to guess the toughest hole…`;
-                    if (_haStep === 2) return `Shout your guess! Then tap "Next \u2192" to reveal the answer`;
-                    if (_haStep === 3) return `Tap "Next \u2192" to see everyone's score on hole ${_hardest.hole}`;
+                    if (_haStep === 0) return `Tap "Next \u2192" for the toughest hole`;
                     return '';
                 })();
 
@@ -14280,114 +14242,73 @@
                     </div>
                 `;
             } else if (currentSlide === beatComparisonSlideIndex) {
-                // BEAT COMPARISON SLIDE — 2-stage:
-                //   stage 0: GUESS — target player centered with the score to beat; the room guesses
-                //            how many players topped it before anything is revealed.
-                //   stage 1: ANSWER — every other player flies in one at a time (random order, 2s
-                //            apart) and lands LEFT (beat the target) or RIGHT (didn't). Photos +
-                //            scores, staggered CSS delays (delay = revealIndex * 2s).
-                const _bcStep = presentationState.beatCompRevealStep || 0;
+                // ─── WHO BEAT <TARGET>? ───
+                // Plays after every player's scores are known. Only the players who BEAT the
+                // target fly in (a celebration, not a ledger). If nobody did: the target is
+                // crowned king of the night.
                 const _bc = analytics.beatComparison;
                 const _mike = state.players.find(p => p.id === _bc.targetPlayerId);
                 const _firstName = (_bc.targetPlayer || '').split(' ')[0];
+                const _beat = (_bc.playersBeatTarget || []).slice()
+                    .sort((a, b) => b.totalPoints - a.totalPoints);
                 
-                if (_bcStep === 0) {
+                if (_beat.length === 0) {
+                    // 👑 NOBODY beat him — long live the king.
                     html += `
                         <div style="animation:fadeIn 0.6s ease-out;max-width:900px;width:100%;text-align:center;">
-                            <div style="color:#ef4444;font-size:16px;font-weight:800;letter-spacing:3px;text-transform:uppercase;margin-bottom:8px;animation:slideUp 0.5s ease-out;">Audience Challenge</div>
-                            <h1 style="color:white;font-size:clamp(34px, 4.5vw, 46px);margin:0 0 36px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">How many players beat ${_firstName} tonight?</h1>
-                            <div style="display:flex;flex-direction:column;align-items:center;animation:scaleIn 0.6s 0.3s ease-out both;">
-                                <div style="filter:drop-shadow(0 0 40px rgba(251,191,36,0.5));">
-                                    <div style="border:5px solid #fbbf24;border-radius:50%;padding:4px;">
-                                        ${_mike ? renderAvatar(_mike, 170) : ''}
+                            <div style="font-size:76px;line-height:1;animation:slideUp 0.6s ease-out;">👑</div>
+                            <h1 style="color:#fbbf24;font-size:clamp(38px, 5vw, 56px);font-weight:900;margin:6px 0 26px;text-shadow:0 4px 24px rgba(0,0,0,0.6);animation:slideUp 0.7s 0.15s ease-out both;">
+                                Nobody beat ${_firstName} tonight
+                            </h1>
+                            <div style="display:flex;flex-direction:column;align-items:center;animation:scaleIn 0.7s 0.35s ease-out both;">
+                                <div style="filter:drop-shadow(0 0 50px rgba(251,191,36,0.65));">
+                                    <div style="border:6px solid #fbbf24;border-radius:50%;padding:5px;">
+                                        ${_mike ? renderAvatar(_mike, 190) : ''}
                                     </div>
                                 </div>
-                                <div style="color:white;font-size:30px;font-weight:800;margin-top:18px;">${_bc.targetPlayer}</div>
-                                <div style="color:#fbbf24;font-size:64px;font-weight:900;line-height:1;margin-top:10px;">${_bc.targetScore}</div>
-                                <div style="color:rgba(255,255,255,0.6);font-size:15px;margin-top:4px;">points — the score to beat</div>
+                                <div style="color:white;font-size:32px;font-weight:900;margin-top:18px;">${_bc.targetPlayer}</div>
+                                <div style="color:#fbbf24;font-size:56px;font-weight:900;line-height:1;margin-top:8px;">${_bc.targetScore} pts</div>
+                                <div style="color:rgba(255,255,255,0.75);font-size:17px;font-style:italic;letter-spacing:2px;margin-top:14px;text-transform:uppercase;animation:fadeIn 1s 1s ease-out both;">
+                                    Long live the King
+                                </div>
                             </div>
-                            <p style="color:#818cf8;font-size:16px;font-style:italic;margin-top:44px;animation:fadeIn 0.8s 1s ease-out both;">
-                                Shout a number! Then tap "Next \u2192" for the answer
-                            </p>
                         </div>
                     `;
                 } else {
-                const beatList = _bc.playersBeatTarget || [];
-                const missList = _bc.playersDidNotBeat || [];
-                const STEP_MS = 2000;
-
-                // Combined randomized reveal order across BOTH sides (Fisher-Yates shuffle).
-                const _combined = [
-                    ...beatList.map(p => ({ side: 'beat', p })),
-                    ...missList.map(p => ({ side: 'miss', p }))
-                ];
-                for (let i = _combined.length - 1; i > 0; i--) {
-                    const j = Math.floor(Math.random() * (i + 1));
-                    const tmp = _combined[i]; _combined[i] = _combined[j]; _combined[j] = tmp;
-                }
-                const _revealOrder = {};
-                _combined.forEach((entry, idx) => { _revealOrder[entry.p.playerId] = idx; });
-
-                const _sideCard = (p, isBeat) => {
-                    const sp = state.players.find(s => s.id === p.playerId);
-                    const order = _revealOrder[p.playerId] || 0;
-                    const delay = (order * STEP_MS) / 1000; // seconds
-                    const accent = isBeat ? '#10b981' : '#ef4444';
-                    // Beat cards (left) fly in from the right (out of center); miss cards (right) from the left.
-                    const animName = isBeat ? 'bc-in-from-right' : 'bc-in-from-left';
-                    return `
-                        <div style="opacity:0;animation:${animName} 0.6s ${delay}s ease-out both;background:rgba(255,255,255,0.08);border:2px solid ${accent}aa;border-radius:14px;padding:10px 14px;display:flex;align-items:center;gap:12px;">
-                            <div style="flex-shrink:0;">${sp ? renderAvatar(sp, 48) : ''}</div>
-                            <div style="flex:1;min-width:0;text-align:left;">
-                                <div style="color:white;font-size:16px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.playerName}</div>
-                                <div style="display:flex;align-items:center;gap:6px;margin-top:3px;">
-                                    <div style="width:8px;height:8px;border-radius:50%;background:${p.teamColor};"></div>
-                                    <div style="color:#a5b4fc;font-size:12px;">${p.teamName}</div>
-                                </div>
+                    // The conquerors fly in one by one above the target.
+                    html += `
+                        <div style="animation:fadeIn 0.6s ease-out;max-width:1100px;width:100%;text-align:center;">
+                            <h1 style="color:white;font-size:clamp(34px, 4.5vw, 46px);margin:0 0 6px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
+                                They beat ${_firstName} tonight
+                            </h1>
+                            <p style="color:#a5b4fc;font-size:15px;margin:0 0 30px;font-weight:600;letter-spacing:2px;text-transform:uppercase;">
+                                ${_beat.length} player${_beat.length === 1 ? '' : 's'} topped ${_bc.targetScore} points
+                            </p>
+                            
+                            <div style="display:flex;justify-content:center;gap:34px;flex-wrap:wrap;margin-bottom:44px;">
+                                ${_beat.map((p, i) => {
+                                    const sp = state.players.find(x => x.id === p.playerId);
+                                    return `
+                                        <div style="display:flex;flex-direction:column;align-items:center;animation:${i % 2 === 0 ? 'bc-in-from-left' : 'bc-in-from-right'} 0.7s ${0.3 + i * 0.6}s cubic-bezier(0.34, 1.56, 0.64, 1) both;">
+                                            <div style="border:4px solid ${p.teamColor || '#10b981'};border-radius:50%;padding:3px;filter:drop-shadow(0 0 20px rgba(16,185,129,0.4));">
+                                                ${sp ? renderAvatar(sp, 110) : ''}
+                                            </div>
+                                            <div style="color:white;font-size:19px;font-weight:800;margin-top:10px;">${p.playerName}</div>
+                                            <div style="color:#10b981;font-size:26px;font-weight:900;line-height:1;">${p.totalPoints} pts</div>
+                                        </div>
+                                    `;
+                                }).join('')}
                             </div>
-                            <div style="color:${accent};font-size:26px;font-weight:900;flex-shrink:0;">${p.totalPoints}</div>
+                            
+                            <div style="display:flex;flex-direction:column;align-items:center;opacity:0.85;animation:fadeIn 0.8s 0.2s ease-out both;">
+                                <div style="border:3px solid #fbbf24;border-radius:50%;padding:3px;">
+                                    ${_mike ? renderAvatar(_mike, 92) : ''}
+                                </div>
+                                <div style="color:rgba(255,255,255,0.85);font-size:15px;font-weight:700;margin-top:8px;">${_bc.targetPlayer} · ${_bc.targetScore} pts</div>
+                                <div style="color:rgba(255,255,255,0.5);font-size:12px;font-style:italic;margin-top:2px;">the score to beat</div>
+                            </div>
                         </div>
                     `;
-                };
-
-                html += `
-                    <div style="animation:fadeIn 0.6s ease-out;max-width:1500px;width:100%;">
-                        <h1 style="color:white;font-size:clamp(34px, 4.5vw, 46px);margin:0 0 6px;text-shadow:0 4px 20px rgba(0,0,0,0.5);text-align:center;">
-                            ⚔️ Who Beat ${_bc.targetPlayer}?
-                        </h1>
-                        <p style="color:#a5b4fc;font-size:18px;margin:0 0 24px;text-align:center;">
-                            Target: ${_bc.targetScore} points · players appear one at a time
-                        </p>
-                        <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:24px;align-items:start;">
-                            <!-- LEFT: beat Mike -->
-                            <div>
-                                <h2 style="color:#10b981;font-size:22px;font-weight:800;margin:0 0 14px;text-align:center;">✅ Beat ${_firstName} (${beatList.length})</h2>
-                                <div style="display:grid;gap:10px;">
-                                    ${beatList.map(p => _sideCard(p, true)).join('') || `<div style="color:#64748b;text-align:center;font-size:14px;padding:20px;">Nobody topped ${_firstName}</div>`}
-                                </div>
-                            </div>
-                            <!-- CENTER: Mike -->
-                            <div style="display:flex;flex-direction:column;align-items:center;padding:0 10px;align-self:center;">
-                                <div style="animation:bc-mike-pulse 2.4s ease-in-out infinite;filter:drop-shadow(0 0 40px rgba(251,191,36,0.5));">
-                                    <div style="border:5px solid #fbbf24;border-radius:50%;padding:4px;">
-                                        ${_mike ? renderAvatar(_mike, 150) : ''}
-                                    </div>
-                                </div>
-                                <div style="color:#fbbf24;font-size:13px;font-weight:800;letter-spacing:2px;text-transform:uppercase;margin-top:14px;">The Target</div>
-                                <div style="color:white;font-size:26px;font-weight:800;margin-top:2px;text-align:center;">${_bc.targetPlayer}</div>
-                                <div style="color:#fbbf24;font-size:44px;font-weight:900;line-height:1;margin-top:6px;">${_bc.targetScore}</div>
-                                <div style="color:rgba(255,255,255,0.6);font-size:13px;">points to beat</div>
-                            </div>
-                            <!-- RIGHT: didn't beat Mike -->
-                            <div>
-                                <h2 style="color:#ef4444;font-size:22px;font-weight:800;margin:0 0 14px;text-align:center;">📉 Didn't Beat ${_firstName} (${missList.length})</h2>
-                                <div style="display:grid;gap:10px;">
-                                    ${missList.map(p => _sideCard(p, false)).join('') || `<div style="color:#64748b;text-align:center;font-size:14px;padding:20px;">Nobody fell short</div>`}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                `;
                 }
             } else if (currentSlide === scoringDistSlideIndex) {
                 // SCORING DISTRIBUTION SLIDE
@@ -14452,69 +14373,6 @@
                         </div>
                     </div>
                 `;
-            } else if (currentSlide === photosSlideIndex) {
-                // ─── PHOTOS OF THE DAY ───
-                // Gallery view of all round photos + button to launch fullscreen slideshow.
-                // Photos may be in legacy schema (array of URL strings) or new schema (array of {url, path, uploadedAt}).
-                const rawPhotos = mostRecentRound.photos || [];
-                const photos = rawPhotos.map(p => (typeof p === 'string' ? { url: p } : p)).filter(p => p && p.url);
-                // Stash photo URLs globally so the slideshow window can access them
-                window.__photoSlideshowUrls = photos.map(p => p.url);
-                
-                if (photos.length === 0) {
-                    html += `
-                        <div style="animation:fadeIn 0.8s ease-in;width:100%;max-width:900px;text-align:center;padding:60px 20px;">
-                            <div style="font-size:96px;margin-bottom:18px;opacity:0.5;">📷</div>
-                            <h1 style="color:white;font-size:clamp(34px, 4.5vw, 46px);margin:0 0 12px;font-weight:800;">No Photos Today</h1>
-                            <p style="color:rgba(255,255,255,0.65);font-size:18px;">Photos uploaded during the round will appear here.</p>
-                        </div>
-                    `;
-                } else {
-                    // Grid: 3 columns wide, photos tile evenly. Cap height so 10+ photos still fit on one screen.
-                    const gridCols = photos.length <= 4 ? 2 : (photos.length <= 9 ? 3 : 4);
-                    html += `
-                        <div style="animation:fadeIn 0.8s ease-in;width:100%;max-width:1400px;height:100%;display:flex;flex-direction:column;padding:8px 0;box-sizing:border-box;">
-                            <!-- Header with title + slideshow button -->
-                            <div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0;margin-bottom:16px;padding:0 8px;">
-                                <div>
-                                    <h1 style="color:white;font-size:clamp(34px, 4.5vw, 46px);margin:0;text-shadow:0 4px 20px rgba(0,0,0,0.5);font-weight:800;">
-                                        📸 Photos of the Day
-                                    </h1>
-                                    <div style="color:#a5b4fc;font-size:14px;margin-top:4px;font-weight:500;">
-                                        ${photos.length} photo${photos.length !== 1 ? 's' : ''} captured during the round
-                                    </div>
-                                </div>
-                                <button onclick="window.startPhotoSlideshow && window.startPhotoSlideshow()"
-                                        style="background:linear-gradient(135deg, #f59e0b 0%, #d97706 100%);color:white;border:none;padding:12px 24px;border-radius:10px;cursor:pointer;font-weight:700;font-size:15px;letter-spacing:1px;box-shadow:0 6px 20px rgba(245,158,11,0.4);transition:transform 0.15s, box-shadow 0.15s;"
-                                        onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 10px 28px rgba(245,158,11,0.5)'"
-                                        onmouseout="this.style.transform='';this.style.boxShadow='0 6px 20px rgba(245,158,11,0.4)'">
-                                    ▶ Start Slideshow
-                                </button>
-                            </div>
-                            
-                            <!-- Gallery grid (auto-sized so all photos fit, no scroll) -->
-                            <div style="flex:1;min-height:0;background:linear-gradient(135deg, rgba(59,130,246,0.12) 0%, rgba(59,130,246,0.05) 100%);border:2px solid rgba(59,130,246,0.3);border-radius:16px;padding:18px;overflow:hidden;">
-                                <div style="display:grid;grid-template-columns:repeat(${gridCols}, 1fr);gap:12px;height:100%;">
-                                    ${photos.map((photo, idx) => `
-                                        <div onclick="window.startPhotoSlideshow && window.startPhotoSlideshow(${idx})"
-                                             style="background:rgba(0,0,0,0.4);border-radius:10px;overflow:hidden;border:2px solid rgba(255,255,255,0.18);cursor:pointer;position:relative;transition:transform 0.15s, border-color 0.15s, box-shadow 0.15s;min-height:0;"
-                                             onmouseover="this.style.transform='scale(1.03)';this.style.borderColor='#fbbf24';this.style.boxShadow='0 8px 24px rgba(251,191,36,0.4)'"
-                                             onmouseout="this.style.transform='';this.style.borderColor='rgba(255,255,255,0.18)';this.style.boxShadow=''">
-                                            <img src="${photo.url}" 
-                                                 style="width:100%;height:100%;object-fit:cover;display:block;" 
-                                                 alt="Photo ${idx + 1}"
-                                                 loading="lazy"
-                                                 onerror="this.style.display='none';this.parentNode.innerHTML+='<div style=\\'color:rgba(255,255,255,0.5);font-size:14px;text-align:center;padding:30px;\\'>Image unavailable</div>';">
-                                            <div style="position:absolute;bottom:6px;right:8px;background:rgba(0,0,0,0.7);color:white;font-size:11px;font-weight:700;padding:3px 8px;border-radius:4px;letter-spacing:0.5px;">
-                                                ${idx + 1}/${photos.length}
-                                            </div>
-                                        </div>
-                                    `).join('')}
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                }
             } else if (currentSlide === netSlideIndex) {
                 // ═══════════════════════════════════════════════════════
                 // NET SCORE WINNER — Progressive Reveal (B2)
@@ -17153,8 +17011,8 @@
                 const slowSpan = target - slowFrom;
                 const creepMode = (minRecord != null) && slowSpan >= 0 && slowSpan <= 25;
                 
-                const SLOW_SPEED = 1;                       // 1 unit per second near records
-                const FAST_SPEED = Math.max(150, target / 0.7); // cover the bulk in ~0.7s
+                const SLOW_SPEED = 3;                       // 3 units per second near records (3× faster)
+                const FAST_SPEED = Math.max(300, target / 0.35); // cover the bulk in ~0.35s
                 
                 const inSlowZone = (v) => {
                     if (minRecord == null) return false;
