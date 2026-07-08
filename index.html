@@ -624,7 +624,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.06.10.3';
+        const APP_VERSION = '2026.07.08.1';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -11266,6 +11266,7 @@
             // Closing collage: photo mosaic + sign-off message. Only shown when there are photos.
             const hasClosingSlide = roundPhotos && roundPhotos.length > 0;
             const closingSlideIndex = hasClosingSlide ? slideIndex++ : -1;
+            presentationState._closingSlideIndex = closingSlideIndex;
             
             // ─── FACTOID GENERATOR ───
             // Produces a small array of "Did you know?" facts surfaced on the title slide.
@@ -15837,15 +15838,13 @@
                     setTimeout(() => hydrateWeatherCard(weatherQuery, targetDateISO), 30);
                 }
             } else if (currentSlide === closingSlideIndex) {
-                // ─── END-OF-NIGHT CLOSING COLLAGE ───
-                // Photo mosaic with subtle Ken Burns animation + sign-off message.
-                // Closes the deck with an emotional/atmospheric note rather than a configuration screen.
-                const rawPhotos = mostRecentRound.photos || [];
-                const photos = rawPhotos.map(p => (typeof p === 'string' ? { url: p } : p)).filter(p => p && p.url);
-                
-                // Layout: 4-column grid that fills the viewport, with the closing message centered as an overlay
-                const gridCols = photos.length <= 4 ? 2 : (photos.length <= 9 ? 3 : (photos.length <= 16 ? 4 : 5));
-                // Distribute Ken-Burns animation timing so tiles don't all pulse in sync
+                // ─── END-OF-NIGHT SLIDESHOW ───
+                // Full-screen loop through ALL of tonight's pictures (round photos topped up
+                // from the default pool — the same merged set the rest of the deck uses).
+                // Crossfades every few seconds with a slow Ken Burns drift, cycling until
+                // the presentation is exited. The sign-off message shows big, then tucks
+                // into the corner as a caption while the photos roll.
+                const photos = (roundPhotos || []).filter(Boolean);
                 const sayings = [
                     'Until next time, golfers.',
                     'Same time next round?',
@@ -15854,60 +15853,50 @@
                     'Another one in the books.',
                     'See you out there.'
                 ];
-                const sayingIdx = (totalRounds + (photos.length || 0)) % sayings.length;
-                const closingSaying = sayings[sayingIdx];
+                const closingSaying = sayings[(totalRounds + photos.length) % sayings.length];
+                const startIdx = presentationState._closingPhotoIdx || 0;
+                const first = photos[startIdx % photos.length];
+                const second = photos[(startIdx + 1) % photos.length];
                 
                 html += `
                     <style>
-                        @keyframes closingKenBurns {
-                            0%, 100% { transform: scale(1.0); }
-                            50%      { transform: scale(1.12); }
+                        @keyframes closingDrift {
+                            0%   { transform: scale(1.06) translate(0.8%, 0.5%); }
+                            100% { transform: scale(1.14) translate(-0.8%, -0.7%); }
                         }
-                        @keyframes closingTileFadeIn {
-                            from { opacity: 0; transform: scale(0.92); }
-                            to   { opacity: 1; transform: scale(1); }
+                        @keyframes closingIntroOut {
+                            0%, 70% { opacity: 1; transform: translateY(0); }
+                            100%    { opacity: 0; transform: translateY(-16px); }
                         }
-                        @keyframes closingTitleSlideUp {
-                            0%   { opacity: 0; transform: translateY(40px); }
-                            100% { opacity: 1; transform: translateY(0); }
+                        @keyframes closingCaptionIn {
+                            0%, 82% { opacity: 0; }
+                            100%    { opacity: 1; }
                         }
                     </style>
                     
-                    <!-- Full-bleed photo mosaic backdrop -->
-                    <div style="position:absolute;inset:0;display:grid;grid-template-columns:repeat(${gridCols}, 1fr);gap:6px;padding:6px;background:#000;">
-                        ${photos.map((photo, idx) => {
-                            // Stagger animation delays so tiles fade in and pulse independently
-                            const fadeDelay = (idx * 60) / 1000;
-                            const burnDuration = 8 + (idx % 4) * 2;
-                            const burnDelay = (idx * 0.7) % burnDuration;
-                            return `
-                                <div style="position:relative;overflow:hidden;border-radius:4px;animation:closingTileFadeIn 0.7s ${fadeDelay}s ease-out backwards;">
-                                    <img src="${photo.url}" 
-                                         style="width:100%;height:100%;object-fit:cover;display:block;animation:closingKenBurns ${burnDuration}s ease-in-out -${burnDelay}s infinite;"
-                                         alt="Round photo ${idx + 1}"
-                                         loading="lazy" />
-                                </div>
-                            `;
-                        }).join('')}
-                    </div>
-                    
-                    <!-- Dark overlay so the message reads clearly -->
-                    <div style="position:absolute;inset:0;background:radial-gradient(ellipse at center, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.85) 100%);pointer-events:none;"></div>
-                    
-                    <!-- Center message stack -->
-                    <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px;pointer-events:none;">
-                        <div style="font-size:72px;line-height:1;margin-bottom:18px;animation:closingTitleSlideUp 0.9s 0.4s ease-out backwards;text-shadow:0 4px 24px rgba(0,0,0,0.8);">⛳</div>
-                        <h1 style="color:white;font-size:clamp(48px, 7vw, 84px);font-weight:900;letter-spacing:-1px;line-height:1.05;margin:0 0 20px;text-shadow:0 6px 32px rgba(0,0,0,0.9), 0 2px 8px rgba(0,0,0,0.6);animation:closingTitleSlideUp 1s 0.55s ease-out backwards;">
-                            ${closingSaying}
-                        </h1>
-                        <div style="color:rgba(255,255,255,0.85);font-size:20px;font-weight:600;letter-spacing:2px;text-transform:uppercase;text-shadow:0 2px 12px rgba(0,0,0,0.8);animation:closingTitleSlideUp 1s 0.75s ease-out backwards;">
-                            ${mostRecentRound.courseName || 'The Dutch Cup'}
+                    <div id="closingShow" style="position:fixed;inset:0;background:#000;overflow:hidden;">
+                        <div id="closingA" style="position:absolute;inset:-3%;background-image:url('${first}');background-size:cover;background-position:center;opacity:1;transition:opacity 1.4s ease-in-out;animation:closingDrift 9s ease-in-out infinite alternate;"></div>
+                        <div id="closingB" style="position:absolute;inset:-3%;background-image:url('${second || first}');background-size:cover;background-position:center;opacity:0;transition:opacity 1.4s ease-in-out;animation:closingDrift 9s ease-in-out -4.5s infinite alternate-reverse;"></div>
+                        <div style="position:absolute;inset:0;background:linear-gradient(180deg, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.05) 40%, rgba(0,0,0,0.55) 100%);pointer-events:none;"></div>
+                        
+                        <!-- Big sign-off, then it hands over to the corner caption -->
+                        <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px;pointer-events:none;animation:closingIntroOut 7s ease-in-out forwards;">
+                            <div style="font-size:64px;line-height:1;margin-bottom:14px;text-shadow:0 4px 24px rgba(0,0,0,0.8);">⛳</div>
+                            <h1 style="color:white;font-size:clamp(44px, 6.5vw, 76px);font-weight:900;letter-spacing:-1px;line-height:1.05;margin:0;text-shadow:0 6px 32px rgba(0,0,0,0.9);">
+                                ${closingSaying}
+                            </h1>
                         </div>
-                        <div style="color:#fbbf24;font-size:15px;font-weight:700;letter-spacing:4px;margin-top:12px;text-shadow:0 2px 12px rgba(0,0,0,0.8);animation:closingTitleSlideUp 1s 0.95s ease-out backwards;">
-                            ${photos.length} memor${photos.length === 1 ? 'y' : 'ies'} captured today
+                        <div style="position:absolute;left:4%;bottom:5%;pointer-events:none;animation:closingCaptionIn 8s ease-out forwards;">
+                            <div style="color:white;font-size:22px;font-weight:800;text-shadow:0 3px 16px rgba(0,0,0,0.9);">${closingSaying}</div>
+                            <div style="color:rgba(255,255,255,0.75);font-size:13px;font-weight:600;letter-spacing:2px;text-transform:uppercase;margin-top:4px;text-shadow:0 2px 10px rgba(0,0,0,0.9);">
+                                ${mostRecentRound.courseName || 'The Dutch Cup'} · ${photos.length} picture${photos.length === 1 ? '' : 's'} · tap Exit to finish
+                            </div>
                         </div>
                     </div>
                 `;
+                
+                // Kick the loop (idempotent — the tick self-cleans when we leave this slide)
+                setTimeout(() => { try { startClosingSlideshow(photos.length); } catch (e) {} }, 50);
             }
             
             html += `
@@ -16990,6 +16979,43 @@
             } catch (err) {
                 console.warn('Badge sound failed:', err);
             }
+        };
+        
+        // ─── End-of-night closing slideshow loop ───
+        // Crossfades between two stacked layers every few seconds, cycling through the
+        // night's photos until the presentation exits or the slide changes. DOM-only swaps
+        // (no re-render), and the tick self-cleans when it no longer belongs on screen.
+        window.__closingLoopTimer = null;
+        window.startClosingSlideshow = (photoCount) => {
+            if (window.__closingLoopTimer) return; // already running
+            if (!photoCount || photoCount < 2) return; // one photo: nothing to cycle
+            let showingA = true;
+            window.__closingLoopTimer = setInterval(() => {
+                const a = document.getElementById('closingA');
+                const b = document.getElementById('closingB');
+                const stillHere = presentationState.active
+                    && presentationState.currentSlide === presentationState._closingSlideIndex
+                    && a && b;
+                if (!stillHere) {
+                    clearInterval(window.__closingLoopTimer);
+                    window.__closingLoopTimer = null;
+                    return;
+                }
+                const photos = (presentationState.roundPhotos || []).filter(Boolean);
+                if (photos.length < 2) return;
+                // Advance the cycle; preload the NEXT image into the hidden layer, then fade.
+                const idx = ((presentationState._closingPhotoIdx || 0) + 1) % photos.length;
+                presentationState._closingPhotoIdx = idx;
+                const hidden = showingA ? b : a;
+                const visible = showingA ? a : b;
+                hidden.style.backgroundImage = `url('${photos[idx]}')`;
+                // Give the browser a beat to start loading before the fade
+                setTimeout(() => {
+                    hidden.style.opacity = '1';
+                    visible.style.opacity = '0';
+                }, 120);
+                showingA = !showingA;
+            }, 5000);
         };
         
         // ─── Generic MP3 player ───
