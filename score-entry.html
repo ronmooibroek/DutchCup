@@ -297,6 +297,13 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
 .foot-btn.prev { flex: 1; background: var(--sky); color: var(--ink-soft); font-size: 15px; border: 2px solid var(--sand); }
 .foot-btn.next { flex: 2.2; background: var(--fairway); color: white; font-size: 18px; box-shadow: 0 3px 12px rgba(46,125,79,0.4); }
 .foot-btn.next:active { background: var(--fairway-dk); }
+.foot-btn.finish { flex: 2.2; background: #E3A93E; color: #3d2c00; font-size: 18px; box-shadow: 0 3px 12px rgba(227,169,62,0.45); }
+.foot-btn.finish:active { background: #C98F27; }
+.foot-btn.finish.pulse { animation: finishPulse 1.2s ease-in-out infinite; }
+@keyframes finishPulse {
+    0%, 100% { box-shadow: 0 3px 12px rgba(227,169,62,0.45); }
+    50% { box-shadow: 0 3px 26px rgba(227,169,62,0.9); }
+}
 .foot-btn.next.pulse { animation: nextPulse 1.2s ease-in-out infinite; }
 .foot-btn:disabled { opacity: 0.35; }
 @keyframes nextPulse {
@@ -483,7 +490,7 @@ document.addEventListener('visibilitychange', () => {
     try { if (document.visibilityState === 'hidden' && hasPendingEdits()) flushPendingEdits(); } catch (e) {}
 });
 
-const SE_VERSION = '2.4.0'; // always-visible camera button above the photo accordion
+const SE_VERSION = '2.5.0'; // Finish Round button on hole 18 + wrap-up screen with incomplete-hole check
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
@@ -496,6 +503,7 @@ const state = {
     unsubscribe: null,
     pendingTimer: null,
     autoAdvanceTimer: null,
+    finished: false,           // showing the end-of-round summary screen
     sheetPlayerId: null,       // whose score sheet (bottom sheet pad) is open
     padExpanded: false,        // sheet showing the full 1–12 grid instead of par-relative
     pendingEdits: {
@@ -1431,12 +1439,89 @@ function buildFooterNav() {
         onclick: () => goToHole(state.currentHole - 1),
         disabled: state.currentHole === 0 ? '' : null
     }, el('span', null, '←'), el('span', null, 'Prev hole')));
-    wrap.appendChild(el('button', {
-        class: 'foot-btn next' + (holeDone && state.currentHole < 17 ? ' pulse' : ''),
-        onclick: () => goToHole(state.currentHole + 1),
-        disabled: state.currentHole === 17 ? '' : null
-    }, el('span', null, holeDone && state.currentHole < 17 ? 'Hole done — next' : 'Next hole'), el('span', null, '→')));
+    if (state.currentHole === 17) {
+        // Hole 18: the round ends HERE — a distinct Finish button (also the save moment,
+        // since there is no next hole to trigger the usual save-on-hole-change).
+        wrap.appendChild(el('button', {
+            class: 'foot-btn finish' + (holeDone ? ' pulse' : ''),
+            onclick: () => finishRound()
+        }, el('span', null, '🏁'), el('span', null, 'Finish round')));
+    } else {
+        wrap.appendChild(el('button', {
+            class: 'foot-btn next' + (holeDone ? ' pulse' : ''),
+            onclick: () => goToHole(state.currentHole + 1)
+        }, el('span', null, holeDone ? 'Hole done — next' : 'Next hole'), el('span', null, '→')));
+    }
     return wrap;
+}
+
+// ─── Finish round: save everything, then show the wrap-up screen ───
+function finishRound() {
+    if (hasPendingEdits()) { setStatus('Saving…', 'saving'); flushPendingEdits(); }
+    state.finished = true;
+    state.sheetPlayerId = null;
+    renderRoundFinished();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function renderRoundFinished() {
+    const round = getRoundById(state.selectedRoundId);
+    if (!round) return;
+    const groupPlayers = getGroupPlayers(round, state.groupNumber);
+
+    setHeader(round.courseName || 'Round', `Group ${state.groupNumber} · Finished`);
+    $('#switch-btn').style.display = 'inline-block';
+
+    // Any holes still incomplete? (missing scores or missing BBB points)
+    const incomplete = [];
+    for (let h = 0; h < 18; h++) {
+        if (holeStatus(round, groupPlayers, h) !== 'complete') incomplete.push(h);
+    }
+
+    const appEl = $('#app');
+    appEl.innerHTML = '';
+
+    const card = el('div', { class: 'card', style: 'text-align:center;' });
+    card.appendChild(el('div', { style: 'font-size:56px;line-height:1;margin:6px 0 10px;' }, incomplete.length === 0 ? '🏆' : '🏁'));
+    card.appendChild(el('h2', null, incomplete.length === 0 ? 'Round complete!' : 'Round finished'));
+    card.appendChild(el('p', { class: 'muted' }, 'All scores are saved. Final results and awards come together in the main app.'));
+    appEl.appendChild(card);
+
+    // Incomplete-hole nudge: tap a hole to jump back and fix it
+    if (incomplete.length > 0) {
+        const warn = el('div', { class: 'card' });
+        warn.appendChild(el('h2', { style: 'font-size:16px;' }, '⚠️ Still missing something on:'));
+        const row = el('div', { class: 'pick-row', style: 'margin-top:8px;' });
+        incomplete.forEach(h => {
+            row.appendChild(el('button', {
+                class: 'pick-chip', type: 'button',
+                onclick: () => { state.finished = false; goToHole(h); }
+            }, `Hole ${h + 1}`));
+        });
+        warn.appendChild(row);
+        warn.appendChild(el('p', { class: 'muted', style: 'margin-top:8px;' }, 'Scores or BBB points are incomplete on these holes. Tap one to jump back.'));
+        appEl.appendChild(warn);
+    }
+
+    // Group scorecard summary
+    const sum = el('div', { class: 'card' });
+    sum.appendChild(el('h2', { style: 'font-size:16px;' }, "Your group's day"));
+    groupPlayers.forEach(p => {
+        const t = computePlayerTotals(round, p);
+        const r = el('div', { class: 'balls-row' });
+        r.appendChild(el('div', { class: 'balls-name' }, p.name || '?'));
+        r.appendChild(el('div', { style: 'font-weight:900;font-size:17px;font-variant-numeric:tabular-nums;' },
+            `${t.gross || '—'} gross · ${t.points} pts`));
+        sum.appendChild(r);
+    });
+    appEl.appendChild(sum);
+
+    const back = el('button', {
+        class: 'foot-btn prev', type: 'button',
+        style: 'width:100%;margin-top:4px;',
+        onclick: () => { state.finished = false; renderScoreEntry(); }
+    }, '← Back to scoring');
+    appEl.appendChild(back);
 }
 
 function goToHole(holeIdx) {
@@ -1447,6 +1532,7 @@ function goToHole(holeIdx) {
         flushPendingEdits();
     }
     state.currentHole = holeIdx;
+    state.finished = false;
     state.sheetPlayerId = null;       // close any open score sheet on hole change
     state.padExpanded = false;
     // This is THE save moment: edits collected on the hole flush now.
