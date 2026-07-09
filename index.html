@@ -537,6 +537,22 @@
             0%, 100% { transform: translateX(0) rotate(-5deg); }
             50%      { transform: translateX(20px) rotate(5deg); }
         }
+        /* ─── Fun-award flair keyframes ─── */
+        @keyframes fa-pop {
+            0%   { transform: scale(0.2); opacity: 0; }
+            30%  { transform: scale(1.5); opacity: 1; }
+            55%  { transform: scale(1); opacity: 0.9; }
+            100% { transform: scale(0.4); opacity: 0; }
+        }
+        @keyframes fa-twinkle {
+            0%, 100% { transform: scale(0.7) rotate(-8deg); opacity: 0.25; }
+            50%      { transform: scale(1.25) rotate(8deg); opacity: 1; }
+        }
+        @keyframes fa-spin {
+            0%   { transform: rotate(0deg) scale(1); }
+            50%  { transform: rotate(180deg) scale(1.15); }
+            100% { transform: rotate(360deg) scale(1); }
+        }
         /* ─── Presentation data drawer (background data on demand) ─── */
         .pres-drawer-backdrop {
             position: fixed; inset: 0; z-index: 9000;
@@ -624,7 +640,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.07.08.2';
+        const APP_VERSION = '2026.07.08.3';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -9463,6 +9479,274 @@
                 
                 presentationAnalytics.awards.par3Specialist = par3SpecialistWinners.length > 0 ? par3SpecialistWinners : null;
                 
+                // ═══════════════════════════════════════════════════════
+                // FUN AWARDS — eleven number-crunched extras, computed from
+                // tonight's scorecards (plus the event history for Nemesis Hole).
+                // Same winner shape as the other awards: { player, team, teamColor, ...metrics }.
+                // ═══════════════════════════════════════════════════════
+                (() => {
+                    const A = presentationAnalytics.awards;
+                    
+                    // Shared per-player hole extraction (gross + net per scored hole, tonight)
+                    const FUN = [];
+                    allPlayerPerformances.forEach(p => {
+                        mostRecentRound.teams.forEach(team => {
+                            const player = team.players.find(pl => pl.id === p.playerId);
+                            if (!player || !Array.isArray(player.scores)) return;
+                            const holes = [];
+                            player.scores.forEach((score, idx) => {
+                                const g = parseInt(score);
+                                const par = mostRecentRound.pars[idx];
+                                if (!g || !par) return;
+                                const hi = mostRecentRound.handicaps[idx];
+                                const strokes = getPlayerStrokesOnHole(player, mostRecentRound, hi);
+                                holes.push({ idx, gross: g, par, net: g - strokes });
+                            });
+                            if (holes.length > 0) {
+                                FUN.push({ player: p.playerName, team: p.teamName, teamColor: p.teamColor,
+                                           playerId: p.playerId, holes });
+                            }
+                        });
+                    });
+                    if (FUN.length === 0) return;
+                    
+                    // Field average gross per hole (tonight)
+                    const fieldAvg = {};
+                    {
+                        const sums = {}, counts = {};
+                        FUN.forEach(f => f.holes.forEach(h => {
+                            sums[h.idx] = (sums[h.idx] || 0) + h.gross;
+                            counts[h.idx] = (counts[h.idx] || 0) + 1;
+                        }));
+                        Object.keys(sums).forEach(i => { fieldAvg[i] = sums[i] / counts[i]; });
+                    }
+                    
+                    // Generic "best across the field with ties" helper.
+                    // valFn(f) → { v, ...extras } or null; cmp(a,b) true when a beats b.
+                    const crown = (valFn, cmp) => {
+                        let bestV = null, out = [];
+                        FUN.forEach(f => {
+                            const r = valFn(f);
+                            if (!r || r.v == null) return;
+                            if (bestV === null || cmp(r.v, bestV)) {
+                                bestV = r.v; out = [{ player: f.player, team: f.team, teamColor: f.teamColor, ...r }];
+                            } else if (r.v === bestV) {
+                                out.push({ player: f.player, team: f.team, teamColor: f.teamColor, ...r });
+                            }
+                        });
+                        return out;
+                    };
+                    
+                    // ❄ SNOWMAN — worst single-hole gross in the field
+                    A.snowman = (() => {
+                        const w = crown(f => {
+                            let worst = null;
+                            f.holes.forEach(h => { if (!worst || h.gross > worst.gross) worst = h; });
+                            return worst ? { v: worst.gross, gross: worst.gross, par: worst.par, holeIdx: worst.idx, holes: [worst.idx] } : null;
+                        }, (a, b) => a > b);
+                        return (w.length && w[0].gross >= 7) ? w : null; // needs to be genuinely ugly
+                    })();
+                    
+                    // 💥 KABOOM — biggest single-hole blow-up vs the field's average on that hole
+                    A.kaboom = (() => {
+                        const w = crown(f => {
+                            let boom = null;
+                            f.holes.forEach(h => {
+                                const avg = fieldAvg[h.idx];
+                                if (avg == null) return;
+                                const over = h.gross - avg;
+                                if (!boom || over > boom.over) boom = { over, h };
+                            });
+                            if (!boom || boom.over < 2.5) return null; // must be a real detonation
+                            return { v: Math.round(boom.over * 10) / 10, over: boom.over.toFixed(1),
+                                     gross: boom.h.gross, avg: fieldAvg[boom.h.idx].toFixed(1),
+                                     holeIdx: boom.h.idx, holes: [boom.h.idx] };
+                        }, (a, b) => a > b);
+                        return w.length ? w : null;
+                    })();
+                    
+                    // 📉 FACEPLANT — hot front nine (top-3 in the field), then the biggest back-nine collapse
+                    A.faceplant = (() => {
+                        const withSides = FUN.map(f => {
+                            const front = f.holes.filter(h => h.idx < 9);
+                            const back = f.holes.filter(h => h.idx >= 9);
+                            if (front.length < 7 || back.length < 7) return null;
+                            const fSum = front.reduce((s, h) => s + h.gross, 0);
+                            const bSum = back.reduce((s, h) => s + h.gross, 0);
+                            return { f, fSum, bSum, delta: bSum - fSum };
+                        }).filter(Boolean);
+                        if (withSides.length < 2) return null;
+                        const frontRank = withSides.slice().sort((a, b) => a.fSum - b.fSum);
+                        let best = null;
+                        withSides.forEach(x => {
+                            const rank = frontRank.indexOf(x) + 1;
+                            if (rank <= 3 && x.delta >= 5 && (!best || x.delta > best.delta)) best = x;
+                        });
+                        if (!best) return null;
+                        return [{ player: best.f.player, team: best.f.team, teamColor: best.f.teamColor,
+                                  front: best.fSum, back: best.bSum, delta: best.delta,
+                                  holes: best.f.holes.filter(h => h.idx >= 9).map(h => h.idx) }];
+                    })();
+                    
+                    // 🎭 SANDBAGGER ALERT — net score suspiciously far under net par
+                    A.sandbagger = (() => {
+                        const w = crown(f => {
+                            const played = f.holes;
+                            if (played.length < 14) return null;
+                            const netToPar = played.reduce((s, h) => s + (h.net - h.par), 0);
+                            return { v: netToPar, netToPar };
+                        }, (a, b) => a < b);
+                        return (w.length && w[0].netToPar <= -3) ? w : null;
+                    })();
+                    
+                    // 😈 NEMESIS HOLE — event-long: the single hole that has cost a player the most strokes vs par
+                    A.nemesisHole = (() => {
+                        const damageByPlayer = {}; // playerId → { name, team, teamColor, holes: {idx: dmg} }
+                        (eventRounds || []).forEach(r => {
+                            if (!r || !Array.isArray(r.pars)) return;
+                            (r.teams || []).forEach(team => {
+                                (team.players || []).forEach(pl => {
+                                    if (!Array.isArray(pl.scores)) return;
+                                    pl.scores.forEach((score, idx) => {
+                                        const g = parseInt(score);
+                                        const par = r.pars[idx];
+                                        if (!g || !par || g <= par) return;
+                                        const rec = damageByPlayer[pl.id] = damageByPlayer[pl.id]
+                                            || { name: pl.name, holes: {} };
+                                        rec.holes[idx] = (rec.holes[idx] || 0) + (g - par);
+                                    });
+                                });
+                            });
+                        });
+                        let best = null;
+                        Object.keys(damageByPlayer).forEach(pid => {
+                            const rec = damageByPlayer[pid];
+                            Object.keys(rec.holes).forEach(idx => {
+                                const dmg = rec.holes[idx];
+                                if (!best || dmg > best.dmg) best = { pid, name: rec.name, holeIdx: parseInt(idx), dmg };
+                            });
+                        });
+                        if (!best || best.dmg < 5) return null;
+                        const perf = allPlayerPerformances.find(p => p.playerId == best.pid);
+                        if (!perf) return null; // nemesis belongs to someone not playing tonight — skip
+                        return [{ player: perf.playerName, team: perf.teamName, teamColor: perf.teamColor,
+                                  holeIdx: best.holeIdx, damage: best.dmg, holes: [best.holeIdx] }];
+                    })();
+                    
+                    // 🎩 HOUDINI — best single NET hole of the night
+                    A.houdini = (() => {
+                        const w = crown(f => {
+                            let magic = null;
+                            f.holes.forEach(h => {
+                                const d = h.net - h.par;
+                                if (!magic || d < magic.d) magic = { d, h };
+                            });
+                            if (!magic || magic.d > -2) return null; // net eagle or better only
+                            return { v: magic.d, netToPar: magic.d, net: magic.h.net,
+                                     gross: magic.h.gross, holeIdx: magic.h.idx, holes: [magic.h.idx] };
+                        }, (a, b) => a < b);
+                        return w.length ? w : null;
+                    })();
+                    
+                    // 🦖 PAR-5 PREDATOR — best cumulative net on the par 5s
+                    A.par5Predator = (() => {
+                        const w = crown(f => {
+                            const p5 = f.holes.filter(h => h.par === 5);
+                            if (p5.length === 0) return null;
+                            const netToPar = p5.reduce((s, h) => s + (h.net - h.par), 0);
+                            return { v: netToPar, netToPar, count: p5.length, holes: p5.map(h => h.idx) };
+                        }, (a, b) => a < b);
+                        return (w.length && w[0].netToPar <= 0) ? w : null; // must have EATEN them, not survived them
+                    })();
+                    
+                    // 🔁 GROUNDHOG DAY — longest run of identical consecutive gross scores
+                    A.groundhog = (() => {
+                        const w = crown(f => {
+                            // consecutive by hole index (a gap in scoring breaks the run)
+                            const byIdx = {};
+                            f.holes.forEach(h => { byIdx[h.idx] = h.gross; });
+                            let bestLen = 0, bestVal = null, bestStart = -1;
+                            let curLen = 0, curVal = null, curStart = -1;
+                            for (let i = 0; i < 18; i++) {
+                                const g = byIdx[i];
+                                if (g != null && g === curVal) {
+                                    curLen++;
+                                } else if (g != null) {
+                                    curVal = g; curLen = 1; curStart = i;
+                                } else {
+                                    curVal = null; curLen = 0;
+                                }
+                                if (curLen > bestLen) { bestLen = curLen; bestVal = curVal; bestStart = curStart; }
+                            }
+                            if (bestLen < 3) return null;
+                            const holes = [];
+                            for (let k = 0; k < bestLen; k++) holes.push(bestStart + k);
+                            return { v: bestLen, runLen: bestLen, value: bestVal, holes };
+                        }, (a, b) => a > b);
+                        return w.length ? w : null;
+                    })();
+                    
+                    // 📠 THE PHOTOCOPIER — matched the field's average on the most holes
+                    A.photocopier = (() => {
+                        const w = crown(f => {
+                            const holes = f.holes.filter(h => fieldAvg[h.idx] != null
+                                && Math.abs(h.gross - fieldAvg[h.idx]) <= 0.5).map(h => h.idx);
+                            if (holes.length < 6) return null;
+                            return { v: holes.length, matched: holes.length, holes };
+                        }, (a, b) => a > b);
+                        return w.length ? w : null;
+                    })();
+                    
+                    // 🦅 VULTURE — most BBB points collected on holes they scored net bogey-or-worse
+                    A.vulture = (() => {
+                        if (!Array.isArray(mostRecentRound.bbbAwards) || mostRecentRound.bbbAwards.length === 0) return null;
+                        const counts = {}; // playerId → { n, holes:Set }
+                        mostRecentRound.bbbAwards.forEach(e => {
+                            if (!e || e.holeIdx == null) return;
+                            ['bingo', 'bango', 'bongo'].forEach(slot => {
+                                const pid = e[slot];
+                                if (pid === '' || pid == null) return;
+                                const f = FUN.find(x => x.playerId == pid);
+                                if (!f) return;
+                                const h = f.holes.find(hh => hh.idx === e.holeIdx);
+                                if (!h || h.net <= h.par) return; // only counts when they scraped it
+                                const rec = counts[pid] = counts[pid] || { f, n: 0, holes: [] };
+                                rec.n++;
+                                if (!rec.holes.includes(e.holeIdx)) rec.holes.push(e.holeIdx);
+                            });
+                        });
+                        let bestN = 0, out = [];
+                        Object.values(counts).forEach(rec => {
+                            if (rec.n > bestN) { bestN = rec.n; out = [rec]; }
+                            else if (rec.n === bestN && rec.n > 0) out.push(rec);
+                        });
+                        if (bestN < 2) return null;
+                        return out.map(rec => ({ player: rec.f.player, team: rec.f.team, teamColor: rec.f.teamColor,
+                                                 count: rec.n, holes: rec.holes }));
+                    })();
+                    
+                    // ⚗️ JEKYLL & HYDE — biggest front/back gross split, either direction
+                    A.jekyllHyde = (() => {
+                        let best = null;
+                        FUN.forEach(f => {
+                            const front = f.holes.filter(h => h.idx < 9);
+                            const back = f.holes.filter(h => h.idx >= 9);
+                            if (front.length < 7 || back.length < 7) return;
+                            const fSum = front.reduce((s, h) => s + h.gross, 0);
+                            const bSum = back.reduce((s, h) => s + h.gross, 0);
+                            const gap = Math.abs(fSum - bSum);
+                            if (!best || gap > best.gap) best = { f, fSum, bSum, gap };
+                        });
+                        if (!best || best.gap < 5) return null;
+                        // exclude if it's the same story as Faceplant tonight (front hero → back collapse)
+                        if (A.faceplant && A.faceplant.some(w => w.player === best.f.player)) return null;
+                        const worseIsBack = best.bSum > best.fSum;
+                        return [{ player: best.f.player, team: best.f.team, teamColor: best.f.teamColor,
+                                  front: best.fSum, back: best.bSum, gap: best.gap, worseIsBack,
+                                  holes: best.f.holes.filter(h => worseIsBack ? h.idx >= 9 : h.idx < 9).map(h => h.idx) }];
+                    })();
+                })();
+                
                 // ─── PER-PLAYER AWARD ATTACHMENT ───
                 // Each player slide gets a `playerAwards` array with all the awards they earned this round.
                 // Awards are revealed as additional sub-stages after the standard 3 stages (hero/details/points).
@@ -9573,7 +9857,75 @@
                                       : `Net ${w.netTotal}`;
                               }
                               return (w.par3Score != null) ? `Par-3 net ${w.par3Score}` : '';
-                          } }
+                          } },
+                        
+                        // ─── FUN AWARDS (the eleven) ───
+                        { key: 'snowman', label: 'SNOWMAN OF THE NIGHT', emoji: '⛄',
+                          color: '#7dd3fc', flair: 'snow',
+                          tagline: w => `A ${w.gross} on hole ${w.holeIdx + 1}`,
+                          description: 'The single ugliest hole in the entire field tonight. It happens to everyone — but tonight it happened to you, biggest.',
+                          detail: w => `Par ${w.par} · gross ${w.gross}`,
+                          holes: w => w.holes, highlightLabel: 'The Scene of the Crime' },
+                        { key: 'kaboom', label: 'KABOOM', emoji: '💥',
+                          color: '#f97316', flair: 'boom',
+                          tagline: w => `+${w.over} strokes over the field on one hole`,
+                          description: 'The biggest single-hole detonation relative to what everyone else did there. The field walked through; you set off fireworks.',
+                          detail: w => `Hole ${w.holeIdx + 1}: you ${w.gross}, field avg ${w.avg}`,
+                          holes: w => w.holes, highlightLabel: 'Ground Zero' },
+                        { key: 'faceplant', label: 'FACEPLANT', emoji: '📉',
+                          color: '#ef4444', flair: 'tumble',
+                          tagline: w => `Front ${w.front} → back ${w.back}`,
+                          description: 'Top-three front nine in the field... and then the wheels, the doors, and the bumper all came off on the back.',
+                          detail: w => `+${w.delta} strokes worse on the back nine`,
+                          holes: w => w.holes, highlightLabel: 'Where It Went Wrong' },
+                        { key: 'sandbagger', label: 'SANDBAGGER ALERT', emoji: '🎭',
+                          color: '#a3e635', flair: 'sneaky',
+                          tagline: w => `${w.netToPar} net vs par`,
+                          description: 'Played suspiciously far above their handicap tonight. The committee has been notified. The committee is also impressed.',
+                          detail: w => `Net ${Math.abs(w.netToPar)} under net par`,
+                          highlightLabel: '' },
+                        { key: 'nemesisHole', label: 'NEMESIS HOLE', emoji: '😈',
+                          color: '#dc2626', flair: 'devil',
+                          tagline: w => `Hole ${w.holeIdx + 1} owes them money`,
+                          description: 'The single hole that has cost this player the most strokes over par across the whole event. It knows what it did.',
+                          detail: w => `${w.damage} strokes over par this event on hole ${w.holeIdx + 1}`,
+                          holes: w => w.holes, highlightLabel: 'The Nemesis' },
+                        { key: 'houdini', label: 'HOUDINI', emoji: '🎩',
+                          color: '#c084fc', flair: 'magic',
+                          tagline: w => `Net ${Math.abs(w.netToPar)} under par on one hole`,
+                          description: 'The single greatest escape act of the night — the best net hole anyone produced. Nothing up the sleeves but a stroke or two.',
+                          detail: w => `Hole ${w.holeIdx + 1}: gross ${w.gross}, net ${w.net}`,
+                          holes: w => w.holes, highlightLabel: 'The Great Escape' },
+                        { key: 'par5Predator', label: 'PAR-5 PREDATOR', emoji: '🦖',
+                          color: '#22c55e', flair: 'dino',
+                          tagline: 'Ate the long holes alive',
+                          description: 'Best combined net score on the par 5s — where others survive the long holes, this one hunts them.',
+                          detail: w => `${w.netToPar > 0 ? '+' : ''}${w.netToPar} net across ${w.count} par-5${w.count === 1 ? '' : 's'}`,
+                          holes: w => w.holes, highlightLabel: 'The Hunting Grounds' },
+                        { key: 'groundhog', label: 'GROUNDHOG DAY', emoji: '🔁',
+                          color: '#94a3b8', flair: 'loop',
+                          tagline: w => `${w.runLen} straight ${w.value}s`,
+                          description: 'The same score, hole after hole after hole. Wake up. Golf. Repeat. Statistically fascinating; spiritually concerning.',
+                          detail: w => `Holes ${w.holes[0] + 1}–${w.holes[w.holes.length - 1] + 1}, all ${w.value}s`,
+                          holes: w => w.holes, highlightLabel: 'Déjà Vu', highlightConnect: true },
+                        { key: 'photocopier', label: 'THE PHOTOCOPIER', emoji: '📠',
+                          color: '#e5e7eb', flair: 'copy',
+                          tagline: w => `Matched the field on ${w.matched} holes`,
+                          description: 'Matched the field average on more holes than anyone else. Aggressively, relentlessly, heroically... average.',
+                          detail: w => `${w.matched} of 18 holes within half a stroke of the group`,
+                          holes: w => w.holes, highlightLabel: 'Perfect Copies' },
+                        { key: 'vulture', label: 'VULTURE', emoji: '🦅',
+                          color: '#f59e0b', flair: 'vulture',
+                          tagline: w => `${w.count} BBB points scavenged`,
+                          description: 'Collected Bingo-Bango-Bongo points on holes they scored net bogey or worse. Playing badly AND profiting: respect.',
+                          detail: w => `${w.count} point${w.count === 1 ? '' : 's'} picked clean on rough holes`,
+                          holes: w => w.holes, highlightLabel: 'The Carrion Holes' },
+                        { key: 'jekyllHyde', label: 'JEKYLL & HYDE', emoji: '⚗️',
+                          color: '#8b5cf6', flair: 'split',
+                          tagline: w => `Front ${w.front} / back ${w.back}`,
+                          description: 'Two completely different golfers shared one scorecard tonight. One of them should not be allowed back.',
+                          detail: w => `${w.gap}-stroke split · Dr. ${w.worseIsBack ? 'Front' : 'Back'} vs Mr. ${w.worseIsBack ? 'Back' : 'Front'}`,
+                          holes: w => w.holes, highlightLabel: w => `Mr. ${w.worseIsBack ? 'Back' : 'Front'} Was Here` }
                     ];
                     
                     // Build the awards list for each player
@@ -9633,9 +9985,15 @@
                                     label: spec.label,
                                     emoji: spec.emoji,
                                     color: spec.color,
-                                    tagline: spec.tagline,
+                                    // taglines/labels may be static strings or functions of the winner
+                                    tagline: (typeof spec.tagline === 'function') ? spec.tagline(won) : spec.tagline,
                                     description: spec.description,
-                                    detail: spec.detail(won)
+                                    detail: spec.detail(won),
+                                    flair: spec.flair || null,
+                                    relevantHoles: (typeof spec.holes === 'function') ? spec.holes(won) : undefined,
+                                    highlightLabel: (typeof spec.highlightLabel === 'function') ? spec.highlightLabel(won) : (spec.highlightLabel || ''),
+                                    highlightConnect: !!spec.highlightConnect,
+                                    holeIdx: (won.holeIdx != null) ? won.holeIdx : undefined
                                 });
                             }
                         });
@@ -12812,7 +13170,13 @@
                     let highlightLabel = '';  // human label for the highlighted holes
                     let highlightConnect = false; // whether to draw a connecting band across consecutive highlighted holes
                     
-                    if (award.type === 'ctp') {
+                    if (Array.isArray(award.relevantHoles) && award.relevantHoles.length > 0) {
+                        // Fun awards carry their own highlight set (computed with the award itself).
+                        displayMode = 'fullScorecard';
+                        relevantHoles = award.relevantHoles.slice();
+                        highlightLabel = award.highlightLabel || '';
+                        highlightConnect = !!award.highlightConnect;
+                    } else if (award.type === 'ctp') {
                         displayMode = 'ctpHero';
                     } else if (award.type === 'extra9') {
                         displayMode = 'extra9Money';
@@ -13004,6 +13368,41 @@
                     const displayEmoji = (displayMode === 'extra9Money') ? '💰' : award.emoji;
                     const displayColor = (displayMode === 'extra9Money') ? '#16a34a' : award.color;
                     
+                    // ── Fun-award flair: a full-bleed particle layer themed per award ──
+                    // (Snow falls for the Snowman, explosions for Kaboom, sparkles for Houdini…)
+                    const flairHTML = (() => {
+                        if (!award.flair) return '';
+                        const recipes = {
+                            snow:    { e: ['❄️', '❄️', '🌨️', '⛄'], anim: 'ex9-fall',   n: 12 },
+                            boom:    { e: ['💥', '🔥', '💣'],        anim: 'fa-pop',     n: 8 },
+                            tumble:  { e: ['📉', '🙈', '💨'],        anim: 'ex9-fall',   n: 6 },
+                            sneaky:  { e: ['🎭', '🤫', '👀'],        anim: 'ex9-sway',   n: 6 },
+                            devil:   { e: ['😈', '⚔️', '🔥'],        anim: 'fa-twinkle', n: 7 },
+                            magic:   { e: ['✨', '🪄', '✨', '🎩'],   anim: 'fa-twinkle', n: 10 },
+                            dino:    { e: ['🦖', '🌴', '🍖'],        anim: 'ex9-sway',   n: 6 },
+                            loop:    { e: ['🔁', '📆', '🔂'],        anim: 'fa-spin',    n: 7 },
+                            copy:    { e: ['📄', '📠', '📄'],        anim: 'ex9-fall',   n: 8 },
+                            vulture: { e: ['🦅', '💀', '🪶'],        anim: 'ex9-sway',   n: 6 },
+                            split:   { e: ['⚗️', '🧪'],              anim: 'ex9-sway',   n: 5 }
+                        };
+                        const r = recipes[award.flair];
+                        if (!r) return '';
+                        let spans = '';
+                        for (let i = 0; i < r.n; i++) {
+                            const left = 3 + ((i * 89) / r.n) + ((i % 3) * 2);
+                            const size = 22 + ((i * 13) % 28);
+                            const delay = ((i * 0.55) % 3.5).toFixed(2);
+                            const dur = r.anim === 'ex9-fall' ? (5 + (i % 4)) : (2.2 + (i % 3) * 0.7).toFixed(1);
+                            const top = r.anim === 'ex9-fall' ? '-12vh' : ((8 + ((i * 29) % 72)) + '%');
+                            spans += `<div style="position:absolute;left:${left}%;top:${top};font-size:${size}px;animation:${r.anim} ${dur}s ${r.anim === 'ex9-fall' ? 'linear' : 'ease-in-out'} ${delay}s infinite;opacity:0.8;">${r.e[i % r.e.length]}</div>`;
+                        }
+                        // Jekyll & Hyde: the whole slide splits into two moods behind the content
+                        const splitBg = award.flair === 'split'
+                            ? `<div style="position:absolute;inset:0;background:linear-gradient(90deg, rgba(16,185,129,0.10) 0%, rgba(16,185,129,0.10) 49.7%, rgba(255,255,255,0.25) 49.7%, rgba(255,255,255,0.25) 50.3%, rgba(239,68,68,0.12) 50.3%, rgba(239,68,68,0.12) 100%);"></div>`
+                            : '';
+                        return `<div style="position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:1;">${splitBg}${spans}</div>`;
+                    })();
+                    
                     html += `
                         <style>
                             @keyframes awardEntrance {
@@ -13022,6 +13421,7 @@
                             }
                         </style>
                         <div style="animation:fadeIn 0.5s ease-out;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:24px 20px;box-sizing:border-box;text-align:center;position:relative;overflow:hidden;">
+                            ${flairHTML}
                             
                             <!-- Stage indicator (small, top) -->
                             <div style="position:absolute;top:20px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,0.5);font-size:12px;font-weight:700;letter-spacing:3px;z-index:3;">
@@ -16696,7 +17096,21 @@
             'DECIDED ON LAST HOLE': 'Sounds/you-win.mp3',
             'CLINICAL':           'Sounds/you-win.mp3',
             'GRINDER':            'Sounds/you-win.mp3',
-            'SOLID WIN':          'Sounds/you-win.mp3'
+            'SOLID WIN':          'Sounds/you-win.mp3',
+            
+            // Fun awards — keyed by award LABEL (taglines are dynamic for these).
+            // Swap the files as you add themed sounds to the Sounds/ folder.
+            'SNOWMAN OF THE NIGHT': 'Sounds/you-win.mp3',
+            'KABOOM':               'Sounds/you-win.mp3',
+            'FACEPLANT':            'Sounds/you-win.mp3',
+            'SANDBAGGER ALERT':     'Sounds/you-win.mp3',
+            'NEMESIS HOLE':         'Sounds/you-win.mp3',
+            'HOUDINI':              'Sounds/you-win.mp3',
+            'PAR-5 PREDATOR':       'Sounds/you-win.mp3',
+            'GROUNDHOG DAY':        'Sounds/you-win.mp3',
+            'THE PHOTOCOPIER':      'Sounds/you-win.mp3',
+            'VULTURE':              'Sounds/you-win.mp3',
+            'JEKYLL & HYDE':        'Sounds/you-win.mp3'
         };
         
         // Cache for Audio elements so they don't reload on every play
