@@ -640,7 +640,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.07.08.3';
+        const APP_VERSION = '2026.07.09.1';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -10945,7 +10945,12 @@
                 
                 // New enhanced slides
                 const hasBiggestMomentsSlide = presentationAnalytics.biggestMoments.length > 0;
-                const hasBeatComparisonSlide = presentationAnalytics.beatComparison.playersBeatTarget.length > 0;
+                // The slide exists whenever the target played and ANYONE else did too.
+                // An empty beat-list is not "no slide" — it's the 👑 "Long live the King" moment.
+                const hasBeatComparisonSlide = !!(presentationAnalytics.beatComparison
+                    && presentationAnalytics.beatComparison.targetPlayer
+                    && (presentationAnalytics.beatComparison.playersBeatTarget.length > 0
+                        || presentationAnalytics.beatComparison.playersDidNotBeat.length > 0));
                 const hasHoleAnalysisSlide = true; // Always show hole performance
                 const hasScoringDistSlide = true; // Always show scoring distribution
                 const hasRollercoasterSlide = !!(presentationAnalytics.awards && presentationAnalytics.awards.rollercoaster);
