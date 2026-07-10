@@ -553,6 +553,17 @@
             50%  { transform: rotate(180deg) scale(1.15); }
             100% { transform: rotate(360deg) scale(1); }
         }
+        /* ─── Dutch flag wave (title page) ─── */
+        @keyframes nl-flag-sway {
+            0%, 100% { transform: rotateZ(0deg) skewY(0.6deg); }
+            25%      { transform: rotateZ(-0.8deg) skewY(-1.2deg); }
+            50%      { transform: rotateZ(0.4deg) skewY(1.4deg); }
+            75%      { transform: rotateZ(-0.5deg) skewY(-0.8deg); }
+        }
+        @keyframes nl-flag-ripple {
+            0%   { background-position: 0 0; }
+            100% { background-position: 480px 0; }
+        }
         /* ─── Presentation data drawer (background data on demand) ─── */
         .pres-drawer-backdrop {
             position: fixed; inset: 0; z-index: 9000;
@@ -640,7 +651,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.07.09.1';
+        const APP_VERSION = '2026.07.09.2';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -10931,7 +10942,7 @@
                 
                 // Calculate total slides
                 // Title + Individual Players (one per player) + Awards + Teams + Handicaps + Next Round
-                let totalSlides = 1; // Title
+                let totalSlides = 2; // Flag anthem page + title/standings page
                 totalSlides += individualPlayerSlides.length; // One slide per player (#1 player has champion intro as sub-stage)
                 const hasNetSlide = hasScheduledRounds && netWinner !== null;
                 const hasBBBSlide = hasScheduledRounds && bbbWinner !== null;
@@ -11523,7 +11534,9 @@
                 presentationState.isWinnerSlide = false;
                 
             // Calculate slide indices - NEW ORDER
-            let slideIndex = 1; // Start after title (0)
+            let slideIndex = 1; // Slide 0 is the Dutch-flag anthem page
+            // The original title/standings page follows the flag as its own slide.
+            const titleContentSlideIndex = slideIndex++;
             
             // ── COLD OPEN TEASER ──
             // A 3-beat "tonight's episode" hook built from the night's data, names withheld.
@@ -11941,6 +11954,38 @@
                     </div>
                 `;
             } else if (currentSlide === 0) {
+                // ─── DUTCH FLAG ANTHEM PAGE (slide 0) ───
+                // A waving tricolor + Het Wilhelmus. Pure CSS wave: skew oscillation on the
+                // cloth plus a moving light ripple. Anthem starts here (guarded + mute-aware)
+                // and stops the moment we leave the slide.
+                html += `
+                    <div style="position:fixed;inset:0;background:radial-gradient(ellipse at 50% 30%, #1e1b4b 0%, #0b0a1f 75%);overflow:hidden;"></div>
+                    <div style="animation:fadeIn 1s ease-in;max-width:1100px;width:100%;position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;">
+                        
+                        <!-- Flagpole + waving flag -->
+                        <div style="display:flex;align-items:flex-start;justify-content:center;margin-bottom:34px;">
+                            <div style="width:10px;height:min(46vh, 420px);background:linear-gradient(90deg, #9ca3af, #e5e7eb 40%, #6b7280);border-radius:6px;box-shadow:0 6px 24px rgba(0,0,0,0.6);"></div>
+                            <div style="position:relative;width:min(58vw, 640px);height:min(38vh, 384px);transform-origin:left center;animation:nl-flag-sway 5s ease-in-out infinite;">
+                                <div style="position:absolute;inset:0;background:linear-gradient(180deg, #AE1C28 0%, #AE1C28 33.34%, #FFFFFF 33.34%, #FFFFFF 66.67%, #21468B 66.67%, #21468B 100%);border-radius:0 6px 6px 0;box-shadow:0 18px 60px rgba(0,0,0,0.55);"></div>
+                                <!-- rolling light + shade ripple to sell the wave -->
+                                <div style="position:absolute;inset:0;border-radius:0 6px 6px 0;background:repeating-linear-gradient(100deg, rgba(0,0,0,0.16) 0px, rgba(0,0,0,0) 60px, rgba(255,255,255,0.16) 110px, rgba(0,0,0,0) 170px, rgba(0,0,0,0.16) 240px);background-size:480px 100%;animation:nl-flag-ripple 3.2s linear infinite;mix-blend-mode:overlay;"></div>
+                            </div>
+                        </div>
+                        
+                        <h1 style="color:white;font-size:clamp(42px, 6vw, 68px);font-weight:900;letter-spacing:4px;margin:0 0 8px;text-shadow:0 6px 30px rgba(0,0,0,0.8);animation:slideUp 0.8s 0.3s ease-out both;">
+                            ${eventName}
+                        </h1>
+                        <p style="color:#fbbf24;font-size:17px;font-weight:700;letter-spacing:6px;text-transform:uppercase;margin:0 0 6px;animation:fadeIn 1s 0.8s ease-out both;">
+                            🎺 Het Wilhelmus
+                        </p>
+                        <p style="color:#818cf8;font-size:15px;font-style:italic;margin:26px 0 0;animation:fadeIn 1s 1.6s ease-out both;">
+                            Tap "Next →" to begin the show
+                        </p>
+                    </div>
+                `;
+                // Start the anthem (guarded, mute-aware, silent if the MP3 isn't uploaded yet)
+                setTimeout(() => { try { startAnthem(); } catch (e) {} }, 100);
+            } else if (currentSlide === titleContentSlideIndex) {
                 // TITLE SLIDE
                 // Optional backdrop: first round photo (if any), heavily darkened
                 const bgPhoto = (roundPhotos && roundPhotos.length > 0) ? roundPhotos[0] : null;
@@ -14658,7 +14703,15 @@
                     .sort((a, b) => b.totalPoints - a.totalPoints);
                 
                 if (_beat.length === 0) {
-                    // 👑 NOBODY beat him — long live the king.
+                    // 👑 NOBODY beat him — long live the king. Fanfare on first land.
+                    if (!presentationState._kingSoundPlayed) {
+                        presentationState._kingSoundPlayed = true;
+                        setTimeout(() => {
+                            if (typeof playBadgeSound === 'function') {
+                                try { playBadgeSound('LONG LIVE THE KING'); } catch (e) {}
+                            }
+                        }, 400);
+                    }
                     html += `
                         <div style="animation:fadeIn 0.6s ease-out;max-width:900px;width:100%;text-align:center;">
                             <div style="font-size:76px;line-height:1;animation:slideUp 0.6s ease-out;">👑</div>
@@ -16159,7 +16212,10 @@
                 `;
                 
                 // Kick the loop (idempotent — the tick self-cleans when we leave this slide)
-                setTimeout(() => { try { startClosingSlideshow(photos.length); } catch (e) {} }, 50);
+                setTimeout(() => {
+                    try { startClosingSlideshow(photos.length); } catch (e) {}
+                    try { startClosingMusic(); } catch (e) {}
+                }, 50);
             }
             
             html += `
@@ -16358,6 +16414,8 @@
             const previousSlide = presentationState.currentSlide;
             presentationState.currentSlide++;
             // Reset sub-step states when we leave their slides
+            // Music follows the slide: anthem only on the flag page, outro only on the closing loop.
+            try { syncPresentationMusic(); } catch (e) {}
             // Reset all uniform reveal steps (registry-driven), then the custom ones.
             // In Quick Recap mode, land slides FULLY revealed instead of starting hidden.
             for (const r of UNIFORM_REVEALS) presentationState[r.stepKey] = window.__quickRecapMode ? uniformRevealMax(r) : 0;
@@ -16445,6 +16503,9 @@
                 const _newContentIdx = (_newEntry && _newEntry.kind === 'content') ? _newEntry.value : -1;
                 const _newOnPhoto = _newEntry && _newEntry.kind === 'photo';
                 
+                // Music follows the slide in BOTH directions (stops the outro when backing
+                // off the closing loop; the flag page restarts the anthem via its render).
+                try { syncPresentationMusic(); } catch (e) {}
                 // Uniform reveals: entering one of these slides via Back lands fully revealed;
                 // leaving them resets the step to 0. Registry-driven.
                 for (const r of UNIFORM_REVEALS) {
@@ -16783,8 +16844,49 @@
             renderPresentation();
         };
         
+        // ─── Presentation music: anthem (title) + closing-slideshow track ───
+        // Both are guarded (no double-start), mute-aware, and fail silently when the
+        // MP3 hasn't been uploaded to Sounds/ yet.
+        window.__anthemAudio = null;
+        window.startAnthem = () => {
+            if (window.__presentationMuted || window.__anthemAudio) return;
+            if (!presentationState.active || presentationState.currentSlide !== 0) return;
+            try {
+                const a = new Audio('Sounds/wilhelmus.mp3');
+                a.volume = 0.85;
+                window.__anthemAudio = a;
+                a.play().catch(() => { window.__anthemAudio = null; });
+            } catch (e) { window.__anthemAudio = null; }
+        };
+        window.stopAnthem = () => {
+            const a = window.__anthemAudio;
+            if (a) { try { a.pause(); } catch (e) {} window.__anthemAudio = null; }
+        };
+        window.__closingMusicAudio = null;
+        window.startClosingMusic = () => {
+            if (window.__presentationMuted || window.__closingMusicAudio) return;
+            try {
+                const a = new Audio('Sounds/closing.mp3');
+                a.loop = true;
+                a.volume = 0.6;
+                window.__closingMusicAudio = a;
+                a.play().catch(() => { window.__closingMusicAudio = null; });
+            } catch (e) { window.__closingMusicAudio = null; }
+        };
+        window.stopClosingMusic = () => {
+            const a = window.__closingMusicAudio;
+            if (a) { try { a.pause(); } catch (e) {} window.__closingMusicAudio = null; }
+        };
+        // Keep the right track for the slide we're on; called on every slide change.
+        window.syncPresentationMusic = () => {
+            if (!presentationState.active) { stopAnthem(); stopClosingMusic(); return; }
+            if (presentationState.currentSlide !== 0) stopAnthem();
+            if (presentationState.currentSlide !== presentationState._closingSlideIndex) stopClosingMusic();
+        };
+        
         window.togglePresentationMute = () => {
             window.__presentationMuted = !window.__presentationMuted;
+            if (window.__presentationMuted) { try { stopAnthem(); stopClosingMusic(); } catch (e) {} }
             // Update the toggle button label if it's currently rendered
             const btn = document.getElementById('presentationMuteToggle');
             if (btn) btn.textContent = window.__presentationMuted ? '🔇' : '🔊';
@@ -17115,7 +17217,9 @@
             'GROUNDHOG DAY':        'Sounds/you-win.mp3',
             'THE PHOTOCOPIER':      'Sounds/you-win.mp3',
             'VULTURE':              'Sounds/you-win.mp3',
-            'JEKYLL & HYDE':        'Sounds/you-win.mp3'
+            'JEKYLL & HYDE':        'Sounds/you-win.mp3',
+            // Swap to a royal fanfare MP3 (e.g. Sounds/king.mp3) when you upload one.
+            'LONG LIVE THE KING':   'Sounds/you-win.mp3'
         };
         
         // Cache for Audio elements so they don't reload on every play
@@ -17918,6 +18022,7 @@
         };
 
         window.closePresentationMode = () => {
+            try { stopAnthem(); stopClosingMusic(); } catch (e) {}
             const presentationDiv = document.getElementById('presentationMode');
             if (presentationDiv) {
                 presentationDiv.remove();
