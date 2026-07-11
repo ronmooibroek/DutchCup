@@ -565,6 +565,9 @@
             padding: 4px 10px; border-radius: 999px; letter-spacing: 0.3px;
             backdrop-filter: blur(4px);
         }
+        .sound-admin-pill.blank {
+            border-style: dashed; color: rgba(255,255,255,0.35);
+        }
         .sound-admin-panel {
             position: absolute; left: 0; bottom: 30px; width: 280px;
             background: rgba(15, 23, 42, 0.96); border: 1px solid rgba(165,180,252,0.35);
@@ -678,7 +681,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.07.10.2';
+        const APP_VERSION = '2026.07.10.3';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -11675,6 +11678,52 @@
             const closingSlideIndex = hasClosingSlide ? slideIndex++ : -1;
             presentationState._closingSlideIndex = closingSlideIndex;
             
+            // ── Stable slide-name resolver (for per-slide sound slots) ──
+            // Names, not indices: "NET COUNTDOWN" is the same slot every week even though
+            // its position shifts with player counts and conditional slides.
+            {
+                const _sn = {};
+                const nm = (i, name) => { if (i >= 0) _sn[i] = name; };
+                nm(0, 'OPENING FLAG');
+                nm(titleContentSlideIndex, 'TITLE PAGE');
+                nm(teaserSlideIndex, 'COLD OPEN');
+                nm(fieldSlideIndex, "TODAY'S FIELD");
+                nm(byNumbersSlideIndex, 'BY THE NUMBERS');
+                nm(biggestMomentsSlideIndex, 'BIGGEST MOMENTS');
+                nm(holeAnalysisSlideIndex, 'HOLE PERFORMANCE');
+                nm(beatComparisonSlideIndex, 'BEAT COMPARISON');
+                nm(scoringDistSlideIndex, 'SCORING DISTRIBUTION');
+                nm(ctpLeadersSlideIndex, 'CTP LEADERS');
+                nm(bbbLeadersSlideIndex, 'BBB LEADERS');
+                nm(weeklyAchievementsSlideIndex, 'WEEKLY ACHIEVEMENTS');
+                nm(dividerAwardsSlideIndex, 'DIVIDER: HONORS');
+                nm(netSlideIndex, 'NET COUNTDOWN');
+                nm(perfIntroSlideIndex, 'PERFORMANCES INTRO');
+                nm(dividerMatchesSlideIndex, 'DIVIDER: MATCHES');
+                nm(bracketIntroSlideIndex, 'BRACKET INTRO');
+                nm(bracketFallbackSlideIndex, 'BRACKET RECAP');
+                nm(bracketWOverviewSlideIndex, "WINNER'S BRACKET");
+                nm(bracketLOverviewSlideIndex, "LOSER'S BRACKET");
+                nm(dividerTeamsSlideIndex, 'DIVIDER: TEAMS');
+                nm(teamIntroSlideIndex, 'TEAM INTRO');
+                nm(eventNetSlideIndex, 'EVENT NET');
+                nm(milestonesSlideIndex, 'MILESTONES');
+                nm(handicapSlideIndex, 'HANDICAPS');
+                nm(extra9TeamsSlideIndex, 'EXTRA 9');
+                nm(nextRoundSlideIndex, 'NEXT ROUND');
+                nm(closingSlideIndex, 'CLOSING SLIDESHOW');
+                const _pStart = individualPlayerSlidesStart, _pCount = individualPlayerSlides.length;
+                const _mStart = bracketCombinedSlideStart, _mCount = bracketCombinedSlideCount;
+                const _tStart = teamSlidesStartIndex, _tCount = teamStandings.length;
+                presentationState._slideNameOf = (idx) => {
+                    if (_sn[idx]) return _sn[idx];
+                    if (_pCount > 0 && idx >= _pStart && idx < _pStart + _pCount) return 'PLAYER SLIDES';
+                    if (_mStart >= 0 && _mCount > 0 && idx >= _mStart && idx < _mStart + _mCount) return 'MATCH SLIDES';
+                    if (_tCount > 0 && idx >= _tStart && idx < _tStart + _tCount) return 'TEAM SLIDES';
+                    return 'SLIDE ' + (idx + 1);
+                };
+            }
+            
             // ─── FACTOID GENERATOR ───
             // Produces a small array of "Did you know?" facts surfaced on the title slide.
             // Pulls from cross-round event data: who's been consistent, who's improving, who owns CTPs, etc.
@@ -16945,10 +16994,12 @@
                     toast.className = 'sound-admin-toast';
                     document.body.appendChild(toast);
                 }
-                const fileName = resolvedSrc ? resolvedSrc.replace(/^Sounds\//, '') : '(muted for this slot)';
+                const fileName = resolvedSrc
+                    ? '🔊 ' + resolvedSrc.replace(/^Sounds\//, '')
+                    : (window.__soundOverrides[slot] === '__none__' ? '🔇 muted' : '➕ add sound');
                 toast.dataset.slot = slot;
                 toast.innerHTML = `
-                    <div class="sound-admin-pill" onclick="toggleSoundAdminPanel()">🔊 ${fileName}</div>
+                    <div class="sound-admin-pill${resolvedSrc ? '' : ' blank'}" onclick="toggleSoundAdminPanel()">${fileName}</div>
                     <div class="sound-admin-panel" id="soundAdminPanel" style="display:none;"></div>
                 `;
                 toast.style.display = 'block';
@@ -16989,7 +17040,16 @@
             window.saveSoundOverrides();
             // Audition the new choice immediately through the same path it normally plays.
             const rec = window.__lastSlotPlay[slot];
-            if (!rec) { window.notifySoundPlayed(slot, window.resolveSoundSrc(slot, null)); return; }
+            if (!rec) {
+                // Fresh per-slide slot (was a blank pill): play it as this slide's track.
+                if (slot.indexOf('SLIDE: ') === 0) {
+                    window.stopSlideTrack();
+                    window.playSlideTrack(slot, null, { vol: 0.75 });
+                } else {
+                    window.notifySoundPlayed(slot, window.resolveSoundSrc(slot, null));
+                }
+                return;
+            }
             if (rec.kind === 'track') {
                 window.stopSlideTrack();
                 window.playSlideTrack(slot, rec.defaultSrc, rec.opts || {});
@@ -17053,8 +17113,24 @@
             return null;
         };
         window.syncPresentationMusic = () => {
-            const key = window.__slideTrackKeyForCurrent();
-            if (window.__slideTrack && window.__slideTrack.key !== key) window.stopSlideTrack();
+            const dedicated = window.__slideTrackKeyForCurrent();
+            const cur = presentationState.currentSlide;
+            const slideName = presentationState._slideNameOf
+                ? presentationState._slideNameOf(cur) : ('SLIDE ' + (cur + 1));
+            const ambientKey = 'SLIDE: ' + slideName;
+            const expected = dedicated || ambientKey;
+            if (window.__slideTrack && window.__slideTrack.key !== expected) window.stopSlideTrack();
+            // Slides without a built-in track get a per-slide sound slot: play the assigned
+            // clip if there is one, otherwise show the blank "add sound" pill — the
+            // every-transition affordance for building the soundtrack live.
+            if (!dedicated && presentationState.active) {
+                const assigned = window.resolveSoundSrc(ambientKey, null);
+                if (assigned) {
+                    window.playSlideTrack(ambientKey, null, { vol: 0.75 });
+                } else {
+                    window.notifySoundPlayed(ambientKey, null);
+                }
+            }
         };
         
         window.togglePresentationMute = () => {
