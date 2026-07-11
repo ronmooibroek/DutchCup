@@ -651,7 +651,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.07.09.2';
+        const APP_VERSION = '2026.07.10.1';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -11573,6 +11573,7 @@
             
             // ── Act 1: the numbers ──
             const fieldSlideIndex = hasFieldSlide ? slideIndex++ : -1;
+            presentationState._fieldSlideIndex = fieldSlideIndex;
             const byNumbersSlideIndex = hasByNumbersSlide ? slideIndex++ : -1;
             presentationState._byNumbersSlideIndex = byNumbersSlideIndex;
             const biggestMomentsSlideIndex = hasBiggestMomentsSlide ? slideIndex++ : -1;
@@ -11591,6 +11592,7 @@
             const _hasPhotos = Array.isArray(roundPhotos) && roundPhotos.length > 0;
             const hasDividerAwards = _hasPhotos && individualPlayerSlides.length > 0;
             const dividerAwardsSlideIndex = hasDividerAwards ? slideIndex++ : -1;
+            presentationState._dividerAwardsSlideIndex = dividerAwardsSlideIndex;
             const netSlideIndex = hasNetSlide ? slideIndex++ : -1;
             presentationState._netSlideIndex = netSlideIndex;
             presentationState._netTopCount = (presentationState.netTop5 || []).length
@@ -11609,6 +11611,7 @@
             // ── Act 3: match-play drama ──
             const hasDividerMatches = _hasPhotos && (hasBracketIntroSlide || bracketCombinedSlideCount > 0);
             const dividerMatchesSlideIndex = hasDividerMatches ? slideIndex++ : -1;
+            presentationState._dividerMatchesSlideIndex = dividerMatchesSlideIndex;
             const bracketIntroSlideIndex   = hasBracketIntroSlide  ? slideIndex++ : -1;
             const bracketCombinedSlideStart = bracketCombinedSlideCount > 0 ? slideIndex : -1;
             slideIndex += bracketCombinedSlideCount; // ONE slide per match — sub-step reveal inside
@@ -11983,8 +11986,9 @@
                         </p>
                     </div>
                 `;
-                // Start the anthem (guarded, mute-aware, silent if the MP3 isn't uploaded yet)
-                setTimeout(() => { try { startAnthem(); } catch (e) {} }, 100);
+                // Het Wilhelmus — Ron's F1-podium version. encodeURI in playSlideTrack
+                // handles the space in the filename.
+                setTimeout(() => { try { playSlideTrack('anthem', 'Sounds/dutch-anthem-f1-podium (1).mp3', { vol: 0.85 }); } catch (e) {} }, 100);
             } else if (currentSlide === titleContentSlideIndex) {
                 // TITLE SLIDE
                 // Optional backdrop: first round photo (if any), heavily darkened
@@ -12125,10 +12129,15 @@
                 // ── CHAPTER DIVIDER: full-bleed round photo + caption, subtle Ken Burns ──
                 const _len = roundPhotos.length;
                 const _div = currentSlide === dividerAwardsSlideIndex
-                    ? { photo: roundPhotos[0 % _len], caption: 'On to the individual honors…' }
+                    ? { photo: roundPhotos[0 % _len], caption: 'On to the individual honors…',
+                        trackKey: 'divAwards', trackSrc: 'Sounds/masters-theme-14sec.mp3' }
                     : currentSlide === dividerMatchesSlideIndex
-                        ? { photo: roundPhotos[1 % _len], caption: 'Time for the matches…' }
+                        ? { photo: roundPhotos[1 % _len], caption: 'Time for the matches…',
+                            trackKey: 'divMatches', trackSrc: 'Sounds/nfl-theme-song-hq-mp3cutnet.mp3' }
                         : { photo: roundPhotos[2 % _len], caption: 'And now — the team battle…' };
+                if (_div.trackKey) {
+                    setTimeout(() => { try { playSlideTrack(_div.trackKey, _div.trackSrc, { vol: 0.8 }); } catch (e) {} }, 150);
+                }
                 html += `
                     <div style="position:fixed;inset:0;background:#000;overflow:hidden;">
                         <div style="position:absolute;inset:-4%;background-image:url('${_div.photo}');background-size:cover;background-position:center;animation:kb-zoom 14s ease-in-out forwards;"></div>
@@ -12140,6 +12149,8 @@
                     </div>
                 `;
             } else if (currentSlide === fieldSlideIndex) {
+                // Warm-up music while the field is on screen (stops on slide change).
+                setTimeout(() => { try { playSlideTrack('field', 'Sounds/10-walking-on-sunshine.mp3', { loop: true, vol: 0.55 }); } catch (e) {} }, 100);
                 // TODAY'S FIELD — grid of player avatars to set the human tone
                 // Look up state-side player records to get photoUrl + canonical name
                 const fieldEntries = playersWhoPlayed.map(p => {
@@ -14866,6 +14877,19 @@
                 //   step totalPositions     → show the leader (acknowledged, but NOT the trophy)
                 //   step totalPositions + 1 → show the eligible winner with the trophy + ineligibility note
                 const extraStep = netLeaderIneligible ? 1 : 0;
+                
+                // Position stingers: each newly revealed place gets its Road Rash call
+                // (#1 first… #4 gets the last-place razz). Plays once per step.
+                const _ns = presentationState.netRevealStep || 0;
+                if (_ns > 0 && _ns <= totalPositions && presentationState._netSoundStep !== _ns) {
+                    presentationState._netSoundStep = _ns;
+                    const _placeRevealed = totalPositions - _ns + 1;
+                    const _sfx = _placeRevealed === 1 ? 'Sounds/road-rash-64-first-place.mp3'
+                        : _placeRevealed === 2 ? 'Sounds/road-rash-64-second-place.mp3'
+                        : _placeRevealed === 3 ? 'Sounds/road-rash-64-third-place.mp3'
+                        : 'Sounds/road-rash-64-last-place.mp3';
+                    setTimeout(() => { try { playSfx(_sfx, 0.85); } catch (e) {} }, 200);
+                }
                 const maxStep = totalPositions + extraStep;
                 const step = Math.min(presentationState.netRevealStep || 0, maxStep);
                 
@@ -16214,7 +16238,8 @@
                 // Kick the loop (idempotent — the tick self-cleans when we leave this slide)
                 setTimeout(() => {
                     try { startClosingSlideshow(photos.length); } catch (e) {}
-                    try { startClosingMusic(); } catch (e) {}
+                    // "Straight Down the Middle" — the end-of-night record player.
+                    try { playSlideTrack('closing', 'Sounds/Straight-down-the-middle-full.mp3', { loop: true, vol: 0.6 }); } catch (e) {}
                 }, 50);
             }
             
@@ -16844,49 +16869,56 @@
             renderPresentation();
         };
         
-        // ─── Presentation music: anthem (title) + closing-slideshow track ───
-        // Both are guarded (no double-start), mute-aware, and fail silently when the
-        // MP3 hasn't been uploaded to Sounds/ yet.
-        window.__anthemAudio = null;
-        window.startAnthem = () => {
-            if (window.__presentationMuted || window.__anthemAudio) return;
-            if (!presentationState.active || presentationState.currentSlide !== 0) return;
+        // ─── Presentation music: one generic slide-track system ───
+        // A slide "owns" at most one track (keyed). Render branches call playSlideTrack;
+        // syncPresentationMusic (run on every slide change, both directions) stops any
+        // track whose slide we've left. Mute-aware; missing MP3s fail silently.
+        window.__slideTrack = null; // { key, audio }
+        window.playSlideTrack = (key, src, opts) => {
+            opts = opts || {};
+            if (window.__presentationMuted) return;
+            if (window.__slideTrack && window.__slideTrack.key === key) return; // already playing
+            window.stopSlideTrack();
             try {
-                const a = new Audio('Sounds/wilhelmus.mp3');
-                a.volume = 0.85;
-                window.__anthemAudio = a;
-                a.play().catch(() => { window.__anthemAudio = null; });
-            } catch (e) { window.__anthemAudio = null; }
+                const a = new Audio(encodeURI(src));
+                a.loop = !!opts.loop;
+                a.volume = (opts.vol != null) ? opts.vol : 0.75;
+                window.__slideTrack = { key, audio: a };
+                a.play().catch(() => { if (window.__slideTrack && window.__slideTrack.key === key) window.__slideTrack = null; });
+            } catch (e) { window.__slideTrack = null; }
         };
-        window.stopAnthem = () => {
-            const a = window.__anthemAudio;
-            if (a) { try { a.pause(); } catch (e) {} window.__anthemAudio = null; }
+        window.stopSlideTrack = () => {
+            const t = window.__slideTrack;
+            if (t) { try { t.audio.pause(); } catch (e) {} window.__slideTrack = null; }
         };
-        window.__closingMusicAudio = null;
-        window.startClosingMusic = () => {
-            if (window.__presentationMuted || window.__closingMusicAudio) return;
+        // One-shot sound effect (position stingers etc.)
+        window.playSfx = (src, vol) => {
+            if (window.__presentationMuted) return;
             try {
-                const a = new Audio('Sounds/closing.mp3');
-                a.loop = true;
-                a.volume = 0.6;
-                window.__closingMusicAudio = a;
-                a.play().catch(() => { window.__closingMusicAudio = null; });
-            } catch (e) { window.__closingMusicAudio = null; }
+                const a = new Audio(encodeURI(src));
+                a.volume = (vol != null) ? vol : 0.9;
+                a.play().catch(() => {});
+            } catch (e) {}
         };
-        window.stopClosingMusic = () => {
-            const a = window.__closingMusicAudio;
-            if (a) { try { a.pause(); } catch (e) {} window.__closingMusicAudio = null; }
+        // Which track key does the current slide own?
+        window.__slideTrackKeyForCurrent = () => {
+            if (!presentationState.active) return null;
+            const cur = presentationState.currentSlide;
+            if (cur === 0) return 'anthem';
+            if (cur === presentationState._fieldSlideIndex) return 'field';
+            if (cur === presentationState._dividerAwardsSlideIndex) return 'divAwards';
+            if (cur === presentationState._dividerMatchesSlideIndex) return 'divMatches';
+            if (cur === presentationState._closingSlideIndex) return 'closing';
+            return null;
         };
-        // Keep the right track for the slide we're on; called on every slide change.
         window.syncPresentationMusic = () => {
-            if (!presentationState.active) { stopAnthem(); stopClosingMusic(); return; }
-            if (presentationState.currentSlide !== 0) stopAnthem();
-            if (presentationState.currentSlide !== presentationState._closingSlideIndex) stopClosingMusic();
+            const key = window.__slideTrackKeyForCurrent();
+            if (window.__slideTrack && window.__slideTrack.key !== key) window.stopSlideTrack();
         };
         
         window.togglePresentationMute = () => {
             window.__presentationMuted = !window.__presentationMuted;
-            if (window.__presentationMuted) { try { stopAnthem(); stopClosingMusic(); } catch (e) {} }
+            if (window.__presentationMuted) { try { stopSlideTrack(); } catch (e) {} }
             // Update the toggle button label if it's currently rendered
             const btn = document.getElementById('presentationMuteToggle');
             if (btn) btn.textContent = window.__presentationMuted ? '🔇' : '🔊';
@@ -17205,21 +17237,19 @@
             'GRINDER':            'Sounds/you-win.mp3',
             'SOLID WIN':          'Sounds/you-win.mp3',
             
-            // Fun awards — keyed by award LABEL (taglines are dynamic for these).
-            // Swap the files as you add themed sounds to the Sounds/ folder.
-            'SNOWMAN OF THE NIGHT': 'Sounds/you-win.mp3',
-            'KABOOM':               'Sounds/you-win.mp3',
-            'FACEPLANT':            'Sounds/you-win.mp3',
-            'SANDBAGGER ALERT':     'Sounds/you-win.mp3',
-            'NEMESIS HOLE':         'Sounds/you-win.mp3',
-            'HOUDINI':              'Sounds/you-win.mp3',
-            'PAR-5 PREDATOR':       'Sounds/you-win.mp3',
-            'GROUNDHOG DAY':        'Sounds/you-win.mp3',
-            'THE PHOTOCOPIER':      'Sounds/you-win.mp3',
-            'VULTURE':              'Sounds/you-win.mp3',
-            'JEKYLL & HYDE':        'Sounds/you-win.mp3',
-            // Swap to a royal fanfare MP3 (e.g. Sounds/king.mp3) when you upload one.
-            'LONG LIVE THE KING':   'Sounds/you-win.mp3'
+            // Fun awards — themed to Ron's Sounds/ library.
+            'SNOWMAN OF THE NIGHT': 'Sounds/priceisrightfail_1.mp3',
+            'KABOOM':               'Sounds/punch-gaming-sound-effect-hd_RzlG1GE.mp3',
+            'FACEPLANT':            'Sounds/priceisrightfail_1.mp3',
+            'SANDBAGGER ALERT':     'Sounds/cheering.mp3',
+            'NEMESIS HOLE':         'Sounds/prison-cell-door-lock.mp3',
+            'HOUDINI':              'Sounds/magic-fairy.mp3',
+            'PAR-5 PREDATOR':       'Sounds/nsmb-new-high-score.mp3',
+            'GROUNDHOG DAY':        'Sounds/mario-sonic-olympics-channel-menu.mp3',
+            'THE PHOTOCOPIER':      'Sounds/camera_zLdd1zp.mp3',
+            'VULTURE':              'Sounds/golfclap.mp3',
+            'JEKYLL & HYDE':        'Sounds/whoosh-wind.mp3',
+            'LONG LIVE THE KING':   'Sounds/road-rash-64-first-place.mp3'
         };
         
         // Cache for Audio elements so they don't reload on every play
@@ -18022,7 +18052,7 @@
         };
 
         window.closePresentationMode = () => {
-            try { stopAnthem(); stopClosingMusic(); } catch (e) {}
+            try { stopSlideTrack(); } catch (e) {}
             const presentationDiv = document.getElementById('presentationMode');
             if (presentationDiv) {
                 presentationDiv.remove();
