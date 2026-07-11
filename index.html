@@ -553,6 +553,33 @@
             50%  { transform: rotate(180deg) scale(1.15); }
             100% { transform: rotate(360deg) scale(1); }
         }
+        /* ─── Sound admin toast (subtle, bottom-left) ─── */
+        .sound-admin-toast {
+            position: fixed; left: 14px; bottom: 14px; z-index: 9500;
+            transition: opacity 0.5s ease; font-family: inherit;
+        }
+        .sound-admin-pill {
+            display: inline-block; cursor: pointer;
+            background: rgba(15, 23, 42, 0.55); border: 1px solid rgba(255,255,255,0.14);
+            color: rgba(255,255,255,0.55); font-size: 11px; font-weight: 600;
+            padding: 4px 10px; border-radius: 999px; letter-spacing: 0.3px;
+            backdrop-filter: blur(4px);
+        }
+        .sound-admin-panel {
+            position: absolute; left: 0; bottom: 30px; width: 280px;
+            background: rgba(15, 23, 42, 0.96); border: 1px solid rgba(165,180,252,0.35);
+            border-radius: 12px; padding: 12px; box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+        }
+        .sound-admin-slot {
+            color: #a5b4fc; font-size: 10px; font-weight: 800; letter-spacing: 1.5px;
+            text-transform: uppercase; margin-bottom: 6px;
+        }
+        .sound-admin-panel select {
+            width: 100%; background: #1e293b; color: white; border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 8px; padding: 8px; font-size: 13px;
+        }
+        .sound-admin-note { color: rgba(255,255,255,0.35); font-size: 10px; margin-top: 6px; }
+        
         /* ─── Dutch flag wave (title page) ─── */
         @keyframes nl-flag-sway {
             0%, 100% { transform: rotateZ(0deg) skewY(0.6deg); }
@@ -651,7 +678,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.07.10.1';
+        const APP_VERSION = '2026.07.10.2';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -12974,7 +13001,7 @@
                         setTimeout(() => {
                             // Signature track for the Champion Golfer of the Day reveal.
                             if (typeof playMp3File === 'function') {
-                                try { playMp3File('Sounds/All-I-do-is-win.mp3', 0.8); } catch (e) {}
+                                try { playMp3File('Sounds/All-I-do-is-win.mp3', 0.8, 'CHAMPION SONG'); } catch (e) {}
                             }
                         }, 200);
                     }
@@ -14888,7 +14915,8 @@
                         : _placeRevealed === 2 ? 'Sounds/road-rash-64-second-place.mp3'
                         : _placeRevealed === 3 ? 'Sounds/road-rash-64-third-place.mp3'
                         : 'Sounds/road-rash-64-last-place.mp3';
-                    setTimeout(() => { try { playSfx(_sfx, 0.85); } catch (e) {} }, 200);
+                    const _slot = 'NET COUNTDOWN #' + _placeRevealed;
+                    setTimeout(() => { try { playSfx(_slot, _sfx, 0.85); } catch (e) {} }, 200);
                 }
                 const maxStep = totalPositions + extraStep;
                 const step = Math.min(presentationState.netRevealStep || 0, maxStep);
@@ -16869,6 +16897,111 @@
             renderPresentation();
         };
         
+        // ─── SOUND ADMIN: live slot overrides + audition toast ───
+        // Every sound in the deck plays through a named SLOT. After a sound fires, a small
+        // pill appears bottom-left with the clip name for a few seconds; tapping it opens a
+        // panel with the full Sounds/ library so the clip for that slot can be swapped LIVE.
+        // Choices persist on this device (localStorage) and survive file renames: if a
+        // default 404s after a rename, the pill still appears — pick the new file, done.
+        window.__soundLibrary = [];
+        (function loadSoundLibrary() {
+            try {
+                fetch('https://api.github.com/repos/ronmooibroek/DutchCup/contents/Sounds')
+                    .then(r => r.ok ? r.json() : [])
+                    .then(items => {
+                        if (Array.isArray(items)) {
+                            window.__soundLibrary = items
+                                .filter(i => i && i.type === 'file' && /\.mp3$/i.test(i.name))
+                                .map(i => i.name)
+                                .sort((a, b) => a.localeCompare(b));
+                        }
+                    })
+                    .catch(() => {});
+            } catch (e) {}
+        })();
+        window.__soundOverrides = (() => {
+            try { return JSON.parse(localStorage.getItem('dcSoundOverrides') || '{}'); }
+            catch (e) { return {}; }
+        })();
+        window.saveSoundOverrides = () => {
+            try { localStorage.setItem('dcSoundOverrides', JSON.stringify(window.__soundOverrides)); } catch (e) {}
+        };
+        // slot + built-in default → the src that should actually play (null = muted slot)
+        window.resolveSoundSrc = (slot, defaultSrc) => {
+            const o = window.__soundOverrides[slot];
+            if (o === '__none__') return null;
+            if (o) return 'Sounds/' + o;
+            return defaultSrc;
+        };
+        window.__lastSlotPlay = {}; // slot → { kind, defaultSrc, opts/vol } for auditioning
+        
+        window.__soundToastTimer = null;
+        window.notifySoundPlayed = (slot, resolvedSrc) => {
+            try {
+                let toast = document.getElementById('soundAdminToast');
+                if (!toast) {
+                    toast = document.createElement('div');
+                    toast.id = 'soundAdminToast';
+                    toast.className = 'sound-admin-toast';
+                    document.body.appendChild(toast);
+                }
+                const fileName = resolvedSrc ? resolvedSrc.replace(/^Sounds\//, '') : '(muted for this slot)';
+                toast.dataset.slot = slot;
+                toast.innerHTML = `
+                    <div class="sound-admin-pill" onclick="toggleSoundAdminPanel()">🔊 ${fileName}</div>
+                    <div class="sound-admin-panel" id="soundAdminPanel" style="display:none;"></div>
+                `;
+                toast.style.display = 'block';
+                toast.style.opacity = '1';
+                if (window.__soundToastTimer) clearTimeout(window.__soundToastTimer);
+                window.__soundToastTimer = setTimeout(() => {
+                    const panel = document.getElementById('soundAdminPanel');
+                    if (panel && panel.style.display !== 'none') return; // keep while editing
+                    toast.style.opacity = '0';
+                    setTimeout(() => { if (toast.style.opacity === '0') toast.style.display = 'none'; }, 500);
+                }, 6000);
+            } catch (e) {}
+        };
+        window.toggleSoundAdminPanel = () => {
+            const toast = document.getElementById('soundAdminToast');
+            const panel = document.getElementById('soundAdminPanel');
+            if (!toast || !panel) return;
+            if (panel.style.display !== 'none') { panel.style.display = 'none'; return; }
+            const slot = toast.dataset.slot;
+            const cur = window.__soundOverrides[slot] || '';
+            const rec = window.__lastSlotPlay[slot] || {};
+            const defName = rec.defaultSrc ? rec.defaultSrc.replace(/^Sounds\//, '') : '(none built in)';
+            const opts = ['<option value="">(default: ' + defName + ')</option>']
+                .concat((window.__soundLibrary || []).map(n =>
+                    `<option value="${n.replace(/"/g, '&quot;')}" ${cur === n ? 'selected' : ''}>${n}</option>`))
+                .concat([`<option value="__none__" ${cur === '__none__' ? 'selected' : ''}>🔇 none (mute this slot)</option>`]);
+            panel.innerHTML = `
+                <div class="sound-admin-slot">${slot}</div>
+                <select onchange="applySoundOverride('${slot.replace(/'/g, "\\'")}', this.value)">${opts.join('')}</select>
+                <div class="sound-admin-note">${window.__soundLibrary.length ? window.__soundLibrary.length + ' clips in library' : 'library list unavailable'}</div>
+            `;
+            panel.style.display = 'block';
+            if (window.__soundToastTimer) clearTimeout(window.__soundToastTimer);
+        };
+        window.applySoundOverride = (slot, value) => {
+            if (value === '') delete window.__soundOverrides[slot];
+            else window.__soundOverrides[slot] = value;
+            window.saveSoundOverrides();
+            // Audition the new choice immediately through the same path it normally plays.
+            const rec = window.__lastSlotPlay[slot];
+            if (!rec) { window.notifySoundPlayed(slot, window.resolveSoundSrc(slot, null)); return; }
+            if (rec.kind === 'track') {
+                window.stopSlideTrack();
+                window.playSlideTrack(slot, rec.defaultSrc, rec.opts || {});
+            } else if (rec.kind === 'sfx') {
+                window.playSfx(slot, rec.defaultSrc, rec.vol);
+            } else if (rec.kind === 'badge') {
+                window.playBadgeSound(slot);
+            } else if (rec.kind === 'mp3') {
+                window.playMp3File(rec.defaultSrc, rec.vol, slot);
+            }
+        };
+        
         // ─── Presentation music: one generic slide-track system ───
         // A slide "owns" at most one track (keyed). Render branches call playSlideTrack;
         // syncPresentationMusic (run on every slide change, both directions) stops any
@@ -16876,11 +17009,15 @@
         window.__slideTrack = null; // { key, audio }
         window.playSlideTrack = (key, src, opts) => {
             opts = opts || {};
+            window.__lastSlotPlay[key] = { kind: 'track', defaultSrc: src, opts };
             if (window.__presentationMuted) return;
             if (window.__slideTrack && window.__slideTrack.key === key) return; // already playing
             window.stopSlideTrack();
+            const resolved = window.resolveSoundSrc(key, src);
+            window.notifySoundPlayed(key, resolved);
+            if (!resolved) return;
             try {
-                const a = new Audio(encodeURI(src));
+                const a = new Audio(encodeURI(resolved));
                 a.loop = !!opts.loop;
                 a.volume = (opts.vol != null) ? opts.vol : 0.75;
                 window.__slideTrack = { key, audio: a };
@@ -16891,11 +17028,15 @@
             const t = window.__slideTrack;
             if (t) { try { t.audio.pause(); } catch (e) {} window.__slideTrack = null; }
         };
-        // One-shot sound effect (position stingers etc.)
-        window.playSfx = (src, vol) => {
+        // One-shot sound effect (position stingers etc.), slot-addressable.
+        window.playSfx = (slot, src, vol) => {
+            window.__lastSlotPlay[slot] = { kind: 'sfx', defaultSrc: src, vol };
             if (window.__presentationMuted) return;
+            const resolved = window.resolveSoundSrc(slot, src);
+            window.notifySoundPlayed(slot, resolved);
+            if (!resolved) return;
             try {
-                const a = new Audio(encodeURI(src));
+                const a = new Audio(encodeURI(resolved));
                 a.volume = (vol != null) ? vol : 0.9;
                 a.play().catch(() => {});
             } catch (e) {}
@@ -17369,13 +17510,16 @@
             try {
                 if (window.__presentationMuted) return;
                 const key = (tagline || 'DEFAULT').toString().toUpperCase().trim();
-                const file = window.__badgeSoundMap[key] || window.__badgeSoundMap['DEFAULT'];
+                const mapped = window.__badgeSoundMap[key] || window.__badgeSoundMap['DEFAULT'];
+                window.__lastSlotPlay[key] = { kind: 'badge', defaultSrc: mapped };
+                const file = window.resolveSoundSrc(key, mapped);
+                window.notifySoundPlayed(key, file);
                 if (!file) return;
                 
                 // Reuse cached Audio if available (better for rapid replays)
                 let audio = window.__badgeAudioCache[file];
                 if (!audio) {
-                    audio = new Audio(file);
+                    audio = new Audio(encodeURI(file));
                     audio.preload = 'auto';
                     audio.volume = 0.7;
                     window.__badgeAudioCache[file] = audio;
@@ -17432,13 +17576,18 @@
         // ─── Generic MP3 player ───
         // Plays an arbitrary MP3 by path (e.g. 'Sounds/All-I-do-is-win.mp3'), honoring the app-wide
         // mute and caching the Audio element for replays. Used for slide-specific signature tracks.
-        window.playMp3File = (file, volume) => {
+        window.playMp3File = (file, volume, slot) => {
             try {
+                if (slot) {
+                    window.__lastSlotPlay[slot] = { kind: 'mp3', defaultSrc: file, vol: volume };
+                    file = window.resolveSoundSrc(slot, file);
+                    window.notifySoundPlayed(slot, file);
+                }
                 if (window.__presentationMuted) return;
                 if (!file) return;
                 let audio = window.__badgeAudioCache[file];
                 if (!audio) {
-                    audio = new Audio(file);
+                    audio = new Audio(encodeURI(file));
                     audio.preload = 'auto';
                     window.__badgeAudioCache[file] = audio;
                 }
