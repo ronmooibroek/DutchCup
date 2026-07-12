@@ -556,7 +556,11 @@
         /* ─── Sound admin toast (subtle, bottom-left) ─── */
         .sound-admin-toast {
             position: fixed; left: 14px; bottom: 14px; z-index: 9500;
-            transition: opacity 0.5s ease; font-family: inherit;
+            transition: opacity 0.4s ease; font-family: inherit;
+            pointer-events: none; /* never intercept navigation taps… */
+        }
+        .sound-admin-pill, .sound-admin-panel {
+            pointer-events: auto; /* …except on the pill and its panel themselves */
         }
         .sound-admin-pill {
             display: inline-block; cursor: pointer;
@@ -681,7 +685,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.07.10.3';
+        const APP_VERSION = '2026.07.10.4';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -11159,6 +11163,8 @@
                     },
                     // Bracket dramatic reveal data
                     bracketMatchSlides: bracketMatchSlides,
+                    // Ordinal of tonight's round within the event (for the flag/title page)
+                    eventRoundNumber: (eventRounds || []).findIndex(r => r.id === mostRecentRound.id) + 1,
                     bracketHasFallback: bracketHasFallback,
                     bracketCurrentStateData: bracketCurrentStateData,
                     hasBracketIntroSlide: hasBracketIntroSlide,
@@ -12054,6 +12060,21 @@
                         <h1 style="color:white;font-size:clamp(42px, 6vw, 68px);font-weight:900;letter-spacing:4px;margin:0 0 8px;text-shadow:0 6px 30px rgba(0,0,0,0.8);animation:slideUp 0.8s 0.3s ease-out both;">
                             ${eventName}
                         </h1>
+                        ${(() => {
+                            // Round details: where, when, and which round of the event this is.
+                            const bits = [];
+                            if (mostRecentRound.courseName) bits.push('📍 ' + mostRecentRound.courseName);
+                            if (mostRecentRound.date) {
+                                const d = new Date(mostRecentRound.date + 'T12:00:00');
+                                if (!isNaN(d)) bits.push('📅 ' + d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }));
+                            }
+                            const rn = presentationState.eventRoundNumber || 0;
+                            if (rn > 0 && totalRounds > 0) bits.push('⛳ Round ' + rn + ' of ' + totalRounds);
+                            return bits.length ? `
+                                <p style="color:rgba(255,255,255,0.85);font-size:17px;font-weight:600;letter-spacing:1px;margin:2px 0 14px;animation:fadeIn 1s 0.6s ease-out both;">
+                                    ${bits.join('&nbsp;&nbsp;·&nbsp;&nbsp;')}
+                                </p>` : '';
+                        })()}
                         <p style="color:#fbbf24;font-size:17px;font-weight:700;letter-spacing:6px;text-transform:uppercase;margin:0 0 6px;animation:fadeIn 1s 0.8s ease-out both;">
                             🎺 Het Wilhelmus
                         </p>
@@ -17005,12 +17026,13 @@
                 toast.style.display = 'block';
                 toast.style.opacity = '1';
                 if (window.__soundToastTimer) clearTimeout(window.__soundToastTimer);
+                toast.style.pointerEvents = 'none'; // container never blocks; pill/panel opt back in
                 window.__soundToastTimer = setTimeout(() => {
                     const panel = document.getElementById('soundAdminPanel');
                     if (panel && panel.style.display !== 'none') return; // keep while editing
                     toast.style.opacity = '0';
-                    setTimeout(() => { if (toast.style.opacity === '0') toast.style.display = 'none'; }, 500);
-                }, 6000);
+                    setTimeout(() => { if (toast.style.opacity === '0') toast.style.display = 'none'; }, 400);
+                }, 2200);
             } catch (e) {}
         };
         window.toggleSoundAdminPanel = () => {
