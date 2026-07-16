@@ -708,7 +708,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.07.12.2';
+        const APP_VERSION = '2026.07.13.1';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -1517,13 +1517,27 @@
             if (posBefore != null) chips.push(stat('Standing', '#' + posBefore, '#fbbf24'));
             if (block.prevWinProbability != null) chips.push(stat('Win Odds', block.prevWinProbability.toFixed(1) + '%', '#a5b4fc'));
             const sep = '<div style="width:1px;height:54px;background:rgba(255,255,255,0.15);"></div>';
+            // Player profile pictures — the faces about to be revealed.
+            const playersHTML = (block.players || []).map((p, i) => {
+                const sp = state.players.find(x => x.id === p.playerId)
+                    || { id: p.playerId, name: p.playerName };
+                return `
+                    <div style="display:flex;flex-direction:column;align-items:center;gap:8px;animation:scaleIn 0.6s ${0.55 + i * 0.15}s ease-out both;">
+                        <div style="border:3px solid ${block.teamColor};border-radius:50%;padding:3px;box-shadow:0 6px 20px rgba(0,0,0,0.4);">
+                            ${renderAvatar(sp, 96)}
+                        </div>
+                        <div style="color:white;font-size:17px;font-weight:700;text-shadow:0 2px 8px rgba(0,0,0,0.6);">${sp.name || p.playerName || '?'}</div>
+                    </div>
+                `;
+            }).join('');
             return `
                 <div style="animation:fadeIn 0.6s ease-out;max-width:900px;width:100%;text-align:center;">
-                    <div style="color:rgba(255,255,255,0.55);font-size:15px;font-weight:700;letter-spacing:4px;text-transform:uppercase;margin-bottom:22px;animation:slideUp 0.6s ease-out;">Now revealing</div>
-                    <div style="display:flex;justify-content:center;margin-bottom:20px;animation:scaleIn 0.7s 0.1s ease-out both;">${logoHTML}</div>
-                    <h1 style="color:white;font-size:clamp(44px,6vw,72px);font-weight:900;letter-spacing:1px;margin:0 0 8px;text-shadow:0 6px 30px rgba(0,0,0,0.7);animation:slideUp 0.7s 0.2s ease-out both;">${block.teamName}</h1>
-                    <div style="color:rgba(255,255,255,0.5);font-size:15px;font-weight:600;margin-bottom:28px;animation:fadeIn 1s 0.5s ease-out both;">Entering tonight</div>
-                    <div style="display:inline-flex;align-items:center;gap:0;background:rgba(255,255,255,0.05);border-radius:16px;padding:20px 10px;animation:rrCardIn 0.7s 0.4s ease-out both;">
+                    <div style="color:rgba(255,255,255,0.55);font-size:15px;font-weight:700;letter-spacing:4px;text-transform:uppercase;margin-bottom:18px;animation:slideUp 0.6s ease-out;">Now revealing</div>
+                    <div style="display:flex;justify-content:center;margin-bottom:18px;animation:scaleIn 0.7s 0.1s ease-out both;">${logoHTML}</div>
+                    <h1 style="color:white;font-size:clamp(40px,5.5vw,66px);font-weight:900;letter-spacing:1px;margin:0 0 8px;text-shadow:0 6px 30px rgba(0,0,0,0.7);animation:slideUp 0.7s 0.2s ease-out both;">${block.teamName}</h1>
+                    ${playersHTML ? `<div style="display:flex;justify-content:center;gap:36px;flex-wrap:wrap;margin:22px 0 24px;">${playersHTML}</div>` : ''}
+                    <div style="color:rgba(255,255,255,0.5);font-size:14px;font-weight:600;margin-bottom:18px;animation:fadeIn 1s 0.7s ease-out both;">Entering tonight</div>
+                    <div style="display:inline-flex;align-items:center;gap:0;background:rgba(255,255,255,0.05);border-radius:16px;padding:18px 10px;animation:rrCardIn 0.7s 0.6s ease-out both;">
                         ${chips.join(sep)}
                     </div>
                 </div>
@@ -1617,7 +1631,14 @@
                         <div style="flex:1;min-width:0;">
                             <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
                                 <div style="color:white;font-size:20px;font-weight:800;">${st.name || 'Team'}</div>
-                                <div style="color:white;font-size:15px;font-weight:600;">${t.points || 0} pts</div>
+                                <div style="display:flex;align-items:baseline;gap:10px;">
+                                    ${(() => {
+                                        const blk = (presentationState._revealBlocks || []).find(b => b.teamId == t.id);
+                                        return (blk && blk.tonightPts != null)
+                                            ? `<span style="color:#10b981;font-size:13px;font-weight:800;">+${blk.tonightPts} tonight</span>` : '';
+                                    })()}
+                                    <div style="color:white;font-size:15px;font-weight:600;">${t.points || 0} pts</div>
+                                </div>
                             </div>
                             <div style="height:22px;background:rgba(255,255,255,0.08);border-radius:6px;overflow:hidden;position:relative;">
                                 <div style="height:100%;width:${(prob / maxProb) * 100}%;background:linear-gradient(90deg,${color}cc,${color});border-radius:6px;transform-origin:left;animation:rrBarGrow 0.9s ${0.4 + i * 0.22}s cubic-bezier(0.22,1,0.36,1) both;"></div>
@@ -1634,6 +1655,17 @@
                         <div style="font-size:52px;line-height:1;margin-bottom:8px;">🏆</div>
                         <h1 style="color:white;font-size:clamp(34px,4.5vw,52px);font-weight:900;margin:0;text-shadow:0 4px 20px rgba(0,0,0,0.5);">The State of the Cup</h1>
                         <p style="color:#a5b4fc;font-size:14px;font-weight:600;letter-spacing:2px;text-transform:uppercase;margin:6px 0 0;">Standings &amp; chances of winning it all</p>
+                        ${(() => {
+                            const done = presentationState.eventRoundNumber || 0;
+                            const total = presentationState.totalRounds || 0;
+                            if (!done || !total) return '';
+                            const left = Math.max(0, total - done);
+                            return `<div style="display:inline-flex;align-items:center;gap:10px;margin-top:14px;padding:8px 18px;border-radius:999px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);">
+                                <span style="color:white;font-size:14px;font-weight:800;">⛳ Round ${done} of ${total} complete</span>
+                                <span style="color:rgba(255,255,255,0.35);">·</span>
+                                <span style="color:${left === 0 ? '#fbbf24' : '#a5b4fc'};font-size:14px;font-weight:800;">${left === 0 ? '🏁 Season over — final standings!' : left + ' round' + (left === 1 ? '' : 's') + ' to play'}</span>
+                            </div>`;
+                        })()}
                     </div>
                     ${rows}
                     <p style="color:rgba(255,255,255,0.4);font-size:12px;text-align:center;margin-top:20px;font-style:italic;">Win odds from a Monte Carlo simulation of the remaining rounds.</p>
@@ -7821,8 +7853,7 @@
             { stepKey: 'netRevealStep',        indexKey: '_netSlideIndex',        countKey: '_netTopCount' },
             { stepKey: 'ctpLeadersRevealStep', indexKey: '_ctpLeadersSlideIndex', countKey: '_ctpLeadersCount' },
             { stepKey: 'bbbLeadersRevealStep', indexKey: '_bbbLeadersSlideIndex', countKey: '_bbbLeadersCount' },
-            { stepKey: 'byNumbersRevealStep',  indexKey: '_byNumbersSlideIndex',  maxStep: 3 },
-            { stepKey: 'holePerfRevealStep',   indexKey: '_holePerfSlideIndex',   maxStep: 1 }
+            { stepKey: 'byNumbersRevealStep',  indexKey: '_byNumbersSlideIndex',  maxStep: 3 }
         ];
         const uniformRevealMax = (r) => (r.maxStep != null) ? r.maxStep : (presentationState[r.countKey] || 0);
 
@@ -8643,7 +8674,33 @@
                         if (p.totalPoints >= individualPlayerSlides[ci].totalPoints) ci = i;
                     });
                     
-                    return { blocks, seq, championIndex: ci };
+                    // ── Round difficulty: tonight's average net-to-par vs the event norm ──
+                    const netToParForRound = (r) => {
+                        const par = (r.pars || []).reduce((s, p) => s + (parseInt(p) || 0), 0);
+                        const vals = [];
+                        (r.teams || []).forEach(team => (team.players || []).forEach(pl => {
+                            const scored = (pl.scores || []).filter(s => parseInt(s) > 0);
+                            if (scored.length < 16) return;
+                            const gross = (pl.scores || []).reduce((s, x) => s + (parseInt(x) || 0), 0);
+                            const sp = state.players.find(x => x.id === pl.id);
+                            const effHc = getPlayerHandicapForRound(sp, r, pl);
+                            vals.push((gross - effHc) - par);
+                        }));
+                        return vals;
+                    };
+                    let _tonightVals = netToParForRound(mostRecentRound);
+                    let _allVals = _tonightVals.slice();
+                    previousRounds.forEach(r => { _allVals = _allVals.concat(netToParForRound(r)); });
+                    const _avg = (a) => a.length ? a.reduce((s, v) => s + v, 0) / a.length : null;
+                    const roundDifficulty = {
+                        tonightToPar: _avg(_tonightVals),
+                        eventToPar: _avg(_allVals),
+                        tonightCount: _tonightVals.length,
+                        totalPlayerRounds: _allVals.length,
+                        roundsCount: previousRounds.length + 1
+                    };
+                    
+                    return { blocks, seq, championIndex: ci, roundDifficulty };
                 })();
                 
                 // Calculate individual awards from today's round
@@ -9907,33 +9964,11 @@
                         return out;
                     };
                     
-                    // ❄ SNOWMAN — worst single-hole gross in the field
-                    A.snowman = (() => {
-                        const w = crown(f => {
-                            let worst = null;
-                            f.holes.forEach(h => { if (!worst || h.gross > worst.gross) worst = h; });
-                            return worst ? { v: worst.gross, gross: worst.gross, par: worst.par, holeIdx: worst.idx, holes: [worst.idx] } : null;
-                        }, (a, b) => a > b);
-                        return (w.length && w[0].gross >= 7) ? w : null; // needs to be genuinely ugly
-                    })();
+                    // (snowman retired — negative-leaning, removed by request)
+
                     
-                    // 💥 KABOOM — biggest single-hole blow-up vs the field's average on that hole
-                    A.kaboom = (() => {
-                        const w = crown(f => {
-                            let boom = null;
-                            f.holes.forEach(h => {
-                                const avg = fieldAvg[h.idx];
-                                if (avg == null) return;
-                                const over = h.gross - avg;
-                                if (!boom || over > boom.over) boom = { over, h };
-                            });
-                            if (!boom || boom.over < 2.5) return null; // must be a real detonation
-                            return { v: Math.round(boom.over * 10) / 10, over: boom.over.toFixed(1),
-                                     gross: boom.h.gross, avg: fieldAvg[boom.h.idx].toFixed(1),
-                                     holeIdx: boom.h.idx, holes: [boom.h.idx] };
-                        }, (a, b) => a > b);
-                        return w.length ? w : null;
-                    })();
+                    // (kaboom retired — negative-leaning, removed by request)
+
                     
                     // 📉 FACEPLANT — hot front nine (top-3 in the field), then the biggest back-nine collapse
                     A.faceplant = (() => {
@@ -9969,39 +10004,8 @@
                         return (w.length && w[0].netToPar <= -3) ? w : null;
                     })();
                     
-                    // 😈 NEMESIS HOLE — event-long: the single hole that has cost a player the most strokes vs par
-                    A.nemesisHole = (() => {
-                        const damageByPlayer = {}; // playerId → { name, team, teamColor, holes: {idx: dmg} }
-                        (eventRounds || []).forEach(r => {
-                            if (!r || !Array.isArray(r.pars)) return;
-                            (r.teams || []).forEach(team => {
-                                (team.players || []).forEach(pl => {
-                                    if (!Array.isArray(pl.scores)) return;
-                                    pl.scores.forEach((score, idx) => {
-                                        const g = parseInt(score);
-                                        const par = r.pars[idx];
-                                        if (!g || !par || g <= par) return;
-                                        const rec = damageByPlayer[pl.id] = damageByPlayer[pl.id]
-                                            || { name: pl.name, holes: {} };
-                                        rec.holes[idx] = (rec.holes[idx] || 0) + (g - par);
-                                    });
-                                });
-                            });
-                        });
-                        let best = null;
-                        Object.keys(damageByPlayer).forEach(pid => {
-                            const rec = damageByPlayer[pid];
-                            Object.keys(rec.holes).forEach(idx => {
-                                const dmg = rec.holes[idx];
-                                if (!best || dmg > best.dmg) best = { pid, name: rec.name, holeIdx: parseInt(idx), dmg };
-                            });
-                        });
-                        if (!best || best.dmg < 5) return null;
-                        const perf = allPlayerPerformances.find(p => p.playerId == best.pid);
-                        if (!perf) return null; // nemesis belongs to someone not playing tonight — skip
-                        return [{ player: perf.playerName, team: perf.teamName, teamColor: perf.teamColor,
-                                  holeIdx: best.holeIdx, damage: best.dmg, holes: [best.holeIdx] }];
-                    })();
+                    // (nemesisHole retired — negative-leaning, removed by request)
+
                     
                     // 🎩 HOUDINI — best single NET hole of the night
                     A.houdini = (() => {
@@ -10093,6 +10097,102 @@
                         if (bestN < 2) return null;
                         return out.map(rec => ({ player: rec.f.player, team: rec.f.team, teamColor: rec.f.teamColor,
                                                  count: rec.n, holes: rec.holes }));
+                    })();
+                    
+                    // 🍯 HONEY POT — all three B's (Bingo+Bango+Bongo) on one hole.
+                    // Badge shows the player's CAREER pot count across the event.
+                    A.honeyPot = (() => {
+                        const potsIn = (r, pid) => {
+                            let n = 0, holes = [];
+                            (r.bbbAwards || []).forEach(e => {
+                                if (!e || e.holeIdx == null) return;
+                                if (String(e.bingo) === String(pid) && String(e.bango) === String(pid) && String(e.bongo) === String(pid)) {
+                                    n++; holes.push(e.holeIdx);
+                                }
+                            });
+                            return { n, holes };
+                        };
+                        const winners = [];
+                        FUN.forEach(f => {
+                            const tonight = potsIn(mostRecentRound, f.playerId);
+                            if (tonight.n === 0) return;
+                            let career = tonight.n;
+                            previousRounds.forEach(r => { career += potsIn(r, f.playerId).n; });
+                            winners.push({ player: f.player, team: f.team, teamColor: f.teamColor,
+                                           count: tonight.n, career, holes: tonight.holes });
+                        });
+                        return winners.length ? winners : null;
+                    })();
+                    
+                    // 🦊 SWIPER — most B points collected on holes where they had the group's
+                    // CLEARLY worst gross (strictly worse than every group-mate).
+                    // 🚨 I'VE BEEN ROBBED — most holes with the group's CLEARLY best gross and ZERO B's.
+                    (() => {
+                        if (!Array.isArray(mostRecentRound.bbbAwards) || mostRecentRound.bbbAwards.length === 0) {
+                            A.swiper = null; A.robbed = null; return;
+                        }
+                        // pid → groupNumber (falls back to one big group if absent)
+                        const groupOf = {};
+                        mostRecentRound.teams.forEach(t => (t.players || []).forEach(pl => {
+                            groupOf[String(pl.id)] = (pl.groupNumber != null) ? pl.groupNumber : 0;
+                        }));
+                        const grossOn = {};
+                        FUN.forEach(f => {
+                            grossOn[String(f.playerId)] = {};
+                            f.holes.forEach(h => { grossOn[String(f.playerId)][h.idx] = h.gross; });
+                        });
+                        const peersOf = (pid) => FUN.filter(f =>
+                            String(f.playerId) !== String(pid)
+                            && groupOf[String(f.playerId)] === groupOf[String(pid)]);
+                        const clearlyWorst = (pid, holeIdx) => {
+                            const mine = grossOn[String(pid)] && grossOn[String(pid)][holeIdx];
+                            if (mine == null) return false;
+                            const peers = peersOf(pid).map(f => grossOn[String(f.playerId)][holeIdx]).filter(v => v != null);
+                            return peers.length > 0 && peers.every(v => mine > v);
+                        };
+                        const clearlyBest = (pid, holeIdx) => {
+                            const mine = grossOn[String(pid)] && grossOn[String(pid)][holeIdx];
+                            if (mine == null) return false;
+                            const peers = peersOf(pid).map(f => grossOn[String(f.playerId)][holeIdx]).filter(v => v != null);
+                            return peers.length > 0 && peers.every(v => mine < v);
+                        };
+                        // B points per player per hole
+                        const bOn = {}; // pid → { holeIdx: n }
+                        mostRecentRound.bbbAwards.forEach(e => {
+                            if (!e || e.holeIdx == null) return;
+                            ['bingo', 'bango', 'bongo'].forEach(slot => {
+                                const pid = e[slot];
+                                if (pid === '' || pid == null) return;
+                                const k = String(pid);
+                                if (!bOn[k]) bOn[k] = {};
+                                bOn[k][e.holeIdx] = (bOn[k][e.holeIdx] || 0) + 1;
+                            });
+                        });
+                        // SWIPER
+                        let swBest = 0, swOut = [];
+                        FUN.forEach(f => {
+                            const mine = bOn[String(f.playerId)] || {};
+                            let n = 0; const holes = [];
+                            Object.keys(mine).forEach(hi => {
+                                const idx = parseInt(hi);
+                                if (clearlyWorst(f.playerId, idx)) { n += mine[hi]; holes.push(idx); }
+                            });
+                            if (n > swBest) { swBest = n; swOut = [{ player: f.player, team: f.team, teamColor: f.teamColor, count: n, holes }]; }
+                            else if (n === swBest && n > 0) swOut.push({ player: f.player, team: f.team, teamColor: f.teamColor, count: n, holes });
+                        });
+                        A.swiper = (swBest >= 2) ? swOut : null;
+                        // ROBBED
+                        let rbBest = 0, rbOut = [];
+                        FUN.forEach(f => {
+                            const mine = bOn[String(f.playerId)] || {};
+                            let n = 0; const holes = [];
+                            f.holes.forEach(h => {
+                                if (clearlyBest(f.playerId, h.idx) && !(mine[h.idx] > 0)) { n++; holes.push(h.idx); }
+                            });
+                            if (n > rbBest) { rbBest = n; rbOut = [{ player: f.player, team: f.team, teamColor: f.teamColor, count: n, holes }]; }
+                            else if (n === rbBest && n > 0) rbOut.push({ player: f.player, team: f.team, teamColor: f.teamColor, count: n, holes });
+                        });
+                        A.robbed = (rbBest >= 3) ? rbOut : null;
                     })();
                     
                     // ⚗️ JEKYLL & HYDE — biggest front/back gross split, either direction
@@ -10230,18 +10330,6 @@
                           } },
                         
                         // ─── FUN AWARDS (the eleven) ───
-                        { key: 'snowman', label: 'SNOWMAN OF THE NIGHT', emoji: '⛄',
-                          color: '#7dd3fc', flair: 'snow',
-                          tagline: w => `A ${w.gross} on hole ${w.holeIdx + 1}`,
-                          description: 'The single ugliest hole in the entire field tonight. It happens to everyone — but tonight it happened to you, biggest.',
-                          detail: w => `Par ${w.par} · gross ${w.gross}`,
-                          holes: w => w.holes, highlightLabel: 'The Scene of the Crime' },
-                        { key: 'kaboom', label: 'KABOOM', emoji: '💥',
-                          color: '#f97316', flair: 'boom',
-                          tagline: w => `+${w.over} strokes over the field on one hole`,
-                          description: 'The biggest single-hole detonation relative to what everyone else did there. The field walked through; you set off fireworks.',
-                          detail: w => `Hole ${w.holeIdx + 1}: you ${w.gross}, field avg ${w.avg}`,
-                          holes: w => w.holes, highlightLabel: 'Ground Zero' },
                         { key: 'faceplant', label: 'FACEPLANT', emoji: '📉',
                           color: '#ef4444', flair: 'tumble',
                           tagline: w => `Front ${w.front} → back ${w.back}`,
@@ -10254,12 +10342,6 @@
                           description: 'Played suspiciously far above their handicap tonight. The committee has been notified. The committee is also impressed.',
                           detail: w => `Net ${Math.abs(w.netToPar)} under net par`,
                           highlightLabel: '' },
-                        { key: 'nemesisHole', label: 'NEMESIS HOLE', emoji: '😈',
-                          color: '#dc2626', flair: 'devil',
-                          tagline: w => `Hole ${w.holeIdx + 1} owes them money`,
-                          description: 'The single hole that has cost this player the most strokes over par across the whole event. It knows what it did.',
-                          detail: w => `${w.damage} strokes over par this event on hole ${w.holeIdx + 1}`,
-                          holes: w => w.holes, highlightLabel: 'The Nemesis' },
                         { key: 'houdini', label: 'HOUDINI', emoji: '🎩',
                           color: '#c084fc', flair: 'magic',
                           tagline: w => `Net ${Math.abs(w.netToPar)} under par on one hole`,
@@ -10284,6 +10366,24 @@
                           description: 'Matched the field average on more holes than anyone else. Aggressively, relentlessly, heroically... average.',
                           detail: w => `${w.matched} of 18 holes within half a stroke of the group`,
                           holes: w => w.holes, highlightLabel: 'Perfect Copies' },
+                        { key: 'honeyPot', label: 'HONEY POT', emoji: '🍯',
+                          color: '#f59e0b', flair: 'honey',
+                          tagline: w => `${w.career} career pot${w.career === 1 ? '' : 's'}`,
+                          description: "Swept all three B's — Bingo, Bango, AND Bongo — on a single hole. The whole jar, one paw.",
+                          detail: w => `${w.count} tonight (hole${w.holes.length === 1 ? '' : 's'} ${w.holes.map(h => h + 1).join(', ')}) · ${w.career} career`,
+                          holes: w => w.holes, highlightLabel: 'The Honey Pot' },
+                        { key: 'swiper', label: 'SWIPER', emoji: '🦊',
+                          color: '#fb923c', flair: 'swiper',
+                          tagline: w => `${w.count} B's swiped from the wreckage`,
+                          description: "Collected the most BBB points on holes where they had the group's clearly WORST score. Swiper, no swiping… too late.",
+                          detail: w => `${w.count} point${w.count === 1 ? '' : 's'} on ${w.holes.length} disaster hole${w.holes.length === 1 ? '' : 's'}`,
+                          holes: w => w.holes, highlightLabel: 'Crime Scenes' },
+                        { key: 'robbed', label: "I'VE BEEN ROBBED", emoji: '🚨',
+                          color: '#60a5fa', flair: 'robbed',
+                          tagline: w => `Best score, zero B's — ${w.count} times`,
+                          description: "Had the group's clearly BEST score on the hole and walked away with NOTHING in B's. Somebody call the authorities.",
+                          detail: w => `Robbed on holes ${w.holes.map(h => h + 1).join(', ')}`,
+                          holes: w => w.holes, highlightLabel: 'The Robberies' },
                         { key: 'vulture', label: 'VULTURE', emoji: '🦅',
                           color: '#f59e0b', flair: 'vulture',
                           tagline: w => `${w.count} BBB points scavenged`,
@@ -11354,7 +11454,7 @@
                 if (hasBiggestMomentsSlide) totalSlides++;
                 if (hasPerfIntroSlide) totalSlides++;
                 if (hasBeatComparisonSlide) totalSlides++;
-                if (hasHoleAnalysisSlide) totalSlides++;
+                if (hasHoleAnalysisSlide) totalSlides += 2; // easiest + toughest
                 if (hasScoringDistSlide) totalSlides++;
                 // Achievement award slides (rollercoaster, steady eddie, on fire, grind, dialed in, par3 specialist)
                 // are now rolled into per-player segments — skip totalSlides increments
@@ -11402,6 +11502,7 @@
                     // Reveal-redesign payload: team blocks (worst first), interleaved sequence,
                     // and tonight's champion index (order-independent).
                     _revealBlocks: _rr.blocks,
+                    _roundDifficulty: _rr.roundDifficulty,
                     _revealSeq: _rr.seq,
                     _championIndexData: _rr.championIndex,
                     previousStandings: previousStandings,
@@ -11943,8 +12044,9 @@
             const byNumbersSlideIndex = hasByNumbersSlide ? slideIndex++ : -1;
             presentationState._byNumbersSlideIndex = byNumbersSlideIndex;
             const biggestMomentsSlideIndex = hasBiggestMomentsSlide ? slideIndex++ : -1;
-            const holeAnalysisSlideIndex = hasHoleAnalysisSlide ? slideIndex++ : -1;
-            presentationState._holePerfSlideIndex = holeAnalysisSlideIndex;
+            // Easiest + toughest hole are now two REAL slides (separate sound slots).
+            const holeAnalysisSlideIndex = hasHoleAnalysisSlide ? slideIndex++ : -1; // easiest
+            const hardestHoleSlideIndex = hasHoleAnalysisSlide ? slideIndex++ : -1;  // toughest
             const scoringDistSlideIndex = hasScoringDistSlide ? slideIndex++ : -1;
             const ctpLeadersSlideIndex = hasCTPLeadersSlide ? slideIndex++ : -1;
             const bbbLeadersSlideIndex = hasBBBLeadersSlide ? slideIndex++ : -1;
@@ -12031,9 +12133,10 @@
                 nm(fieldSlideIndex, "TODAY'S FIELD");
                 nm(byNumbersSlideIndex, 'BY THE NUMBERS');
                 nm(biggestMomentsSlideIndex, 'BIGGEST MOMENTS');
-                nm(holeAnalysisSlideIndex, 'HOLE PERFORMANCE');
+                nm(holeAnalysisSlideIndex, 'EASIEST HOLE');
+                nm(hardestHoleSlideIndex, 'TOUGHEST HOLE');
                 nm(beatComparisonSlideIndex, 'BEAT COMPARISON');
-                nm(scoringDistSlideIndex, 'SCORING DISTRIBUTION');
+                nm(scoringDistSlideIndex, 'ROUND DIFFICULTY');
                 nm(ctpLeadersSlideIndex, 'CTP LEADERS');
                 nm(bbbLeadersSlideIndex, 'BBB LEADERS');
                 nm(weeklyAchievementsSlideIndex, 'WEEKLY ACHIEVEMENTS');
@@ -12491,50 +12594,6 @@
                                 </div>
                             </div>
                         ` : ''}
-                        
-                        <div style="background:rgba(255,255,255,0.05);border:2px solid rgba(255,255,255,0.1);border-radius:16px;padding:24px;margin:30px auto;max-width:700px;">
-                            <h3 style="color:#a5b4fc;font-size:20px;margin:0 0 16px;text-align:center;">
-                                📋 Jump to Section
-                            </h3>
-                            <div style="display:grid;grid-template-columns:repeat(2, 1fr);gap:12px;">
-                                ${individualPlayerSlides.length > 0 ? `
-                                    <button onclick="presentationState.currentSlide = ${individualPlayerSlidesStart}; renderPresentation();" 
-                                            style="background:rgba(59,130,246,0.2);border:2px solid rgba(59,130,246,0.4);color:white;padding:12px 16px;border-radius:8px;cursor:pointer;font-size:14px;transition:all 0.3s;text-align:left;">
-                                        👤 Player Performance
-                                    </button>
-                                ` : ''}
-                                ${hasNetSlide ? `
-                                    <button onclick="presentationState.currentSlide = ${netSlideIndex}; renderPresentation();" 
-                                            style="background:rgba(34,197,94,0.2);border:2px solid rgba(34,197,94,0.4);color:white;padding:12px 16px;border-radius:8px;cursor:pointer;font-size:14px;transition:all 0.3s;text-align:left;">
-                                        ⛳ Awards
-                                    </button>
-                                ` : ''}
-                                ${teamStandings.length > 0 ? `
-                                    <button onclick="presentationState.currentSlide = ${teamSlidesStartIndex}; renderPresentation();" 
-                                            style="background:rgba(245,158,11,0.2);border:2px solid rgba(245,158,11,0.4);color:white;padding:12px 16px;border-radius:8px;cursor:pointer;font-size:14px;transition:all 0.3s;text-align:left;">
-                                        🏆 Team Standings
-                                    </button>
-                                ` : ''}
-                                ${hasHoleAnalysisSlide ? `
-                                    <button onclick="presentationState.currentSlide = ${holeAnalysisSlideIndex}; renderPresentation();" 
-                                            style="background:rgba(236,72,153,0.2);border:2px solid rgba(236,72,153,0.4);color:white;padding:12px 16px;border-radius:8px;cursor:pointer;font-size:14px;transition:all 0.3s;text-align:left;">
-                                        📊 Analytics
-                                    </button>
-                                ` : ''}
-                                ${hasCTPLeadersSlide ? `
-                                    <button onclick="presentationState.currentSlide = ${ctpLeadersSlideIndex}; renderPresentation();" 
-                                            style="background:rgba(59,130,246,0.2);border:2px solid rgba(59,130,246,0.4);color:white;padding:12px 16px;border-radius:8px;cursor:pointer;font-size:14px;transition:all 0.3s;text-align:left;">
-                                        🎯 CTP Leaders
-                                    </button>
-                                ` : ''}
-                                ${hasBBBLeadersSlide ? `
-                                    <button onclick="presentationState.currentSlide = ${bbbLeadersSlideIndex}; renderPresentation();" 
-                                            style="background:rgba(245,158,11,0.2);border:2px solid rgba(245,158,11,0.4);color:white;padding:12px 16px;border-radius:8px;cursor:pointer;font-size:14px;transition:all 0.3s;text-align:left;">
-                                        🎪 BBB Leaders
-                                    </button>
-                                ` : ''}
-                            </div>
-                        </div>
                         
                         <button onclick="nextPresentationSlide()" 
                                 class="btn-primary" 
@@ -13037,11 +13096,8 @@
                 // Plays a light intro sound on first landing (gated by flag so re-renders don't replay).
                 if (!presentationState._perfIntroSoundPlayed) {
                     presentationState._perfIntroSoundPlayed = true;
-                    setTimeout(() => {
-                        if (typeof playPerfIntroSound === 'function') {
-                            try { playPerfIntroSound(); } catch (e) { console.warn('Perf intro sound failed:', e); }
-                        }
-                    }, 150);
+                    // Coded intro sound removed — attach an MP3 via the slide's
+                    // "PERFORMANCES INTRO" sound pill instead.
                 }
                 html += `
                     <style>
@@ -13893,7 +13949,10 @@
                             loop:    { e: ['🔁', '📆', '🔂'],        anim: 'fa-spin',    n: 7 },
                             copy:    { e: ['📄', '📠', '📄'],        anim: 'ex9-fall',   n: 8 },
                             vulture: { e: ['🦅', '💀', '🪶'],        anim: 'ex9-sway',   n: 6 },
-                            split:   { e: ['⚗️', '🧪'],              anim: 'ex9-sway',   n: 5 }
+                            split:   { e: ['⚗️', '🧪'],              anim: 'ex9-sway',   n: 5 },
+                            honey:   { e: ['🍯', '🐝', '🐝'],        anim: 'fa-twinkle', n: 8 },
+                            swiper:  { e: ['🦊', '💨'],              anim: 'ex9-sway',   n: 6 },
+                            robbed:  { e: ['🚨', '💰', '👮'],        anim: 'fa-pop',     n: 7 }
                         };
                         const r = recipes[award.flair];
                         if (!r) return '';
@@ -14199,7 +14258,7 @@
                 // Stage 0: matchup view  (avatars + VS)
                 // Stage 1: result + tagline + final score line
                 // Stage 2: details + next matches + elimination/championship effects
-                // Sub-step controlled by presentationState.bracketRevealStep (0..2)
+                // Sub-step controlled by presentationState.bracketRevealStep (0..3): matchup → cart race → reveal → detail
                 const matchIdx = currentSlide - bracketCombinedSlideStart;
                 const slide = bracketMatchSlides[matchIdx];
                 const stage = (presentationState.bracketRevealStep || 0);
@@ -14219,8 +14278,8 @@
                     const winnerSlot = liveWinnerSlot || match.winner;  // 'slot1' | 'slot2'
                     const winnerIsP1 = winnerSlot === 'slot1';
                     
-                    // Trigger confetti for: dramatic taglines OR championship
-                    if (stage >= 1 && (dramatic || championshipWinner)) {
+                    // Trigger confetti for: dramatic taglines OR championship (at the winner reveal)
+                    if (stage >= 2 && (dramatic || championshipWinner)) {
                         presentationState.isWinnerSlide = true;
                     }
                     
@@ -14317,6 +14376,53 @@
                     }
                     // ── STAGE 1: result + tagline + final score ──
                     else if (stage === 1) {
+                        // ═══ 🛺 THE CART RACE — the match unfolds hole by hole ═══
+                        // Two golf carts race down the fairway; each hole's winner surges ahead.
+                        // DOM-driven animation (no re-renders) via startCartRace; self-cleans on leave.
+                        const raceHoles = segHoles.map(h => ({ i: h.holeIndex, r: h.result || 'halved' }));
+                        presentationState._cartRaceData = {
+                            matchIdx,
+                            holes: raceHoles,
+                            p1Name: (p1 && p1.name) || 'Player 1',
+                            p2Name: (p2 && p2.name) || 'Player 2',
+                            winnerSlot
+                        };
+                        const laneRow = (who, name, avatarHTML, topPct) => `
+                            <div id="cart-${matchIdx}-${who}" style="position:absolute;left:4%;top:${topPct}%;transform:translateY(-50%);display:flex;align-items:center;gap:6px;transition:left 0.55s cubic-bezier(0.34,1.2,0.64,1);z-index:3;">
+                                <div style="border:3px solid ${who === 'slot1' ? '#3b82f6' : '#ef4444'};border-radius:50%;padding:2px;background:rgba(0,0,0,0.35);">${avatarHTML}</div>
+                                <div style="font-size:34px;transform:scaleX(-1);filter:drop-shadow(0 4px 8px rgba(0,0,0,0.5));">🛺</div>
+                            </div>`;
+                        const sp1 = state.players.find(x => x.id == (p1 && p1.id)) || { id: 0, name: (p1 && p1.name) || '?' };
+                        const sp2 = state.players.find(x => x.id == (p2 && p2.id)) || { id: 0, name: (p2 && p2.name) || '?' };
+                        html += `
+                            <div style="animation:fadeIn 0.5s ease-out;max-width:1100px;width:100%;text-align:center;">
+                                <div style="color:rgba(255,255,255,0.7);font-size:16px;font-weight:600;letter-spacing:3px;margin-bottom:4px;">${roundLabel.toUpperCase()} · ${match.id.toUpperCase()}</div>
+                                <h2 style="color:white;font-size:clamp(26px,3.5vw,36px);font-weight:900;margin:0 0 6px;">${sp1.name} <span style="color:rgba(255,255,255,0.4);font-weight:600;">vs</span> ${sp2.name}</h2>
+                                <div id="raceScore-${matchIdx}" style="color:#fbbf24;font-size:26px;font-weight:900;letter-spacing:1px;min-height:34px;margin-bottom:14px;">ALL SQUARE</div>
+                                
+                                <!-- The fairway -->
+                                <div style="position:relative;height:220px;border-radius:18px;overflow:hidden;background:linear-gradient(180deg,#166534 0%,#15803d 40%,#166534 100%);border:2px solid rgba(255,255,255,0.15);box-shadow:inset 0 4px 30px rgba(0,0,0,0.4);">
+                                    <div style="position:absolute;left:0;right:0;top:50%;height:2px;background:repeating-linear-gradient(90deg, rgba(255,255,255,0.35) 0 18px, transparent 18px 36px);"></div>
+                                    <!-- Finish line -->
+                                    <div style="position:absolute;right:6%;top:0;bottom:0;width:14px;background:repeating-conic-gradient(#fff 0% 25%, #111 0% 50%) 0 0 / 14px 14px;opacity:0.9;"></div>
+                                    <div style="position:absolute;right:calc(6% - 8px);top:6px;font-size:26px;z-index:4;">🏁</div>
+                                    ${laneRow('slot1', sp1.name, renderAvatar(sp1, 44), 30)}
+                                    ${laneRow('slot2', sp2.name, renderAvatar(sp2, 44), 70)}
+                                    <!-- Lane name tags -->
+                                    <div style="position:absolute;left:10px;top:8px;color:#93c5fd;font-size:13px;font-weight:800;text-shadow:0 2px 6px rgba(0,0,0,0.7);z-index:2;">${sp1.name}</div>
+                                    <div style="position:absolute;left:10px;bottom:8px;color:#fca5a5;font-size:13px;font-weight:800;text-shadow:0 2px 6px rgba(0,0,0,0.7);z-index:2;">${sp2.name}</div>
+                                </div>
+                                
+                                <div id="raceStatus-${matchIdx}" style="color:white;font-size:19px;font-weight:700;min-height:30px;margin-top:16px;opacity:0.9;">On the first tee…</div>
+                                <!-- Hole dots fill in as the race runs -->
+                                <div id="raceDots-${matchIdx}" style="display:flex;justify-content:center;gap:5px;margin-top:12px;flex-wrap:wrap;">
+                                    ${raceHoles.map(h => `<div id="raceDot-${matchIdx}-${h.i}" style="width:22px;height:22px;border-radius:6px;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;transition:all 0.3s;">${h.i}</div>`).join('')}
+                                </div>
+                            </div>
+                        `;
+                        setTimeout(() => { try { startCartRace(); } catch (e) {} }, 400);
+                    }
+                    else if (stage === 2) {
                         // Play badge-specific MP3 sound on first land (gated by per-match flag so re-renders don't replay).
                         // Sound file is looked up from window.__badgeSoundMap by tagline (e.g. "DOMINATION" → Sounds/you-win.mp3).
                         const _badgeSoundFlag = '_badgeSoundPlayed_match' + matchIdx;
@@ -15031,7 +15137,7 @@
                         `;
                     }
                 }
-            } else if (currentSlide === holeAnalysisSlideIndex) {
+            } else if (currentSlide === holeAnalysisSlideIndex || currentSlide === hardestHoleSlideIndex) {
                 // HOLE ANALYSIS SLIDE — 4 sub-stage reveal of the holes that played EASIEST and HARDEST overall.
                 //   stage 0 = easiest hole (lowest avg net-to-par) hero
                 //   stage 1 = + every player's score on that hole
@@ -15039,7 +15145,7 @@
                 //   stage 3 = + every player's score on that hole
                 // Easiest/hardest are by GROUP AVERAGE (analytics.bestHole / worstHole), not any one
                 // player's single best/worst hole.
-                const _haStep = presentationState.holePerfRevealStep || 0;
+                const _haStep = (currentSlide === hardestHoleSlideIndex) ? 1 : 0;
                 
                 // Register backing data for the ⓘ drawer: the full 18-hole difficulty table.
                 window.__dataDrawers['holeAnalysis'] = {
@@ -15262,66 +15368,61 @@
                     `;
                 }
             } else if (currentSlide === scoringDistSlideIndex) {
-                // SCORING DISTRIBUTION SLIDE
-                const maxScore = Math.max(
-                    analytics.scoringDistribution.albatross,
-                    analytics.scoringDistribution.eagle,
-                    analytics.scoringDistribution.birdie,
-                    analytics.scoringDistribution.par,
-                    analytics.scoringDistribution.bogey,
-                    analytics.scoringDistribution.doublePlus
-                );
-                
+                // ═══ ROUND DIFFICULTY — tonight vs the event norm vs net par ═══
+                const rd = presentationState._roundDifficulty || {};
+                const tonight = rd.tonightToPar, evt = rd.eventToPar;
+                const hasData = (tonight != null && evt != null);
+                const delta = hasData ? (tonight - evt) : 0; // − easier · + tougher
+                const fmt = (v) => (v == null) ? '—' : (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(1);
+                const verdict = !hasData ? { icon: '⛳', title: 'Not enough data yet', sub: '' }
+                    : delta <= -0.5 ? { icon: '☀️', title: 'A SCORING NIGHT', sub: `${Math.abs(delta).toFixed(1)} strokes easier than usual`, color: '#10b981' }
+                    : delta >= 0.5 ? { icon: '🌧️', title: 'A GRIND', sub: `${delta.toFixed(1)} strokes tougher than usual`, color: '#ef4444' }
+                    : { icon: '⚖️', title: 'RIGHT ON TREND', sub: 'Tonight scored just like a typical round', color: '#9ca3af' };
+                const needlePct = Math.max(4, Math.min(96, 50 + (delta / 3) * 50));
                 html += `
-                    <div style="animation:slideUp 0.8s ease-out;max-width:1000px;width:100%;">
-                        <h1 style="color:white;font-size:clamp(34px, 4.5vw, 46px);margin:0 0 30px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
-                            📊 How Everyone Scored Today
+                    <div style="animation:slideUp 0.8s ease-out;max-width:900px;width:100%;text-align:center;">
+                        <h1 style="color:white;font-size:clamp(34px, 4.5vw, 46px);margin:0 0 8px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
+                            ⛳ How Tough Was Tonight?
                         </h1>
+                        <p style="color:#a5b4fc;font-size:15px;font-weight:600;letter-spacing:2px;text-transform:uppercase;margin:0 0 34px;">Average net score vs par</p>
                         
-                        <div style="background:rgba(255,255,255,0.05);border:2px solid rgba(255,255,255,0.1);border-radius:16px;padding:40px;">
-                            <!-- Scoring Bars -->
-                            <div style="display:grid;gap:20px;margin-bottom:40px;">
-                                ${[
-                                    {label: 'Albatross/Eagle', count: analytics.scoringDistribution.albatross + analytics.scoringDistribution.eagle, color: '#10b981', icon: '🦅', category: 'albatross_eagle', details: [...(analytics.scoreDetails.albatross || []), ...(analytics.scoreDetails.eagle || [])]},
-                                    {label: 'Birdies', count: analytics.scoringDistribution.birdie, color: '#3b82f6', icon: '🐦', category: 'birdie', details: analytics.scoreDetails.birdie || []},
-                                    {label: 'Pars', count: analytics.scoringDistribution.par, color: '#a78bfa', icon: '➖', category: 'par', details: analytics.scoreDetails.par || []},
-                                    {label: 'Bogeys', count: analytics.scoringDistribution.bogey, color: '#f59e0b', icon: '⚠️', category: 'bogey', details: analytics.scoreDetails.bogey || []},
-                                    {label: 'Double+', count: analytics.scoringDistribution.doublePlus, color: '#ef4444', icon: '❌', category: 'doublePlus', details: analytics.scoreDetails.doublePlus || []}
-                                ].map((item, idx) => {
-                                    const percentage = maxScore > 0 ? (item.count / maxScore * 100) : 0;
-                                    const detailsJson = JSON.stringify(item.details).replace(/"/g, '&quot;');
-                                    return `
-                                        <div style="${item.count > 0 ? 'cursor:pointer;' : ''}" 
-                                             ${item.count > 0 ? `onclick="showScoringDetails('${item.category}', JSON.parse('${detailsJson}'), '${item.color}', '${item.label}')"` : ''}>
-                                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                                                <div style="display:flex;align-items:center;gap:12px;">
-                                                    <span style="font-size:24px;">${item.icon}</span>
-                                                    <span style="color:white;font-size:18px;font-weight:600;">${item.label}</span>
-                                                    ${item.count > 0 ? '<span style="color:#64748b;font-size:14px;margin-left:8px;">(click for details)</span>' : ''}
-                                                </div>
-                                                <span style="color:${item.color};font-size:24px;font-weight:700;">${item.count}</span>
-                                            </div>
-                                            <div style="background:#1e293b;border-radius:8px;height:32px;overflow:hidden;">
-                                                <div style="background:linear-gradient(90deg, ${item.color} 0%, ${item.color}CC 100%);height:100%;width:${percentage}%;transition:width 1s ease-out;display:flex;align-items:center;justify-content:center;">
-                                                    ${item.count > 0 ? `<span style="color:white;font-size:14px;font-weight:600;text-shadow:0 1px 2px rgba(0,0,0,0.5);">${item.count}</span>` : ''}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    `;
-                                }).join('')}
+                        <div style="display:flex;justify-content:center;gap:0;background:rgba(255,255,255,0.05);border-radius:16px;padding:20px 10px;margin-bottom:36px;animation:rrCardIn 0.6s 0.2s ease-out both;">
+                            <div style="text-align:center;padding:0 26px;">
+                                <div style="color:#9ca3af;font-size:13px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;">Net Par</div>
+                                <div style="color:white;font-size:38px;font-weight:900;">E</div>
                             </div>
-                            
-                            <!-- Stats Summary -->
-                            <div style="background:rgba(255,255,255,0.1);border-radius:12px;padding:24px;text-align:center;">
-                                <div style="color:#a5b4fc;font-size:16px;margin-bottom:8px;">Average Score</div>
-                                <div style="color:white;font-size:48px;font-weight:700;margin-bottom:8px;">
-                                    ${analytics.averageScore}
-                                </div>
-                                <div style="color:#818cf8;font-size:14px;">
-                                    Course Par: ${analytics.coursePar.toFixed(1)}
-                                </div>
+                            <div style="width:1px;height:54px;background:rgba(255,255,255,0.15);align-self:center;"></div>
+                            <div style="text-align:center;padding:0 26px;">
+                                <div style="color:#9ca3af;font-size:13px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;">Tonight</div>
+                                <div style="color:#fbbf24;font-size:38px;font-weight:900;">${fmt(tonight)}</div>
+                            </div>
+                            <div style="width:1px;height:54px;background:rgba(255,255,255,0.15);align-self:center;"></div>
+                            <div style="text-align:center;padding:0 26px;">
+                                <div style="color:#9ca3af;font-size:13px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;">Event Avg</div>
+                                <div style="color:white;font-size:38px;font-weight:900;">${fmt(evt)}</div>
                             </div>
                         </div>
+                        
+                        ${hasData ? `
+                            <!-- Difficulty gauge: needle lands on tonight's delta vs the event norm -->
+                            <div style="max-width:680px;margin:0 auto 30px;animation:rrCardIn 0.7s 0.5s ease-out both;">
+                                <div style="display:flex;justify-content:space-between;color:rgba(255,255,255,0.55);font-size:12px;font-weight:700;letter-spacing:1px;margin-bottom:8px;">
+                                    <span>☀️ EASIER</span><span>USUAL</span><span>TOUGHER 🌧️</span>
+                                </div>
+                                <div style="position:relative;height:26px;border-radius:999px;background:linear-gradient(90deg,#10b981 0%,#84cc16 30%,#9ca3af 50%,#f59e0b 70%,#ef4444 100%);box-shadow:inset 0 2px 8px rgba(0,0,0,0.4);">
+                                    <div style="position:absolute;left:50%;top:-4px;bottom:-4px;width:2px;background:rgba(255,255,255,0.5);"></div>
+                                    <div style="position:absolute;left:${needlePct}%;top:50%;transform:translate(-50%,-50%);width:34px;height:34px;border-radius:50%;background:white;box-shadow:0 4px 16px rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;font-size:18px;animation:rrCardIn 0.8s 0.9s cubic-bezier(0.34,1.56,0.64,1) both;">⛳</div>
+                                </div>
+                            </div>
+                            <div style="display:inline-flex;flex-direction:column;align-items:center;gap:4px;padding:20px 40px;border-radius:16px;background:${verdict.color}18;border:2px solid ${verdict.color};animation:rrCardIn 0.8s 1.2s ease-out both;">
+                                <div style="font-size:44px;line-height:1;">${verdict.icon}</div>
+                                <div style="color:${verdict.color};font-size:30px;font-weight:900;letter-spacing:1px;">${verdict.title}</div>
+                                ${verdict.sub ? `<div style="color:rgba(255,255,255,0.85);font-size:16px;font-weight:600;">${verdict.sub}</div>` : ''}
+                            </div>
+                            <p style="color:rgba(255,255,255,0.4);font-size:12px;margin-top:24px;font-style:italic;">
+                                Based on ${rd.totalPlayerRounds} player-rounds across ${rd.roundsCount} round${rd.roundsCount === 1 ? '' : 's'} · ${rd.tonightCount} tonight
+                            </p>
+                        ` : `<p style="color:rgba(255,255,255,0.6);font-size:18px;">Play a full round to unlock the difficulty gauge.</p>`}
                     </div>
                 `;
             } else if (currentSlide === netSlideIndex) {
@@ -15363,14 +15464,27 @@
                 // Position stingers: each newly revealed place gets its Road Rash call
                 // (#1 first… #4 gets the last-place razz). Plays once per step.
                 const _ns = presentationState.netRevealStep || 0;
-                if (_ns > 0 && _ns <= totalPositions && presentationState._netSoundStep !== _ns) {
+                if (_ns > 0 && _ns <= totalPositions + extraStep && presentationState._netSoundStep !== _ns) {
                     presentationState._netSoundStep = _ns;
-                    const _placeRevealed = totalPositions - _ns + 1;
-                    const _sfx = _placeRevealed === 1 ? 'Sounds/road-rash-64-first-place.mp3'
-                        : _placeRevealed === 2 ? 'Sounds/road-rash-64-second-place.mp3'
-                        : _placeRevealed === 3 ? 'Sounds/road-rash-64-third-place.mp3'
-                        : 'Sounds/road-rash-64-last-place.mp3';
-                    const _slot = 'NET COUNTDOWN #' + _placeRevealed;
+                    let _slot, _sfx;
+                    if (extraStep === 1 && _ns === totalPositions + 1) {
+                        // Ineligible-leader flow: the extra step crowns the actual trophy winner.
+                        _slot = 'NET COUNTDOWN #1';
+                        _sfx = 'Sounds/road-rash-64-first-place.mp3';
+                    } else {
+                        const _placeRevealed = totalPositions - _ns + 1;
+                        if (_placeRevealed === 1 && netLeaderIneligible) {
+                            // Lowest net belongs to a PREVIOUS winner — their own moment, own sound.
+                            _slot = 'NET REPEAT WINNER';
+                            _sfx = 'Sounds/road-rash-64-last-place.mp3';
+                        } else {
+                            _slot = 'NET COUNTDOWN #' + _placeRevealed;
+                            _sfx = _placeRevealed === 1 ? 'Sounds/road-rash-64-first-place.mp3'
+                                : _placeRevealed === 2 ? 'Sounds/road-rash-64-second-place.mp3'
+                                : _placeRevealed === 3 ? 'Sounds/road-rash-64-third-place.mp3'
+                                : 'Sounds/road-rash-64-last-place.mp3';
+                        }
+                    }
                     setTimeout(() => { try { playSfx(_slot, _sfx, 0.85); } catch (e) {} }, 200);
                 }
                 const maxStep = totalPositions + extraStep;
@@ -15437,7 +15551,12 @@
                 
                 // ── REVEALS (step >= totalPositions, full-bleed) ─────────
                 if (step >= totalPositions && totalPositions > 0) {
-                    presentationState.isWinnerSlide = true; // for any downstream fanfare hooks
+                    // Confetti only — the coded celebration audio is retired here so the
+                    // slot MP3s (NET COUNTDOWN #1 / NET REPEAT WINNER) can be heard.
+                    if (presentationState._netConfettiFired !== currentSlide) {
+                        presentationState._netConfettiFired = currentSlide;
+                        setTimeout(() => { try { if (typeof createConfetti === 'function') createConfetti(); } catch (e) {} }, 500);
+                    }
                     const leaderEntry = top5.find(p => p.place === 1) || netLeader || netWinner;
                     
                     if (!netLeaderIneligible) {
@@ -16895,7 +17014,7 @@
             const bcCount = presentationState._bracketMatchCount || 0;
             if (!_navOnPhoto && bcStart >= 0 && _navContentIdx >= bcStart && _navContentIdx < bcStart + bcCount) {
                 const step = presentationState.bracketRevealStep || 0;
-                if (step < 2) {
+                if (step < 3) { // 0 matchup · 1 cart race · 2 winner reveal · 3 detail
                     presentationState.bracketRevealStep = step + 1;
                     renderPresentation();
                     return;
@@ -17072,7 +17191,7 @@
                 });
                 // When entering a bracket combined slide via Back, jump to fully-revealed (step 2)
                 if (!_newOnPhoto && bcStart >= 0 && _newContentIdx >= bcStart && _newContentIdx < bcStart + bcCount) {
-                    presentationState.bracketRevealStep = 2;
+                    presentationState.bracketRevealStep = 3; // land fully revealed (detail)
                 } else {
                     presentationState.bracketRevealStep = 0;
                 }
@@ -17899,17 +18018,17 @@
             'SOLID WIN':          'Sounds/you-win.mp3',
             
             // Fun awards — themed to Ron's Sounds/ library.
-            'SNOWMAN OF THE NIGHT': 'Sounds/priceisrightfail_1.mp3',
-            'KABOOM':               'Sounds/punch-gaming-sound-effect-hd_RzlG1GE.mp3',
             'FACEPLANT':            'Sounds/priceisrightfail_1.mp3',
             'SANDBAGGER ALERT':     'Sounds/cheering.mp3',
-            'NEMESIS HOLE':         'Sounds/prison-cell-door-lock.mp3',
             'HOUDINI':              'Sounds/magic-fairy.mp3',
             'PAR-5 PREDATOR':       'Sounds/nsmb-new-high-score.mp3',
             'GROUNDHOG DAY':        'Sounds/mario-sonic-olympics-channel-menu.mp3',
             'THE PHOTOCOPIER':      'Sounds/camera_zLdd1zp.mp3',
             'VULTURE':              'Sounds/golfclap.mp3',
             'JEKYLL & HYDE':        'Sounds/whoosh-wind.mp3',
+            'HONEY POT':            'Sounds/cheering.mp3',
+            'SWIPER':               'Sounds/whoosh-wind.mp3',
+            "I'VE BEEN ROBBED":     'Sounds/priceisrightfail_1.mp3',
             'LONG LIVE THE KING':   'Sounds/road-rash-64-first-place.mp3'
         };
         
@@ -18091,6 +18210,70 @@
                 }, 120);
                 showingA = !showingA;
             }, 5000);
+        };
+        
+        // ─── 🛺 Cart race driver: hole-by-hole match animation ───
+        // Steps through the match's holes every ~0.65s, surging the hole-winner's cart
+        // ahead. Pure DOM updates (no re-renders); self-cleans when the slide or stage
+        // changes; the winner crosses the finish line on the last tick.
+        window.__cartRaceTimer = null;
+        window.startCartRace = () => {
+            const data = presentationState._cartRaceData;
+            if (!data) return;
+            if (window.__cartRaceTimer) { clearInterval(window.__cartRaceTimer); window.__cartRaceTimer = null; }
+            const slideAtStart = presentationState.currentSlide;
+            const m = data.matchIdx;
+            const total = data.holes.length || 1;
+            let t = 0, up1 = 0; // p1's holes-up tally
+            // Optional soundtrack for the race (assign via the sound pill; silent until then)
+            try { playSfx('CART RACE', null, 0.8); } catch (e) {}
+            const byId = (id) => document.getElementById(id);
+            const setPos = () => {
+                const base = 5 + (t / total) * 74;
+                const lead = Math.max(-9, Math.min(9, up1 * 2.4));
+                const c1 = byId(`cart-${m}-slot1`);
+                const c2 = byId(`cart-${m}-slot2`);
+                if (c1) c1.style.left = Math.max(3, Math.min(82, base + lead)) + '%';
+                if (c2) c2.style.left = Math.max(3, Math.min(82, base - lead)) + '%';
+            };
+            window.__cartRaceTimer = setInterval(() => {
+                const stillHere = presentationState.active
+                    && presentationState.currentSlide === slideAtStart
+                    && (presentationState.bracketRevealStep || 0) === 1;
+                if (!stillHere) {
+                    clearInterval(window.__cartRaceTimer);
+                    window.__cartRaceTimer = null;
+                    return;
+                }
+                if (t >= total) {
+                    // 🏁 Finish: the match winner surges across the line.
+                    const winName = data.winnerSlot === 'slot1' ? data.p1Name : data.p2Name;
+                    const w = byId(`cart-${m}-${data.winnerSlot}`);
+                    if (w) w.style.left = '85%';
+                    const st = byId(`raceStatus-${m}`);
+                    if (st) st.innerHTML = `🏁 <b>${winName}</b> takes it! <span style="opacity:0.6;font-size:14px;">— tap Next for the reveal</span>`;
+                    clearInterval(window.__cartRaceTimer);
+                    window.__cartRaceTimer = null;
+                    return;
+                }
+                const h = data.holes[t];
+                if (h.r === 'slot1') up1++;
+                else if (h.r === 'slot2') up1--;
+                t++;
+                setPos();
+                const st = byId(`raceStatus-${m}`);
+                if (st) st.textContent = `Hole ${h.i}: ` + (h.r === 'halved' ? 'halved'
+                    : (h.r === 'slot1' ? data.p1Name : data.p2Name) + ' wins the hole');
+                const sc = byId(`raceScore-${m}`);
+                if (sc) sc.textContent = up1 === 0 ? 'ALL SQUARE'
+                    : (up1 > 0 ? `${data.p1Name} ${up1} UP` : `${data.p2Name} ${-up1} UP`);
+                const d = byId(`raceDot-${m}-${h.i}`);
+                if (d) {
+                    d.style.background = h.r === 'halved' ? 'rgba(156,163,175,0.55)'
+                        : (h.r === 'slot1' ? '#3b82f6' : '#ef4444');
+                    d.style.color = 'white';
+                }
+            }, 650);
         };
         
         // ─── Generic MP3 player ───
