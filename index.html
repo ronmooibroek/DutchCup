@@ -583,6 +583,13 @@
             30%      { transform: translateY(10px); }
             60%      { transform: translateY(4px); }
         }
+        /* Fairway strike: the ball leaps off the club face and settles */
+        @keyframes fwStrike {
+            0%   { transform: translateY(0) scale(1) rotate(0deg); }
+            30%  { transform: translateY(-26px) scale(1.18) rotate(-12deg); }
+            65%  { transform: translateY(-10px) scale(1.05) rotate(6deg); }
+            100% { transform: translateY(0) scale(1) rotate(0deg); }
+        }
         @keyframes rrBarGrow {
             0%   { transform: scaleX(0); }
             100% { transform: scaleX(1); }
@@ -674,7 +681,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.07.18.2';
+        const APP_VERSION = '2026.07.18.3';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -1561,7 +1568,6 @@
             // Dial scale: shared across teams so needles are comparable night to night
             const _maxAfter = Math.max(10, ...((presentationState.teamStandings || []).map(t => t.points || 0)), block.afterPts);
             const dialMax = Math.ceil((_maxAfter * 1.08) / 10) * 10;
-            const angleFor = (v) => -90 + (Math.max(0, Math.min(dialMax, v)) / dialMax) * 180;
             
             // ── Header: BIG logo + name + the players' faces ──
             const logoHTML = block.logo
@@ -1600,47 +1606,70 @@
                 };
             }
             
-            // ── Rival markers: teams already revealed tonight, pinned at their final totals ──
-            const revealedRivals = (presentationState._revealBlocks || [])
+            // ── The fairway: every scoring method is a ball struck toward the pin ──
+            // Horizontal, compact, and correct at every stage (no stale needle), which
+            // leaves the standings lists the room they need.
+            const pctFor = (v) => Math.max(0, Math.min(100, (v / dialMax) * 100));
+            // Rival flags: teams already revealed tonight, planted at their final totals
+            const rivalFlags = (presentationState._revealBlocks || [])
                 .slice(0, (bIdx == null ? 0 : bIdx))
-                .filter(b => String(b.teamId) !== String(tid));
-            const rivalMarkers = revealedRivals.map(rb => {
-                const a = angleFor(rb.afterPts);
-                const face = rb.logo
-                    ? `<img src="${rb.logo}" style="width:30px;height:30px;border-radius:8px;object-fit:cover;border:2px solid ${rb.teamColor};box-shadow:0 3px 10px rgba(0,0,0,0.6);">`
-                    : `<div style="width:26px;height:26px;border-radius:50%;background:${rb.teamColor};border:2px solid rgba(255,255,255,0.85);box-shadow:0 3px 10px rgba(0,0,0,0.6);"></div>`;
-                return `
-                    <div style="position:absolute;left:50%;bottom:8px;height:158px;transform-origin:50% 100%;transform:translateX(-50%) rotate(${a}deg);z-index:2;pointer-events:none;">
-                        <div style="position:absolute;top:-16px;left:50%;transform:translateX(-50%) rotate(${-a}deg);">${face}</div>
-                        <div style="position:absolute;top:0;left:50%;transform:translateX(-50%);width:2px;height:24px;background:${rb.teamColor};opacity:0.7;"></div>
-                    </div>`;
-            }).join('');
+                .filter(b => String(b.teamId) !== String(tid))
+                .map(rb => {
+                    const badge = rb.logo
+                        ? `<img src="${rb.logo}" style="width:26px;height:26px;border-radius:7px;object-fit:cover;border:2px solid ${rb.teamColor};">`
+                        : `<div style="width:18px;height:18px;border-radius:50%;background:${rb.teamColor};border:2px solid rgba(255,255,255,0.85);"></div>`;
+                    return `
+                        <div style="position:absolute;left:${pctFor(rb.afterPts)}%;bottom:14px;transform:translateX(-50%);z-index:2;pointer-events:none;text-align:center;">
+                            ${badge}
+                            <div style="width:2px;height:26px;background:${rb.teamColor};opacity:0.75;margin:0 auto;"></div>
+                        </div>`;
+                }).join('');
             
-            const dialHTML = stage >= 1 ? `
-                <div style="display:flex;flex-direction:column;align-items:center;margin:4px 0;animation:rrCardIn 0.6s ease-out both;">
-                    <!-- Semicircle gauge -->
-                    <div style="position:relative;width:400px;height:210px;overflow:hidden;">
-                        <div style="position:absolute;inset:0 0 -200px 0;border-radius:50%;background:conic-gradient(from 270deg, ${block.teamColor}55 0deg, ${block.teamColor} 180deg, transparent 180deg);opacity:0.3;"></div>
-                        <div style="position:absolute;inset:18px 18px -182px 18px;border-radius:50%;background:radial-gradient(circle at 50% 100%, #1e293b 0%, #0f172a 70%);"></div>
-                        ${rivalMarkers}
-                        <div id="dialNeedle-${tid}" style="position:absolute;left:50%;bottom:8px;width:6px;height:165px;background:linear-gradient(180deg,#fde047,#f59e0b);border-radius:5px;transform-origin:50% 100%;transform:translateX(-50%) rotate(${angleFor(block.beforePts)}deg);transition:transform 0.75s cubic-bezier(0.34,1.35,0.64,1);box-shadow:0 0 22px rgba(251,191,36,0.85);z-index:5;"></div>
-                        <div style="position:absolute;left:50%;bottom:0;transform:translateX(-50%);width:32px;height:32px;border-radius:50%;background:#fbbf24;box-shadow:0 0 20px rgba(251,191,36,0.7);z-index:6;"></div>
-                        <div style="position:absolute;left:8px;bottom:4px;color:rgba(255,255,255,0.4);font-size:12px;font-weight:700;">0</div>
-                        <div style="position:absolute;right:8px;bottom:4px;color:rgba(255,255,255,0.4);font-size:12px;font-weight:700;">${dialMax}</div>
+            const fairwayHTML = stage === 1 ? `
+                <div style="max-width:840px;margin:10px auto 0;animation:rrCardIn 0.5s ease-out both;">
+                    <div style="position:relative;height:132px;border-radius:16px;overflow:hidden;background:linear-gradient(180deg,#0b3d1f 0%,#166534 30%,#15803d 62%,#166534 100%);border:2px solid rgba(255,255,255,0.14);box-shadow:inset 0 6px 30px rgba(0,0,0,0.45);">
+                        <!-- mown stripes -->
+                        <div style="position:absolute;inset:0;background:repeating-linear-gradient(90deg, rgba(255,255,255,0.05) 0 34px, transparent 34px 68px);"></div>
+                        <!-- the green + pin at the target end -->
+                        <div style="position:absolute;right:0;top:0;bottom:0;width:15%;background:radial-gradient(ellipse at 60% 60%, #4ade80 0%, #22c55e 55%, transparent 75%);opacity:0.75;"></div>
+                        <div style="position:absolute;right:6%;bottom:16px;text-align:center;z-index:3;">
+                            <div style="font-size:28px;line-height:1;">⛳</div>
+                        </div>
+                        ${rivalFlags}
+                        <!-- tee marker at this team's starting total -->
+                        <div style="position:absolute;left:${pctFor(block.beforePts)}%;bottom:10px;transform:translateX(-50%);z-index:2;">
+                            <div style="width:2px;height:20px;background:rgba(255,255,255,0.5);margin:0 auto;"></div>
+                            <div style="color:rgba(255,255,255,0.65);font-size:10px;font-weight:800;white-space:nowrap;">START ${block.beforePts}</div>
+                        </div>
+                        <!-- the ball in play: advances with every scoring method -->
+                        <div id="fwBall-${tid}" style="position:absolute;left:${pctFor(block.beforePts)}%;bottom:52px;transform:translateX(-50%);z-index:5;transition:left 0.75s cubic-bezier(0.25,0.9,0.35,1);">
+                            <div id="fwBallInner-${tid}" style="font-size:26px;filter:drop-shadow(0 4px 6px rgba(0,0,0,0.55));">🏌️</div>
+                        </div>
+                        <!-- distance rail -->
+                        <div style="position:absolute;left:0;right:0;bottom:6px;height:3px;background:rgba(255,255,255,0.12);"></div>
+                        <div id="fwFill-${tid}" style="position:absolute;left:0;bottom:6px;height:3px;width:${pctFor(block.beforePts)}%;background:${block.teamColor};transition:width 0.75s cubic-bezier(0.25,0.9,0.35,1);"></div>
                     </div>
                     
-                    <!-- Big running total -->
-                    <div style="display:flex;align-items:baseline;gap:12px;margin-top:6px;">
-                        <div id="dialNum-${tid}" style="color:white;font-size:64px;font-weight:900;line-height:1;font-variant-numeric:tabular-nums;text-shadow:0 4px 24px rgba(0,0,0,0.6);">${block.beforePts}</div>
-                        <div id="dialGain-${tid}" style="color:#10b981;font-size:28px;font-weight:900;opacity:0;"></div>
+                    <div style="display:flex;align-items:baseline;justify-content:center;gap:12px;margin-top:10px;">
+                        <div id="dialNum-${tid}" style="color:white;font-size:58px;font-weight:900;line-height:1;font-variant-numeric:tabular-nums;text-shadow:0 4px 24px rgba(0,0,0,0.6);">${block.beforePts}</div>
+                        <div id="dialGain-${tid}" style="color:#10b981;font-size:26px;font-weight:900;opacity:0;"></div>
                     </div>
-                    <div style="color:rgba(255,255,255,0.45);font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;">Event points</div>
+                    <div style="color:rgba(255,255,255,0.45);font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;text-align:center;">Event points</div>
                     
-                    <!-- Who's scoring right now (borrowed from the player pages) -->
-                    <div id="dialFeed-${tid}" style="display:flex;align-items:center;justify-content:center;gap:14px;min-height:64px;margin-top:14px;">
-                        <div style="color:rgba(255,255,255,0.55);font-size:19px;font-weight:700;">Starting from ${block.beforePts}…</div>
+                    <div id="dialFeed-${tid}" style="display:flex;align-items:center;justify-content:center;gap:14px;min-height:60px;margin-top:10px;">
+                        <div style="color:rgba(255,255,255,0.55);font-size:18px;font-weight:700;">On the tee at ${block.beforePts}…</div>
                     </div>
-                    <div id="dialChips-${tid}" style="display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin-top:6px;max-width:820px;"></div>
+                    <div id="dialChips-${tid}" style="display:flex;justify-content:center;gap:7px;flex-wrap:wrap;margin-top:4px;max-width:820px;"></div>
+                </div>` : '';
+            
+            // Stage 2 keeps only a slim result strip so the standings own the screen.
+            const resultStripHTML = stage >= 2 ? `
+                <div style="display:inline-flex;align-items:center;gap:16px;margin:6px auto 10px;padding:8px 20px;border-radius:999px;background:rgba(255,255,255,0.06);border:1px solid ${block.teamColor};animation:rrCardIn 0.4s ease-out both;">
+                    <span style="color:rgba(255,255,255,0.6);font-size:12px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;">Tonight</span>
+                    <span style="color:#10b981;font-size:22px;font-weight:900;">+${block.tonightPts}</span>
+                    <span style="color:rgba(255,255,255,0.25);">→</span>
+                    <span style="color:white;font-size:26px;font-weight:900;">${block.afterPts}</span>
+                    <span style="color:rgba(255,255,255,0.45);font-size:12px;font-weight:700;">EVENT POINTS</span>
                 </div>` : '';
             
             // ── Stage 2: the reveal ladder — every team a slot; grey until revealed ──
@@ -1720,14 +1749,15 @@
             
             return `
                 <div style="animation:fadeIn 0.5s ease-out;max-width:900px;width:100%;text-align:center;">
-                    <div style="display:flex;align-items:center;justify-content:center;gap:26px;margin-bottom:${stage >= 1 ? '4px' : '18px'};">
+                    <div style="display:flex;align-items:center;justify-content:center;gap:26px;margin-bottom:${stage >= 2 ? '2px' : (stage >= 1 ? '4px' : '18px')};">
                         <div style="animation:scaleIn 0.6s ease-out both;">${logoHTML}</div>
                         <div style="text-align:left;">
                             <h1 style="color:white;font-size:clamp(32px,4.2vw,48px);font-weight:900;margin:0 0 10px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">${block.teamName}</h1>
                             <div style="display:flex;gap:18px;">${facesHTML}</div>
                         </div>
                     </div>
-                    ${dialHTML}
+                    ${fairwayHTML}
+                    ${resultStripHTML}
                     ${ladderHTML}
                 </div>
             `;
@@ -1744,13 +1774,19 @@
             const slideAtStart = presentationState.currentSlide;
             let i = 0, val = d.before;
             const byId = (id) => document.getElementById(id);
-            const angle = (v) => -90 + (Math.max(0, Math.min(d.max, v)) / d.max) * 180;
+            const pct = (v) => Math.max(0, Math.min(100, (v / d.max) * 100));
             window.__teamDialTimer = setInterval(() => {
                 const stillHere = presentationState.active
                     && presentationState.currentSlide === slideAtStart
                     && (presentationState.teamRevealStep || 0) === 1;
                 if (!stillHere) { clearInterval(window.__teamDialTimer); window.__teamDialTimer = null; return; }
                 if (i >= d.steps.length) {
+                    const ballEnd = byId('fwBall-' + d.tid);
+                    if (ballEnd) ballEnd.style.left = pct(d.after) + '%';
+                    const fillEnd = byId('fwFill-' + d.tid);
+                    if (fillEnd) fillEnd.style.width = pct(d.after) + '%';
+                    const innerEnd = byId('fwBallInner-' + d.tid);
+                    if (innerEnd) { innerEnd.textContent = '⛳'; innerEnd.style.animation = 'fa-pop 0.6s ease-out'; }
                     const feed = byId('dialFeed-' + d.tid);
                     if (feed) feed.innerHTML = `<div style="color:#fbbf24;font-size:30px;font-weight:900;letter-spacing:1px;animation:fa-pop 0.6s ease-out;">🏁 FINAL — ${d.after} POINTS</div>`;
                     const num = byId('dialNum-' + d.tid);
@@ -1760,8 +1796,17 @@
                 }
                 const s = d.steps[i]; i++;
                 val += s.pts;
-                const needle = byId('dialNeedle-' + d.tid);
-                if (needle) needle.style.transform = `translateX(-50%) rotate(${angle(val)}deg)`;
+                // 🏌️ strike: the ball flies to the new total, the rail fills behind it
+                const ball = byId('fwBall-' + d.tid);
+                if (ball) ball.style.left = pct(val) + '%';
+                const fill = byId('fwFill-' + d.tid);
+                if (fill) fill.style.width = pct(val) + '%';
+                const inner = byId('fwBallInner-' + d.tid);
+                if (inner) {
+                    inner.textContent = '🏌️';
+                    inner.style.animation = 'none'; void inner.offsetHeight;
+                    inner.style.animation = 'fwStrike 0.75s ease-out';
+                }
                 const num = byId('dialNum-' + d.tid);
                 if (num) {
                     num.textContent = val;
