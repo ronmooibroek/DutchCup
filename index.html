@@ -674,7 +674,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.07.18.1';
+        const APP_VERSION = '2026.07.18.2';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -1685,6 +1685,18 @@
                         posBefore: null
                     };
                 });
+                
+                // Movement chip + sound (restored: the ladder refactor dropped these)
+                const moved = (block.posBefore != null) ? (block.posBefore - block.posAfter) : 0;
+                const mColor = moved > 0 ? '#10b981' : (moved < 0 ? '#ef4444' : '#9ca3af');
+                const mWord = (block.posBefore == null) ? 'NEW'
+                    : (moved > 0 ? `▲ UP ${moved}` : (moved < 0 ? `▼ DOWN ${Math.abs(moved)}` : '— HELD'));
+                if (presentationState._teamMoveSfxId !== tid) {
+                    presentationState._teamMoveSfxId = tid;
+                    if (moved > 0) setTimeout(() => { try { playSfx('TEAM RANK UP', 'Sounds/nsmb-new-high-score.mp3', 0.85); } catch (e) {} }, 900);
+                    else if (moved < 0) setTimeout(() => { try { playSfx('TEAM RANK DOWN', 'Sounds/priceisrightfail_1.mp3', 0.75); } catch (e) {} }, 900);
+                }
+                
                 ladderHTML = `
                     <div style="max-width:1000px;margin:6px auto 0;animation:rrCardIn 0.5s ease-out both;">
                         <div style="display:flex;justify-content:center;align-items:center;gap:12px;margin-bottom:12px;">
@@ -4004,14 +4016,17 @@
                                         </div>
                                         
                                         <div style="flex:1;">
-                                            <div style="font-weight:600;font-size:12px;margin-bottom:6px;">🎯 BBB</div>
+                                            <div style="font-weight:600;font-size:12px;margin-bottom:6px;">
+                                                🎯 BBB${window.roundHasPerHoleBBB(round) ? ' <span style="font-weight:500;color:#6b7280;">(from hole taps)</span>' : ''}
+                                            </div>
                                             <input type="number" 
                                                    value="${player.bbbTotal || 0}" 
                                                    min="0" 
                                                    max="54"
+                                                   ${window.roundHasPerHoleBBB(round) ? 'readonly' : ''}
                                                    onfocus="this.select()"
                                                    onchange="setBBBTotal(${teamIdx}, ${playerIdx}, this.value)"
-                                                   style="width:70px;padding:8px;border:2px solid #8b5cf6;border-radius:8px;font-size:16px;font-weight:700;text-align:center;">
+                                                   style="width:70px;padding:8px;border:2px solid ${window.roundHasPerHoleBBB(round) ? '#d1d5db' : '#8b5cf6'};border-radius:8px;font-size:16px;font-weight:700;text-align:center;${window.roundHasPerHoleBBB(round) ? 'background:#f9fafb;color:#6b7280;' : ''}">
                                         </div>
                                     </div>
                                 </div>
@@ -4102,6 +4117,16 @@
                                         <div style="font-size:9px;color:${points > 0 ? '#059669' : '#dc2626'};font-weight:600;min-height:12px;">
                                             ${points !== 0 ? (points > 0 ? '+' : '') + points : ''}
                                         </div>
+                                        ${(() => {
+                                            // Per-hole BBB tap — drives Honey Pot, Swiper, I've Been Robbed, Vulture
+                                            const n = window.bbbCountFor(round, holeIdx, player.id);
+                                            return `<button onclick="cycleHoleBBB(${teamIdx}, ${playerIdx}, ${holeIdx})"
+                                                title="Bingo-Bango-Bongo points on hole ${holeNum} — tap to cycle"
+                                                style="margin-top:2px;width:100%;max-width:44px;min-height:20px;border-radius:6px;cursor:pointer;font-size:10px;font-weight:800;line-height:1;padding:3px 0;
+                                                       ${n > 0 ? 'background:#FFD95E;border:1px solid #E3B93E;color:#6b4e00;' : 'background:transparent;border:1px dashed #d1d5db;color:#c3c8cf;'}">
+                                                ${n > 0 ? '🎯' + n : '🎯'}
+                                            </button>`;
+                                        })()}
                                     </div>`;
                             }
                             
@@ -10301,15 +10326,20 @@
                     // 🍯 HONEY POT — all three B's (Bingo+Bango+Bongo) on one hole.
                     // Badge shows the player's CAREER pot count across the event.
                     A.honeyPot = (() => {
+                        // Count a player's B's PER HOLE across every entry, so a sweep is found
+                        // regardless of how the three points were split across entries.
                         const potsIn = (r, pid) => {
-                            let n = 0, holes = [];
+                            const perHole = {};
                             (r.bbbAwards || []).forEach(e => {
                                 if (!e || e.holeIdx == null) return;
-                                if (String(e.bingo) === String(pid) && String(e.bango) === String(pid) && String(e.bongo) === String(pid)) {
-                                    n++; holes.push(e.holeIdx);
-                                }
+                                ['bingo', 'bango', 'bongo'].forEach(slot => {
+                                    if (e[slot] !== '' && e[slot] != null && String(e[slot]) === String(pid)) {
+                                        perHole[e.holeIdx] = (perHole[e.holeIdx] || 0) + 1;
+                                    }
+                                });
                             });
-                            return { n, holes };
+                            const holes = Object.keys(perHole).filter(h => perHole[h] >= 3).map(h => parseInt(h));
+                            return { n: holes.length, holes };
                         };
                         const winners = [];
                         FUN.forEach(f => {
@@ -12772,11 +12802,11 @@
                                                 points: t.points || 0,
                                                 odds: (lb && lb.previousWinProbability != null) ? lb.previousWinProbability : null
                                             };
-                                        }), { rowH: 48 })}
+                                        }), { rowH: 44 })}
                                     </div>
                                     <div>
                                         <div style="color:#a5b4fc;font-size:12px;font-weight:800;letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;">🎯 Individuals entering tonight</div>
-                                        <div style="max-height:400px;overflow:hidden;">
+                                        <div>
                                             ${renderStandingsLadder(
                                                 (presentationState._individualStandings || [])
                                                     .filter(s => s.before > 0)
@@ -12785,7 +12815,7 @@
                                                         return { id: s.id, name: s.name, color: s.color,
                                                                  points: s.before, avatarOf: sp || { id: s.id, name: s.name } };
                                                     }),
-                                                { showFaces: true, compact: true, rowH: 42, idPrefix: 'openIndiv' })}
+                                                { showFaces: true, compact: true, rowH: 36, idPrefix: 'openIndiv' })}
                                         </div>
                                     </div>
                                 </div>
@@ -12810,12 +12840,6 @@
                                 </div>
                             </div>
                         ` : ''}
-                        
-                        <button onclick="nextPresentationSlide()" 
-                                class="btn-primary" 
-                                style="padding:20px 40px;font-size:24px;background:linear-gradient(135deg, #10b981 0%, #059669 100%);box-shadow:0 8px 24px rgba(16,185,129,0.4);margin-top:20px;">
-                            🎯 Player Performance →
-                        </button>
                     </div>
                 `;
             } else if (currentSlide === teaserSlideIndex) {
@@ -19748,6 +19772,89 @@
             }
         };
 
+        // ═══ PER-HOLE BBB ═══
+        // Stored in round.bbbAwards = [{ holeIdx, bingo, bango, bongo }] — the same shape the
+        // score-entry app writes and the Honey Pot / Swiper / Robbed / Vulture awards read.
+        // A hole may hold MORE than one entry (one per group of three points), so multiple
+        // foursomes can each award their own Bingo-Bango-Bongo on the same hole.
+        window.bbbCountFor = (round, holeIdx, playerId) => {
+            if (!round || !Array.isArray(round.bbbAwards)) return 0;
+            let n = 0;
+            round.bbbAwards.forEach(a => {
+                if (!a || a.holeIdx !== holeIdx) return;
+                ['bingo', 'bango', 'bongo'].forEach(slot => {
+                    if (a[slot] !== '' && a[slot] != null && String(a[slot]) === String(playerId)) n++;
+                });
+            });
+            return n;
+        };
+        window.roundHasPerHoleBBB = (round) => Array.isArray(round && round.bbbAwards) && round.bbbAwards.length > 0;
+        // Rewrite every entry for one hole from a { playerId: count } map.
+        window.__writeHoleBBB = (round, holeIdx, counts) => {
+            if (!Array.isArray(round.bbbAwards)) round.bbbAwards = [];
+            round.bbbAwards = round.bbbAwards.filter(a => !(a && a.holeIdx === holeIdx));
+            // Sweeps first, each in their own entry, so a Honey Pot is never split in half.
+            const sweeps = Object.keys(counts).filter(pid => counts[pid] >= 3);
+            sweeps.forEach(pid => {
+                round.bbbAwards.push({ holeIdx, bingo: pid, bango: pid, bongo: pid });
+            });
+            const ids = [];
+            Object.keys(counts).forEach(pid => {
+                const n = sweeps.includes(pid) ? counts[pid] - 3 : counts[pid];
+                for (let i = 0; i < n; i++) ids.push(pid);
+            });
+            for (let i = 0; i < ids.length; i += 3) {
+                round.bbbAwards.push({
+                    holeIdx,
+                    bingo: ids[i] || '',
+                    bango: ids[i + 1] || '',
+                    bongo: ids[i + 2] || ''
+                });
+            }
+        };
+        // Once per-hole data exists it becomes the source of truth for bbbTotal (which drives points).
+        window.__recomputeBBBTotals = (round) => {
+            if (!window.roundHasPerHoleBBB(round)) return;
+            const tally = {};
+            round.bbbAwards.forEach(a => ['bingo', 'bango', 'bongo'].forEach(slot => {
+                const pid = a && a[slot];
+                if (pid !== '' && pid != null) tally[String(pid)] = (tally[String(pid)] || 0) + 1;
+            }));
+            (round.teams || []).forEach(t => (t.players || []).forEach(p => {
+                p.bbbTotal = tally[String(p.id)] || 0;
+            }));
+        };
+        // Tap a hole's BBB badge: cycle that player's points on the hole (0→1→2→3→0).
+        window.cycleHoleBBB = (teamIdx, playerIdx, holeIdx) => {
+            try {
+                const round = state.activeRound;
+                const player = round.teams[teamIdx].players[playerIdx];
+                const pid = String(player.id);
+                const first = !window.roundHasPerHoleBBB(round);
+                
+                // Current counts for this hole, keyed by player id
+                const counts = {};
+                (round.teams || []).forEach(t => (t.players || []).forEach(p => {
+                    const n = window.bbbCountFor(round, holeIdx, p.id);
+                    if (n > 0) counts[String(p.id)] = n;
+                }));
+                counts[pid] = ((counts[pid] || 0) + 1) % 4;
+                if (counts[pid] === 0) delete counts[pid];
+                
+                window.__writeHoleBBB(round, holeIdx, counts);
+                window.__recomputeBBBTotals(round);
+                if (first) notify('🎯 Per-hole BBB started — season totals now come from these taps');
+                
+                const scrollX = window.scrollX || window.pageXOffset;
+                const scrollY = window.scrollY || window.pageYOffset;
+                render();
+                setTimeout(() => { window.scrollTo(scrollX, scrollY); }, 10);
+            } catch (err) {
+                console.error('Cycle hole BBB error:', err);
+                showError('Failed to set hole BBB: ' + err.message);
+            }
+        };
+        
         window.setBBBTotal = (teamIdx, playerIdx, value) => {
             try {
                 const player = state.activeRound.teams[teamIdx].players[playerIdx];
