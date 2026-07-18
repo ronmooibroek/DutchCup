@@ -583,12 +583,21 @@
             30%      { transform: translateY(10px); }
             60%      { transform: translateY(4px); }
         }
-        /* Fairway strike: the ball leaps off the club face and settles */
-        @keyframes fwStrike {
-            0%   { transform: translateY(0) scale(1) rotate(0deg); }
-            30%  { transform: translateY(-26px) scale(1.18) rotate(-12deg); }
-            65%  { transform: translateY(-10px) scale(1.05) rotate(6deg); }
-            100% { transform: translateY(0) scale(1) rotate(0deg); }
+        /* Fairway: the golfer's backswing and follow-through */
+        @keyframes fwSwing {
+            0%   { transform: rotate(0deg) scale(1); }
+            30%  { transform: rotate(-16deg) scale(1.04); }   /* backswing */
+            48%  { transform: rotate(14deg) scale(1.08); }    /* impact */
+            70%  { transform: rotate(8deg) scale(1.03); }     /* follow-through */
+            100% { transform: rotate(0deg) scale(1); }
+        }
+        /* Ball flight: rises off the club face, peaks, then drops to the landing spot */
+        @keyframes fwFlight {
+            0%   { transform: translateY(0) scale(0.8); }
+            15%  { transform: translateY(-34px) scale(1.1); }
+            50%  { transform: translateY(-52px) scale(1.15); }
+            85%  { transform: translateY(-18px) scale(1); }
+            100% { transform: translateY(0) scale(1); }
         }
         @keyframes rrBarGrow {
             0%   { transform: scaleX(0); }
@@ -681,7 +690,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.07.18.3';
+        const APP_VERSION = '2026.07.18.4';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -1642,8 +1651,13 @@
                             <div style="color:rgba(255,255,255,0.65);font-size:10px;font-weight:800;white-space:nowrap;">START ${block.beforePts}</div>
                         </div>
                         <!-- the ball in play: advances with every scoring method -->
-                        <div id="fwBall-${tid}" style="position:absolute;left:${pctFor(block.beforePts)}%;bottom:52px;transform:translateX(-50%);z-index:5;transition:left 0.75s cubic-bezier(0.25,0.9,0.35,1);">
-                            <div id="fwBallInner-${tid}" style="font-size:26px;filter:drop-shadow(0 4px 6px rgba(0,0,0,0.55));">🏌️</div>
+                        <!-- The golfer stands over the ball, swings, then walks up to it -->
+                        <div id="fwGolfer-${tid}" style="position:absolute;left:${pctFor(block.beforePts)}%;bottom:18px;transform:translateX(-50%);z-index:5;transition:left 0.35s ease-in-out;">
+                            <div id="fwGolferInner-${tid}" style="font-size:34px;filter:drop-shadow(0 4px 6px rgba(0,0,0,0.55));transform-origin:50% 90%;">🏌️</div>
+                        </div>
+                        <!-- The ball flies from the strike point to where the total lands -->
+                        <div id="fwBall-${tid}" style="position:absolute;left:${pctFor(block.beforePts)}%;bottom:22px;transform:translateX(-50%);z-index:6;transition:left 0.7s cubic-bezier(0.3,0.05,0.4,1);">
+                            <div id="fwBallInner-${tid}" style="font-size:15px;filter:drop-shadow(0 3px 5px rgba(0,0,0,0.6));opacity:0;">⚪</div>
                         </div>
                         <!-- distance rail -->
                         <div style="position:absolute;left:0;right:0;bottom:6px;height:3px;background:rgba(255,255,255,0.12);"></div>
@@ -1781,12 +1795,21 @@
                     && (presentationState.teamRevealStep || 0) === 1;
                 if (!stillHere) { clearInterval(window.__teamDialTimer); window.__teamDialTimer = null; return; }
                 if (i >= d.steps.length) {
+                    const endPct = pct(d.after);
                     const ballEnd = byId('fwBall-' + d.tid);
-                    if (ballEnd) ballEnd.style.left = pct(d.after) + '%';
+                    if (ballEnd) ballEnd.style.left = endPct + '%';
+                    const golferEnd = byId('fwGolfer-' + d.tid);
+                    if (golferEnd) golferEnd.style.left = endPct + '%';
                     const fillEnd = byId('fwFill-' + d.tid);
-                    if (fillEnd) fillEnd.style.width = pct(d.after) + '%';
+                    if (fillEnd) fillEnd.style.width = endPct + '%';
                     const innerEnd = byId('fwBallInner-' + d.tid);
-                    if (innerEnd) { innerEnd.textContent = '⛳'; innerEnd.style.animation = 'fa-pop 0.6s ease-out'; }
+                    if (innerEnd) {
+                        innerEnd.textContent = '⚪';
+                        innerEnd.style.opacity = '1';
+                        innerEnd.style.animation = 'fa-pop 0.6s ease-out';
+                    }
+                    const gInnerEnd = byId('fwGolferInner-' + d.tid);
+                    if (gInnerEnd) { gInnerEnd.textContent = '🙌'; gInnerEnd.style.animation = 'fa-pop 0.6s ease-out'; }
                     const feed = byId('dialFeed-' + d.tid);
                     if (feed) feed.innerHTML = `<div style="color:#fbbf24;font-size:30px;font-weight:900;letter-spacing:1px;animation:fa-pop 0.6s ease-out;">🏁 FINAL — ${d.after} POINTS</div>`;
                     const num = byId('dialNum-' + d.tid);
@@ -1796,17 +1819,39 @@
                 }
                 const s = d.steps[i]; i++;
                 val += s.pts;
-                // 🏌️ strike: the ball flies to the new total, the rail fills behind it
+                // 🏌️ SWING → ⚪ FLIGHT → walk up: the golfer stays put and strikes, the ball
+                // flies ahead to the new total, then the golfer walks to it for the next shot.
+                const target = pct(val);
+                const golfer = byId('fwGolfer-' + d.tid);
+                const golferInner = byId('fwGolferInner-' + d.tid);
                 const ball = byId('fwBall-' + d.tid);
-                if (ball) ball.style.left = pct(val) + '%';
+                const ballInner = byId('fwBallInner-' + d.tid);
                 const fill = byId('fwFill-' + d.tid);
-                if (fill) fill.style.width = pct(val) + '%';
-                const inner = byId('fwBallInner-' + d.tid);
-                if (inner) {
-                    inner.textContent = '🏌️';
-                    inner.style.animation = 'none'; void inner.offsetHeight;
-                    inner.style.animation = 'fwStrike 0.75s ease-out';
+                // 1) the swing
+                if (golferInner) {
+                    golferInner.style.animation = 'none'; void golferInner.offsetHeight;
+                    golferInner.style.animation = 'fwSwing 0.5s ease-in-out';
                 }
+                // 2) at impact, the ball launches from the golfer's feet
+                setTimeout(() => {
+                    if (ball && golfer) {
+                        ball.style.transition = 'none';
+                        ball.style.left = golfer.style.left || (pct(val) + '%');
+                        void ball.offsetHeight;
+                        ball.style.transition = 'left 0.7s cubic-bezier(0.3,0.05,0.4,1)';
+                        ball.style.left = target + '%';
+                    }
+                    if (ballInner) {
+                        ballInner.style.opacity = '1';
+                        ballInner.style.animation = 'none'; void ballInner.offsetHeight;
+                        ballInner.style.animation = 'fwFlight 0.7s ease-out';
+                    }
+                    if (fill) fill.style.width = target + '%';
+                }, 200);
+                // 3) once it lands, the golfer walks up to the ball
+                setTimeout(() => {
+                    if (golfer) golfer.style.left = target + '%';
+                }, 920);
                 const num = byId('dialNum-' + d.tid);
                 if (num) {
                     num.textContent = val;
