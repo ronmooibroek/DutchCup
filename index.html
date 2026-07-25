@@ -696,7 +696,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.07.19.1';
+        const APP_VERSION = '2026.07.19.2';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -1911,6 +1911,7 @@
                 }
                 // 2) at impact, the ball launches from the golfer's feet
                 setTimeout(() => {
+                    try { playSfx('FAIRWAY SHOT', 'Sounds/golf-hit.mp3', 0.8); } catch (e) {}
                     if (ball && golfer) {
                         ball.style.transition = 'none';
                         ball.style.left = golfer.style.left || (pct(val) + '%');
