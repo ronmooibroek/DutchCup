@@ -696,7 +696,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.07.18.6';
+        const APP_VERSION = '2026.07.18.7';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -1447,6 +1447,20 @@
         
         // Upload a Blob to Firebase Storage at the given path. Returns download URL.
         // Throws with a helpful message if Storage isn't enabled in the Firebase project.
+        // Turn a Firebase Storage error into something readable on the course.
+        window.describeStorageError = (err) => {
+            const code = (err && (err.code || err.name)) || '';
+            if (code === 'storage/quota-exceeded')
+                return 'Firebase Storage quota exceeded — check Storage → Usage in the Firebase console';
+            if (code === 'storage/unauthorized' || code === 'storage/unauthenticated')
+                return 'Upload blocked — Storage rules rejected it (check the rules/expiry)';
+            if (code === 'storage/retry-limit-exceeded' || code === 'storage/canceled')
+                return 'Upload failed — weak connection, try again';
+            if (code === 'storage/unknown')
+                return 'Upload failed — Storage returned an unknown error (often billing/quota)';
+            return (err && err.message) ? err.message : 'Unknown upload error';
+        };
+        
         const uploadPhoto = async (blob, storagePath) => {
             if (!firebaseStorage) {
                 throw new Error('Firebase Storage is not enabled for this project. Enable it in the Firebase console (Storage → Get Started) to upload photos.');
@@ -22344,7 +22358,7 @@
             if (!file) return;
             try {
                 notify('📸 Compressing photo…');
-                const blob = await compressImage(file, 800, 0.85);
+                const blob = await compressImage(file, 600, 0.75); // player photo: display size is small
                 const ts = Date.now();
                 const path = playerPhotoPath(playerId, ts);
                 notify('⬆️ Uploading…');
@@ -22413,7 +22427,7 @@
                 for (let i = 0; i < fileList.length; i++) {
                     const file = fileList[i];
                     try {
-                        const blob = await compressImage(file, 1200, 0.85); // larger maxDim for round photos (more detail)
+                        const blob = await compressImage(file, 1000, 0.72); // round photo: sized for the slideshow
                         const ts = Date.now() + i; // ensure unique paths even if uploads are fast
                         const path = roundPhotoPath(round.id || round.timestamp || roundIndex, ts);
                         const url = await uploadPhoto(blob, path);
@@ -23132,11 +23146,13 @@
                 notify(`📸 Uploading ${fileList.length} photo${fileList.length === 1 ? '' : 's'}…`);
                 
                 let uploadedCount = 0;
+                let lastErr = null;
                 for (let i = 0; i < fileList.length; i++) {
                     const file = fileList[i];
                     try {
-                        // Compress to ~1200px max dim, ~300KB output
-                        const blob = await compressImage(file, 1200, 0.85);
+                        // ~1000px / q0.72 keeps slideshow sharpness at roughly half the bytes
+                        // of the old 1200/0.85 — less Storage used, less bandwidth on replay.
+                        const blob = await compressImage(file, 1000, 0.72);
                         const ts = Date.now() + i;
                         const roundKey = round.id || round.timestamp || 'active';
                         const path = roundPhotoPath(roundKey, ts);
@@ -23147,13 +23163,14 @@
                         render();
                     } catch (perFileErr) {
                         console.error(`Failed to upload photo ${i + 1}:`, perFileErr);
+                        lastErr = perFileErr;
                     }
                 }
                 
                 event.target.value = ''; // clear input so same file can be selected again
                 
                 if (uploadedCount === 0) {
-                    showError('All photo uploads failed. Check the console for details.');
+                    showError('Photo upload failed — ' + window.describeStorageError(lastErr));
                 } else if (uploadedCount < fileList.length) {
                     notify(`⚠️ ${uploadedCount} of ${fileList.length} photos uploaded`);
                 } else {
