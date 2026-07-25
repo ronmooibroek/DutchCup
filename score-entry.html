@@ -490,7 +490,7 @@ document.addEventListener('visibilitychange', () => {
     try { if (document.visibilityState === 'hidden' && hasPendingEdits()) flushPendingEdits(); } catch (e) {}
 });
 
-const SE_VERSION = '2.5.0'; // Finish Round button on hole 18 + wrap-up screen with incomplete-hole check
+const SE_VERSION = '2.6.0'; // lighter photo compression (~half the bytes) + clearer quota guidance
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
@@ -1970,7 +1970,7 @@ async function uploadRoundPhotos(fileList) {
         const file = files[i];
         try {
             // Compress, then upload to Firebase Storage
-            const blob = await compressImage(file, 1200, 0.85);
+            const blob = await compressImage(file, 1000, 0.72); // ~half the bytes of 1200/0.85
             const ts = Date.now() + i; // unique even for rapid uploads
             const path = roundPhotoPath(roundId, ts);
             const url = await uploadPhotoBlob(blob, path);
@@ -2006,7 +2006,7 @@ async function uploadRoundPhotos(fileList) {
         if (code === 'storage/unauthorized' || code === 'storage/unauthenticated') {
             setStatus('Upload blocked — Storage rules expired (check Firebase console)', 'error');
         } else if (code === 'storage/quota-exceeded') {
-            setStatus('Upload blocked — Storage quota exceeded', 'error');
+            setStatus('Storage quota exceeded — see Firebase console → Storage → Usage', 'error');
         } else if (code === 'storage/retry-limit-exceeded' || code === 'storage/canceled') {
             setStatus('Upload failed — poor connection, try again', 'error');
         } else {
