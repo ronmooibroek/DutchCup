@@ -701,7 +701,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.07.25.2';
+        const APP_VERSION = '2026.07.25.3';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -2818,13 +2818,44 @@
                                    style="width:100%;padding:12px;border:2px solid #d1d5db;border-radius:8px;font-size:16px;min-height:80px;"></textarea>
                         </div>
                         <div style="margin-bottom:16px;">
-                            <label style="display:block;margin-bottom:8px;font-weight:600;">Start Date:</label>
+                            <label style="display:block;margin-bottom:8px;font-weight:600;">Start Date (first round):</label>
                             <input type="date" id="eventStartDate" value="${new Date().toISOString().split('T')[0]}"
+                                   onchange="renderEventRoundPickers()"
                                    style="width:100%;padding:12px;border:2px solid #d1d5db;border-radius:8px;font-size:16px;">
                         </div>
-                        <button onclick="saveEvent()" class="btn-primary" style="width:100%;">✅ Create Event</button>
+                        
+                        <div style="border-top:2px solid #e5e7eb;margin:20px 0 16px;padding-top:16px;">
+                            <h3 style="margin:0 0 4px;font-size:18px;">📅 Schedule the rounds</h3>
+                            <p style="margin:0 0 14px;font-size:13px;color:#6b7280;">
+                                One round per day from the start date. Groups get set later, round by round.
+                            </p>
+                            <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
+                                <div style="flex:1;min-width:130px;">
+                                    <label style="display:block;margin-bottom:8px;font-weight:600;">How many rounds?</label>
+                                    <input type="number" id="eventRoundCount" value="7" min="0" max="30"
+                                           onchange="renderEventRoundPickers()" oninput="renderEventRoundPickers()"
+                                           style="width:100%;padding:12px;border:2px solid #d1d5db;border-radius:8px;font-size:16px;">
+                                </div>
+                                <div style="flex:1;min-width:130px;">
+                                    <label style="display:block;margin-bottom:8px;font-weight:600;">Default tee time:</label>
+                                    <input type="time" id="eventRoundTime" value="09:00"
+                                           onchange="renderEventRoundPickers()"
+                                           style="width:100%;padding:12px;border:2px solid #d1d5db;border-radius:8px;font-size:16px;">
+                                </div>
+                            </div>
+                            <div id="eventRoundPickers"></div>
+                        </div>
+                        
+                        <label style="display:flex;align-items:center;gap:10px;margin-bottom:16px;font-weight:600;cursor:pointer;">
+                            <input type="checkbox" id="eventMakeCurrent" checked style="width:20px;height:20px;">
+                            Switch to this event after creating
+                        </label>
+                        
+                        <button onclick="saveEvent()" class="btn-primary" style="width:100%;">✅ Create Event & Rounds</button>
                     </div>
                 `;
+                window.__eventRoundCourses = [];
+                setTimeout(() => { try { renderEventRoundPickers(); } catch (e) {} }, 0);
                 return;
             }
             
@@ -20058,6 +20089,63 @@
             }
         };
 
+        // ─── New-event round scheduler ───────────────────────────────────────
+        // One picker per round; the chosen course is remembered per slot so changing
+        // the count or the date doesn't wipe selections.
+        window.__eventRoundCourses = [];
+        window.__addDaysYMD = (ymd, days) => {
+            const [y, m, d] = (ymd || '').split('-').map(Number);
+            if (!y || !m || !d) return ymd;
+            const dt = new Date(y, m - 1, d + days);
+            const p = n => String(n).padStart(2, '0');
+            return `${dt.getFullYear()}-${p(dt.getMonth() + 1)}-${p(dt.getDate())}`;
+        };
+        window.renderEventRoundPickers = () => {
+            const host = document.getElementById('eventRoundPickers');
+            if (!host) return;
+            const countEl = document.getElementById('eventRoundCount');
+            const n = Math.max(0, Math.min(30, parseInt(countEl && countEl.value) || 0));
+            if (!state.courses || state.courses.length === 0) {
+                host.innerHTML = `<div style="padding:14px;background:#fef3c7;border:2px solid #fbbf24;border-radius:10px;font-size:14px;">
+                    ⚠️ No courses yet — add courses first (Admin → Courses) and the event will be created without rounds.
+                </div>`;
+                return;
+            }
+            if (n === 0) {
+                host.innerHTML = `<p style="font-size:13px;color:#6b7280;margin:0;">No rounds will be created.</p>`;
+                return;
+            }
+            const startDate = (document.getElementById('eventStartDate') || {}).value || '';
+            const time = (document.getElementById('eventRoundTime') || {}).value || '09:00';
+            let html = '';
+            for (let i = 0; i < n; i++) {
+                // Default: walk through the course list in order, wrapping if fewer courses than rounds
+                if (window.__eventRoundCourses[i] == null) {
+                    window.__eventRoundCourses[i] = state.courses[i % state.courses.length].id;
+                }
+                const sel = window.__eventRoundCourses[i];
+                const ymd = window.__addDaysYMD(startDate, i);
+                let pretty = ymd;
+                try {
+                    const [y, m, d] = ymd.split('-').map(Number);
+                    pretty = new Date(y, m - 1, d).toLocaleDateString('en-US',
+                        { weekday: 'short', month: 'short', day: 'numeric' });
+                } catch (e) {}
+                html += `
+                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;padding:10px;background:#f9fafb;border-radius:10px;">
+                        <div style="min-width:96px;">
+                            <div style="font-weight:800;font-size:14px;color:#065f46;">Round ${i + 1}</div>
+                            <div style="font-size:12px;color:#6b7280;">${pretty} · ${time}</div>
+                        </div>
+                        <select onchange="window.__eventRoundCourses[${i}] = parseInt(this.value)"
+                                style="flex:1;padding:10px;border:2px solid #d1d5db;border-radius:8px;font-size:15px;background:white;">
+                            ${state.courses.map(co => `<option value="${co.id}" ${co.id === sel ? 'selected' : ''}>${co.name}</option>`).join('')}
+                        </select>
+                    </div>`;
+            }
+            host.innerHTML = html;
+        };
+        
         // Event management functions
         window.saveEvent = () => {
             try {
@@ -20081,12 +20169,63 @@
                 const updatedEvents = [...state.events, newEvent];
                 save('events', updatedEvents);
                 
-                // Set as current event if it's the first one
-                if (state.events.length === 0) {
+                // ── Build the scheduled rounds: one per day, course per round ──
+                const countEl = document.getElementById('eventRoundCount');
+                const roundCount = Math.max(0, Math.min(30, parseInt(countEl && countEl.value) || 0));
+                const teeTime = (document.getElementById('eventRoundTime') || {}).value || '09:00';
+                const newRounds = [];
+                
+                if (roundCount > 0 && state.courses && state.courses.length > 0) {
+                    // Fresh team/player copies per round so rounds never share objects
+                    const buildTeams = () => state.teams.map(t => {
+                        const p1 = state.players.find(p => p.id === t.players[0]);
+                        const p2 = state.players.find(p => p.id === t.players[1]);
+                        if (!p1 || !p2) return null;
+                        const mk = pl => ({
+                            id: pl.id, name: pl.name, handicap: pl.handicap,
+                            scores: Array(18).fill(''), bbbTotal: 0, ballsRemaining: 3
+                        });
+                        return { teamId: t.id, teamName: t.name, groupNumber: null, players: [mk(p1), mk(p2)] };
+                    }).filter(Boolean);
+                    
+                    const [th, tm] = teeTime.split(':').map(Number);
+                    for (let i = 0; i < roundCount; i++) {
+                        const courseId = window.__eventRoundCourses[i] != null
+                            ? window.__eventRoundCourses[i]
+                            : state.courses[i % state.courses.length].id;
+                        const course = state.courses.find(co => co.id === courseId);
+                        if (!course) continue;
+                        const ymd = window.__addDaysYMD(startDate, i);
+                        const [yy, mm, dd] = ymd.split('-').map(Number);
+                        newRounds.push({
+                            id: Date.now() + i,              // unique per round
+                            eventId: newEvent.id,
+                            courseId: course.id,
+                            courseName: course.name,
+                            courseAddress: course.address || '',
+                            pars: course.pars,
+                            handicaps: course.handicaps,
+                            date: ymd,
+                            timestamp: new Date(yy, mm - 1, dd, th || 0, tm || 0, 0).getTime(),
+                            teams: buildTeams(),
+                            ctpWinners: [],
+                            extra9Winners: [],
+                            active: false                    // scheduled, not started
+                        });
+                    }
+                    if (newRounds.length > 0) save('rounds', [...state.rounds, ...newRounds]);
+                }
+                
+                // Switch to the new event when asked (or when it's the very first one)
+                const makeCurrent = (document.getElementById('eventMakeCurrent') || {}).checked;
+                if (makeCurrent || state.events.length === 0) {
                     save('currentEventId', newEvent.id);
                 }
                 
-                notify('✅ Event created!');
+                window.__eventRoundCourses = [];
+                notify(newRounds.length > 0
+                    ? `✅ Event created with ${newRounds.length} scheduled round${newRounds.length === 1 ? '' : 's'}!`
+                    : '✅ Event created!');
                 navigate('events');
             } catch (err) {
                 console.error('Save event error:', err);
