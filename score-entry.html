@@ -67,6 +67,24 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
 
 /* ─── App shell ─── */
 #app { max-width: 560px; margin: 0 auto; padding: 8px 10px 96px; }
+/* ─── Live leaderboard ─── */
+.lb-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+.lb-tab {
+    flex: 1; padding: 10px 6px; border-radius: 10px; border: 2px solid var(--sand);
+    background: white; font-size: 13px; font-weight: 800; cursor: pointer; min-height: 44px;
+}
+.lb-tab.on { background: var(--fairway); border-color: var(--fairway); color: white; }
+.lb-row {
+    display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+    border-radius: 10px; background: var(--card); margin-bottom: 6px; box-shadow: var(--shadow);
+}
+.lb-row.me { border-left: 4px solid var(--fairway); }
+.lb-pos { width: 26px; font-weight: 900; font-size: 14px; color: var(--ink-soft); }
+.lb-name { flex: 1; font-weight: 800; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lb-sub { font-size: 11px; color: var(--ink-soft); font-weight: 600; }
+.lb-pts { font-weight: 900; font-size: 17px; font-variant-numeric: tabular-nums; }
+.lb-thru { font-size: 11px; color: var(--ink-soft); width: 46px; text-align: right; font-weight: 700; }
+.lb-empty { text-align: center; color: var(--ink-soft); padding: 22px 10px; font-size: 14px; }
 .ctp-slim { display: flex; align-items: center; gap: 10px; padding: 10px 12px; }
 .ctp-slim .lbl { font-size: 13px; font-weight: 800; white-space: nowrap; }
 .ctp-slim .lbl small { display: block; font-weight: 600; color: var(--ink-soft); font-size: 10.5px; }
@@ -490,7 +508,7 @@ document.addEventListener('visibilitychange', () => {
     try { if (document.visibilityState === 'hidden' && hasPendingEdits()) flushPendingEdits(); } catch (e) {}
 });
 
-const SE_VERSION = '2.6.0'; // lighter photo compression (~half the bytes) + clearer quota guidance
+const SE_VERSION = '2.7.0'; // live leaderboard (teams / players / my match)
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
@@ -504,6 +522,7 @@ const state = {
     pendingTimer: null,
     autoAdvanceTimer: null,
     finished: false,           // showing the end-of-round summary screen
+    board: null,               // 'teams' | 'players' | 'match' when the leaderboard is open
     sheetPlayerId: null,       // whose score sheet (bottom sheet pad) is open
     padExpanded: false,        // sheet showing the full 1–12 grid instead of par-relative
     pendingEdits: {
@@ -982,6 +1001,8 @@ window.__switchPlayer = function() {
 // SCORE ENTRY VIEW
 // ═══════════════════════════════════════════════════════════════════════
 function renderScoreEntry() {
+    // If the leaderboard is open, keep showing it (live data refreshes route here).
+    if (state.board) { renderLeaderboard(); return; }
     const round = getRoundById(state.selectedRoundId);
     if (!round) return;
     const groupPlayers = getGroupPlayers(round, state.groupNumber);
@@ -1003,6 +1024,13 @@ function renderScoreEntry() {
 
     // Photo card — collapsible, always available during scoring
     appEl.appendChild(buildPhotoCard(round));
+
+    // Live leaderboard entry point
+    appEl.appendChild(el('button', {
+        class: 'foot-btn prev', type: 'button',
+        style: 'width:100%;margin-bottom:8px;background:#EDF4EE;color:var(--fairway-dk);font-size:15px;',
+        onclick: () => { state.board = 'teams'; renderLeaderboard(); }
+    }, '\u{1F4CA} Live leaderboard'));
 
     appEl.appendChild(buildFooterNav());
 
@@ -1426,6 +1454,135 @@ function buildPhotoCard(round) {
     
     wrap.appendChild(body);
     return wrap;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// LIVE LEADERBOARD — everyone's round as it stands right now
+// Reads the same live-synced rounds data, so it updates as other groups score.
+// ═══════════════════════════════════════════════════════════════════════
+function renderLeaderboard() {
+    const round = getRoundById(state.selectedRoundId);
+    if (!round) { state.board = null; renderScoreEntry(); return; }
+    const tab = state.board || 'teams';
+
+    setHeader(round.courseName || 'Round', 'Live leaderboard');
+    const appEl = $('#app');
+    appEl.innerHTML = '';
+
+    // Tabs
+    const tabs = el('div', { class: 'lb-tabs' });
+    [['teams', '🏆 Teams'], ['players', '🎯 Players'], ['match', '⚔️ My Match']].forEach(([k, label]) => {
+        tabs.appendChild(el('button', {
+            class: 'lb-tab' + (tab === k ? ' on' : ''), type: 'button',
+            onclick: () => { state.board = k; renderLeaderboard(); }
+        }, label));
+    });
+    appEl.appendChild(tabs);
+
+    const players = getAllRoundPlayers(round).map(p => {
+        const t = computePlayerTotals(round, p);
+        return { ...p, gross: t.gross, points: t.points, thru: t.thru };
+    });
+
+    if (tab === 'players') {
+        const ranked = players.slice().sort((a, b) => b.points - a.points || b.thru - a.thru);
+        if (ranked.every(p => p.thru === 0)) {
+            appEl.appendChild(el('div', { class: 'lb-empty' }, 'No scores in yet — come back after a hole or two.'));
+        }
+        ranked.forEach((p, i) => {
+            const isMe = idsEqual(p.id, state.currentPlayerId);
+            appEl.appendChild(el('div', { class: 'lb-row' + (isMe ? ' me' : '') },
+                el('div', { class: 'lb-pos' }, i === 0 && p.thru > 0 ? '\u{1F451}' : '#' + (i + 1)),
+                el('div', { class: 'lb-name' },
+                    document.createTextNode(p.name || '?'),
+                    el('div', { class: 'lb-sub' }, `${p.teamName || ''}${p.gross ? ' \u00b7 ' + p.gross + ' gross' : ''}`)),
+                el('div', { class: 'lb-thru' }, p.thru ? 'thru ' + p.thru : '\u2014'),
+                el('div', { class: 'lb-pts' }, String(p.points))
+            ));
+        });
+    } else if (tab === 'teams') {
+        const byTeam = {};
+        (round.teams || []).forEach(team => {
+            const rows = (team.players || []).map(p => players.find(x => idsEqual(x.id, p.id))).filter(Boolean);
+            byTeam[team.teamName || 'Team'] = {
+                name: team.teamName || 'Team',
+                points: rows.reduce((s, r) => s + r.points, 0),
+                thru: rows.length ? Math.max(...rows.map(r => r.thru)) : 0,
+                members: rows
+            };
+        });
+        const ranked = Object.values(byTeam).sort((a, b) => b.points - a.points);
+        if (ranked.every(t => t.thru === 0)) {
+            appEl.appendChild(el('div', { class: 'lb-empty' }, 'No scores in yet — come back after a hole or two.'));
+        }
+        ranked.forEach((t, i) => {
+            const mine = t.members.some(m => idsEqual(m.id, state.currentPlayerId));
+            appEl.appendChild(el('div', { class: 'lb-row' + (mine ? ' me' : '') },
+                el('div', { class: 'lb-pos' }, i === 0 && t.thru > 0 ? '\u{1F451}' : '#' + (i + 1)),
+                el('div', { class: 'lb-name' },
+                    document.createTextNode(t.name),
+                    el('div', { class: 'lb-sub' }, t.members.map(m => `${m.name}: ${m.points}`).join(' \u00b7 '))),
+                el('div', { class: 'lb-thru' }, t.thru ? 'thru ' + t.thru : '\u2014'),
+                el('div', { class: 'lb-pts' }, String(t.points))
+            ));
+        });
+    } else {
+        // ── My Match: hole-by-hole net match play against the group ──
+        const me = players.find(p => idsEqual(p.id, state.currentPlayerId));
+        const group = getGroupPlayers(round, state.groupNumber)
+            .map(p => players.find(x => idsEqual(x.id, p.id))).filter(Boolean);
+        const opponents = group.filter(p => !idsEqual(p.id, state.currentPlayerId));
+        if (!me || opponents.length === 0) {
+            appEl.appendChild(el('div', { class: 'lb-empty' },
+                'Match view needs you and at least one playing partner in the group.'));
+        } else {
+            const myHc = parseInt(me.handicap, 10) || 0;
+            opponents.forEach(op => {
+                const opHc = parseInt(op.handicap, 10) || 0;
+                let up = 0, played = 0;
+                const dots = el('div', { style: 'display:flex;gap:3px;flex-wrap:wrap;margin-top:8px;' });
+                for (let h = 0; h < 18; h++) {
+                    const a = effectiveScore(round, me.id, h);
+                    const b = effectiveScore(round, op.id, h);
+                    if (a === '' || a == null || b === '' || b == null) {
+                        dots.appendChild(el('div', { style: 'width:14px;height:14px;border-radius:4px;background:#E8E4D9;' }));
+                        continue;
+                    }
+                    const holeHc = (round.handicaps || [])[h];
+                    const an = parseInt(a, 10) - strokesOnHole(myHc, holeHc);
+                    const bn = parseInt(b, 10) - strokesOnHole(opHc, holeHc);
+                    played++;
+                    let col = '#9CA3AF';
+                    if (an < bn) { up++; col = '#2E7D32'; }
+                    else if (bn < an) { up--; col = '#C62828'; }
+                    dots.appendChild(el('div', { style: `width:14px;height:14px;border-radius:4px;background:${col};` }));
+                }
+                const remaining = 18 - played;
+                let statusText, statusColor;
+                if (up === 0) { statusText = 'ALL SQUARE'; statusColor = 'var(--ink-soft)'; }
+                else if (Math.abs(up) > remaining && remaining >= 0 && played > 0) {
+                    statusText = up > 0 ? `WON ${up}&${remaining}` : `LOST ${-up}&${remaining}`;
+                    statusColor = up > 0 ? '#2E7D32' : '#C62828';
+                } else {
+                    statusText = up > 0 ? `${up} UP` : `${-up} DOWN`;
+                    statusColor = up > 0 ? '#2E7D32' : '#C62828';
+                }
+                appEl.appendChild(el('div', { class: 'card', style: 'padding:14px;' },
+                    el('div', { style: 'display:flex;justify-content:space-between;align-items:baseline;' },
+                        el('div', { style: 'font-weight:800;font-size:16px;' }, `vs ${op.name}`),
+                        el('div', { style: `font-weight:900;font-size:18px;color:${statusColor};` }, statusText)),
+                    el('div', { class: 'lb-sub', style: 'margin-top:2px;' },
+                        `${played} hole${played === 1 ? '' : 's'} played \u00b7 net match play`),
+                    dots
+                ));
+            });
+        }
+    }
+
+    appEl.appendChild(el('button', {
+        class: 'foot-btn prev', type: 'button', style: 'width:100%;margin-top:10px;',
+        onclick: () => { state.board = null; renderScoreEntry(); }
+    }, '\u2190 Back to scoring'));
 }
 
 function buildFooterNav() {
