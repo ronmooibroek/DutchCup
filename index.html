@@ -701,7 +701,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.07.25.3';
+        const APP_VERSION = '2026.07.26.1';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -945,6 +945,42 @@
             db.listen('rounds', (value) => {
                 if (value) {
                     state.rounds = value;
+                    // If this device is scoring a round that someone else just updated,
+                    // fold their entries into our open copy instead of drifting stale.
+                    // Per-cell "last change wins": a filled value beats a blank one, and
+                    // whatever we're actively typing stays put.
+                    try {
+                        const ar = state.activeRound;
+                        if (ar && ar.id != null) {
+                            const server = value.find(r => r && String(r.id) === String(ar.id));
+                            if (server && Array.isArray(server.teams)) {
+                                server.teams.forEach((st, ti) => {
+                                    const lt = ar.teams && ar.teams[ti];
+                                    if (!lt) return;
+                                    (st.players || []).forEach((sp, pi) => {
+                                        const lp = lt.players && lt.players[pi];
+                                        if (!lp || String(sp.id) !== String(lp.id)) return;
+                                        (sp.scores || []).forEach((sv, hi) => {
+                                            const lv = (lp.scores || [])[hi];
+                                            if (sv !== '' && sv != null && (lv === '' || lv == null)) {
+                                                lp.scores[hi] = sv;   // adopt what we don't have
+                                            }
+                                        });
+                                        if (sp.bbbTotal != null && !lp.bbbTotal) lp.bbbTotal = sp.bbbTotal;
+                                        if (sp.ballsRemaining != null && lp.ballsRemaining == null) {
+                                            lp.ballsRemaining = sp.ballsRemaining;
+                                        }
+                                    });
+                                });
+                                // Per-hole BBB + CTP/Extra9 are authoritative from the server copy
+                                if (Array.isArray(server.bbbAwards) && server.bbbAwards.length > 0) {
+                                    ar.bbbAwards = server.bbbAwards;
+                                }
+                                if (Array.isArray(server.ctpWinners) && server.ctpWinners.length > 0
+                                    && !(ar.ctpWinners || []).length) ar.ctpWinners = server.ctpWinners;
+                            }
+                        }
+                    } catch (e) { console.error('activeRound merge failed:', e); }
                     render();
                 }
             });
@@ -1070,6 +1106,60 @@
     }
 
         // Save helper
+        // ─── Merge-safe rounds writer ────────────────────────────────────────
+        // Both apps store ALL rounds in one Firestore document, so a plain write of a
+        // stale in-memory array silently erases whatever another device just entered.
+        // This takes the SERVER copy as the base and splices in only the rounds this
+        // device actually touched — "last change wins" per round, not per whole array.
+        window.saveRoundsMerged = async (nextRounds, changedIds) => {
+            const touched = (changedIds || []).map(String);
+            state.rounds = nextRounds;                     // optimistic local update
+            try {
+                let base = null;
+                if (useFirebase && firestoreDb) {
+                    const doc = await firestoreDb.collection('leagues').doc(LEAGUE_ID)
+                        .collection('data').doc('rounds').get();
+                    if (doc.exists) base = doc.data().value;
+                }
+                if (!Array.isArray(base) || touched.length === 0) {
+                    save('rounds', nextRounds);            // no server copy: plain write
+                    return;
+                }
+                const mineById = {};
+                nextRounds.forEach(r => { if (r && r.id != null) mineById[String(r.id)] = r; });
+                // Server rounds win, EXCEPT the ones this device changed.
+                const merged = base.map(sr => {
+                    const key = String(sr && sr.id);
+                    return touched.includes(key) && mineById[key] ? mineById[key] : sr;
+                });
+                // Anything new here that the server hasn't seen yet
+                nextRounds.forEach(r => {
+                    if (r && r.id != null && !base.some(sr => String(sr && sr.id) === String(r.id))) {
+                        merged.push(r);
+                    }
+                });
+                // Rounds this device deliberately deleted
+                const finalMerged = merged.filter(r =>
+                    !(r && r.id != null && touched.includes(String(r.id)) && !mineById[String(r.id)]));
+                save('rounds', finalMerged);
+            } catch (err) {
+                console.error('Merged rounds save failed, writing directly:', err);
+                save('rounds', nextRounds);
+            }
+        };
+        
+        // Commit a finished round by ID. Since activateRound now leaves the round in the
+        // shared array (so scorers stay connected), finishing must REPLACE it rather than
+        // append — otherwise the round would appear twice.
+        window.commitFinishedRound = (round) => {
+            if (!round) return;
+            if (round.id == null) round.id = Date.now();
+            const idx = state.rounds.findIndex(r => r && String(r.id) === String(round.id));
+            const next = [...state.rounds];
+            if (idx >= 0) next[idx] = round; else next.push(round);
+            saveRoundsMerged(next, [round.id]);
+        };
+        
         const save = (key, value) => {
             state[key] = value;
             db.set(key, value);
@@ -18888,11 +18978,14 @@
                     return;
                 }
                 
-                // Set as active round for scoring
+                // Set as active round for scoring.
+                // CRITICAL: keep the round's ID and keep it in the shared rounds array.
+                // Deleting either yanks the round out from under anyone scoring it in the
+                // companion app (their selectedRoundId stops resolving and they get bounced).
                 state.activeRound = JSON.parse(JSON.stringify(round));
                 state.activeRound.active = true;
-                delete state.activeRound.id; // Will get new ID when saved
-                delete state.activeRound.scheduledMode; // Remove scheduling flag
+                state.activeRound.id = round.id;           // stable identity for all devices
+                delete state.activeRound.scheduledMode;
                 
                 // UPDATE HANDICAPS: Refresh all player handicaps from current state
                 state.activeRound.teams.forEach(team => {
@@ -18905,10 +18998,11 @@
                     });
                 });
                 
-                // Remove the scheduled round from the rounds array
-                // (it will be re-added as a completed round when saved)
-                const updatedRounds = state.rounds.filter((r, idx) => idx !== roundIndex);
-                save('rounds', updatedRounds);
+                // Flip the shared round to active IN PLACE — no removal, no new ID.
+                // Scorers stay connected; the round simply becomes live for everyone.
+                const updatedRounds = state.rounds.map((r, idx) =>
+                    idx === roundIndex ? { ...r, active: true } : r);
+                saveRoundsMerged(updatedRounds, [round.id]);
                 
                 // Check if groups are already assigned
                 const hasGroupAssignments = state.activeRound.teams.some(team => 
@@ -23903,7 +23997,7 @@
                             updatedRounds.push(round);
                             save('rounds', updatedRounds);
                         } else {
-                            save('rounds', [...state.rounds, round]);
+                            commitFinishedRound(round);
                         }
                     } else {
                         // Create full timestamp from date and current time
@@ -23916,7 +24010,7 @@
                         } else {
                             round.timestamp = round.id;
                         }
-                        save('rounds', [...state.rounds, round]);
+                        commitFinishedRound(round);
                     }
                     
                     // Use the timestamp we just created (not reparse the date string)
