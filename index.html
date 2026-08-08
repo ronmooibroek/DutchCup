@@ -701,7 +701,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.07.26.4';
+        const APP_VERSION = '2026.07.26.5';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -6496,9 +6496,15 @@
                 const e = (state.events || []).find(x => String(x.id) === String(id));
                 return e ? e.name : (id == null ? '(no event)' : '(unknown event ' + id + ')');
             };
-            const statusOf = (r) => r.completed === true ? 'COMPLETED'
-                : (r.active === false ? 'SCHEDULED' : 'IN PROGRESS');
-            const colorOf = (s) => s === 'COMPLETED' ? '#6366f1' : (s === 'SCHEDULED' ? '#10b981' : '#f59e0b');
+            // A round is BROKEN when its flags contradict: completed AND scheduled at once.
+            // Such a round shows as completed here but scheduled on the home screen, and
+            // most actions refuse to touch it — which is exactly how one gets stuck.
+            const isBroken = (r) => r.completed === true && r.active === false;
+            const statusOf = (r) => isBroken(r) ? '⚠️ CONFLICTED'
+                : (r.completed === true ? 'COMPLETED'
+                : (r.active === false ? 'SCHEDULED' : 'IN PROGRESS'));
+            const colorOf = (s) => s === '⚠️ CONFLICTED' ? '#dc2626'
+                : (s === 'COMPLETED' ? '#6366f1' : (s === 'SCHEDULED' ? '#10b981' : '#f59e0b'));
 
             // Group every round by event so nothing can hide
             const byEvent = {};
@@ -6524,6 +6530,20 @@
                         <strong>In progress:</strong> ${all.filter(r => r.active !== false && r.completed !== true).length} ·
                         <strong>Completed:</strong> ${all.filter(r => r.completed === true).length}
                     </div>
+                    ${(() => {
+                        const broken = all.filter(isBroken);
+                        if (broken.length === 0) return '';
+                        return `<div style="background:#fee2e2;border:2px solid #dc2626;padding:14px;border-radius:8px;margin-bottom:8px;">
+                            <strong>⚠️ ${broken.length} round(s) have contradictory flags</strong>
+                            <div style="font-size:13px;color:#7f1d1d;margin:6px 0 10px;">
+                                Marked completed AND scheduled at the same time, so they appear in two
+                                places and most buttons refuse to act on them.
+                            </div>
+                            ${!state.readOnly ? `<button onclick="repairConflictedRounds()" class="btn-primary" style="width:100%;background:#dc2626;">
+                                🔧 Fix all — return them to Scheduled
+                            </button>` : ''}
+                        </div>`;
+                    })()}
                     ${orphanKeys.length > 0 ? `
                         <div style="background:#fee2e2;border:2px solid #ef4444;padding:14px;border-radius:8px;margin-bottom:8px;">
                             <strong>⚠️ ${orphanKeys.reduce((n, k) => n + byEvent[k].length, 0)} round(s) belong to an event that no longer exists.</strong>
@@ -6560,12 +6580,16 @@
                                             <div style="font-size:12px;color:#6b7280;margin-top:3px;">
                                                 ${isNaN(dt) ? '(no date)' : dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
                                                 · ${filled} score(s) entered · id: ${r.id}
+                                                <br><code style="font-size:10px;color:#9ca3af;">active: ${String(r.active)} · completed: ${String(r.completed)}</code>
+                                                ${isBroken(r) ? '<br><span style="color:#dc2626;font-size:11px;font-weight:700;">Contradictory flags — pick a state below to fix it.</span>' : ''}
                                             </div>
                                         </div>
                                         ${!state.readOnly ? `
-                                            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                                            <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">
                                                 ${!isCurrent ? `<button onclick="moveRoundToCurrentEvent(${i})" class="btn-secondary" style="padding:6px 10px;font-size:12px;background:#0ea5e9;color:white;">➡️ Move to current event</button>` : ''}
-                                                ${r.active !== false ? `<button onclick="makeRoundScheduled(${i})" class="btn-secondary" style="padding:6px 10px;font-size:12px;">📅 Make scheduled</button>` : ''}
+                                                <button onclick="makeRoundScheduled(${i})" class="btn-secondary" style="padding:6px 10px;font-size:12px;">📅 Make scheduled</button>
+                                                <button onclick="makeRoundInProgress(${i})" class="btn-secondary" style="padding:6px 10px;font-size:12px;background:#f59e0b;color:white;">▶️ Make in-progress</button>
+                                                <button onclick="doctorDeleteRound(${i})" class="btn-secondary" style="padding:6px 10px;font-size:12px;background:#dc2626;color:white;">🗑️ Delete</button>
                                             </div>` : ''}
                                     </div>
                                 </div>`;
@@ -6589,6 +6613,79 @@
             } catch (err) {
                 console.error('Move round error:', err);
                 showError('Failed to move round: ' + err.message);
+            }
+        };
+
+        // Repair every round whose flags contradict: clear `completed`, leave it scheduled.
+        window.repairConflictedRounds = () => {
+            try {
+                const broken = state.rounds.filter(r => r.completed === true && r.active === false);
+                if (broken.length === 0) { notify('Nothing to fix'); return; }
+                if (!confirm(`Fix ${broken.length} conflicted round(s)?\n\n` +
+                    'They will be returned to Scheduled with the completed flag cleared.\n' +
+                    'Any scores already entered are kept.')) return;
+                const ids = broken.map(r => r.id);
+                const next = state.rounds.map(r => {
+                    if (!(r.completed === true && r.active === false)) return r;
+                    const copy = { ...r, active: false };
+                    delete copy.completed;
+                    delete copy.completedAt;
+                    return copy;
+                });
+                saveRoundsMerged(next, ids);
+                notify(`🔧 Fixed ${broken.length} round(s)`);
+                showRoundsDebug();
+            } catch (err) {
+                console.error('Repair error:', err);
+                showError('Repair failed: ' + err.message);
+            }
+        };
+
+        // Delete ANY round, whatever state it's in. This is the escape hatch when a
+        // round's flags are contradictory and the normal buttons refuse to act.
+        window.doctorDeleteRound = (roundIndex) => {
+            try {
+                const round = state.rounds[roundIndex];
+                if (!round) { showError('Round not found!'); return; }
+                let filled = 0;
+                (round.teams || []).forEach(t => (t.players || []).forEach(p => {
+                    filled += (p.scores || []).filter(s => s !== '' && s != null).length;
+                }));
+                const msg = `PERMANENTLY DELETE this round?\n\n${round.courseName || '(no course)'}\n` +
+                    `${round.date || ''}  ·  id ${round.id}\n` +
+                    `${filled} score(s) entered\n\n` +
+                    (filled > 0 ? '⚠️ These scores will be lost forever.\n\n' : '') +
+                    'This cannot be undone.';
+                if (!confirm(msg)) return;
+                const next = state.rounds.filter((r, i) => i !== roundIndex);
+                saveRoundsMerged(next, [round.id]);
+                notify('🗑️ Round deleted');
+                showRoundsDebug();
+            } catch (err) {
+                console.error('Doctor delete error:', err);
+                showError('Failed to delete round: ' + err.message);
+            }
+        };
+
+        // Force a round into the in-progress state (active, not completed).
+        window.makeRoundInProgress = (roundIndex) => {
+            try {
+                const round = state.rounds[roundIndex];
+                if (!round) { showError('Round not found!'); return; }
+                if (!confirm(`Set "${round.courseName}" to IN PROGRESS?\n\nScoring reopens on all devices. Scores are kept.`)) return;
+                const next = state.rounds.map((r, i) => {
+                    if (i !== roundIndex) return r;
+                    const copy = { ...r, active: true };
+                    delete copy.completed;
+                    delete copy.completedAt;
+                    return copy;
+                });
+                saveRoundsMerged(next, [round.id]);
+                notify('▶️ Round is now in progress');
+                showRoundsDebug();
+            } catch (err) {
+                console.error('Make in-progress error:', err);
+                showError('Failed: ' + err.message);
             }
         };
 
