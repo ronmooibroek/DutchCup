@@ -431,12 +431,17 @@ const LEAGUE_ID = "dutch-cup-2024";
 
 let firestoreDb = null;
 let roundsRef = null;
+let eventsRef = null;
+let currentEventRef = null;
 let firebaseStorage = null; // optional; null if Storage SDK not available
 try {
     if (typeof firebase === 'undefined') throw new Error('Firebase SDK failed to load. Check your internet connection.');
     firebase.initializeApp(firebaseConfig);
     firestoreDb = firebase.firestore();
     roundsRef = firestoreDb.collection('leagues').doc(LEAGUE_ID).collection('data').doc('rounds');
+    // Bracket lives on the event object, so the match tab needs these too.
+    eventsRef = firestoreDb.collection('leagues').doc(LEAGUE_ID).collection('data').doc('events');
+    currentEventRef = firestoreDb.collection('leagues').doc(LEAGUE_ID).collection('data').doc('currentEventId');
     // Storage is optional — if it's missing, photo upload will gracefully fall back to disabled state
     if (firebase.storage) {
         try { firebaseStorage = firebase.storage(); }
@@ -508,7 +513,7 @@ document.addEventListener('visibilitychange', () => {
     try { if (document.visibilityState === 'hidden' && hasPendingEdits()) flushPendingEdits(); } catch (e) {}
 });
 
-const SE_VERSION = '2.8.0'; // never discard edits when a round locks; auto-flush on reopen
+const SE_VERSION = '2.9.0'; // match tab driven by the event's match-play bracket
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
@@ -523,6 +528,8 @@ const state = {
     autoAdvanceTimer: null,
     finished: false,           // showing the end-of-round summary screen
     board: null,               // 'teams' | 'players' | 'match' when the leaderboard is open
+    events: [],                // league events (carry the match-play bracket)
+    currentEventId: null,
     sheetPlayerId: null,       // whose score sheet (bottom sheet pad) is open
     padExpanded: false,        // sheet showing the full 1–12 grid instead of par-relative
     pendingEdits: {
@@ -755,7 +762,17 @@ function effectiveBBB(round, holeIdx) {
 async function init() {
     if (!roundsRef) return;
     try {
-        state.unsubscribe = roundsRef.onSnapshot(handleRoundsSnapshot, (err) => {
+        // Bracket data — silent if unavailable; the match tab just says so.
+    try {
+        if (eventsRef) eventsRef.onSnapshot(d => {
+            if (d.exists) { state.events = Array.isArray(d.data().value) ? d.data().value : []; if (state.board === 'match') renderLeaderboard(); }
+        }, () => {});
+        if (currentEventRef) currentEventRef.onSnapshot(d => {
+            if (d.exists) { state.currentEventId = d.data().value; if (state.board === 'match') renderLeaderboard(); }
+        }, () => {});
+    } catch (e) { console.warn('Bracket listeners unavailable:', e); }
+
+    state.unsubscribe = roundsRef.onSnapshot(handleRoundsSnapshot, (err) => {
             console.error('Listen error:', err);
             showFatalError('Connection error: ' + (err.message || err), 'Code: ' + (err.code || '?'));
         });
@@ -1469,6 +1486,102 @@ function buildPhotoCard(round) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// MATCH PLAY BRACKET — mirrors the main app's slot resolution
+// ═══════════════════════════════════════════════════════════════════════
+function seResolveSlot(slot, bracket, matches) {
+    if (!slot) return null;
+    if (slot.source === 'seed') {
+        const pid = (bracket.playerIds || [])[slot.seedIndex];
+        return { playerId: pid, isBye: pid == null };
+    }
+    if (slot.source === 'match') {
+        const src = matches[slot.matchId];
+        if (!src || src.status !== 'decided') return null;
+        const key = slot.takeWinner ? src.winner : src.loser;
+        if (key === 'bye-advance') return { playerId: null, isBye: true };
+        return seResolveSlot(key === 'slot1' ? src.slot1 : src.slot2, bracket, matches);
+    }
+    return null;
+}
+
+// Which event round number is the round being scored? (1-indexed, chronological)
+function seRoundNumberFor(round) {
+    if (!round) return null;
+    const evId = round.eventId;
+    const siblings = (state.allRounds || [])
+        .filter(r => r.eventId === evId && r.active === true && (r.timestamp || r.id))
+        .sort((a, b) => (a.timestamp || a.id) - (b.timestamp || b.id));
+    const i = siblings.findIndex(r => idsEqual(r.id, round.id));
+    return i >= 0 ? i + 1 : null;
+}
+
+// Every bracket match scheduled for THIS round, with both players resolved.
+function seLiveMatches(round) {
+    const ev = (state.events || []).find(e => String(e.id) === String(round && round.eventId))
+        || (state.events || []).find(e => String(e.id) === String(state.currentEventId));
+    if (!ev || !ev.bracket || !ev.bracket.matches) return { matches: [], reason: 'no-bracket' };
+    const rn = seRoundNumberFor(round);
+    if (!rn) return { matches: [], reason: 'round-not-in-event' };
+    const bracket = ev.bracket;
+    const all = bracket.matches;
+    const out = [];
+    Object.keys(all).forEach(mid => {
+        const m = all[mid];
+        if (m.roundNumber !== rn) return;
+        const a = seResolveSlot(m.slot1, bracket, all);
+        const b = seResolveSlot(m.slot2, bracket, all);
+        if (!a || !b || a.isBye || b.isBye) return;   // byes aren't playable matches
+        out.push({ id: mid, match: m, p1Id: a.playerId, p2Id: b.playerId,
+                   segment: m.holeSegment || 'full' });
+    });
+    return { matches: out, reason: out.length ? 'ok' : 'none-this-round' };
+}
+
+// Hole range for a match segment
+function seSegmentHoles(segment) {
+    if (segment === 'front9') return [0, 9];
+    if (segment === 'back9') return [9, 18];
+    return [0, 18];
+}
+
+// Net match status computed ONLY on holes where BOTH players have a score.
+function seMatchStatus(round, p1, p2, segment) {
+    const [lo, hi] = seSegmentHoles(segment);
+    const h1 = parseInt(p1 && p1.handicap, 10) || 0;
+    const h2 = parseInt(p2 && p2.handicap, 10) || 0;
+    let up = 0, played = 0;
+    const holes = [];
+    for (let h = lo; h < hi; h++) {
+        const a = p1 ? effectiveScore(round, p1.id, h) : '';
+        const b = p2 ? effectiveScore(round, p2.id, h) : '';
+        if (a === '' || a == null || b === '' || b == null) {
+            holes.push({ h, state: 'pending' });
+            continue;
+        }
+        const idx = (round.handicaps || [])[h];
+        const an = parseInt(a, 10) - strokesOnHole(h1, idx);
+        const bn = parseInt(b, 10) - strokesOnHole(h2, idx);
+        played++;
+        let st = 'halved';
+        if (an < bn) { up++; st = 'p1'; }
+        else if (bn < an) { up--; st = 'p2'; }
+        holes.push({ h, state: st, gross1: parseInt(a, 10), gross2: parseInt(b, 10), net1: an, net2: bn });
+    }
+    const remaining = (hi - lo) - played;
+    let label, leader = null;
+    if (played === 0) label = 'NOT STARTED';
+    else if (up === 0) label = 'ALL SQUARE';
+    else if (Math.abs(up) > remaining) {
+        label = `${Math.abs(up)}&${remaining}`;   // mathematically closed out
+        leader = up > 0 ? 'p1' : 'p2';
+    } else {
+        label = `${Math.abs(up)} UP`;
+        leader = up > 0 ? 'p1' : 'p2';
+    }
+    return { up, played, remaining, label, leader, holes, closed: played > 0 && Math.abs(up) > remaining };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // LIVE LEADERBOARD — everyone's round as it stands right now
 // Reads the same live-synced rounds data, so it updates as other groups score.
 // ═══════════════════════════════════════════════════════════════════════
@@ -1483,7 +1596,7 @@ function renderLeaderboard() {
 
     // Tabs
     const tabs = el('div', { class: 'lb-tabs' });
-    [['teams', '🏆 Teams'], ['players', '🎯 Players'], ['match', '⚔️ My Match']].forEach(([k, label]) => {
+    [['teams', '🏆 Teams'], ['players', '🎯 Players'], ['match', '⚔️ Matches']].forEach(([k, label]) => {
         tabs.appendChild(el('button', {
             class: 'lb-tab' + (tab === k ? ' on' : ''), type: 'button',
             onclick: () => { state.board = k; renderLeaderboard(); }
@@ -1539,54 +1652,87 @@ function renderLeaderboard() {
             ));
         });
     } else {
-        // ── My Match: hole-by-hole net match play against the group ──
-        const me = players.find(p => idsEqual(p.id, state.currentPlayerId));
-        const group = getGroupPlayers(round, state.groupNumber)
-            .map(p => players.find(x => idsEqual(x.id, p.id))).filter(Boolean);
-        const opponents = group.filter(p => !idsEqual(p.id, state.currentPlayerId));
-        if (!me || opponents.length === 0) {
-            appEl.appendChild(el('div', { class: 'lb-empty' },
-                'Match view needs you and at least one playing partner in the group.'));
+        // ── MATCHES: the event's match-play bracket for this round ──
+        // Pairings come from the bracket (players may be in different groups); status is
+        // computed only on holes where BOTH players have a score in.
+        const { matches, reason } = seLiveMatches(round);
+        const allPlayers = getAllRoundPlayers(round);
+        const findP = (id) => allPlayers.find(p => idsEqual(p.id, id));
+
+        if (matches.length === 0) {
+            const msg = reason === 'no-bracket'
+                ? 'No match-play bracket is set up for this event yet.'
+                : reason === 'round-not-in-event'
+                    ? 'This round isn\'t part of the event\'s match schedule.'
+                    : 'No bracket matches are scheduled for this round.';
+            appEl.appendChild(el('div', { class: 'lb-empty' }, msg));
         } else {
-            const myHc = parseInt(me.handicap, 10) || 0;
-            opponents.forEach(op => {
-                const opHc = parseInt(op.handicap, 10) || 0;
-                let up = 0, played = 0;
-                const dots = el('div', { style: 'display:flex;gap:3px;flex-wrap:wrap;margin-top:8px;' });
-                for (let h = 0; h < 18; h++) {
-                    const a = effectiveScore(round, me.id, h);
-                    const b = effectiveScore(round, op.id, h);
-                    if (a === '' || a == null || b === '' || b == null) {
-                        dots.appendChild(el('div', { style: 'width:14px;height:14px;border-radius:4px;background:#E8E4D9;' }));
-                        continue;
-                    }
-                    const holeHc = (round.handicaps || [])[h];
-                    const an = parseInt(a, 10) - strokesOnHole(myHc, holeHc);
-                    const bn = parseInt(b, 10) - strokesOnHole(opHc, holeHc);
-                    played++;
-                    let col = '#9CA3AF';
-                    if (an < bn) { up++; col = '#2E7D32'; }
-                    else if (bn < an) { up--; col = '#C62828'; }
-                    dots.appendChild(el('div', { style: `width:14px;height:14px;border-radius:4px;background:${col};` }));
-                }
-                const remaining = 18 - played;
-                let statusText, statusColor;
-                if (up === 0) { statusText = 'ALL SQUARE'; statusColor = 'var(--ink-soft)'; }
-                else if (Math.abs(up) > remaining && remaining >= 0 && played > 0) {
-                    statusText = up > 0 ? `WON ${up}&${remaining}` : `LOST ${-up}&${remaining}`;
-                    statusColor = up > 0 ? '#2E7D32' : '#C62828';
-                } else {
-                    statusText = up > 0 ? `${up} UP` : `${-up} DOWN`;
-                    statusColor = up > 0 ? '#2E7D32' : '#C62828';
-                }
-                appEl.appendChild(el('div', { class: 'card', style: 'padding:14px;' },
-                    el('div', { style: 'display:flex;justify-content:space-between;align-items:baseline;' },
-                        el('div', { style: 'font-weight:800;font-size:16px;' }, `vs ${op.name}`),
-                        el('div', { style: `font-weight:900;font-size:18px;color:${statusColor};` }, statusText)),
-                    el('div', { class: 'lb-sub', style: 'margin-top:2px;' },
-                        `${played} hole${played === 1 ? '' : 's'} played \u00b7 net match play`),
-                    dots
+            // Your own match first
+            const mine = matches.filter(m => idsEqual(m.p1Id, state.currentPlayerId) || idsEqual(m.p2Id, state.currentPlayerId));
+            const others = matches.filter(m => !mine.includes(m));
+            [...mine, ...others].forEach(entry => {
+                const p1 = findP(entry.p1Id), p2 = findP(entry.p2Id);
+                const st = seMatchStatus(round, p1, p2, entry.segment);
+                const isMine = mine.includes(entry);
+                const decided = entry.match.status === 'decided';
+                const segLabel = entry.segment === 'front9' ? 'Front 9'
+                    : (entry.segment === 'back9' ? 'Back 9' : '18 holes');
+
+                // Leader name + status colour
+                const leadName = st.leader === 'p1' ? (p1 && p1.name) : (st.leader === 'p2' ? (p2 && p2.name) : null);
+                const statusColor = st.played === 0 ? 'var(--ink-soft)'
+                    : (st.leader ? (st.closed ? '#2E7D32' : '#1F5C39') : 'var(--ink-soft)');
+
+                const card = el('div', { class: 'card', style: `padding:14px;${isMine ? 'border-left:5px solid var(--fairway);' : ''}` });
+                card.appendChild(el('div', { style: 'display:flex;justify-content:space-between;align-items:baseline;gap:10px;' },
+                    el('div', { style: 'font-weight:900;font-size:16px;' },
+                        `${(p1 && p1.name) || '?'} vs ${(p2 && p2.name) || '?'}`),
+                    el('div', { style: `font-weight:900;font-size:17px;color:${statusColor};white-space:nowrap;` },
+                        st.played === 0 ? 'NOT STARTED' : (leadName ? `${leadName.split(' ')[0]} ${st.label}` : st.label))
                 ));
+                card.appendChild(el('div', { class: 'lb-sub', style: 'margin-top:2px;' },
+                    `${segLabel} \u00b7 thru ${st.played}${st.remaining > 0 ? ' \u00b7 ' + st.remaining + ' to play' : ''}` +
+                    (decided ? ' \u00b7 \u2713 decided' : '') + (isMine ? ' \u00b7 YOUR MATCH' : '')));
+
+                // Hole strip, coloured from the leader's perspective
+                const strip = el('div', { style: 'display:flex;gap:3px;flex-wrap:wrap;margin-top:10px;' });
+                st.holes.forEach(h => {
+                    const col = h.state === 'pending' ? '#E8E4D9'
+                        : h.state === 'halved' ? '#9CA3AF'
+                        : h.state === 'p1' ? '#2E7D32' : '#C62828';
+                    strip.appendChild(el('div', {
+                        title: h.state === 'pending' ? `Hole ${h.h + 1}: waiting`
+                            : `Hole ${h.h + 1}: ${h.gross1}(${h.net1}) v ${h.gross2}(${h.net2})`,
+                        style: `width:15px;height:15px;border-radius:4px;background:${col};`
+                    }));
+                });
+                card.appendChild(strip);
+
+                // Hole-by-hole detail for your own match
+                if (isMine && st.played > 0) {
+                    const tbl = el('div', { style: 'margin-top:10px;border-top:1px solid var(--sand);padding-top:8px;' });
+                    tbl.appendChild(el('div', { style: 'display:flex;font-size:11px;font-weight:800;color:var(--ink-soft);padding:0 2px 4px;' },
+                        el('div', { style: 'width:34px;' }, 'HOLE'),
+                        el('div', { style: 'flex:1;' }, (p1 && p1.name || '').split(' ')[0]),
+                        el('div', { style: 'flex:1;' }, (p2 && p2.name || '').split(' ')[0]),
+                        el('div', { style: 'width:56px;text-align:right;' }, 'MATCH')));
+                    let run = 0;
+                    st.holes.filter(h => h.state !== 'pending').forEach(h => {
+                        if (h.state === 'p1') run++; else if (h.state === 'p2') run--;
+                        const rowCol = h.state === 'p1' ? '#2E7D32' : (h.state === 'p2' ? '#C62828' : 'var(--ink-soft)');
+                        tbl.appendChild(el('div', { style: 'display:flex;align-items:center;font-size:13px;padding:3px 2px;border-bottom:1px solid #F3F1EA;' },
+                            el('div', { style: 'width:34px;font-weight:700;' }, String(h.h + 1)),
+                            el('div', { style: `flex:1;font-weight:${h.state === 'p1' ? '900' : '600'};color:${h.state === 'p1' ? '#2E7D32' : 'inherit'};` },
+                                `${h.gross1} (${h.net1})`),
+                            el('div', { style: `flex:1;font-weight:${h.state === 'p2' ? '900' : '600'};color:${h.state === 'p2' ? '#C62828' : 'inherit'};` },
+                                `${h.gross2} (${h.net2})`),
+                            el('div', { style: `width:56px;text-align:right;font-weight:800;color:${rowCol};` },
+                                run === 0 ? 'AS' : (run > 0 ? `${run} UP` : `${-run} DN`))));
+                    });
+                    tbl.appendChild(el('div', { class: 'lb-sub', style: 'margin-top:6px;' }, 'Gross (net) \u00b7 match position after each hole'));
+                    card.appendChild(tbl);
+                }
+                appEl.appendChild(card);
             });
         }
     }
