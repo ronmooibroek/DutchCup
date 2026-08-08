@@ -701,7 +701,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.07.27.1';
+        const APP_VERSION = '2026.07.27.2';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -4262,6 +4262,27 @@
                             <div style="background:linear-gradient(135deg,#8b5cf6,#6366f1);padding:20px;border-radius:12px;margin:24px 0 16px 0;text-align:center;box-shadow:0 4px 6px rgba(0,0,0,0.1);">
                                 <h2 style="margin:0;color:white;font-size:24px;font-weight:700;">🏌️ GROUP ${groupKey}</h2>
                                 <p style="margin:8px 0 0 0;color:#e9d5ff;font-size:14px;">Foursome ${groupKey}</p>
+                                ${(() => {
+                                    // Every hole awards exactly 3 BBB points, so a finished
+                                    // group totals 54. Anything else means holes are missing.
+                                    const prog = window.bbbGroupProgress(round, parseInt(groupKey));
+                                    const done = prog.awarded === 54;
+                                    const bad = prog.incomplete.filter(x => x.n > 3);
+                                    return `
+                                        <div style="margin-top:12px;background:rgba(255,255,255,0.15);border-radius:8px;padding:10px;">
+                                            <div style="color:white;font-weight:800;font-size:15px;">
+                                                🎯 BBB ${prog.awarded} / 54 ${done ? '✅' : ''}
+                                            </div>
+                                            <div style="height:6px;background:rgba(255,255,255,0.25);border-radius:3px;margin:6px 0;overflow:hidden;">
+                                                <div style="height:100%;width:${Math.min(100, (prog.awarded / 54) * 100)}%;background:${done ? '#4ade80' : '#fbbf24'};"></div>
+                                            </div>
+                                            <div style="color:#e9d5ff;font-size:12px;">
+                                                ${done ? 'All 18 holes complete'
+                                                    : `Holes still needing points: ${prog.incomplete.filter(x => x.n < 3).map(x => x.hole).join(', ') || '—'}`}
+                                                ${bad.length ? `<br><span style="color:#fecaca;font-weight:700;">⚠️ Over-awarded on hole(s): ${bad.map(x => x.hole).join(', ')}</span>` : ''}
+                                            </div>
+                                        </div>`;
+                                })()}
                             </div>
                         `;
                     }
@@ -4375,16 +4396,14 @@
                                         
                                         <div style="flex:1;">
                                             <div style="font-weight:600;font-size:12px;margin-bottom:6px;">
-                                                🎯 BBB${window.roundHasPerHoleBBB(round) ? ' <span style="font-weight:500;color:#6b7280;">(from hole taps)</span>' : ''}
+                                                🎯 BBB <span style="font-weight:500;color:#6b7280;">(from hole taps)</span>
                                             </div>
-                                            <input type="number" 
-                                                   value="${player.bbbTotal || 0}" 
-                                                   min="0" 
-                                                   max="54"
-                                                   ${window.roundHasPerHoleBBB(round) ? 'readonly' : ''}
-                                                   onfocus="this.select()"
-                                                   onchange="setBBBTotal(${teamIdx}, ${playerIdx}, this.value)"
-                                                   style="width:70px;padding:8px;border:2px solid ${window.roundHasPerHoleBBB(round) ? '#d1d5db' : '#8b5cf6'};border-radius:8px;font-size:16px;font-weight:700;text-align:center;${window.roundHasPerHoleBBB(round) ? 'background:#f9fafb;color:#6b7280;' : ''}">
+                                            <!-- Derived only. Bulk entry is deliberately impossible: a typed total
+                                                 silently disagreed with the per-hole awards, and the two apps then
+                                                 scored differently. Tap the 🎯 badge under each hole instead. -->
+                                            <div style="width:70px;padding:8px;border:2px dashed #d1d5db;border-radius:8px;font-size:16px;font-weight:700;text-align:center;background:#f9fafb;color:#374151;">
+                                                ${window.bbbCountForPlayer(round, player.id)}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -6576,6 +6595,13 @@
                 ${!state.readOnly ? `
                 <div class="card">
                     <h3 style="margin:0 0 10px;">🔧 Repair</h3>
+                    <button onclick="reconcileAllBBB()" class="btn-primary" style="width:100%;margin-bottom:10px;background:#8b5cf6;">
+                        🎯 Reconcile BBB totals from per-hole entries
+                    </button>
+                    <p style="font-size:12px;color:#6b7280;margin:0 0 16px;">
+                        Rewrites every player's stored BBB total to match their per-hole awards.
+                        Fixes rounds where a typed total disagreed with what was tapped on the course.
+                    </p>
                     <button onclick="hsRebuildFromRounds()" class="btn-primary" style="width:100%;margin-bottom:10px;background:#10b981;">
                         ♻️ Rebuild everything from the rounds database
                     </button>
@@ -6625,6 +6651,38 @@
                     </div>`;
             });
             app.innerHTML = html;
+        };
+
+        // Make every stored bbbTotal agree with the per-hole awards.
+        window.reconcileAllBBB = () => {
+            try {
+                let changed = 0;
+                const touched = [];
+                const next = (state.rounds || []).map(r => {
+                    if (!Array.isArray(r.bbbAwards) || r.bbbAwards.length === 0) return r;
+                    let roundChanged = false;
+                    const teams = (r.teams || []).map(t => ({
+                        ...t,
+                        players: (t.players || []).map(p => {
+                            const real = window.bbbCountForPlayer(r, p.id);
+                            if ((p.bbbTotal || 0) === real) return p;
+                            roundChanged = true; changed++;
+                            return { ...p, bbbTotal: real };
+                        })
+                    }));
+                    if (!roundChanged) return r;
+                    touched.push(r.id);
+                    return { ...r, teams };
+                });
+                if (changed === 0) { notify('✅ All BBB totals already match'); return; }
+                if (!confirm(`Correct ${changed} player BBB total(s) across ${touched.length} round(s)?\n\n` +
+                    'Stored totals will be rewritten to match the per-hole awards.')) return;
+                saveRoundsMerged(next, touched);
+                notify(`🎯 Reconciled ${changed} BBB total(s)`);
+            } catch (err) {
+                console.error('BBB reconcile error:', err);
+                showError('Reconcile failed: ' + err.message);
+            }
         };
 
         // Regenerate historic scores purely from completed rounds, then recalc handicaps.
@@ -20607,6 +20665,39 @@
             });
             return n;
         };
+        // A player's BBB total, counted from the per-hole awards (the source of truth).
+        window.bbbCountForPlayer = (round, playerId) => {
+            if (!round || !Array.isArray(round.bbbAwards)) return 0;
+            let n = 0;
+            round.bbbAwards.forEach(a => ['bingo', 'bango', 'bongo'].forEach(slot => {
+                if (a && a[slot] !== '' && a[slot] != null && String(a[slot]) === String(playerId)) n++;
+            }));
+            return n;
+        };
+        // BBB progress for one group: 3 points per hole × 18 = 54 when complete.
+        window.bbbGroupProgress = (round, groupNumber) => {
+            const holes = [];
+            let awarded = 0;
+            for (let h = 0; h < 18; h++) {
+                let n = 0;
+                (round.bbbAwards || []).forEach(a => {
+                    if (!a || a.holeIdx !== h) return;
+                    ['bingo', 'bango', 'bongo'].forEach(slot => {
+                        const pid = a[slot];
+                        if (pid === '' || pid == null) return;
+                        // only count points belonging to this group's players
+                        let inGroup = false;
+                        (round.teams || []).forEach(t => (t.players || []).forEach(p => {
+                            if (String(p.id) === String(pid) && (t.groupNumber === groupNumber || p.groupNumber === groupNumber)) inGroup = true;
+                        }));
+                        if (inGroup) n++;
+                    });
+                });
+                awarded += n;
+                holes.push({ hole: h + 1, n });
+            }
+            return { awarded, target: 54, holes, incomplete: holes.filter(x => x.n !== 3) };
+        };
         window.roundHasPerHoleBBB = (round) => Array.isArray(round && round.bbbAwards) && round.bbbAwards.length > 0;
         // Rewrite every entry for one hole from a { playerId: count } map.
         window.__writeHoleBBB = (round, holeIdx, counts) => {
@@ -20674,7 +20765,12 @@
             }
         };
         
-        window.setBBBTotal = (teamIdx, playerIdx, value) => {
+        // RETIRED: bulk BBB entry. Totals are derived from per-hole awards only, so the
+        // admin app and the on-course app can never disagree again.
+        window.setBBBTotal = () => {
+            showError('BBB is now entered hole by hole — tap the 🎯 badge under each hole score.');
+        };
+        window.__setBBBTotalLegacy = (teamIdx, playerIdx, value) => {
             try {
                 const player = state.activeRound.teams[teamIdx].players[playerIdx];
                 const total = parseInt(value) || 0;
