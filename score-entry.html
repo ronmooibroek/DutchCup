@@ -521,7 +521,7 @@ document.addEventListener('visibilitychange', () => {
     try { if (document.visibilityState === 'hidden' && hasPendingEdits()) flushPendingEdits(); } catch (e) {}
 });
 
-const SE_VERSION = '2.12.0'; // BBB from bbbTotal (matches admin) + tappable score audit
+const SE_VERSION = '2.13.0'; // CTP shares one canonical format with the admin app + audit trail
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
@@ -790,6 +790,19 @@ function effectiveCTP(round, holeIdx) {
         }
     }
     if (cw.length === 18 && (typeof cw[holeIdx] === 'string' || typeof cw[holeIdx] === 'number')) return idStr(cw[holeIdx]);
+    // Legacy scalar slots: Nth entry = Nth par 3. Handles both raw player ids and
+    // "teamIdx-playerIdx" position strings written by older admin builds.
+    const par3s = (round.pars || []).map((p, i) => (parseInt(p) === 3 ? i : -1)).filter(i => i >= 0);
+    const slot = par3s.indexOf(holeIdx);
+    if (slot >= 0 && cw[slot] != null && cw[slot] !== '' && typeof cw[slot] !== 'object') {
+        const s = String(cw[slot]);
+        const m = s.match(/^(\d+)-(\d+)$/);
+        if (m) {
+            const pl = ((round.teams || [])[+m[1]] || {}).players || [];
+            return pl[+m[2]] ? idStr(pl[+m[2]].id) : '';
+        }
+        return idStr(s);
+    }
     return '';
 }
 
@@ -2057,7 +2070,12 @@ function computePlayerTotals(round, p) {
             || (w && w.playerId != null && idsEqual(w.playerId, p.id))).length;
     };
     const extra9Points = countWins(round.extra9Winners) * BONUS.extra9;
-    const ctpPoints = countWins(round.ctpWinners) * BONUS.ctp;
+    // CTP: count canonical entries for this player across all holes
+    let ctpWins = 0;
+    for (let h = 0; h < 18; h++) {
+        if (idsEqual(effectiveCTP(round, h), p.id)) ctpWins++;
+    }
+    const ctpPoints = ctpWins * BONUS.ctp;
 
     const points = strokePoints + bbbPoints + ballPoints + extra9Points + ctpPoints;
     return { gross, points, thru, strokePoints, bbbPoints, ballPoints, extra9Points, ctpPoints };
@@ -2263,7 +2281,27 @@ async function flushPendingEdits() {
                         }
                         return true;
                     });
-                    if (winnerId) round.ctpWinners.push({ holeIdx, playerId: winnerId });
+                    // Canonical shape shared with the admin app, stamped with who set it.
+                    const nameOf = (id) => {
+                        let n = null;
+                        (round.teams || []).forEach(t => (t.players || []).forEach(p => {
+                            if (idsEqual(p.id, id)) n = p.name;
+                        }));
+                        return n;
+                    };
+                    const setterName = nameOf(state.currentPlayerId) || 'Course';
+                    if (winnerId) {
+                        round.ctpWinners.push({
+                            holeIdx, playerId: winnerId,
+                            setBy: setterName, setAt: Date.now(), source: 'course'
+                        });
+                    }
+                    if (!Array.isArray(round.ctpLog)) round.ctpLog = [];
+                    round.ctpLog.push({
+                        holeIdx, at: Date.now(), by: setterName, source: 'course',
+                        from: null, to: winnerId ? (nameOf(winnerId) || String(winnerId)) : null
+                    });
+                    if (round.ctpLog.length > 200) round.ctpLog = round.ctpLog.slice(-200);
                 });
             }
 
