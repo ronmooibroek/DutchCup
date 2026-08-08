@@ -521,7 +521,7 @@ document.addEventListener('visibilitychange', () => {
     try { if (document.visibilityState === 'hidden' && hasPendingEdits()) flushPendingEdits(); } catch (e) {}
 });
 
-const SE_VERSION = '2.11.0'; // USGA course handicap ported from the admin app
+const SE_VERSION = '2.12.0'; // BBB from bbbTotal (matches admin) + tappable score audit
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
@@ -536,6 +536,7 @@ const state = {
     autoAdvanceTimer: null,
     finished: false,           // showing the end-of-round summary screen
     board: null,               // 'teams' | 'players' | 'match' when the leaderboard is open
+    auditPlayerId: null,       // when set, the leaderboard shows that player's score audit
     events: [],                // league events (carry the match-play bracket)
     leaguePlayers: [],         // player records (carry handicapIndex for USGA mode)
     useUSGA: false,            // mirrors settings.useUSGAHandicap
@@ -1559,6 +1560,81 @@ function buildPhotoCard(round) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// PLAYER AUDIT — show exactly how a total was built, so any mismatch with
+// the admin app can be traced hole by hole rather than guessed at.
+// ═══════════════════════════════════════════════════════════════════════
+function renderPlayerAudit(round, p) {
+    const hc = seHandicapForRound(round, p);
+    const rawHc = parseInt(p.handicap, 10) || 0;
+    const t = computePlayerTotals(round, p);
+    const frag = document.createDocumentFragment();
+
+    frag.appendChild(el('div', { class: 'card', style: 'padding:14px;' },
+        el('div', { style: 'display:flex;justify-content:space-between;align-items:baseline;' },
+            el('div', { style: 'font-weight:900;font-size:18px;' }, p.name || '?'),
+            el('div', { style: 'font-weight:900;font-size:24px;color:var(--fairway);' }, String(t.points))),
+        el('div', { class: 'lb-sub', style: 'margin-top:2px;' },
+            `${p.teamName || ''} \u00b7 gross ${t.gross} \u00b7 thru ${t.thru}`),
+        el('div', { class: 'lb-sub', style: 'margin-top:6px;' },
+            `Handicap used: ${hc}${state.useUSGA && hc !== rawHc ? ` (course handicap \u2014 stored value is ${rawHc})` : ''}`)
+    ));
+
+    // Component breakdown
+    const comp = el('div', { class: 'card', style: 'padding:14px;' });
+    comp.appendChild(el('div', { style: 'font-weight:800;font-size:13px;letter-spacing:1px;color:var(--ink-soft);margin-bottom:8px;' }, 'HOW THE TOTAL IS BUILT'));
+    const row = (label, detail, value) => el('div', { style: 'display:flex;justify-content:space-between;align-items:baseline;padding:6px 0;border-bottom:1px solid #F3F1EA;' },
+        el('div', null,
+            el('div', { style: 'font-weight:700;font-size:14px;' }, label),
+            el('div', { class: 'lb-sub' }, detail)),
+        el('div', { style: 'font-weight:900;font-size:16px;' }, String(value)));
+    comp.appendChild(row('\u26f3 Stroke play', `${t.thru} hole(s) scored`, t.strokePoints));
+    comp.appendChild(row('\u{1F3AF} BBB', `${parseInt(p.bbbTotal, 10) || 0} \u00d7 ${BONUS.bbb}`, t.bbbPoints));
+    comp.appendChild(row('\u26aa Balls', `${parseInt(p.ballsRemaining, 10) || 0} \u00d7 ${BONUS.ball}`, t.ballPoints));
+    comp.appendChild(row('\u{1F4CD} CTP', t.ctpPoints ? `\u00d7 ${BONUS.ctp}` : 'none', t.ctpPoints));
+    comp.appendChild(row('\u{1F3C6} Extra 9', t.extra9Points ? `\u00d7 ${BONUS.extra9}` : 'none', t.extra9Points));
+    comp.appendChild(el('div', { style: 'display:flex;justify-content:space-between;padding-top:10px;font-weight:900;font-size:17px;' },
+        el('div', null, 'TOTAL'), el('div', null, String(t.points))));
+    frag.appendChild(comp);
+
+    // Hole-by-hole stroke points
+    const holes = el('div', { class: 'card', style: 'padding:14px;' });
+    holes.appendChild(el('div', { style: 'font-weight:800;font-size:13px;letter-spacing:1px;color:var(--ink-soft);margin-bottom:8px;' }, 'HOLE BY HOLE'));
+    holes.appendChild(el('div', { style: 'display:flex;font-size:11px;font-weight:800;color:var(--ink-soft);padding-bottom:4px;' },
+        el('div', { style: 'width:34px;' }, 'HOLE'),
+        el('div', { style: 'width:34px;' }, 'PAR'),
+        el('div', { style: 'width:44px;' }, 'GROSS'),
+        el('div', { style: 'width:36px;' }, 'STK'),
+        el('div', { style: 'width:36px;' }, 'NET'),
+        el('div', { style: 'flex:1;text-align:right;' }, 'PTS')));
+    for (let h = 0; h < 18; h++) {
+        const s = effectiveScore(round, p.id, h);
+        if (s === '' || s == null) continue;
+        const n = parseInt(s, 10);
+        const par = (round.pars || [])[h];
+        const strokes = strokesOnHole(hc, (round.handicaps || [])[h]);
+        const net = n - strokes;
+        const pts = getPoints(net - par);
+        holes.appendChild(el('div', { style: 'display:flex;font-size:13px;padding:3px 0;border-bottom:1px solid #F7F5EF;' },
+            el('div', { style: 'width:34px;font-weight:700;' }, String(h + 1)),
+            el('div', { style: 'width:34px;color:var(--ink-soft);' }, String(par ?? '—')),
+            el('div', { style: 'width:44px;font-weight:700;' }, String(n)),
+            el('div', { style: 'width:36px;color:var(--ink-soft);' }, strokes ? '−' + strokes : '—'),
+            el('div', { style: 'width:36px;' }, String(net)),
+            el('div', { style: `flex:1;text-align:right;font-weight:800;color:${pts > 0 ? '#2E7D32' : (pts < 0 ? '#C62828' : 'var(--ink-soft)')};` },
+                (pts > 0 ? '+' : '') + pts)));
+    }
+    holes.appendChild(el('div', { style: 'display:flex;justify-content:space-between;padding-top:8px;font-weight:900;' },
+        el('div', null, 'Stroke play total'), el('div', null, String(t.strokePoints))));
+    frag.appendChild(holes);
+
+    frag.appendChild(el('button', {
+        class: 'foot-btn prev', type: 'button', style: 'width:100%;margin-top:8px;',
+        onclick: () => { state.auditPlayerId = null; renderLeaderboard(); }
+    }, '\u2190 Back to leaderboard'));
+    return frag;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // MATCH PLAY BRACKET — mirrors the main app's slot resolution
 // ═══════════════════════════════════════════════════════════════════════
 function seResolveSlot(slot, bracket, matches) {
@@ -1667,6 +1743,13 @@ function renderLeaderboard() {
     const appEl = $('#app');
     appEl.innerHTML = '';
 
+    // Audit view for a single player
+    if (state.auditPlayerId != null) {
+        const ap = getAllRoundPlayers(round).find(x => idsEqual(x.id, state.auditPlayerId));
+        if (ap) { appEl.appendChild(renderPlayerAudit(round, ap)); return; }
+        state.auditPlayerId = null;
+    }
+
     // Tabs
     const tabs = el('div', { class: 'lb-tabs' });
     [['teams', '🏆 Teams'], ['players', '🎯 Players'], ['match', '⚔️ Matches']].forEach(([k, label]) => {
@@ -1676,6 +1759,10 @@ function renderLeaderboard() {
         }, label));
     });
     appEl.appendChild(tabs);
+    if (tab === 'players') {
+        appEl.appendChild(el('div', { class: 'lb-sub', style: 'text-align:center;margin-bottom:8px;' },
+            'Tap a player to see how their total was calculated'));
+    }
 
     const players = getAllRoundPlayers(round).map(p => {
         const t = computePlayerTotals(round, p);
@@ -1689,7 +1776,11 @@ function renderLeaderboard() {
         }
         ranked.forEach((p, i) => {
             const isMe = idsEqual(p.id, state.currentPlayerId);
-            appEl.appendChild(el('div', { class: 'lb-row' + (isMe ? ' me' : '') },
+            appEl.appendChild(el('div', {
+                class: 'lb-row' + (isMe ? ' me' : ''),
+                style: 'cursor:pointer;',
+                onclick: () => { state.auditPlayerId = idStr(p.id); renderLeaderboard(); }
+            },
                 el('div', { class: 'lb-pos' }, i === 0 && p.thru > 0 ? '\u{1F451}' : '#' + (i + 1)),
                 el('div', { class: 'lb-name' },
                     document.createTextNode(p.name || '?'),
@@ -1948,17 +2039,10 @@ function computePlayerTotals(round, p) {
     // ── Bonus points, exactly as the admin app counts them ──
     // Stroke play alone never matched the main app's totals; BBB, balls remaining,
     // Extra 9 and CTP all contribute there too.
-    const bbbCount = (() => {
-        // Per-hole BBB is authoritative when present; otherwise the aggregate.
-        if (Array.isArray(round.bbbAwards) && round.bbbAwards.length > 0) {
-            let n = 0;
-            round.bbbAwards.forEach(a => ['bingo', 'bango', 'bongo'].forEach(slot => {
-                if (a && a[slot] !== '' && a[slot] != null && idsEqual(a[slot], p.id)) n++;
-            }));
-            return n;
-        }
-        return parseInt(p.bbbTotal, 10) || 0;
-    })();
+    // The admin app scores BBB from p.bbbTotal in every one of its calculation paths.
+    // Counting per-hole bbbAwards here instead made the two apps disagree whenever the
+    // per-hole entries and the aggregate had drifted. bbbTotal is the single source.
+    const bbbCount = parseInt(p.bbbTotal, 10) || 0;
     const bbbPoints = bbbCount * BONUS.bbb;
     const ballPoints = (parseInt(p.ballsRemaining, 10) || 0) * BONUS.ball;
 
