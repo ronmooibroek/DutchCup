@@ -701,7 +701,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.07.26.1';
+        const APP_VERSION = '2026.07.26.2';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -1151,9 +1151,18 @@
         // Commit a finished round by ID. Since activateRound now leaves the round in the
         // shared array (so scorers stay connected), finishing must REPLACE it rather than
         // append — otherwise the round would appear twice.
-        window.commitFinishedRound = (round) => {
+        window.commitFinishedRound = (round, lockRound) => {
             if (!round) return;
             if (round.id == null) round.id = Date.now();
+            // Locking is explicit. Progress saves leave `completed` untouched.
+            if (lockRound === true) {
+                round.completed = true;
+                round.completedAt = round.completedAt || Date.now();
+            } else if (round.completed !== true) {
+                delete round.completed;
+                delete round.completedAt;
+            }
+            round.active = true;
             const idx = state.rounds.findIndex(r => r && String(r.id) === String(round.id));
             const next = [...state.rounds];
             if (idx >= 0) next[idx] = round; else next.push(round);
@@ -4116,7 +4125,7 @@
                 const courseTees = (roundCourse && Array.isArray(roundCourse.tees)) ? roundCourse.tees : [];
                 
                 let html = `
-                    <button class="back-btn" onclick="if(confirm('${round.isEditing ? 'Save changes?' : 'Save round?'}')) finishRound(); else navigate('home');">← Back</button>
+                    <button class="back-btn" onclick="finishRound();">← Back (saves progress)</button>
                     <div class="card">
                         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
                             <div>
@@ -4126,7 +4135,7 @@
                             </div>
                             <div style="display:flex;gap:8px;">
                                 <button class="btn-secondary" style="width:auto;padding:12px 16px;background:#6366f1;color:white;" onclick="fillTestData()">🧪 Test Data</button>
-                                <button class="btn-primary" style="width:auto;padding:12px 24px;" onclick="finishRound()">${round.isEditing ? '💾 Update' : '💾 Finish'}</button>
+                                <button class="btn-primary" style="width:auto;padding:12px 24px;" onclick="finishRound()">💾 Save</button>
                             </div>
                         </div>
                     </div>
@@ -4531,7 +4540,10 @@
                             🔄 Recalculate All
                         </button>
                         <button onclick="finishRound()" class="btn-primary" style="flex:1;padding:16px;font-size:16px;">
-                            ${round.isEditing ? '💾 Update Round' : '💾 Finish Round'}
+                            💾 Save Progress
+                        </button>
+                        <button onclick="completeRound()" class="btn-primary" style="flex:1;padding:16px;font-size:16px;background:#b45309;">
+                            🔒 Complete Round
                         </button>
                     </div>
                 `;
@@ -5167,6 +5179,12 @@
                                                                         style="padding:4px 8px;background:#f59e0b;color:white;border:none;border-radius:4px;cursor:pointer;font-size:11px;">
                                                                     ↩️ Reset to Scheduled
                                                                 </button>
+                                                                ${state.rounds[globalRoundIndex] && state.rounds[globalRoundIndex].completed === true ? `
+                                                                    <button onclick="reopenRound(${globalRoundIndex})" 
+                                                                            style="padding:4px 8px;background:#0ea5e9;color:white;border:none;border-radius:4px;cursor:pointer;font-size:11px;">
+                                                                        🔓 Reopen for Scoring
+                                                                    </button>
+                                                                ` : ''}
                                                             </div>
                                                         ` : ''}
                                                     </div>
@@ -23719,25 +23737,65 @@
                 }
                 
                 // Calculate totals and save
-                saveRoundData();
+                saveRoundData(state.__lockOnSave === true);
+                state.__lockOnSave = false;
             } catch (err) {
                 console.error('Finish round error:', err);
                 showError('Failed to finish round: ' + err.message);
             }
         };
 
+        // ─── Explicit round completion (the ONLY thing that locks scoring) ───
+        window.completeRound = () => {
+            const round = state.activeRound;
+            if (!round) { showError('No active round!'); return; }
+            if (!confirm('Complete this round?\n\n' +
+                '• Final scores are locked in\n' +
+                '• Phones on the course can no longer enter scores\n' +
+                '• Handicaps and standings update\n\n' +
+                'You can reopen it later from the Leaderboard if needed.')) return;
+            state.__lockOnSave = true;
+            finishRound();
+        };
+        
+        // Reopen a completed round so scoring can continue on all devices.
+        window.reopenRound = (roundIndex) => {
+            try {
+                const round = state.rounds[roundIndex];
+                if (!round) { showError('Round not found!'); return; }
+                if (!confirm(`Reopen "${round.courseName}" for scoring?\n\nPhones on the course will be able to enter scores again.`)) return;
+                const next = state.rounds.map((r, i) => {
+                    if (i !== roundIndex) return r;
+                    const copy = { ...r, active: true };
+                    delete copy.completed;
+                    delete copy.completedAt;
+                    return copy;
+                });
+                saveRoundsMerged(next, [round.id]);
+                notify('🔓 Round reopened for scoring');
+                render();
+            } catch (err) {
+                console.error('Reopen round error:', err);
+                showError('Failed to reopen round: ' + err.message);
+            }
+        };
+        
         window.finishRoundIgnoreBBB = () => {
             try {
-                // Save without BBB validation
-                saveRoundData();
+                // Save without BBB validation (progress save — does NOT lock the round)
+                saveRoundData(false);
             } catch (err) {
                 console.error('Finish round (ignore BBB) error:', err);
                 showError('Failed to finish round: ' + err.message);
             }
         };
 
-        window.saveRoundData = () => {
+        // saveRoundData(lockRound):
+        //   lockRound === true  → finalize: mark completed, lock out further scoring
+        //   lockRound !== true  → save progress only; the round stays open for everyone
+        window.saveRoundData = (lockRound) => {
             try {
+                const _lockRound = (lockRound === true);
                 const round = state.activeRound;
                 
                 if (!round) {
@@ -23853,10 +23911,12 @@
                         date: originalRound.date,
                         isEditing: undefined,
                         originalIndex: undefined,
-                        // Mark this round as completed so the score-entry app can lock it
-                        // (preserves any existing completedAt if re-editing an already-finished round)
-                        completed: true,
-                        completedAt: originalRound.completedAt || Date.now(),
+                        // Only an explicit "Complete Round" locks it. Saving progress leaves
+                        // the round open so phones on the course keep scoring.
+                        completed: _lockRound ? true : (originalRound.completed === true),
+                        completedAt: _lockRound
+                            ? (originalRound.completedAt || Date.now())
+                            : originalRound.completedAt,
                         active: true
                     };
                     updatedRounds[round.originalIndex] = updatedRound;
@@ -23980,9 +24040,12 @@
                         JSON.stringify(r.teams.map(t => t.teamId).sort()) === JSON.stringify(round.teams.map(t => t.teamId).sort())
                     );
                     
-                    // Mark round as completed so the score-entry app can lock it from further editing
-                    round.completed = true;
-                    round.completedAt = Date.now();
+                    // Only lock when the organizer explicitly completed the round.
+                    // A progress save must leave scoring open on every device.
+                    if (_lockRound) {
+                        round.completed = true;
+                        round.completedAt = round.completedAt || Date.now();
+                    }
                     round.active = true;
                     
                     if (originalScheduledRound && originalScheduledRound.timestamp) {
@@ -23997,7 +24060,7 @@
                             updatedRounds.push(round);
                             save('rounds', updatedRounds);
                         } else {
-                            commitFinishedRound(round);
+                            commitFinishedRound(round, _lockRound);
                         }
                     } else {
                         // Create full timestamp from date and current time
@@ -24010,7 +24073,7 @@
                         } else {
                             round.timestamp = round.id;
                         }
-                        commitFinishedRound(round);
+                        commitFinishedRound(round, _lockRound);
                     }
                     
                     // Use the timestamp we just created (not reparse the date string)
