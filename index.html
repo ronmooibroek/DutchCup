@@ -701,7 +701,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.07.26.2';
+        const APP_VERSION = '2026.07.26.3';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -2690,6 +2690,57 @@
             const currentEventRounds = state.rounds.filter(r => r.eventId === state.currentEventId);
             
             app.innerHTML = `
+                ${(() => {
+                    // ── IN PROGRESS: started but not completed ──
+                    // These used to be invisible: not scheduled (active !== false) and not
+                    // completed, so neither list showed them. Every created round must be
+                    // reachable — continue, complete, reset, or delete.
+                    const liveRounds = state.rounds.filter(r =>
+                        r.eventId === state.currentEventId && r.active !== false && r.completed !== true);
+                    if (liveRounds.length === 0) return '';
+                    liveRounds.sort((a, b) => (a.timestamp || a.id) - (b.timestamp || b.id));
+                    return `
+                        <div class="card" style="background:#fffbeb;border:2px solid #f59e0b;">
+                            <h2>⛳ Rounds In Progress (${liveRounds.length})</h2>
+                            <p style="font-size:13px;color:#92400e;margin:0 0 12px;">
+                                Scoring is open on all devices. Complete a round to lock it.
+                            </p>
+                            ${liveRounds.map(round => {
+                                const idx = state.rounds.indexOf(round);
+                                const d = new Date(round.timestamp || round.id);
+                                const dateStr = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                                // How far along are we?
+                                let filled = 0, total = 0;
+                                (round.teams || []).forEach(t => (t.players || []).forEach(p => {
+                                    total += 18;
+                                    filled += (p.scores || []).filter(s => s !== '' && s != null).length;
+                                }));
+                                const pct = total > 0 ? Math.round((filled / total) * 100) : 0;
+                                return `
+                                    <div class="list-item" style="background:white;margin-bottom:12px;">
+                                        <div style="flex:1;">
+                                            <strong style="color:#92400e;">${round.courseName}</strong>
+                                            <div style="font-size:14px;color:#6b7280;margin-top:4px;">${dateStr} · ${pct}% scored</div>
+                                            <div style="height:6px;background:#f3f4f6;border-radius:3px;margin-top:6px;overflow:hidden;">
+                                                <div style="height:100%;width:${pct}%;background:#f59e0b;"></div>
+                                            </div>
+                                        </div>
+                                        ${!state.readOnly ? `
+                                            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                                                <button onclick="continueRound(${idx})" class="btn-primary"
+                                                        style="padding:8px 16px;background:#10b981;">▶️ Continue</button>
+                                                <button onclick="completeRoundByIndex(${idx})" class="btn-secondary"
+                                                        style="padding:6px 10px;font-size:12px;background:#b45309;color:white;">🔒 Complete</button>
+                                                <button onclick="resetRound(${idx})" class="btn-secondary"
+                                                        style="padding:6px 10px;font-size:12px;">↩️ Reset</button>
+                                                <button onclick="deleteScheduledRound(${idx})" class="btn-secondary"
+                                                        style="padding:6px 10px;font-size:12px;background:#fee2e2;color:#991b1b;">🗑️ Delete</button>
+                                            </div>
+                                        ` : ''}
+                                    </div>`;
+                            }).join('')}
+                        </div>`;
+                })()}
                 ${(() => {
                     const scheduledRounds = state.rounds.filter(r => r.eventId === state.currentEventId && r.active === false);
                     if (scheduledRounds.length === 0) return '';
@@ -7717,24 +7768,28 @@
                     return;
                 }
                 
-                if (round.active !== false) {
-                    showError('Can only delete scheduled rounds!');
+                // Completed rounds are protected; scheduled AND in-progress can be deleted.
+                if (round.completed === true) {
+                    showError('This round is completed — reopen it first if you need to delete it.');
                     return;
                 }
                 
-                const confirmMsg = `Delete this scheduled round?\n\n${round.courseName}\n${round.date}\n\nThis cannot be undone!`;
+                const _inProgress = round.active !== false;
+                const confirmMsg = `Delete this ${_inProgress ? 'IN-PROGRESS' : 'scheduled'} round?\n\n` +
+                    `${round.courseName}\n${round.date}\n\n` +
+                    (_inProgress ? 'Any scores entered will be lost.\n\n' : '') +
+                    'This cannot be undone!';
                 
                 if (!confirm(confirmMsg)) {
                     return;
                 }
                 
                 // Remove the round
-                state.rounds.splice(roundIndex, 1);
+                const _deletedId = round.id;
+                const _next = state.rounds.filter((r, i) => i !== roundIndex);
+                saveRoundsMerged(_next, [_deletedId]);   // merge-safe: won't clobber other devices
                 
-                // Save to database
-                save('rounds', state.rounds);
-                
-                notify('✅ Scheduled round deleted!');
+                notify('✅ Round deleted!');
                 navigate('home');
             } catch (err) {
                 console.error('Delete scheduled round error:', err);
@@ -23745,6 +23800,49 @@
             }
         };
 
+        // Resume scoring an in-progress round (keeps its id so scorers stay connected).
+        window.continueRound = (roundIndex) => {
+            try {
+                const round = state.rounds[roundIndex];
+                if (!round) { showError('Round not found!'); return; }
+                state.activeRound = JSON.parse(JSON.stringify(round));
+                state.activeRound.active = true;
+                state.activeRound.id = round.id;
+                // Refresh handicaps from current player records
+                (state.activeRound.teams || []).forEach(team =>
+                    (team.players || []).forEach(player => {
+                        const cur = state.players.find(p => p.id === player.id);
+                        if (cur) player.handicap = cur.handicap || 0;
+                    }));
+                const hasGroups = (state.activeRound.teams || []).some(t =>
+                    (t.players || []).some(p => p.groupNumber));
+                navigate(hasGroups ? 'scoreEntry' : 'groupSetup');
+            } catch (err) {
+                console.error('Continue round error:', err);
+                showError('Failed to continue round: ' + err.message);
+            }
+        };
+        
+        // Complete a round straight from the list, without opening the scoring screen.
+        window.completeRoundByIndex = (roundIndex) => {
+            try {
+                const round = state.rounds[roundIndex];
+                if (!round) { showError('Round not found!'); return; }
+                if (!confirm(`Complete "${round.courseName}"?\n\n` +
+                    '• Scores are locked in\n' +
+                    '• Phones on the course can no longer enter scores\n\n' +
+                    'You can reopen it later from the Leaderboard.')) return;
+                state.activeRound = JSON.parse(JSON.stringify(round));
+                state.activeRound.active = true;
+                state.activeRound.id = round.id;
+                state.__lockOnSave = true;
+                finishRound();
+            } catch (err) {
+                console.error('Complete round error:', err);
+                showError('Failed to complete round: ' + err.message);
+            }
+        };
+        
         // ─── Explicit round completion (the ONLY thing that locks scoring) ───
         window.completeRound = () => {
             const round = state.activeRound;
@@ -24612,7 +24710,7 @@
                 const updatedRounds = [...state.rounds];
                 updatedRounds[roundIndex] = scheduledRound;
                 
-                save('rounds', updatedRounds);
+                saveRoundsMerged(updatedRounds, [round.id]);   // merge-safe
                 save('players', finalPlayers);
                 
                 notify('✅ Round reset to scheduled status!');
