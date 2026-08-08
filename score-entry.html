@@ -434,6 +434,7 @@ let roundsRef = null;
 let eventsRef = null;
 let currentEventRef = null;
 let settingsRef = null;
+let playersRef = null;
 let firebaseStorage = null; // optional; null if Storage SDK not available
 try {
     if (typeof firebase === 'undefined') throw new Error('Firebase SDK failed to load. Check your internet connection.');
@@ -444,6 +445,7 @@ try {
     eventsRef = firestoreDb.collection('leagues').doc(LEAGUE_ID).collection('data').doc('events');
     currentEventRef = firestoreDb.collection('leagues').doc(LEAGUE_ID).collection('data').doc('currentEventId');
     settingsRef = firestoreDb.collection('leagues').doc(LEAGUE_ID).collection('data').doc('settings');
+    playersRef = firestoreDb.collection('leagues').doc(LEAGUE_ID).collection('data').doc('players');
     // Storage is optional — if it's missing, photo upload will gracefully fall back to disabled state
     if (firebase.storage) {
         try { firebaseStorage = firebase.storage(); }
@@ -519,7 +521,7 @@ document.addEventListener('visibilitychange', () => {
     try { if (document.visibilityState === 'hidden' && hasPendingEdits()) flushPendingEdits(); } catch (e) {}
 });
 
-const SE_VERSION = '2.10.0'; // scoring uses the league's real point settings incl. bonuses
+const SE_VERSION = '2.11.0'; // USGA course handicap ported from the admin app
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
@@ -535,6 +537,8 @@ const state = {
     finished: false,           // showing the end-of-round summary screen
     board: null,               // 'teams' | 'players' | 'match' when the leaderboard is open
     events: [],                // league events (carry the match-play bracket)
+    leaguePlayers: [],         // player records (carry handicapIndex for USGA mode)
+    useUSGA: false,            // mirrors settings.useUSGAHandicap
     currentEventId: null,
     sheetPlayerId: null,       // whose score sheet (bottom sheet pad) is open
     padExpanded: false,        // sheet showing the full 1–12 grid instead of par-relative
@@ -608,6 +612,37 @@ function getPoints(netToPar) {
     if (netToPar === 0)  return POINTS.par;
     if (netToPar === 1)  return POINTS.bogey;
     return POINTS.doubleOrWorse;
+}
+
+// ─── Course handicap, mirroring the admin app exactly ───────────────────
+// The admin app doesn't use the raw stored handicap in USGA mode: it converts the
+// player's Handicap Index into a COURSE handicap for that round's tee. Using the raw
+// value here gave players extra strokes and inflated their points.
+const SE_USGA_DEFAULT_SLOPE = 113;
+const SE_USGA_DEFAULT_RATING = 72.0;
+
+function seCourseHandicap(index, slope, rating, par) {
+    const i = parseFloat(index), s = parseFloat(slope), r = parseFloat(rating), p = parseFloat(par);
+    if (!isFinite(i) || !isFinite(s) || !isFinite(r) || !isFinite(p) || s <= 0) return null;
+    return Math.round(i * (s / 113) + (r - p));
+}
+
+// teamPlayer = the player object stored on the round (has the tee snapshot)
+function seHandicapForRound(round, teamPlayer) {
+    const raw = (teamPlayer && teamPlayer.handicap !== undefined && teamPlayer.handicap !== null)
+        ? parseInt(teamPlayer.handicap, 10) || 0 : 0;
+    if (!state.useUSGA) return raw;
+
+    const lp = (state.leaguePlayers || []).find(p => idsEqual(p.id, teamPlayer && teamPlayer.id));
+    const index = (lp && typeof lp.handicapIndex === 'number') ? lp.handicapIndex : null;
+    if (index === null) return raw;   // not enough data → same fallback the admin app uses
+
+    const slope = (teamPlayer && teamPlayer.teeSlope) || SE_USGA_DEFAULT_SLOPE;
+    const rating = (teamPlayer && teamPlayer.teeRating) || SE_USGA_DEFAULT_RATING;
+    const coursePar = Array.isArray(round && round.pars)
+        ? round.pars.reduce((s, p) => s + (parseInt(p) || 0), 0) : 72;
+    const ch = seCourseHandicap(index, slope, rating, coursePar);
+    return (ch === null) ? raw : ch;
 }
 
 function strokesOnHole(handicap, holeHandicapIdx) {
@@ -793,7 +828,14 @@ async function init() {
                 extra9: s.extra9Points ?? BONUS.extra9,
                 ctp: s.ctpPoints ?? BONUS.ctp
             };
+            state.useUSGA = s.useUSGAHandicap === true;
             if (state.board) renderLeaderboard(); else if (state.selectedRoundId) renderScoreEntry();
+        }, () => {});
+        if (playersRef) playersRef.onSnapshot(d => {
+            if (d.exists) {
+                state.leaguePlayers = Array.isArray(d.data().value) ? d.data().value : [];
+                if (state.board) renderLeaderboard(); else if (state.selectedRoundId) renderScoreEntry();
+            }
         }, () => {});
         if (eventsRef) eventsRef.onSnapshot(d => {
             if (d.exists) { state.events = Array.isArray(d.data().value) ? d.data().value : []; if (state.board === 'match') renderLeaderboard(); }
@@ -1168,7 +1210,7 @@ function buildScoresList(round, groupPlayers) {
     groupPlayers.forEach(p => {
         const pid = idStr(p.id);
         const isMe = idsEqual(p.id, state.currentPlayerId);
-        const hc = parseInt(p.handicap, 10) || 0;
+        const hc = seHandicapForRound(round, p);   // course handicap, matches the admin app
         const strokes = strokesOnHole(hc, holeHc);
         const currentScore = effectiveScore(round, p.id, state.currentHole);
         const cls = classForScore(currentScore, par, strokes);
@@ -1185,7 +1227,7 @@ function buildScoresList(round, groupPlayers) {
                 strokes > 0 ? el('span', { class: 'stroke-dots' }, ' ' + '\u25cf'.repeat(strokes)) : null
             ),
             el('div', { class: 'player-meta' },
-                `HCP ${p.handicap ?? '\u2014'} \u00b7 Thru ${totals.thru}: ${totals.gross || '\u2014'} (${totals.points} pts)`)
+                `HCP ${hc} \u00b7 Thru ${totals.thru}: ${totals.gross || '\u2014'} (${totals.points} pts)`)
         ));
 
         // BBB pill: tap to cycle this player's BBB points (0\u21921\u21922\u21923\u21920),
@@ -1578,8 +1620,8 @@ function seSegmentHoles(segment) {
 // Net match status computed ONLY on holes where BOTH players have a score.
 function seMatchStatus(round, p1, p2, segment) {
     const [lo, hi] = seSegmentHoles(segment);
-    const h1 = parseInt(p1 && p1.handicap, 10) || 0;
-    const h2 = parseInt(p2 && p2.handicap, 10) || 0;
+    const h1 = seHandicapForRound(round, p1);
+    const h2 = seHandicapForRound(round, p2);
     let up = 0, played = 0;
     const holes = [];
     for (let h = lo; h < hi; h++) {
@@ -1889,7 +1931,7 @@ function goToHole(holeIdx) {
 
 function computePlayerTotals(round, p) {
     let gross = 0, strokePoints = 0, thru = 0;
-    const hc = parseInt(p.handicap, 10) || 0;
+    const hc = seHandicapForRound(round, p);   // course handicap, same as the admin app
     for (let h = 0; h < 18; h++) {
         const s = effectiveScore(round, p.id, h);
         if (s === '' || s == null) continue;
@@ -2237,7 +2279,7 @@ function updateCellLiveColor(playerId, gross) {
 
     const par = (round.pars || [])[state.currentHole];
     const holeHc = (round.handicaps || [])[state.currentHole];
-    const hc = parseInt(p.handicap, 10) || 0;
+    const hc = seHandicapForRound(round, p);
     const strokes = strokesOnHole(hc, holeHc);
     const cls = classForScore(gross, par, strokes);
 
