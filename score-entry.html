@@ -389,7 +389,7 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
     </div>
 </div>
 
-<div class="foot-note">Dutch Cup Score Entry · v2.2</div>
+<div class="foot-note" id="foot-version">Dutch Cup Score Entry</div>
 
 <script>
 'use strict';
@@ -433,6 +433,7 @@ let firestoreDb = null;
 let roundsRef = null;
 let eventsRef = null;
 let currentEventRef = null;
+let settingsRef = null;
 let firebaseStorage = null; // optional; null if Storage SDK not available
 try {
     if (typeof firebase === 'undefined') throw new Error('Firebase SDK failed to load. Check your internet connection.');
@@ -442,6 +443,7 @@ try {
     // Bracket lives on the event object, so the match tab needs these too.
     eventsRef = firestoreDb.collection('leagues').doc(LEAGUE_ID).collection('data').doc('events');
     currentEventRef = firestoreDb.collection('leagues').doc(LEAGUE_ID).collection('data').doc('currentEventId');
+    settingsRef = firestoreDb.collection('leagues').doc(LEAGUE_ID).collection('data').doc('settings');
     // Storage is optional — if it's missing, photo upload will gracefully fall back to disabled state
     if (firebase.storage) {
         try { firebaseStorage = firebase.storage(); }
@@ -450,6 +452,10 @@ try {
 } catch (err) {
     console.error('Firebase init failed:', err);
     document.addEventListener('DOMContentLoaded', () => {
+    try {
+        const fv = document.getElementById('foot-version');
+        if (fv) fv.textContent = 'Dutch Cup Score Entry · v' + SE_VERSION;
+    } catch (e) {}
         showFatalError('Could not initialize Firebase: ' + (err.message || err), err.stack);
     });
 }
@@ -513,7 +519,7 @@ document.addEventListener('visibilitychange', () => {
     try { if (document.visibilityState === 'hidden' && hasPendingEdits()) flushPendingEdits(); } catch (e) {}
 });
 
-const SE_VERSION = '2.9.0'; // match tab driven by the event's match-play bracket
+const SE_VERSION = '2.10.0'; // scoring uses the league's real point settings incl. bonuses
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
@@ -589,7 +595,12 @@ function formatRoundDate(round) {
     return round.date || 'Unknown date';
 }
 
-const POINTS = { albatross: 10, eagle: 7, birdie: 5, par: 2, bogey: 1, doubleOrWorse: 0 };
+// Defaults only — overwritten by the league's real settings from Firestore so this app
+// and the admin app always agree. (These were previously hardcoded, which is why the
+// leaderboard totals didn't match the main app.)
+let POINTS = { albatross: 10, eagle: 7, birdie: 5, par: 2, bogey: 1, doubleOrWorse: 0 };
+// Bonus-point values, also from settings — the main app counts these toward a player's total.
+let BONUS = { bbb: 1, ball: 1, extra9: 5, ctp: 2 };
 function getPoints(netToPar) {
     if (netToPar <= -3) return POINTS.albatross;
     if (netToPar === -2) return POINTS.eagle;
@@ -764,6 +775,26 @@ async function init() {
     try {
         // Bracket data — silent if unavailable; the match tab just says so.
     try {
+        if (settingsRef) settingsRef.onSnapshot(d => {
+            if (!d.exists) return;
+            const s = d.data().value || {};
+            // Adopt the league's real scoring values
+            POINTS = {
+                albatross: s.albatrossPoints ?? POINTS.albatross,
+                eagle: s.eaglePoints ?? POINTS.eagle,
+                birdie: s.birdiePoints ?? POINTS.birdie,
+                par: s.parPoints ?? POINTS.par,
+                bogey: s.bogeyPoints ?? POINTS.bogey,
+                doubleOrWorse: s.doubleBogeyPoints ?? POINTS.doubleOrWorse
+            };
+            BONUS = {
+                bbb: s.bbbPoints ?? BONUS.bbb,
+                ball: s.ballPoints ?? BONUS.ball,
+                extra9: s.extra9Points ?? BONUS.extra9,
+                ctp: s.ctpPoints ?? BONUS.ctp
+            };
+            if (state.board) renderLeaderboard(); else if (state.selectedRoundId) renderScoreEntry();
+        }, () => {});
         if (eventsRef) eventsRef.onSnapshot(d => {
             if (d.exists) { state.events = Array.isArray(d.data().value) ? d.data().value : []; if (state.board === 'match') renderLeaderboard(); }
         }, () => {});
@@ -1857,7 +1888,7 @@ function goToHole(holeIdx) {
 }
 
 function computePlayerTotals(round, p) {
-    let gross = 0, points = 0, thru = 0;
+    let gross = 0, strokePoints = 0, thru = 0;
     const hc = parseInt(p.handicap, 10) || 0;
     for (let h = 0; h < 18; h++) {
         const s = effectiveScore(round, p.id, h);
@@ -1869,9 +1900,41 @@ function computePlayerTotals(round, p) {
         const par = (round.pars || [])[h];
         const holeHc = (round.handicaps || [])[h];
         const strokes = strokesOnHole(hc, holeHc);
-        points += getPoints((n - strokes) - par);
+        strokePoints += getPoints((n - strokes) - par);
     }
-    return { gross, points, thru };
+
+    // ── Bonus points, exactly as the admin app counts them ──
+    // Stroke play alone never matched the main app's totals; BBB, balls remaining,
+    // Extra 9 and CTP all contribute there too.
+    const bbbCount = (() => {
+        // Per-hole BBB is authoritative when present; otherwise the aggregate.
+        if (Array.isArray(round.bbbAwards) && round.bbbAwards.length > 0) {
+            let n = 0;
+            round.bbbAwards.forEach(a => ['bingo', 'bango', 'bongo'].forEach(slot => {
+                if (a && a[slot] !== '' && a[slot] != null && idsEqual(a[slot], p.id)) n++;
+            }));
+            return n;
+        }
+        return parseInt(p.bbbTotal, 10) || 0;
+    })();
+    const bbbPoints = bbbCount * BONUS.bbb;
+    const ballPoints = (parseInt(p.ballsRemaining, 10) || 0) * BONUS.ball;
+
+    // Extra9 / CTP winners are stored as "teamIdx-playerIdx" position strings
+    let pos = null;
+    (round.teams || []).forEach((t, ti) => (t.players || []).forEach((pl, pi) => {
+        if (idsEqual(pl.id, p.id)) pos = ti + '-' + pi;
+    }));
+    const countWins = (arr) => {
+        if (!Array.isArray(arr) || pos == null) return 0;
+        return arr.filter(w => String(w) === pos || idsEqual(w, p.id)
+            || (w && w.playerId != null && idsEqual(w.playerId, p.id))).length;
+    };
+    const extra9Points = countWins(round.extra9Winners) * BONUS.extra9;
+    const ctpPoints = countWins(round.ctpWinners) * BONUS.ctp;
+
+    const points = strokePoints + bbbPoints + ballPoints + extra9Points + ctpPoints;
+    return { gross, points, thru, strokePoints, bbbPoints, ballPoints, extra9Points, ctpPoints };
 }
 
 // ═══════════════════════════════════════════════════════════════════════
