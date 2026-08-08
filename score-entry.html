@@ -508,7 +508,7 @@ document.addEventListener('visibilitychange', () => {
     try { if (document.visibilityState === 'hidden' && hasPendingEdits()) flushPendingEdits(); } catch (e) {}
 });
 
-const SE_VERSION = '2.7.0'; // live leaderboard (teams / players / my match)
+const SE_VERSION = '2.8.0'; // never discard edits when a round locks; auto-flush on reopen
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
@@ -817,6 +817,16 @@ function handleRoundsSnapshot(doc) {
         return;
     }
 
+    // A previously-locked round that has been reopened: flush the scores we held back.
+    try {
+        const _re = getRoundById(state.selectedRoundId);
+        if (_re && _re.completed !== true && state.__wasLocked && hasPendingEdits()) {
+            state.__wasLocked = false;
+            setStatus('Round reopened — saving held scores…', 'saving');
+            flushPendingEdits();
+        }
+    } catch (e) {}
+
     const round = getRoundById(state.selectedRoundId);
     if (!round) {
         state.selectedRoundId = null; state.currentPlayerId = null; state.groupNumber = null;
@@ -825,11 +835,12 @@ function handleRoundsSnapshot(doc) {
     }
     // If the currently-open round was finalized by the main app, kick back to the picker
     if (round.completed === true) {
-        // Drop any unsaved edits — they can't be saved into a completed round
-        state.pendingEdits = { scores: {}, ctpWinners: {}, balls: {}, bbb: {} };
+        // KEEP pending edits queued — the round may be reopened in the main app, and
+        // throwing away a scorer's work is never the right answer. They flush on reopen.
         if (state.pendingTimer) { clearTimeout(state.pendingTimer); state.pendingTimer = null; }
         state.saving = false;
         const _wasOnEntry = state.currentPlayerId != null;
+        state.__wasLocked = true;   // remember, so held edits flush if it's reopened
         state.selectedRoundId = null;
         state.currentPlayerId = null;
         state.groupNumber = null;
@@ -837,7 +848,8 @@ function handleRoundsSnapshot(doc) {
         // Only alert if the user was actively in the scoring view (avoid spamming on picker)
         if (_wasOnEntry) {
             setTimeout(() => {
-                alert('This round was just finalized in the main app. Returning to the round list.');
+                alert('This round was marked complete in the main app.' +
+                    (hasPendingEdits() ? '\n\nYour unsaved scores are being held — if the round is reopened they will save automatically.' : ''));
             }, 50);
         }
         // Re-render with fresh state
@@ -1983,7 +1995,8 @@ async function flushPendingEdits() {
             if (state.pendingTimer) { clearTimeout(state.pendingTimer); state.pendingTimer = null; }
             // Show a brief alert then bounce to the round picker so the now-locked round is gone from view
             setTimeout(() => {
-                alert('This round was finalized in the main app. Your latest edits could not be saved.');
+                alert('This round is marked complete in the main app, so scores can\'t be saved right now.\n\n' +
+                      'Your entries are being held safely — ask the organizer to reopen the round and they will save automatically.');
                 state.selectedRoundId = null;
                 state.currentPlayerId = null;
                 state.groupNumber = null;
