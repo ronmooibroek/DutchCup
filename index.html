@@ -701,7 +701,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.07.26.6';
+        const APP_VERSION = '2026.07.27.1';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -6214,6 +6214,10 @@
                         🩺 Round Doctor — find every round
                     </button>
                     
+                    <button onclick="showHistoricDoctor()" class="btn-secondary" style="width:100%;margin-bottom:12px;background:#0891b2;color:white;">
+                        🧬 Historic Scores Doctor — audit &amp; repair handicaps
+                    </button>
+                    
                     <button onclick="exportAllData()" class="btn-primary" style="width:100%;margin-bottom:12px;background:#fb923c;">
                         💾 Download All Data (CSV)
                     </button>
@@ -6486,6 +6490,253 @@
             } catch (err) {
                 console.error('Copy failed:', err);
                 return false;
+            }
+        };
+
+        // ═══════════════════════════════════════════════════════════════
+        // HISTORIC SCORES DOCTOR
+        // player.historicScores feeds handicaps ALONGSIDE the rounds database
+        // (entries whose timestamp doesn't match a round are counted as extra
+        // rounds). So stray/duplicate entries silently distort every handicap.
+        // The rounds database is the source of truth; this audits against it.
+        // ═══════════════════════════════════════════════════════════════
+        window.__hsAudit = () => {
+            // Every real round keyed by timestamp, and by date+course as a fallback
+            const roundTs = new Set();
+            const roundKey = new Set();
+            (state.rounds || []).forEach(r => {
+                if (!r || r.active === false) return;
+                const ts = r.timestamp || r.id || 0;
+                roundTs.add(ts);
+                const d = new Date(ts);
+                if (!isNaN(d)) roundKey.add(d.toISOString().slice(0, 10) + '|' + r.courseId);
+            });
+            const now = Date.now();
+            const report = [];
+            (state.players || []).forEach(p => {
+                const seen = {};
+                const entries = (p.historicScores || []).map((hs, i) => {
+                    const ts = typeof hs.date === 'number' ? hs.date : Date.parse(hs.date);
+                    const d = new Date(ts);
+                    const ymd = isNaN(d) ? '?' : d.toISOString().slice(0, 10);
+                    const key = ymd + '|' + hs.courseId + '|' + hs.grossScore;
+                    const dup = !!seen[key];
+                    seen[key] = true;
+                    const matched = roundTs.has(ts) || roundKey.has(ymd + '|' + hs.courseId);
+                    return {
+                        i, ts, ymd,
+                        year: isNaN(d) ? '?' : String(d.getFullYear()),
+                        courseId: hs.courseId,
+                        gross: hs.grossScore,
+                        future: !isNaN(ts) && ts > now,
+                        duplicate: dup,
+                        orphan: !matched
+                    };
+                });
+                if (entries.length > 0) report.push({ player: p, entries });
+            });
+            return report;
+        };
+
+        window.showHistoricDoctor = () => {
+            const app = document.getElementById('app');
+            const report = window.__hsAudit();
+            const all = report.flatMap(r => r.entries);
+            const byYear = {};
+            all.forEach(e => { byYear[e.year] = (byYear[e.year] || 0) + 1; });
+            const nOrphan = all.filter(e => e.orphan).length;
+            const nDup = all.filter(e => e.duplicate).length;
+            const nFuture = all.filter(e => e.future).length;
+
+            let html = `
+                <button class="back-btn" onclick="navigate('settings')">← Back to Settings</button>
+                <div class="card">
+                    <h2>🧬 Historic Scores Doctor</h2>
+                    <p style="color:#6b7280;margin-bottom:14px;">
+                        Historic scores feed handicaps <em>in addition to</em> the rounds database.
+                        Stray entries therefore inflate handicaps. The rounds database is the
+                        source of truth — anything here that doesn't match a round is suspect.
+                    </p>
+                    <div style="background:#dbeafe;padding:14px;border-radius:8px;margin-bottom:12px;">
+                        <strong>Total historic entries:</strong> ${all.length} across ${report.length} player(s)<br>
+                        <strong>By year:</strong> ${Object.keys(byYear).sort().map(y => `${y}: ${byYear[y]}`).join(' · ') || '—'}
+                    </div>
+                    ${(nOrphan + nDup + nFuture) > 0 ? `
+                        <div style="background:#fee2e2;border:2px solid #dc2626;padding:14px;border-radius:8px;margin-bottom:12px;">
+                            <strong>⚠️ Problems found</strong>
+                            <div style="font-size:13px;color:#7f1d1d;margin-top:6px;">
+                                ${nOrphan} orphan (no matching round) · ${nDup} duplicate · ${nFuture} dated in the future
+                            </div>
+                        </div>` : `
+                        <div style="background:#dcfce7;border:2px solid #10b981;padding:12px;border-radius:8px;margin-bottom:12px;">
+                            ✅ Every entry matches a round in the database.
+                        </div>`}
+                </div>
+
+                ${!state.readOnly ? `
+                <div class="card">
+                    <h3 style="margin:0 0 10px;">🔧 Repair</h3>
+                    <button onclick="hsRebuildFromRounds()" class="btn-primary" style="width:100%;margin-bottom:10px;background:#10b981;">
+                        ♻️ Rebuild everything from the rounds database
+                    </button>
+                    <p style="font-size:12px;color:#6b7280;margin:0 0 16px;">
+                        Recommended. Discards all historic entries and regenerates them from
+                        completed rounds only, then recalculates every handicap.
+                    </p>
+                    <div style="border-top:1px solid #e5e7eb;padding-top:12px;">
+                        <p style="font-size:13px;font-weight:700;margin:0 0 8px;">Targeted deletes</p>
+                        ${Object.keys(byYear).sort().map(y => `
+                            <button onclick="hsDeleteYear('${y}')" class="btn-secondary" style="width:100%;margin-bottom:8px;background:#f59e0b;color:white;">
+                                🗑️ Delete all ${byYear[y]} entries from ${y}
+                            </button>`).join('')}
+                        ${nOrphan > 0 ? `<button onclick="hsDeleteFlagged('orphan')" class="btn-secondary" style="width:100%;margin-bottom:8px;">🗑️ Delete ${nOrphan} orphan entries</button>` : ''}
+                        ${nDup > 0 ? `<button onclick="hsDeleteFlagged('duplicate')" class="btn-secondary" style="width:100%;margin-bottom:8px;">🗑️ Delete ${nDup} duplicate entries</button>` : ''}
+                        <button onclick="hsRecalcHandicaps()" class="btn-secondary" style="width:100%;background:#6366f1;color:white;">
+                            🔄 Recalculate all handicaps
+                        </button>
+                    </div>
+                </div>` : ''}`;
+
+            report.forEach(({ player, entries }) => {
+                const bad = entries.filter(e => e.orphan || e.duplicate || e.future).length;
+                html += `
+                    <div class="card" style="${bad ? 'border-left:4px solid #dc2626;' : ''}">
+                        <h3 style="margin:0 0 2px;font-size:16px;">${player.name}</h3>
+                        <p style="font-size:12px;color:#6b7280;margin:0 0 10px;">
+                            ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} · current handicap: ${player.handicap ?? '—'}
+                            ${bad ? ` · <span style="color:#dc2626;font-weight:700;">${bad} suspect</span>` : ''}
+                        </p>
+                        ${entries.sort((a, b) => b.ts - a.ts).map(e => {
+                            const course = state.courses.find(co => co.id === e.courseId);
+                            const flags = [
+                                e.orphan ? '<span style="color:#dc2626;font-weight:700;">ORPHAN</span>' : '',
+                                e.duplicate ? '<span style="color:#b45309;font-weight:700;">DUPLICATE</span>' : '',
+                                e.future ? '<span style="color:#7c3aed;font-weight:700;">FUTURE</span>' : ''
+                            ].filter(Boolean).join(' · ');
+                            return `
+                                <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:5px 0;border-bottom:1px solid #f3f4f6;">
+                                    <div>
+                                        <strong>${e.ymd}</strong> · ${course ? course.name : 'course ' + e.courseId} · gross ${e.gross}
+                                        ${flags ? `<br><span style="font-size:11px;">${flags}</span>` : ''}
+                                    </div>
+                                    ${!state.readOnly ? `<button onclick="hsDeleteOne(${player.id}, ${e.i})" class="btn-secondary" style="padding:4px 8px;font-size:11px;background:#fee2e2;color:#991b1b;">✕</button>` : ''}
+                                </div>`;
+                        }).join('')}
+                    </div>`;
+            });
+            app.innerHTML = html;
+        };
+
+        // Regenerate historic scores purely from completed rounds, then recalc handicaps.
+        window.hsRebuildFromRounds = () => {
+            try {
+                const rounds = (state.rounds || []).filter(r => r && r.active !== false);
+                if (!confirm(`Rebuild ALL historic scores from ${rounds.length} completed round(s)?\n\n` +
+                    '• Every existing historic entry is discarded\n' +
+                    '• New entries are generated from round scorecards only\n' +
+                    '• All handicaps are then recalculated\n\n' +
+                    'This is the clean-slate fix.')) return;
+                const built = {};
+                rounds.forEach(r => {
+                    const ts = r.timestamp || r.id || 0;
+                    (r.teams || []).forEach(t => (t.players || []).forEach(p => {
+                        const gross = sumScores(p.scores);
+                        if (!gross || gross <= 0) return;
+                        (built[p.id] = built[p.id] || []).push({
+                            courseId: r.courseId,
+                            grossScore: gross,
+                            date: ts,
+                            handicap: p.handicap
+                        });
+                    }));
+                });
+                let players = (state.players || []).map(p => ({
+                    ...p,
+                    historicScores: (built[p.id] || []).sort((a, b) => a.date - b.date)
+                }));
+                save('players', players);
+                const n = Object.values(built).reduce((s, a) => s + a.length, 0);
+                hsRecalcHandicaps(true);
+                notify(`♻️ Rebuilt ${n} entries from rounds`);
+                showHistoricDoctor();
+            } catch (err) {
+                console.error('Rebuild historic error:', err);
+                showError('Rebuild failed: ' + err.message);
+            }
+        };
+
+        window.hsDeleteYear = (year) => {
+            try {
+                const inYear = (hs) => {
+                    const ts = typeof hs.date === 'number' ? hs.date : Date.parse(hs.date);
+                    const d = new Date(ts);
+                    return !isNaN(d) && String(d.getFullYear()) === String(year);
+                };
+                const count = (state.players || []).reduce((s, p) =>
+                    s + (p.historicScores || []).filter(inYear).length, 0);
+                if (!confirm(`Delete all ${count} historic entries from ${year}?\n\nHandicaps will be recalculated.`)) return;
+                const players = (state.players || []).map(p => ({
+                    ...p, historicScores: (p.historicScores || []).filter(hs => !inYear(hs))
+                }));
+                save('players', players);
+                hsRecalcHandicaps(true);
+                notify(`🗑️ Deleted ${count} entries from ${year}`);
+                showHistoricDoctor();
+            } catch (err) {
+                console.error('Delete year error:', err);
+                showError('Failed: ' + err.message);
+            }
+        };
+
+        window.hsDeleteFlagged = (flag) => {
+            try {
+                const report = window.__hsAudit();
+                let count = 0;
+                const drop = {};
+                report.forEach(({ player, entries }) => {
+                    const idx = entries.filter(e => e[flag]).map(e => e.i);
+                    if (idx.length) { drop[player.id] = new Set(idx); count += idx.length; }
+                });
+                if (count === 0) { notify('Nothing to delete'); return; }
+                if (!confirm(`Delete ${count} ${flag} entries?\n\nHandicaps will be recalculated.`)) return;
+                const players = (state.players || []).map(p => drop[p.id]
+                    ? { ...p, historicScores: (p.historicScores || []).filter((_, i) => !drop[p.id].has(i)) }
+                    : p);
+                save('players', players);
+                hsRecalcHandicaps(true);
+                notify(`🗑️ Deleted ${count} ${flag} entries`);
+                showHistoricDoctor();
+            } catch (err) {
+                console.error('Delete flagged error:', err);
+                showError('Failed: ' + err.message);
+            }
+        };
+
+        window.hsDeleteOne = (playerId, index) => {
+            try {
+                const players = (state.players || []).map(p => p.id === playerId
+                    ? { ...p, historicScores: (p.historicScores || []).filter((_, i) => i !== index) }
+                    : p);
+                save('players', players);
+                hsRecalcHandicaps(true);
+                showHistoricDoctor();
+            } catch (err) {
+                console.error('Delete entry error:', err);
+                showError('Failed: ' + err.message);
+            }
+        };
+
+        window.hsRecalcHandicaps = (quiet) => {
+            try {
+                const players = (state.players || []).map(p => {
+                    const h = calculatePlayerHandicap(p.id);
+                    return (h == null || isNaN(h)) ? p : { ...p, handicap: h };
+                });
+                save('players', players);
+                if (!quiet) { notify('🔄 Handicaps recalculated'); showHistoricDoctor(); }
+            } catch (err) {
+                console.error('Recalc error:', err);
+                showError('Recalculation failed: ' + err.message);
             }
         };
 
