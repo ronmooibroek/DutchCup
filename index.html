@@ -701,7 +701,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.07.26.3';
+        const APP_VERSION = '2026.07.26.4';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -3047,8 +3047,46 @@
                         <button onclick="updateEvent(${eventId})" class="btn-primary" style="width:100%;">✅ Update Event</button>
                     </div>
                     
+                    <div class="card">
+                        <h3 style="margin:0 0 4px;">➕ Add rounds to this event</h3>
+                        <p style="margin:0 0 14px;font-size:13px;color:#6b7280;">
+                            Appends more scheduled rounds, one per day, starting from the date you pick.
+                        </p>
+                        <div style="display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap;">
+                            <div style="flex:1;min-width:120px;">
+                                <label style="display:block;margin-bottom:6px;font-weight:600;">How many?</label>
+                                <input type="number" id="addRoundCount" value="1" min="1" max="30"
+                                       onchange="renderAddRoundPickers(${eventId})" oninput="renderAddRoundPickers(${eventId})"
+                                       style="width:100%;padding:10px;border:2px solid #d1d5db;border-radius:8px;font-size:16px;">
+                            </div>
+                            <div style="flex:1;min-width:120px;">
+                                <label style="display:block;margin-bottom:6px;font-weight:600;">First date:</label>
+                                <input type="date" id="addRoundStart" value="${(() => {
+                                    const rs = state.rounds.filter(r => String(r.eventId) === String(eventId));
+                                    const last = rs.length ? Math.max(...rs.map(r => r.timestamp || r.id || 0)) : 0;
+                                    const base = last ? new Date(last + 86400000) : new Date();
+                                    const p = n => String(n).padStart(2, '0');
+                                    return `${base.getFullYear()}-${p(base.getMonth() + 1)}-${p(base.getDate())}`;
+                                })()}"
+                                       onchange="renderAddRoundPickers(${eventId})"
+                                       style="width:100%;padding:10px;border:2px solid #d1d5db;border-radius:8px;font-size:16px;">
+                            </div>
+                            <div style="flex:1;min-width:120px;">
+                                <label style="display:block;margin-bottom:6px;font-weight:600;">Tee time:</label>
+                                <input type="time" id="addRoundTime" value="09:00"
+                                       style="width:100%;padding:10px;border:2px solid #d1d5db;border-radius:8px;font-size:16px;">
+                            </div>
+                        </div>
+                        <div id="addRoundPickers"></div>
+                        <button onclick="addRoundsToEvent(${eventId})" class="btn-primary" style="width:100%;margin-top:12px;background:#0ea5e9;">
+                            ➕ Add Rounds
+                        </button>
+                    </div>
+                    
                     ${renderBracketSection(event)}
                 `;
+                window.__addRoundCourses = [];
+                setTimeout(() => { try { renderAddRoundPickers(eventId); } catch (e) {} }, 0);
                 return;
             }
             
@@ -6173,7 +6211,7 @@
                     <h3 style="margin:20px 0 12px;">📤 Export Data</h3>
                     
                     <button onclick="showRoundsDebug()" class="btn-secondary" style="width:100%;margin-bottom:12px;background:#8b5cf6;color:white;">
-                        🔍 Debug: View Rounds Data
+                        🩺 Round Doctor — find every round
                     </button>
                     
                     <button onclick="exportAllData()" class="btn-primary" style="width:100%;margin-bottom:12px;background:#fb923c;">
@@ -6453,90 +6491,127 @@
 
         window.showRoundsDebug = () => {
             const app = document.getElementById('app');
-            
-            const scheduledRounds = state.rounds.filter(r => r.active === false);
-            const completedRounds = state.rounds.filter(r => r.active !== false);
-            
+            const all = state.rounds || [];
+            const evName = (id) => {
+                const e = (state.events || []).find(x => String(x.id) === String(id));
+                return e ? e.name : (id == null ? '(no event)' : '(unknown event ' + id + ')');
+            };
+            const statusOf = (r) => r.completed === true ? 'COMPLETED'
+                : (r.active === false ? 'SCHEDULED' : 'IN PROGRESS');
+            const colorOf = (s) => s === 'COMPLETED' ? '#6366f1' : (s === 'SCHEDULED' ? '#10b981' : '#f59e0b');
+
+            // Group every round by event so nothing can hide
+            const byEvent = {};
+            all.forEach((r, i) => {
+                const k = String(r.eventId);
+                (byEvent[k] = byEvent[k] || []).push({ r, i });
+            });
+            const curKey = String(state.currentEventId);
+            const orphanKeys = Object.keys(byEvent).filter(k =>
+                k !== curKey && !(state.events || []).some(e => String(e.id) === k));
+
             let html = `
                 <button class="back-btn" onclick="navigate('settings')">← Back to Settings</button>
                 <div class="card">
-                    <h2>🔍 Rounds Data Debug</h2>
-                    <p style="color:#6b7280;margin-bottom:20px;">Check your rounds data structure</p>
-                    
-                    <div style="background:#dbeafe;padding:16px;border-radius:8px;margin-bottom:20px;">
-                        <strong>Total Rounds:</strong> ${state.rounds.length}<br>
-                        <strong>Scheduled (active: false):</strong> ${scheduledRounds.length}<br>
-                        <strong>Completed (active: true/undefined):</strong> ${completedRounds.length}
+                    <h2>🩺 Round Doctor</h2>
+                    <p style="color:#6b7280;margin-bottom:16px;">
+                        Every round in the database, grouped by event — including any that don't
+                        show on the home screen. Nothing is hidden here.
+                    </p>
+                    <div style="background:#dbeafe;padding:14px;border-radius:8px;margin-bottom:8px;">
+                        <strong>Total rounds in database:</strong> ${all.length}<br>
+                        <strong>Scheduled:</strong> ${all.filter(r => r.active === false).length} ·
+                        <strong>In progress:</strong> ${all.filter(r => r.active !== false && r.completed !== true).length} ·
+                        <strong>Completed:</strong> ${all.filter(r => r.completed === true).length}
                     </div>
-                    
-                    <h3>📅 Scheduled Rounds (${scheduledRounds.length})</h3>
-            `;
-            
-            if (scheduledRounds.length === 0) {
-                html += `<p style="color:#6b7280;padding:20px;background:#f9fafb;border-radius:8px;">No scheduled rounds</p>`;
-            } else {
-                scheduledRounds.forEach((r, idx) => {
-                    const roundIndex = state.rounds.indexOf(r);
-                    html += `
-                        <div style="background:#f0fdf4;border:2px solid #10b981;border-radius:8px;padding:16px;margin-bottom:12px;">
-                            <div style="display:flex;justify-content:space-between;align-items:start;">
-                                <div style="flex:1;">
-                                    <strong>${r.courseName}</strong> - ${r.date}<br>
-                                    <div style="font-family:monospace;font-size:11px;margin-top:8px;color:#065f46;">
-                                        <div><strong>id:</strong> ${r.id}</div>
-                                        <div><strong>active:</strong> ${JSON.stringify(r.active)}</div>
-                                        <div><strong>timestamp:</strong> ${r.timestamp || '(not set)'}</div>
-                                        <div><strong>ctpWinners:</strong> ${JSON.stringify(r.ctpWinners || '(not set)')}</div>
-                                        <div><strong>extra9Winners:</strong> ${JSON.stringify(r.extra9Winners || '(not set)')}</div>
-                                        <div><strong>netWinners:</strong> ${JSON.stringify(r.netWinners || '(not set)')}</div>
-                                        <div><strong>teams:</strong> ${r.teams ? r.teams.length + ' teams' : '(not set)'}</div>
+                    ${orphanKeys.length > 0 ? `
+                        <div style="background:#fee2e2;border:2px solid #ef4444;padding:14px;border-radius:8px;margin-bottom:8px;">
+                            <strong>⚠️ ${orphanKeys.reduce((n, k) => n + byEvent[k].length, 0)} round(s) belong to an event that no longer exists.</strong>
+                            Use "Move to current event" below to bring them back.
+                        </div>` : ''}
+                </div>`;
+
+            const keys = Object.keys(byEvent).sort((a, b) =>
+                (a === curKey ? -1 : b === curKey ? 1 : 0));
+            if (keys.length === 0) {
+                html += `<div class="card"><p>No rounds exist in the database at all.</p></div>`;
+            }
+            keys.forEach(k => {
+                const isCurrent = k === curKey;
+                const rows = byEvent[k].sort((x, y) =>
+                    (x.r.timestamp || x.r.id || 0) - (y.r.timestamp || y.r.id || 0));
+                html += `
+                    <div class="card" style="${isCurrent ? 'border:2px solid #10b981;' : ''}">
+                        <h3 style="margin:0 0 4px;">${evName(k)} ${isCurrent ? '<span style="font-size:12px;color:#10b981;">(current event)</span>' : ''}</h3>
+                        <p style="font-size:12px;color:#6b7280;margin:0 0 12px;">${rows.length} round(s) · eventId: ${k}</p>
+                        ${rows.map(({ r, i }) => {
+                            const st = statusOf(r);
+                            let filled = 0;
+                            (r.teams || []).forEach(t => (t.players || []).forEach(p => {
+                                filled += (p.scores || []).filter(s => s !== '' && s != null).length;
+                            }));
+                            const dt = new Date(r.timestamp || r.id);
+                            return `
+                                <div style="border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin-bottom:10px;">
+                                    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+                                        <div>
+                                            <strong>${r.courseName || '(no course)'}</strong>
+                                            <span style="background:${colorOf(st)};color:white;font-size:10px;font-weight:800;padding:2px 8px;border-radius:999px;margin-left:6px;">${st}</span>
+                                            <div style="font-size:12px;color:#6b7280;margin-top:3px;">
+                                                ${isNaN(dt) ? '(no date)' : dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                                                · ${filled} score(s) entered · id: ${r.id}
+                                            </div>
+                                        </div>
+                                        ${!state.readOnly ? `
+                                            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                                                ${!isCurrent ? `<button onclick="moveRoundToCurrentEvent(${i})" class="btn-secondary" style="padding:6px 10px;font-size:12px;background:#0ea5e9;color:white;">➡️ Move to current event</button>` : ''}
+                                                ${r.active !== false ? `<button onclick="makeRoundScheduled(${i})" class="btn-secondary" style="padding:6px 10px;font-size:12px;">📅 Make scheduled</button>` : ''}
+                                            </div>` : ''}
                                     </div>
-                                </div>
-                                <button onclick="editScheduledRound(${roundIndex})" class="btn-secondary" style="padding:6px 12px;font-size:12px;">
-                                    ✏️ Edit Date/Time
-                                </button>
-                            </div>
-                        </div>
-                    `;
-                });
-            }
-            
-            html += `<h3 style="margin-top:20px;">✅ Completed Rounds (${completedRounds.length})</h3>`;
-            
-            if (completedRounds.length === 0) {
-                html += `<p style="color:#6b7280;padding:20px;background:#f9fafb;border-radius:8px;">No completed rounds</p>`;
-            } else {
-                completedRounds.forEach((r, idx) => {
-                    html += `
-                        <div style="background:#f0f9ff;border:2px solid #0ea5e9;border-radius:8px;padding:16px;margin-bottom:12px;">
-                            <strong>${r.courseName}</strong> - ${r.date}<br>
-                            <div style="font-family:monospace;font-size:11px;margin-top:8px;color:#0369a1;">
-                                <div><strong>id:</strong> ${r.id}</div>
-                                <div><strong>active:</strong> ${JSON.stringify(r.active)}</div>
-                                <div><strong>timestamp:</strong> ${r.timestamp || '(not set)'}</div>
-                                <div><strong>ctpWinners:</strong> ${JSON.stringify(r.ctpWinners || '(not set)')}</div>
-                                <div><strong>extra9Winners:</strong> ${JSON.stringify(r.extra9Winners || '(not set)')}</div>
-                                <div><strong>netWinners:</strong> ${JSON.stringify(r.netWinners || '(not set)')}</div>
-                                <div><strong>teams:</strong> ${r.teams ? r.teams.length + ' teams' : '(not set)'}</div>
-                            </div>
-                        </div>
-                    `;
-                });
-            }
-            
-            html += `
-                    <div style="background:#fef3c7;padding:16px;border-radius:8px;margin-top:20px;">
-                        <strong>💡 What to check:</strong><br>
-                        • Scheduled rounds should have <code>active: false</code><br>
-                        • Completed rounds should have <code>active: true</code> or <code>undefined</code><br>
-                        • All rounds should have <code>timestamp</code>, <code>ctpWinners</code>, and <code>extra9Winners</code> for proper export<br>
-                        <br>
-                        <strong>Next step:</strong> Press F12 → Console tab → Export All Data → Check console logs for "EXPORT DEBUG"
-                    </div>
-                </div>
-            `;
-            
+                                </div>`;
+                        }).join('')}
+                    </div>`;
+            });
             app.innerHTML = html;
+        };
+
+        // Re-home a round into the event you're currently viewing.
+        window.moveRoundToCurrentEvent = (roundIndex) => {
+            try {
+                const round = state.rounds[roundIndex];
+                if (!round) { showError('Round not found!'); return; }
+                if (!confirm(`Move "${round.courseName}" into the current event?`)) return;
+                const next = state.rounds.map((r, i) =>
+                    i === roundIndex ? { ...r, eventId: state.currentEventId } : r);
+                saveRoundsMerged(next, [round.id]);
+                notify('✅ Round moved to current event');
+                showRoundsDebug();
+            } catch (err) {
+                console.error('Move round error:', err);
+                showError('Failed to move round: ' + err.message);
+            }
+        };
+
+        // Put a round back on the schedule WITHOUT clearing anything.
+        window.makeRoundScheduled = (roundIndex) => {
+            try {
+                const round = state.rounds[roundIndex];
+                if (!round) { showError('Round not found!'); return; }
+                if (!confirm(`Return "${round.courseName}" to the Scheduled list?\n\nScores already entered are kept.`)) return;
+                const next = state.rounds.map((r, i) => {
+                    if (i !== roundIndex) return r;
+                    const copy = { ...r, active: false };
+                    delete copy.completed;
+                    delete copy.completedAt;
+                    return copy;
+                });
+                saveRoundsMerged(next, [round.id]);
+                notify('📅 Round returned to Scheduled');
+                showRoundsDebug();
+            } catch (err) {
+                console.error('Make scheduled error:', err);
+                showError('Failed: ' + err.message);
+            }
         };
 
         window.exportPlayers = () => {
@@ -20256,6 +20331,91 @@
             }
         };
 
+        // ─── Append rounds to an EXISTING event ───────────────────────────────
+        window.__addRoundCourses = [];
+        window.renderAddRoundPickers = (eventId) => {
+            const host = document.getElementById('addRoundPickers');
+            if (!host) return;
+            const n = Math.max(1, Math.min(30, parseInt((document.getElementById('addRoundCount') || {}).value) || 1));
+            if (!state.courses || state.courses.length === 0) {
+                host.innerHTML = '<div style="padding:12px;background:#fef3c7;border-radius:8px;font-size:13px;">Add courses first (Admin → Courses).</div>';
+                return;
+            }
+            const start = (document.getElementById('addRoundStart') || {}).value || '';
+            let html = '';
+            for (let i = 0; i < n; i++) {
+                if (window.__addRoundCourses[i] == null) {
+                    window.__addRoundCourses[i] = state.courses[i % state.courses.length].id;
+                }
+                const sel = window.__addRoundCourses[i];
+                const ymd = window.__addDaysYMD(start, i);
+                let pretty = ymd;
+                try {
+                    const [y, m, d] = ymd.split('-').map(Number);
+                    pretty = new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                } catch (e) {}
+                html += `
+                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;padding:8px;background:#f9fafb;border-radius:8px;">
+                        <div style="min-width:92px;font-size:13px;font-weight:700;color:#065f46;">${pretty}</div>
+                        <select onchange="window.__addRoundCourses[${i}] = parseInt(this.value)"
+                                style="flex:1;padding:9px;border:2px solid #d1d5db;border-radius:8px;font-size:15px;background:white;">
+                            ${state.courses.map(co => `<option value="${co.id}" ${co.id === sel ? 'selected' : ''}>${co.name}</option>`).join('')}
+                        </select>
+                    </div>`;
+            }
+            host.innerHTML = html;
+        };
+        window.addRoundsToEvent = (eventId) => {
+            try {
+                const n = Math.max(1, Math.min(30, parseInt((document.getElementById('addRoundCount') || {}).value) || 1));
+                const start = (document.getElementById('addRoundStart') || {}).value;
+                const time = (document.getElementById('addRoundTime') || {}).value || '09:00';
+                if (!start) { showError('Pick a first date!'); return; }
+                if (!state.courses || state.courses.length === 0) { showError('Add courses first!'); return; }
+                const buildTeams = () => state.teams.map(t => {
+                    const p1 = state.players.find(p => p.id === t.players[0]);
+                    const p2 = state.players.find(p => p.id === t.players[1]);
+                    if (!p1 || !p2) return null;
+                    const mk = pl => ({ id: pl.id, name: pl.name, handicap: pl.handicap,
+                        scores: Array(18).fill(''), bbbTotal: 0, ballsRemaining: 3 });
+                    return { teamId: t.id, teamName: t.name, groupNumber: null, players: [mk(p1), mk(p2)] };
+                }).filter(Boolean);
+                const [th, tm] = time.split(':').map(Number);
+                const added = [];
+                for (let i = 0; i < n; i++) {
+                    const cid = window.__addRoundCourses[i] != null
+                        ? window.__addRoundCourses[i] : state.courses[i % state.courses.length].id;
+                    const course = state.courses.find(co => co.id === cid);
+                    if (!course) continue;
+                    const ymd = window.__addDaysYMD(start, i);
+                    const [yy, mm, dd] = ymd.split('-').map(Number);
+                    added.push({
+                        id: Date.now() + i,
+                        eventId: eventId,
+                        courseId: course.id,
+                        courseName: course.name,
+                        courseAddress: course.address || '',
+                        pars: course.pars,
+                        handicaps: course.handicaps,
+                        date: ymd,
+                        timestamp: new Date(yy, mm - 1, dd, th || 0, tm || 0, 0).getTime(),
+                        teams: buildTeams(),
+                        ctpWinners: [],
+                        extra9Winners: [],
+                        active: false
+                    });
+                }
+                if (added.length === 0) { showError('Nothing to add.'); return; }
+                saveRoundsMerged([...state.rounds, ...added], added.map(r => r.id));
+                window.__addRoundCourses = [];
+                notify(`✅ Added ${added.length} round${added.length === 1 ? '' : 's'}`);
+                navigate('home');
+            } catch (err) {
+                console.error('Add rounds error:', err);
+                showError('Failed to add rounds: ' + err.message);
+            }
+        };
+        
         // ─── New-event round scheduler ───────────────────────────────────────
         // One picker per round; the chosen course is remembered per slot so changing
         // the count or the date doesn't wipe selections.
