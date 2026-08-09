@@ -714,7 +714,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.07.28.6';
+        const APP_VERSION = '2026.07.28.7';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -8186,7 +8186,7 @@
                                 handicap: p1.handicap, 
                                 scores: Array(18).fill(''),
                                 bbbTotal: 0,
-                                ballsRemaining: 3
+                                ballsRemaining: 0
                             },
                             { 
                                 id: p2.id, 
@@ -8194,7 +8194,7 @@
                                 handicap: p2.handicap, 
                                 scores: Array(18).fill(''),
                                 bbbTotal: 0,
-                                ballsRemaining: 3
+                                ballsRemaining: 0
                             }
                         ]
                     };
@@ -19839,7 +19839,7 @@
                                 handicap: p1.handicap, 
                                 scores: Array(18).fill(''),
                                 bbbTotal: 0,
-                                ballsRemaining: 3
+                                ballsRemaining: 0
                             },
                             { 
                                 id: p2.id, 
@@ -19847,7 +19847,7 @@
                                 handicap: p2.handicap, 
                                 scores: Array(18).fill(''),
                                 bbbTotal: 0,
-                                ballsRemaining: 3
+                                ballsRemaining: 0
                             }
                         ]
                     };
@@ -21268,7 +21268,7 @@
                     const p2 = state.players.find(p => p.id === t.players[1]);
                     if (!p1 || !p2) return null;
                     const mk = pl => ({ id: pl.id, name: pl.name, handicap: pl.handicap,
-                        scores: Array(18).fill(''), bbbTotal: 0, ballsRemaining: 3 });
+                        scores: Array(18).fill(''), bbbTotal: 0, ballsRemaining: 0 });
                     return { teamId: t.id, teamName: t.name, groupNumber: null, players: [mk(p1), mk(p2)] };
                 }).filter(Boolean);
                 const [th, tm] = time.split(':').map(Number);
@@ -21401,7 +21401,7 @@
                         if (!p1 || !p2) return null;
                         const mk = pl => ({
                             id: pl.id, name: pl.name, handicap: pl.handicap,
-                            scores: Array(18).fill(''), bbbTotal: 0, ballsRemaining: 3
+                            scores: Array(18).fill(''), bbbTotal: 0, ballsRemaining: 0
                         });
                         return { teamId: t.id, teamName: t.name, groupNumber: null, players: [mk(p1), mk(p2)] };
                     }).filter(Boolean);
@@ -25722,7 +25722,7 @@
                             groupNumber: player.groupNumber,
                             scores: [], // Clear scores
                             bbbTotal: 0,
-                            ballsRemaining: 3 // Reset balls
+                            ballsRemaining: 0 // Reset balls (scorers add what's left on 18)
                         }))
                     })),
                     ctpWinners: [],
