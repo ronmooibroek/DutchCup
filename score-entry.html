@@ -521,7 +521,7 @@ document.addEventListener('visibilitychange', () => {
     try { if (document.visibilityState === 'hidden' && hasPendingEdits()) flushPendingEdits(); } catch (e) {}
 });
 
-const SE_VERSION = '2.14.0'; // CTP uses the shared 18-slot format both apps score from
+const SE_VERSION = '2.15.0'; // BBB is per-hole PER GROUP (groups no longer collide)
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
@@ -817,12 +817,29 @@ function effectiveCTP(round, holeIdx) {
 }
 
 // BBB: read from round.bbbAwards = [{ holeIdx, bingo, bango, bongo }]
+// Every group playing a hole awards its OWN 3 BBB points, so a hole can hold several
+// entries. Picking the first one meant a group could see another group's points (making
+// the hole look full at 3/3 with none of its own players credited) — and overwrite them.
+// These helpers always work with the entry belonging to the CURRENT group.
+function bbbEntryIsForGroup(entry, groupPlayerIds) {
+    if (!entry) return false;
+    const ids = ['bingo', 'bango', 'bongo'].map(s => idStr(entry[s])).filter(v => v !== '');
+    if (ids.length === 0) return true;                      // blank entry: adoptable
+    return ids.some(id => groupPlayerIds.includes(id));      // belongs to us
+}
+function currentGroupPlayerIds(round) {
+    return getGroupPlayers(round, state.groupNumber).map(p => idStr(p.id));
+}
 function effectiveBBB(round, holeIdx) {
     const h = String(holeIdx);
     const pending = state.pendingEdits.bbb[h];
     let base = { bingo: '', bango: '', bongo: '' };
     if (Array.isArray(round.bbbAwards)) {
-        const found = round.bbbAwards.find(a => a && a.holeIdx === holeIdx);
+        const mine = currentGroupPlayerIds(round);
+        const found = round.bbbAwards.find(a =>
+                a && a.holeIdx === holeIdx && a.groupNumber === state.groupNumber)
+            || round.bbbAwards.find(a =>
+                a && a.holeIdx === holeIdx && a.groupNumber == null && bbbEntryIsForGroup(a, mine));
         if (found) base = { bingo: idStr(found.bingo), bango: idStr(found.bango), bongo: idStr(found.bongo) };
     }
     return Object.assign(base, pending || {});
@@ -1299,9 +1316,13 @@ function grossWord(gross, par) {
 // ─── BBB helpers: per-player counts derived from the stored 3 slots ───
 function bbbCountsForHole(round, holeIdx) {
     const slots = effectiveBBB(round, holeIdx);
+    const mine = currentGroupPlayerIds(round);
     const counts = {};
     [slots.bingo, slots.bango, slots.bongo].forEach(id => {
-        if (id !== '' && id != null) counts[idStr(id)] = (counts[idStr(id)] || 0) + 1;
+        const v = idStr(id);
+        if (v === '' || id == null) return;
+        if (mine.length && !mine.includes(v)) return;   // never count another group's points
+        counts[v] = (counts[v] || 0) + 1;
     });
     return counts;
 }
@@ -2349,14 +2370,20 @@ async function flushPendingEdits() {
             // 3) BBB edits (replace any entry for the hole)
             if (Object.keys(edits.bbb).length > 0) {
                 if (!Array.isArray(round.bbbAwards)) round.bbbAwards = [];
+                const myIds = currentGroupPlayerIds(round);
                 Object.keys(edits.bbb).forEach(hStr => {
                     const holeIdx = parseInt(hStr, 10);
                     const slots = edits.bbb[hStr];
-                    round.bbbAwards = round.bbbAwards.filter(a => !(a && a.holeIdx === holeIdx));
-                    // Only push if at least one slot is set
+                    // Drop only THIS group's entry for the hole; other groups keep theirs.
+                    round.bbbAwards = round.bbbAwards.filter(a => {
+                        if (!a || a.holeIdx !== holeIdx) return true;
+                        if (a.groupNumber != null) return a.groupNumber !== state.groupNumber;
+                        return !bbbEntryIsForGroup(a, myIds);
+                    });
                     if (slots.bingo || slots.bango || slots.bongo) {
                         round.bbbAwards.push({
                             holeIdx,
+                            groupNumber: state.groupNumber,   // makes ownership explicit going forward
                             bingo: slots.bingo || '',
                             bango: slots.bango || '',
                             bongo: slots.bongo || ''
