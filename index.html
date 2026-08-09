@@ -701,7 +701,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.07.28.3';
+        const APP_VERSION = '2026.07.28.4';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -20596,43 +20596,82 @@
                     });
                 });
                 
-                // 3. Set BBB totals per group (54 total, each player at least 8)
+                // 3. BBB — allocate HOLE BY HOLE, per group.
+                //    Bulk totals are no longer used anywhere; the per-hole awards are the
+                //    source of truth, so test data has to produce them properly: every
+                //    group awards exactly 3 points on each of the 18 holes = 54.
                 const playersByGroup = {};
                 round.teams.forEach((team, teamIdx) => {
                     team.players.forEach((player, playerIdx) => {
-                        const groupNum = player.groupNumber || 'unassigned';
-                        if (!playersByGroup[groupNum]) {
-                            playersByGroup[groupNum] = [];
-                        }
-                        playersByGroup[groupNum].push({ teamIdx, playerIdx, player });
+                        const groupNum = (player.groupNumber != null) ? player.groupNumber
+                            : (team.groupNumber != null ? team.groupNumber : 'unassigned');
+                        if (!playersByGroup[groupNum]) playersByGroup[groupNum] = [];
+                        playersByGroup[groupNum].push({ teamIdx, playerIdx, player, groupNum });
                     });
                 });
-                
+
+                round.bbbAwards = [];
                 Object.keys(playersByGroup).forEach(groupNum => {
                     if (groupNum === 'unassigned') return;
-                    
-                    const playersInGroup = playersByGroup[groupNum];
-                    const numPlayers = playersInGroup.length;
-                    
-                    // Each player gets at least 8
-                    const minPerPlayer = 8;
-                    const totalMin = minPerPlayer * numPlayers;
-                    const totalBBB = 54;
-                    const remaining = totalBBB - totalMin;
-                    
-                    // Distribute remaining randomly
-                    const distribution = Array(numPlayers).fill(minPerPlayer);
-                    for (let i = 0; i < remaining; i++) {
-                        const randomPlayerIdx = randomInt(0, numPlayers - 1);
-                        distribution[randomPlayerIdx]++;
+                    const group = playersByGroup[groupNum];
+                    if (group.length === 0) return;
+
+                    for (let hole = 0; hole < 18; hole++) {
+                        // Bingo / Bango / Bongo each go to someone in the group. Weight it
+                        // by that hole's score so the winners look plausible, and allow the
+                        // same player to take more than one (that's a Honey Pot when all 3).
+                        const ranked = group.slice().sort((a, b) => {
+                            const sa = parseInt((a.player.scores || [])[hole]) || 99;
+                            const sb = parseInt((b.player.scores || [])[hole]) || 99;
+                            return sa - sb;
+                        });
+                        const pick = () => {
+                            const r = Math.random();
+                            // better scorers more likely, but not guaranteed
+                            const idx = r < 0.45 ? 0 : (r < 0.75 ? Math.min(1, ranked.length - 1)
+                                : randomInt(0, ranked.length - 1));
+                            return String(ranked[idx].player.id);
+                        };
+                        round.bbbAwards.push({
+                            holeIdx: hole,
+                            groupNumber: (groupNum === 'unassigned') ? null : parseInt(groupNum),
+                            bingo: pick(), bango: pick(), bongo: pick()
+                        });
                     }
-                    
-                    // Assign BBB totals
-                    playersInGroup.forEach((p, idx) => {
-                        p.player.bbbTotal = distribution[idx];
-                    });
                 });
-                
+
+                // Derive every player's bbbTotal from what was just allocated
+                round.teams.forEach(team => team.players.forEach(player => {
+                    let n = 0;
+                    round.bbbAwards.forEach(a => ['bingo', 'bango', 'bongo'].forEach(slot => {
+                        if (a && String(a[slot]) === String(player.id)) n++;
+                    }));
+                    player.bbbTotal = n;
+                }));
+
+                // 3b. CTP — one winner per par 3, drawn from the players who actually
+                //     played that hole well, stamped like a real entry.
+                {
+                    const par3s = (round.pars || [])
+                        .map((p, i) => (parseInt(p) === 3 ? i : -1)).filter(i => i >= 0);
+                    const everyone = [];
+                    round.teams.forEach(t => (t.players || []).forEach(p => everyone.push(p)));
+                    round.ctpWinners = new Array(18).fill('');
+                    round.ctpMeta = {};
+                    round.ctpLog = [];
+                    par3s.forEach(hole => {
+                        // Prefer someone who scored well on the hole
+                        const ranked = everyone.slice().sort((a, b) => {
+                            const sa = parseInt((a.scores || [])[hole]) || 99;
+                            const sb = parseInt((b.scores || [])[hole]) || 99;
+                            return sa - sb;
+                        });
+                        const winner = ranked[randomInt(0, Math.min(2, ranked.length - 1))];
+                        if (!winner) return;
+                        window.setCTPForHole(round, hole, winner.id, 'Test Data');
+                    });
+                }
+
                 // 4. Select 4 Extra 9 winners randomly
                 const allPlayers = [];
                 round.teams.forEach((team, teamIdx) => {
