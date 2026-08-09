@@ -521,7 +521,7 @@ document.addEventListener('visibilitychange', () => {
     try { if (document.visibilityState === 'hidden' && hasPendingEdits()) flushPendingEdits(); } catch (e) {}
 });
 
-const SE_VERSION = '2.13.0'; // CTP shares one canonical format with the admin app + audit trail
+const SE_VERSION = '2.14.0'; // CTP uses the shared 18-slot format both apps score from
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
@@ -789,7 +789,17 @@ function effectiveCTP(round, holeIdx) {
             if (itemHole === holeIdx) return idStr(item.playerId);
         }
     }
-    if (cw.length === 18 && (typeof cw[holeIdx] === 'string' || typeof cw[holeIdx] === 'number')) return idStr(cw[holeIdx]);
+    if (cw.length === 18 && (typeof cw[holeIdx] === 'string' || typeof cw[holeIdx] === 'number')) {
+        const v = String(cw[holeIdx] ?? '');
+        if (!v) return '';
+        // Slots hold "teamIdx-playerIdx" position strings — resolve to the player id.
+        const m = v.match(/^(\d+)-(\d+)$/);
+        if (m) {
+            const pl = ((round.teams || [])[+m[1]] || {}).players || [];
+            return pl[+m[2]] ? idStr(pl[+m[2]].id) : '';
+        }
+        return idStr(v);
+    }
     // Legacy scalar slots: Nth entry = Nth par 3. Handles both raw player ids and
     // "teamIdx-playerIdx" position strings written by older admin builds.
     const par3s = (round.pars || []).map((p, i) => (parseInt(p) === 3 ? i : -1)).filter(i => i >= 0);
@@ -2266,43 +2276,74 @@ async function flushPendingEdits() {
                 });
             });
 
-            // 2) CTP edits (last-save-wins; replace any entry for the hole)
+            // 2) CTP edits — write the SHARED format the admin app uses: an 18-slot array
+            //    of "teamIdx-playerIdx" position strings indexed by hole. Audit metadata
+            //    goes in ctpMeta/ctpLog so every scoring path in both apps keeps working.
             if (Object.keys(edits.ctpWinners).length > 0) {
-                if (!Array.isArray(round.ctpWinners)) round.ctpWinners = [];
+                const posOf = (pid) => {
+                    let pos = null;
+                    (round.teams || []).forEach((t, ti) => (t.players || []).forEach((p, pi) => {
+                        if (idsEqual(p.id, pid)) pos = ti + '-' + pi;
+                    }));
+                    return pos;
+                };
+                const nameOf = (pid) => {
+                    let n = null;
+                    (round.teams || []).forEach(t => (t.players || []).forEach(p => {
+                        if (idsEqual(p.id, pid)) n = p.name;
+                    }));
+                    return n;
+                };
+                // Normalise whatever is there into 18 slots first
+                const cw = Array.isArray(round.ctpWinners) ? round.ctpWinners : [];
+                const slots = new Array(18).fill('');
+                const par3s = (round.pars || []).map((p, i) => (parseInt(p) === 3 ? i : -1)).filter(i => i >= 0);
+                if (cw.length === 18 && cw.every(v => typeof v !== 'object')) {
+                    cw.forEach((v, i) => {
+                        if (v === '' || v == null) return;
+                        const s = String(v);
+                        slots[i] = /^\d+-\d+$/.test(s) ? s : (posOf(s) || '');
+                    });
+                } else {
+                    cw.forEach((item, idx) => {
+                        if (item == null || item === '') return;
+                        if (typeof item === 'object') {
+                            const h = (item.holeIdx != null) ? item.holeIdx : (item.hole != null ? item.hole - 1 : null);
+                            const pos = posOf(item.playerId);
+                            if (h != null && h >= 0 && h < 18 && pos) slots[h] = pos;
+                            return;
+                        }
+                        const s = String(item), h = par3s[idx];
+                        if (h == null) return;
+                        slots[h] = /^\d+-\d+$/.test(s) ? s : (posOf(s) || '');
+                    });
+                }
+
+                if (!round.ctpMeta || typeof round.ctpMeta !== 'object') round.ctpMeta = {};
+                if (!Array.isArray(round.ctpLog)) round.ctpLog = [];
+                const setterName = nameOf(state.currentPlayerId) || 'Course';
+
                 Object.keys(edits.ctpWinners).forEach(hStr => {
                     const holeIdx = parseInt(hStr, 10);
                     const winnerId = edits.ctpWinners[hStr];
-                    round.ctpWinners = round.ctpWinners.filter(item => {
-                        if (item == null) return false;
-                        if (typeof item === 'object') {
-                            const itemHole = (item.holeIdx != null) ? item.holeIdx
-                                          : (item.hole != null) ? (item.hole - 1) : null;
-                            return itemHole !== holeIdx;
-                        }
-                        return true;
-                    });
-                    // Canonical shape shared with the admin app, stamped with who set it.
-                    const nameOf = (id) => {
-                        let n = null;
-                        (round.teams || []).forEach(t => (t.players || []).forEach(p => {
-                            if (idsEqual(p.id, id)) n = p.name;
-                        }));
-                        return n;
-                    };
-                    const setterName = nameOf(state.currentPlayerId) || 'Course';
-                    if (winnerId) {
-                        round.ctpWinners.push({
-                            holeIdx, playerId: winnerId,
-                            setBy: setterName, setAt: Date.now(), source: 'course'
-                        });
-                    }
-                    if (!Array.isArray(round.ctpLog)) round.ctpLog = [];
+                    const prevPos = slots[holeIdx];
+                    const prevId = prevPos ? (() => {
+                        const m = prevPos.match(/^(\d+)-(\d+)$/);
+                        const pl = ((round.teams || [])[+m[1]] || {}).players || [];
+                        return pl[+m[2]] ? pl[+m[2]].id : null;
+                    })() : null;
+                    const now = Date.now();
+                    slots[holeIdx] = winnerId ? (posOf(winnerId) || '') : '';
+                    if (winnerId) round.ctpMeta[holeIdx] = { setBy: setterName, setAt: now, source: 'course' };
+                    else delete round.ctpMeta[holeIdx];
                     round.ctpLog.push({
-                        holeIdx, at: Date.now(), by: setterName, source: 'course',
-                        from: null, to: winnerId ? (nameOf(winnerId) || String(winnerId)) : null
+                        holeIdx, at: now, by: setterName, source: 'course',
+                        from: prevId ? (nameOf(prevId) || String(prevId)) : null,
+                        to: winnerId ? (nameOf(winnerId) || String(winnerId)) : null
                     });
-                    if (round.ctpLog.length > 200) round.ctpLog = round.ctpLog.slice(-200);
                 });
+                if (round.ctpLog.length > 200) round.ctpLog = round.ctpLog.slice(-200);
+                round.ctpWinners = slots;
             }
 
             // 3) BBB edits (replace any entry for the hole)
