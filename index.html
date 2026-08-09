@@ -714,7 +714,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.07.29.1';
+        const APP_VERSION = '2026.07.29.2';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -2790,6 +2790,14 @@
                 renderPlayerDetailPage();
             } else if (state.view === 'settings') {
                 renderSettings();
+            } else if (state.view === 'doctors') {
+                renderDoctors();
+            } else if (state.view === 'roundDoctor') {
+                showRoundsDebug();
+            } else if (state.view === 'handicapDoctor') {
+                showHandicapDoctor();
+            } else if (state.view === 'historicDoctor') {
+                showHistoricDoctor();
             } else if (state.view === 'export') {
                 renderExport();
             } else if (state.view === 'soundtest') {
@@ -3021,50 +3029,75 @@
                 
                 ${!state.readOnly ? `
                     <div class="card">
-                        <h2>⚙️ Admin</h2>
-                    <div class="list-item" onclick="navigate('courses')">
-                        <div>
-                            <strong>🏌️ Courses</strong><br>
-                            <small>${state.courses.length} courses</small>
+                        <h2>👥 League Setup</h2>
+                        <p style="color:#6b7280;font-size:13px;margin:0 0 10px;">Who plays, where, and in what teams.</p>
+                        <div class="list-item" onclick="navigate('players')">
+                            <div>
+                                <strong>👥 Players</strong><br>
+                                <small>${state.players.length} players · handicaps &amp; photos</small>
+                            </div>
+                            <span style="font-size:24px;">→</span>
                         </div>
-                        <span style="font-size:24px;">→</span>
-                    </div>
-                    <div class="list-item" onclick="navigate('players')">
-                        <div>
-                            <strong>👥 Players</strong><br>
-                            <small>${state.players.length} players</small>
+                        <div class="list-item" onclick="navigate('teams')">
+                            <div>
+                                <strong>👫 Teams</strong><br>
+                                <small>${state.teams.length} teams · names, colours &amp; logos</small>
+                            </div>
+                            <span style="font-size:24px;">→</span>
                         </div>
-                        <span style="font-size:24px;">→</span>
-                    </div>
-                    <div class="list-item" onclick="navigate('teams')">
-                        <div>
-                            <strong>👫 Teams</strong><br>
-                            <small>${state.teams.length} teams</small>
+                        <div class="list-item" onclick="navigate('courses')">
+                            <div>
+                                <strong>🏌️ Courses</strong><br>
+                                <small>${state.courses.length} courses · pars, stroke index &amp; tees</small>
+                            </div>
+                            <span style="font-size:24px;">→</span>
                         </div>
-                        <span style="font-size:24px;">→</span>
                     </div>
-                    <div class="list-item" onclick="navigate('settings')">
-                        <div>
-                            <strong>⚙️ Settings</strong><br>
-                            <small>Point values & options</small>
+
+                    <div class="card">
+                        <h2>🏆 Competition</h2>
+                        <p style="color:#6b7280;font-size:13px;margin:0 0 10px;">Events, rounds and how points are scored.</p>
+                        <div class="list-item" onclick="navigate('events')">
+                            <div>
+                                <strong>📅 Events &amp; Rounds</strong><br>
+                                <small>${state.events.length} event${state.events.length === 1 ? '' : 's'} · ${state.rounds.length} round${state.rounds.length === 1 ? '' : 's'} · schedules &amp; brackets</small>
+                            </div>
+                            <span style="font-size:24px;">→</span>
                         </div>
-                        <span style="font-size:24px;">→</span>
-                    </div>
-                    <div class="list-item" onclick="navigate('export')">
-                        <div>
-                            <strong>💾 Export/Import</strong><br>
-                            <small>Backup & restore data</small>
+                        <div class="list-item" onclick="navigate('settings')">
+                            <div>
+                                <strong>⚙️ Scoring &amp; Settings</strong><br>
+                                <small>Point values, handicap method, access</small>
+                            </div>
+                            <span style="font-size:24px;">→</span>
                         </div>
-                        <span style="font-size:24px;">→</span>
                     </div>
-                    <div class="list-item" onclick="navigate('soundtest')">
-                        <div>
-                            <strong>🔊 Sound Test</strong><br>
-                            <small>Test MP3 files in the Sounds/ folder</small>
+
+                    <div class="card">
+                        <h2>🛠️ Data &amp; Tools</h2>
+                        <p style="color:#6b7280;font-size:13px;margin:0 0 10px;">Check the numbers, fix problems, back things up.</p>
+                        <div class="list-item" onclick="navigate('doctors')">
+                            <div>
+                                <strong>🩺 Doctors</strong><br>
+                                <small>Diagnose &amp; repair rounds, scores and handicaps</small>
+                            </div>
+                            <span style="font-size:24px;">→</span>
                         </div>
-                        <span style="font-size:24px;">→</span>
+                        <div class="list-item" onclick="navigate('export')">
+                            <div>
+                                <strong>💾 Export / Import</strong><br>
+                                <small>Backup &amp; restore data</small>
+                            </div>
+                            <span style="font-size:24px;">→</span>
+                        </div>
+                        <div class="list-item" onclick="navigate('soundtest')">
+                            <div>
+                                <strong>🔊 Sound Test</strong><br>
+                                <small>Test MP3 files in the Sounds/ folder</small>
+                            </div>
+                            <span style="font-size:24px;">→</span>
+                        </div>
                     </div>
-                </div>
                 ` : (state.settings && state.settings.requireAdminPassword === false ? '' : `
                     <div class="card" style="background:#fef3c7;border:2px solid #f59e0b;">
                         <h2>👁️ Read-Only Mode</h2>
@@ -6394,17 +6427,10 @@
                     
                     <h3 style="margin:20px 0 12px;">📤 Export Data</h3>
                     
-                    <button onclick="showRoundsDebug()" class="btn-secondary" style="width:100%;margin-bottom:12px;background:#8b5cf6;color:white;">
-                        🩺 Round Doctor — find every round
-                    </button>
-                    
-                    <button onclick="showHandicapDoctor()" class="btn-secondary" style="width:100%;margin-bottom:12px;background:#4338ca;color:white;">
-                        🩻 Handicap Doctor — prove every handicap
-                    </button>
-                    
-                    <button onclick="showHistoricDoctor()" class="btn-secondary" style="width:100%;margin-bottom:12px;background:#0891b2;color:white;">
-                        🧬 Historic Scores Doctor — audit &amp; repair handicaps
-                    </button>
+                    <div style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;padding:10px;margin-bottom:14px;font-size:13px;">
+                        Looking for the data tools? They now live under
+                        <strong onclick="navigate('doctors')" style="color:#4338ca;cursor:pointer;text-decoration:underline;">Admin → Doctors</strong>.
+                    </div>
                     
                     <button onclick="exportAllData()" class="btn-primary" style="width:100%;margin-bottom:12px;background:#fb923c;">
                         💾 Download All Data (CSV)
@@ -6792,7 +6818,7 @@
                 .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
             let html = `
-                <button class="back-btn" onclick="navigate('settings')">← Back to Settings</button>
+                <button class="back-btn" onclick="navigate('doctors')">← Back to Doctors</button>
                 <div class="card">
                     <h2>🩻 Handicap Doctor</h2>
                     <p style="color:#6b7280;margin-bottom:14px;">
@@ -6955,7 +6981,7 @@
             const nFuture = all.filter(e => e.future).length;
 
             let html = `
-                <button class="back-btn" onclick="navigate('settings')">← Back to Settings</button>
+                <button class="back-btn" onclick="navigate('doctors')">← Back to Doctors</button>
                 <div class="card">
                     <h2>🧬 Historic Scores Doctor</h2>
                     <p style="color:#6b7280;margin-bottom:14px;">
@@ -7198,6 +7224,88 @@
             }
         };
 
+        // ─── Doctors: every data-integrity tool in one place ───────────────
+        window.renderDoctors = () => {
+            const app = document.getElementById('app');
+            // Quick health signals so the page tells you whether anything needs attention
+            const rounds = state.rounds || [];
+            const conflicted = rounds.filter(r => r.completed === true && r.active === false).length;
+            const scoredScheduled = rounds.filter(r => {
+                if (r.active !== false) return false;
+                return (r.teams || []).some(t => (t.players || []).some(p =>
+                    (p.scores || []).some(s => s !== '' && s != null)));
+            }).length;
+            const orphanEvents = (() => {
+                const ids = new Set((state.events || []).map(e => String(e.id)));
+                return rounds.filter(r => !ids.has(String(r.eventId))).length;
+            })();
+            let hsSuspect = 0;
+            try { hsSuspect = window.__hsAudit().flatMap(r => r.entries)
+                .filter(e => e.orphan || e.duplicate || e.future).length; } catch (e) {}
+            let hcMismatch = 0;
+            try {
+                const usgaOn = !!(state.settings && state.settings.useUSGAHandicap);
+                (state.players || []).forEach(p => {
+                    const a = window.__hcAnalyze(p);
+                    const val = usgaOn
+                        ? (a.usga ? Math.max(0, Math.min(54, Math.round(a.usga.index))) : null)
+                        : (a.dutch ? a.dutch.handicap : null);
+                    if (val != null && parseInt(p.handicap, 10) !== val) hcMismatch++;
+                });
+            } catch (e) {}
+
+            const card = (icon, title, desc, action, colour, issues) => `
+                <div class="list-item" onclick="${action}" style="cursor:pointer;border-left:5px solid ${colour};">
+                    <div style="flex:1;">
+                        <strong style="font-size:17px;">${icon} ${title}</strong><br>
+                        <small style="color:#6b7280;">${desc}</small>
+                        ${issues ? `<div style="margin-top:6px;"><span style="background:#fee2e2;color:#991b1b;font-size:12px;font-weight:800;padding:3px 10px;border-radius:999px;">${issues}</span></div>` : `<div style="margin-top:6px;"><span style="background:#dcfce7;color:#166534;font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px;">✅ nothing flagged</span></div>`}
+                    </div>
+                    <div style="font-size:22px;color:#9ca3af;">→</div>
+                </div>`;
+
+            const roundIssues = [];
+            if (conflicted) roundIssues.push(`${conflicted} conflicted`);
+            if (scoredScheduled) roundIssues.push(`${scoredScheduled} scored but not started`);
+            if (orphanEvents) roundIssues.push(`${orphanEvents} in a missing event`);
+
+            app.innerHTML = `
+                <button class="back-btn" onclick="navigate('home')">← Back</button>
+                <div class="card">
+                    <h2>🩺 Doctors</h2>
+                    <p style="color:#6b7280;margin-bottom:4px;">
+                        Diagnose and repair the data behind rounds, scores and handicaps.
+                        Each tool shows you what it found before changing anything.
+                    </p>
+                </div>
+                <div class="card">
+                    ${card('🩺', 'Round Doctor',
+                        'Every round in the database grouped by event — including any that don\'t show on the home screen. Fix states, move between events, delete.',
+                        "navigate('roundDoctor')", '#8b5cf6', roundIssues.join(' · '))}
+                    ${card('🩻', 'Handicap Doctor',
+                        'Both handicap systems for every player with the full working, so any handicap can be proved line by line.',
+                        "navigate('handicapDoctor')", '#4338ca',
+                        hcMismatch ? `${hcMismatch} stored handicap${hcMismatch === 1 ? '' : 's'} out of date` : '')}
+                    ${card('🧬', 'Historic Scores Doctor',
+                        'Audit the score history that feeds handicaps — orphans, duplicates and future-dated entries — and rebuild it from completed rounds.',
+                        "navigate('historicDoctor')", '#0891b2',
+                        hsSuspect ? `${hsSuspect} suspect entr${hsSuspect === 1 ? 'y' : 'ies'}` : '')}
+                </div>
+                <div class="card">
+                    <h3 style="margin:0 0 10px;">Related</h3>
+                    <div class="list-item" onclick="navigate('export')" style="cursor:pointer;">
+                        <div style="flex:1;"><strong>💾 Export / Import</strong><br>
+                        <small style="color:#6b7280;">Back up or restore all league data</small></div>
+                        <div style="font-size:22px;color:#9ca3af;">→</div>
+                    </div>
+                    <div class="list-item" onclick="navigate('soundtest')" style="cursor:pointer;">
+                        <div style="flex:1;"><strong>🔊 Sound Test</strong><br>
+                        <small style="color:#6b7280;">Check the presentation audio</small></div>
+                        <div style="font-size:22px;color:#9ca3af;">→</div>
+                    </div>
+                </div>`;
+        };
+
         window.showRoundsDebug = () => {
             const app = document.getElementById('app');
             const all = state.rounds || [];
@@ -7226,7 +7334,7 @@
                 k !== curKey && !(state.events || []).some(e => String(e.id) === k));
 
             let html = `
-                <button class="back-btn" onclick="navigate('settings')">← Back to Settings</button>
+                <button class="back-btn" onclick="navigate('doctors')">← Back to Doctors</button>
                 <div class="card">
                     <h2>🩺 Round Doctor</h2>
                     <p style="color:#6b7280;margin-bottom:16px;">
