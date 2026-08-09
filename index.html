@@ -714,7 +714,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.07.28.9';
+        const APP_VERSION = '2026.07.29.1';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -2320,7 +2320,9 @@
             const avg = picked.reduce((s, p) => s + p.v, 0) / useCount;
             const index = Math.round((avg + adjust) * 10) / 10;
             
-            return { index, usedCount: useCount, sourceSize: n, usedIndices };
+            // average/adjustment exposed so the Handicap Doctor can show the working
+            return { index, usedCount: useCount, sourceSize: n, usedIndices,
+                     average: avg, adjustment: adjust };
         };
         
         // Course Handicap = Index × (Slope / 113) + (Rating − Par), rounded to integer
@@ -2383,6 +2385,8 @@
                             differential: diff,
                             source: 'round',
                             gross: gross,
+                            slope: slope,
+                            rating: rating,
                             courseName: round.courseName || '—',
                             teeName: teeName,
                             usedDefaults: !hasSnapshot
@@ -2405,6 +2409,8 @@
                     differential: diff,
                     source: 'historic',
                     gross: hs.grossScore,
+                    slope: USGA_DEFAULT_SLOPE,
+                    rating: USGA_DEFAULT_RATING,
                     courseName: course ? course.name : 'Historic',
                     teeName: null,
                     usedDefaults: true
@@ -6392,6 +6398,10 @@
                         🩺 Round Doctor — find every round
                     </button>
                     
+                    <button onclick="showHandicapDoctor()" class="btn-secondary" style="width:100%;margin-bottom:12px;background:#4338ca;color:white;">
+                        🩻 Handicap Doctor — prove every handicap
+                    </button>
+                    
                     <button onclick="showHistoricDoctor()" class="btn-secondary" style="width:100%;margin-bottom:12px;background:#0891b2;color:white;">
                         🧬 Historic Scores Doctor — audit &amp; repair handicaps
                     </button>
@@ -6722,6 +6732,216 @@
                 if (entries.length > 0) report.push({ player: p, entries });
             });
             return report;
+        };
+
+        // ═══════════════════════════════════════════════════════════════
+        // HANDICAP DOCTOR
+        // Shows both systems side by side and exposes every number that feeds
+        // them, so a handicap can be defended line by line rather than asserted.
+        // ═══════════════════════════════════════════════════════════════
+        window.__hcRow = (label, value, note) => `
+            <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:5px 0;border-bottom:1px solid #f3f4f6;">
+                <div><strong style="font-size:13px;">${label}</strong>${note ? `<div style="font-size:11px;color:#6b7280;">${note}</div>` : ''}</div>
+                <div style="font-weight:800;font-size:15px;white-space:nowrap;">${value}</div>
+            </div>`;
+
+        // Recompute BOTH systems for a player, independent of which is switched on.
+        window.__hcAnalyze = (player) => {
+            const diffs = collectPlayerDifferentials(player) || [];
+            const usga = calculateHandicapIndex(diffs);
+
+            // Dutch Cup path: average over-par of the last 20, × 0.80
+            const allScores = [];
+            (state.rounds || []).forEach(r => {
+                if (!window.roundCountsForHandicap(r)) return;
+                (r.teams || []).forEach(t => (t.players || []).forEach(p => {
+                    if (String(p.id) !== String(player.id)) return;
+                    const gross = sumScores(p.scores);
+                    if (!gross) return;
+                    const par = (r.pars || []).reduce((s, x) => s + (parseInt(x) || 0), 0) || 72;
+                    allScores.push({ date: r.timestamp || r.id, courseName: r.courseName,
+                                     gross, par, overPar: gross - par, source: 'round' });
+                }));
+            });
+            const roundTs = new Set(allScores.map(s => s.date));
+            (player.historicScores || []).forEach(hs => {
+                const ts = typeof hs.date === 'number' ? hs.date : Date.parse(hs.date);
+                if (roundTs.has(ts)) return;
+                const co = (state.courses || []).find(x => String(x.id) === String(hs.courseId));
+                const par = co ? (co.pars || []).reduce((s, x) => s + (parseInt(x) || 0), 0) : 72;
+                allScores.push({ date: ts, courseName: co ? co.name : 'Historic',
+                                 gross: hs.grossScore, par: par || 72,
+                                 overPar: hs.grossScore - (par || 72), source: 'historic' });
+            });
+            allScores.sort((a, b) => b.date - a.date);
+            const last20 = allScores.slice(0, 20);
+            const sumOverPar = last20.reduce((s, x) => s + x.overPar, 0);
+            const avgOverPar = last20.length ? sumOverPar / last20.length : null;
+            const dutch = (avgOverPar == null) ? null : {
+                sum: sumOverPar, n: last20.length, avg: avgOverPar,
+                handicap: Math.max(0, Math.min(36, Math.round(avgOverPar * 0.80))),
+                rows: last20
+            };
+            return { diffs, usga, dutch, allScores };
+        };
+
+        window.showHandicapDoctor = () => {
+            const app = document.getElementById('app');
+            const usgaOn = !!(state.settings && state.settings.useUSGAHandicap);
+            const players = (state.players || []).slice()
+                .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
+            let html = `
+                <button class="back-btn" onclick="navigate('settings')">← Back to Settings</button>
+                <div class="card">
+                    <h2>🩻 Handicap Doctor</h2>
+                    <p style="color:#6b7280;margin-bottom:14px;">
+                        Both systems computed for every player, with the full working shown.
+                        Tap a player to see every score that feeds their handicap and exactly
+                        which ones were used.
+                    </p>
+                    <div style="background:#dbeafe;padding:12px;border-radius:8px;font-size:14px;">
+                        <strong>Active system:</strong> ${usgaOn ? 'USGA / WHS Handicap Index' : 'Dutch Cup (avg over par × 0.80)'}<br>
+                        <strong>Counts toward handicaps:</strong> completed rounds only, plus manual historic entries<br>
+                        <strong>Course handicap:</strong> Index × (Slope ÷ 113) + (Rating − Par)
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3 style="margin:0 0 10px;">All players</h3>
+                    <div style="overflow-x:auto;">
+                    <table style="width:100%;border-collapse:collapse;font-size:14px;">
+                        <thead>
+                            <tr style="background:#f9fafb;">
+                                <th style="text-align:left;padding:8px;">Player</th>
+                                <th style="text-align:right;padding:8px;">Stored</th>
+                                <th style="text-align:right;padding:8px;">USGA Index</th>
+                                <th style="text-align:right;padding:8px;">Dutch Cup</th>
+                                <th style="text-align:right;padding:8px;">Scores</th>
+                                <th style="text-align:center;padding:8px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${players.map(p => {
+                                const a = window.__hcAnalyze(p);
+                                const usgaHc = a.usga ? Math.max(0, Math.min(54, Math.round(a.usga.index))) : null;
+                                const active = usgaOn ? usgaHc : (a.dutch ? a.dutch.handicap : null);
+                                const mismatch = (active != null) && (parseInt(p.handicap, 10) !== active);
+                                return `
+                                    <tr style="border-bottom:1px solid #e5e7eb;${mismatch ? 'background:#fef2f2;' : ''}">
+                                        <td style="padding:8px;font-weight:600;">${p.name}</td>
+                                        <td style="padding:8px;text-align:right;font-weight:800;">${p.handicap ?? '—'}</td>
+                                        <td style="padding:8px;text-align:right;">${a.usga ? a.usga.index.toFixed(1) + ` <span style="color:#6b7280;">(${usgaHc})</span>` : '<span style="color:#9ca3af;">n/a</span>'}</td>
+                                        <td style="padding:8px;text-align:right;">${a.dutch ? a.dutch.handicap : '<span style="color:#9ca3af;">n/a</span>'}</td>
+                                        <td style="padding:8px;text-align:right;color:#6b7280;">${a.allScores.length}</td>
+                                        <td style="padding:8px;text-align:center;">
+                                            <button onclick="showHandicapPlayer(${JSON.stringify(String(p.id))})" class="btn-secondary" style="padding:5px 10px;font-size:12px;">Show working</button>
+                                        </td>
+                                    </tr>
+                                    ${mismatch ? `<tr><td colspan="6" style="padding:2px 8px 8px;font-size:12px;color:#b91c1c;">
+                                        ⚠️ Stored handicap (${p.handicap}) doesn't match the calculated ${usgaOn ? 'USGA' : 'Dutch Cup'} value (${active}) — run Recalculate.
+                                    </td></tr>` : ''}`;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                    </div>
+                    ${!state.readOnly ? `<button onclick="hsRecalcHandicaps()" class="btn-primary" style="width:100%;margin-top:14px;background:#6366f1;">
+                        🔄 Recalculate all handicaps
+                    </button>` : ''}
+                </div>`;
+            app.innerHTML = html;
+        };
+
+        // Full working for one player.
+        window.showHandicapPlayer = (playerId) => {
+            const player = (state.players || []).find(p => String(p.id) === String(playerId));
+            if (!player) { showError('Player not found'); return; }
+            const app = document.getElementById('app');
+            const usgaOn = !!(state.settings && state.settings.useUSGAHandicap);
+            const a = window.__hcAnalyze(player);
+            const usedSet = new Set((a.usga && a.usga.usedIndices) ? Array.from(a.usga.usedIndices) : []);
+
+            let html = `
+                <button class="back-btn" onclick="showHandicapDoctor()">← All players</button>
+                <div class="card">
+                    <h2>🩻 ${player.name}</h2>
+                    <div style="display:flex;gap:20px;flex-wrap:wrap;margin-top:10px;">
+                        <div style="flex:1;min-width:200px;background:#f0fdf4;border:2px solid #10b981;border-radius:10px;padding:12px;">
+                            <div style="font-size:12px;font-weight:800;color:#065f46;letter-spacing:1px;">STORED HANDICAP</div>
+                            <div style="font-size:38px;font-weight:900;">${player.handicap ?? '—'}</div>
+                            <div style="font-size:12px;color:#6b7280;">what the app uses today</div>
+                        </div>
+                        <div style="flex:1;min-width:200px;background:${usgaOn ? '#eef2ff' : '#f9fafb'};border:2px solid ${usgaOn ? '#6366f1' : '#d1d5db'};border-radius:10px;padding:12px;">
+                            <div style="font-size:12px;font-weight:800;color:#3730a3;letter-spacing:1px;">USGA INDEX ${usgaOn ? '(ACTIVE)' : ''}</div>
+                            <div style="font-size:38px;font-weight:900;">${a.usga ? a.usga.index.toFixed(1) : '—'}</div>
+                            <div style="font-size:12px;color:#6b7280;">${a.usga ? `playing handicap ${Math.max(0, Math.min(54, Math.round(a.usga.index)))}` : 'needs 3+ scores'}</div>
+                        </div>
+                        <div style="flex:1;min-width:200px;background:${!usgaOn ? '#eef2ff' : '#f9fafb'};border:2px solid ${!usgaOn ? '#6366f1' : '#d1d5db'};border-radius:10px;padding:12px;">
+                            <div style="font-size:12px;font-weight:800;color:#3730a3;letter-spacing:1px;">DUTCH CUP ${!usgaOn ? '(ACTIVE)' : ''}</div>
+                            <div style="font-size:38px;font-weight:900;">${a.dutch ? a.dutch.handicap : '—'}</div>
+                            <div style="font-size:12px;color:#6b7280;">avg over par × 0.80</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3 style="margin:0 0 8px;">📐 USGA working</h3>
+                    ${a.usga ? `
+                        ${window.__hcRow('Scores available', a.diffs.length, 'most recent 20 are considered')}
+                        ${window.__hcRow('Differentials used', a.usga.usedCount, `WHS table: with ${a.usga.sourceSize} scores, use the lowest ${a.usga.usedCount}`)}
+                        ${window.__hcRow('Average of those', (a.usga.average != null ? a.usga.average.toFixed(2) : '—'))}
+                        ${window.__hcRow('Adjustment', (a.usga.adjustment > 0 ? '+' : '') + (a.usga.adjustment ?? 0), 'WHS allowance for a short record')}
+                        ${window.__hcRow('<strong>Handicap Index</strong>', '<strong>' + a.usga.index.toFixed(1) + '</strong>', 'average + adjustment, rounded to 1dp')}
+                        <div style="margin-top:10px;font-size:12px;color:#6b7280;">
+                            Differential = (113 ÷ Slope) × (Gross − Course Rating)
+                        </div>
+                    ` : `<p style="color:#6b7280;">Not enough scores yet — the USGA method needs at least 3.</p>`}
+                </div>
+
+                <div class="card">
+                    <h3 style="margin:0 0 8px;">🧮 Dutch Cup working</h3>
+                    ${a.dutch ? `
+                        ${window.__hcRow('Scores used', a.dutch.n, 'most recent 20')}
+                        ${window.__hcRow('Sum of over-par', (a.dutch.sum > 0 ? '+' : '') + a.dutch.sum)}
+                        ${window.__hcRow('Average over par', a.dutch.avg.toFixed(2), `${a.dutch.sum} ÷ ${a.dutch.n}`)}
+                        ${window.__hcRow('<strong>× 0.80, rounded</strong>', '<strong>' + a.dutch.handicap + '</strong>', 'capped 0–36')}
+                    ` : `<p style="color:#6b7280;">No scores available.</p>`}
+                </div>
+
+                <div class="card">
+                    <h3 style="margin:0 0 4px;">📋 Every score that feeds this handicap</h3>
+                    <p style="font-size:12px;color:#6b7280;margin:0 0 10px;">
+                        Newest first. Highlighted rows are the ones the USGA index actually used.
+                    </p>
+                    <div style="overflow-x:auto;">
+                    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                        <thead><tr style="background:#f9fafb;">
+                            <th style="text-align:left;padding:6px;">Date</th>
+                            <th style="text-align:left;padding:6px;">Course</th>
+                            <th style="text-align:right;padding:6px;">Gross</th>
+                            <th style="text-align:right;padding:6px;">Slope/Rating</th>
+                            <th style="text-align:right;padding:6px;">Differential</th>
+                            <th style="text-align:left;padding:6px;">Source</th>
+                        </tr></thead>
+                        <tbody>
+                            ${a.diffs.slice(0, 20).map((d, i) => {
+                                const used = usedSet.has(i);
+                                return `<tr style="border-bottom:1px solid #f3f4f6;${used ? 'background:#eef2ff;font-weight:700;' : ''}">
+                                    <td style="padding:6px;">${new Date(d.date).toLocaleDateString('en-US', { year:'numeric', month:'short', day:'numeric' })}</td>
+                                    <td style="padding:6px;">${d.courseName || (d.source === 'historic' ? 'Historic' : '(round)')}</td>
+                                    <td style="padding:6px;text-align:right;">${d.gross ?? '—'}</td>
+                                    <td style="padding:6px;text-align:right;color:#6b7280;">${d.slope ?? '—'}/${d.rating ?? '—'}</td>
+                                    <td style="padding:6px;text-align:right;">${d.differential != null ? d.differential.toFixed(1) : '—'}</td>
+                                    <td style="padding:6px;color:#6b7280;">${d.source === 'historic' ? '📜 historic' : '⛳ round'}${used ? ' · <span style="color:#4338ca;">USED</span>' : ''}</td>
+                                </tr>`;
+                            }).join('')}
+                            ${a.diffs.length === 0 ? '<tr><td colspan="6" style="padding:12px;color:#6b7280;">No scores on record.</td></tr>' : ''}
+                        </tbody>
+                    </table>
+                    </div>
+                    ${a.diffs.length > 20 ? `<p style="font-size:12px;color:#6b7280;margin-top:8px;">${a.diffs.length - 20} older score(s) exist but fall outside the most recent 20.</p>` : ''}
+                </div>`;
+            app.innerHTML = html;
         };
 
         window.showHistoricDoctor = () => {
