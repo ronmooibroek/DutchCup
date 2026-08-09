@@ -701,7 +701,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.07.28.2';
+        const APP_VERSION = '2026.07.28.3';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -20904,13 +20904,33 @@
         };
         window.roundHasPerHoleBBB = (round) => Array.isArray(round && round.bbbAwards) && round.bbbAwards.length > 0;
         // Rewrite every entry for one hole from a { playerId: count } map.
+        // Which group does a player belong to in this round?
+        window.groupOfPlayer = (round, playerId) => {
+            let g = null;
+            (round.teams || []).forEach(t => (t.players || []).forEach(p => {
+                if (String(p.id) === String(playerId)) g = (p.groupNumber != null) ? p.groupNumber : t.groupNumber;
+            }));
+            return g;
+        };
         window.__writeHoleBBB = (round, holeIdx, counts) => {
             if (!Array.isArray(round.bbbAwards)) round.bbbAwards = [];
-            round.bbbAwards = round.bbbAwards.filter(a => !(a && a.holeIdx === holeIdx));
+            // Keep entries on this hole that belong to OTHER groups.
+            const ownerGroup = (() => {
+                const first = Object.keys(counts)[0];
+                return first != null ? window.groupOfPlayer(round, first) : null;
+            })();
+            round.bbbAwards = round.bbbAwards.filter(a => {
+                if (!a || a.holeIdx !== holeIdx) return true;
+                const ids = ['bingo', 'bango', 'bongo'].map(s => a[s]).filter(v => v !== '' && v != null);
+                if (ids.length === 0) return false;
+                const g = window.groupOfPlayer(round, ids[0]);
+                return ownerGroup != null && g != null && g !== ownerGroup;
+            });
             // Sweeps first, each in their own entry, so a Honey Pot is never split in half.
             const sweeps = Object.keys(counts).filter(pid => counts[pid] >= 3);
             sweeps.forEach(pid => {
-                round.bbbAwards.push({ holeIdx, bingo: pid, bango: pid, bongo: pid });
+                round.bbbAwards.push({ holeIdx, groupNumber: window.groupOfPlayer(round, pid),
+                                       bingo: pid, bango: pid, bongo: pid });
             });
             const ids = [];
             Object.keys(counts).forEach(pid => {
@@ -20920,6 +20940,7 @@
             for (let i = 0; i < ids.length; i += 3) {
                 round.bbbAwards.push({
                     holeIdx,
+                    groupNumber: ownerGroup,
                     bingo: ids[i] || '',
                     bango: ids[i + 1] || '',
                     bongo: ids[i + 2] || ''
@@ -20946,9 +20967,13 @@
                 const pid = String(player.id);
                 const first = !window.roundHasPerHoleBBB(round);
                 
-                // Current counts for this hole, keyed by player id
+                // Only rebuild THIS player's group for the hole — every group awards its
+                // own 3 points on the same hole, and they must not overwrite each other.
+                const myGroup = window.groupOfPlayer(round, player.id);
                 const counts = {};
                 (round.teams || []).forEach(t => (t.players || []).forEach(p => {
+                    const g = (p.groupNumber != null) ? p.groupNumber : t.groupNumber;
+                    if (myGroup != null && g !== myGroup) return;
                     const n = window.bbbCountFor(round, holeIdx, p.id);
                     if (n > 0) counts[String(p.id)] = n;
                 }));
