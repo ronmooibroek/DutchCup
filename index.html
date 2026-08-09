@@ -714,7 +714,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.07.28.8';
+        const APP_VERSION = '2026.07.28.9';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -2341,6 +2341,12 @@
         // Every completed round ALSO appears in player.historicScores (saveRoundData writes to both).
         // We dedup by preferring the round entry (real slope/rating) and skipping the historic copy
         // that shares its timestamp.
+        // A round only counts toward handicaps once it's been completed (locked in).
+        // In-progress rounds are transient — a half-finished card would otherwise be
+        // treated as a full 18-hole score.
+        window.roundCountsForHandicap = (r) =>
+            !!r && r.active !== false && r.completed === true;
+
         const collectPlayerDifferentials = (player) => {
             if (!player) return [];
             const differentials = [];
@@ -2348,7 +2354,8 @@
             
             // From completed event rounds
             (state.rounds || []).forEach(round => {
-                if (!round || !Array.isArray(round.teams) || round.active === false) return;
+                // COMPLETED rounds only — an in-progress card isn't a score yet.
+                if (!round || !Array.isArray(round.teams) || !window.roundCountsForHandicap(round)) return;
                 round.teams.forEach(team => {
                     if (!Array.isArray(team.players)) return;
                     team.players.forEach(p => {
@@ -6683,6 +6690,12 @@
                 if (!isNaN(d)) roundKey.add(d.toISOString().slice(0, 10) + '|' + r.courseId);
             });
             const now = Date.now();
+            // "Generic" course entries are deliberate backfill from previous seasons —
+            // they legitimately have no matching round and must never be flagged or
+            // swept up by the bulk repairs.
+            const genericCourseIds = (state.courses || [])
+                .filter(co => /generic/i.test(co.name || ''))
+                .map(co => String(co.id));
             const report = [];
             (state.players || []).forEach(p => {
                 const seen = {};
@@ -6694,14 +6707,16 @@
                     const dup = !!seen[key];
                     seen[key] = true;
                     const matched = roundTs.has(ts) || roundKey.has(ymd + '|' + hs.courseId);
+                    const backfill = genericCourseIds.includes(String(hs.courseId));
                     return {
-                        i, ts, ymd,
+                        i, ts, ymd, backfill,
                         year: isNaN(d) ? '?' : String(d.getFullYear()),
                         courseId: hs.courseId,
                         gross: hs.grossScore,
-                        future: !isNaN(ts) && ts > now,
-                        duplicate: dup,
-                        orphan: !matched
+                        // Backfill rounds are exempt from every suspicion.
+                        future: !backfill && !isNaN(ts) && ts > now,
+                        duplicate: !backfill && dup,
+                        orphan: !backfill && !matched
                     };
                 });
                 if (entries.length > 0) report.push({ player: p, entries });
@@ -6787,6 +6802,7 @@
                         ${entries.sort((a, b) => b.ts - a.ts).map(e => {
                             const course = state.courses.find(co => co.id === e.courseId);
                             const flags = [
+                                e.backfill ? '<span style="color:#0891b2;font-weight:700;">BACKFILL (protected)</span>' : '',
                                 e.orphan ? '<span style="color:#dc2626;font-weight:700;">ORPHAN</span>' : '',
                                 e.duplicate ? '<span style="color:#b45309;font-weight:700;">DUPLICATE</span>' : '',
                                 e.future ? '<span style="color:#7c3aed;font-weight:700;">FUTURE</span>' : ''
@@ -6840,12 +6856,17 @@
         // Regenerate historic scores purely from completed rounds, then recalc handicaps.
         window.hsRebuildFromRounds = () => {
             try {
-                const rounds = (state.rounds || []).filter(r => r && r.active !== false);
-                if (!confirm(`Rebuild ALL historic scores from ${rounds.length} completed round(s)?\n\n` +
-                    '• Every existing historic entry is discarded\n' +
-                    '• New entries are generated from round scorecards only\n' +
-                    '• All handicaps are then recalculated\n\n' +
-                    'This is the clean-slate fix.')) return;
+                // COMPLETED rounds only — in-progress cards are transient.
+                const rounds = (state.rounds || []).filter(r => window.roundCountsForHandicap(r));
+                const genericIds = (state.courses || [])
+                    .filter(co => /generic/i.test(co.name || '')).map(co => String(co.id));
+                const keptBackfill = (state.players || []).reduce((n, p) =>
+                    n + (p.historicScores || []).filter(hs => genericIds.includes(String(hs.courseId))).length, 0);
+                if (!confirm(`Rebuild historic scores from ${rounds.length} COMPLETED round(s)?\n\n` +
+                    '• Entries generated from completed scorecards only\n' +
+                    `• ${keptBackfill} backfill entr${keptBackfill === 1 ? 'y' : 'ies'} (Generic course) are KEPT\n` +
+                    '• Everything else is discarded\n' +
+                    '• All handicaps are then recalculated')) return;
                 const built = {};
                 rounds.forEach(r => {
                     const ts = r.timestamp || r.id || 0;
@@ -6860,10 +6881,14 @@
                         });
                     }));
                 });
-                let players = (state.players || []).map(p => ({
-                    ...p,
-                    historicScores: (built[p.id] || []).sort((a, b) => a.date - b.date)
-                }));
+                let players = (state.players || []).map(p => {
+                    const backfill = (p.historicScores || [])
+                        .filter(hs => genericIds.includes(String(hs.courseId)));
+                    return {
+                        ...p,
+                        historicScores: [...backfill, ...(built[p.id] || [])].sort((a, b) => a.date - b.date)
+                    };
+                });
                 save('players', players);
                 const n = Object.values(built).reduce((s, a) => s + a.length, 0);
                 hsRecalcHandicaps(true);
@@ -6877,7 +6902,10 @@
 
         window.hsDeleteYear = (year) => {
             try {
+                const genericIds = (state.courses || [])
+                    .filter(co => /generic/i.test(co.name || '')).map(co => String(co.id));
                 const inYear = (hs) => {
+                    if (genericIds.includes(String(hs.courseId))) return false;  // never touch backfill
                     const ts = typeof hs.date === 'number' ? hs.date : Date.parse(hs.date);
                     const d = new Date(ts);
                     return !isNaN(d) && String(d.getFullYear()) === String(year);
@@ -25297,8 +25325,15 @@
                                 });
                             });
                             
-                            // Add to historic scores (if we found a score)
-                            if (grossScore > 0) {
+                            // Add to historic scores ONLY when the round is being completed
+                            // AND the card is full. A round is transient until locked in;
+                            // writing partial rounds produced nonsense differentials (a 9-hole
+                            // card scored as an 18-hole round is ~-55).
+                            let _holesScored = 0;
+                            round.teams.forEach(team => team.players.forEach(pl => {
+                                if (pl.id === p.id) _holesScored = (pl.scores || []).filter(s => s !== '' && s != null).length;
+                            }));
+                            if (_lockRound && grossScore > 0 && _holesScored >= 18) {
                                 const historicScores = p.historicScores || [];
                                 return {
                                     ...p,
