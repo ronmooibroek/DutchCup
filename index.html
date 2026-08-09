@@ -596,6 +596,19 @@
             70%  { transform: rotate(8deg) scale(1.03); }     /* follow-through */
             100% { transform: rotate(0deg) scale(1); }
         }
+        /* Score lands with weight */
+        @keyframes fwScorePop {
+            0%   { transform: scale(1); }
+            35%  { transform: scale(1.28); text-shadow: 0 0 40px rgba(255,255,255,0.7); }
+            100% { transform: scale(1); }
+        }
+        /* The "+N" floats up and fades */
+        @keyframes fwGainFloat {
+            0%   { opacity: 0; transform: translateY(14px) scale(0.8); }
+            25%  { opacity: 1; transform: translateY(-4px) scale(1.15); }
+            70%  { opacity: 1; transform: translateY(-10px) scale(1); }
+            100% { opacity: 0; transform: translateY(-26px) scale(0.95); }
+        }
         /* The landed ball morphs into the team badge */
         @keyframes fwBallToBadge {
             0%   { transform: scale(0.18) rotate(-25deg); opacity: 0.6; }
@@ -701,7 +714,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.07.28.5';
+        const APP_VERSION = '2026.07.28.6';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -1727,7 +1740,9 @@
         };
         
         // ═══ Team result slide — staged: 0 header · 1 THE DIAL · 2 standings ladder ═══
-        const TEAM_DIAL_TICK_MS = 1400;
+        // Pacing for the fairway reveal. Deliberately unhurried: each shot gets an
+        // anticipation beat, the swing, the ball flight, then the score lands.
+        const TEAM_DIAL_TICK_MS = 2600;
         const renderTeamBlockSlide = (block, stage, bIdx) => {
             if (!block) return '';
             const tid = block.teamId;
@@ -1842,9 +1857,18 @@
                             <div style="width:54px;height:16px;border-radius:4px;background:linear-gradient(180deg,#a16207,#78350f);box-shadow:0 3px 8px rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.2);"></div>
                             <div style="color:rgba(255,255,255,0.8);font-size:11px;font-weight:900;white-space:nowrap;margin-top:3px;letter-spacing:0.5px;">TEE &middot; ${block.beforePts}</div>
                         </div>
-                        <!-- The golfer stands over the ball, swings, then walks up to it -->
-                        <div id="fwGolfer-${tid}" style="position:absolute;left:${TEE_PCT}%;bottom:26px;transform:translateX(-50%);z-index:5;transition:left 0.35s ease-in-out;">
-                            <div id="fwGolferInner-${tid}" style="font-size:40px;filter:drop-shadow(0 4px 6px rgba(0,0,0,0.55));transform-origin:50% 90%;">🏌️</div>
+                        <!-- The player themselves walks the fairway: their profile picture
+                             swings, the ball flies, then they walk up to it. -->
+                        <div id="fwGolfer-${tid}" style="position:absolute;left:${TEE_PCT}%;bottom:22px;transform:translateX(-50%);z-index:5;transition:left 0.6s ease-in-out;text-align:center;">
+                            <div id="fwGolferInner-${tid}" style="transform-origin:50% 90%;filter:drop-shadow(0 6px 10px rgba(0,0,0,0.6));">
+                                <div style="border:3px solid ${block.teamColor};border-radius:50%;padding:2px;background:rgba(0,0,0,0.35);display:inline-block;">
+                                    ${(block.players && block.players[0])
+                                        ? renderAvatar(state.players.find(x => x.id === block.players[0].playerId)
+                                            || { id: block.players[0].playerId, name: block.players[0].playerName }, 62)
+                                        : '<div style="width:62px;height:62px;border-radius:50%;background:#334155;"></div>'}
+                                </div>
+                            </div>
+                            <div id="fwGolferName-${tid}" style="color:white;font-size:12px;font-weight:800;text-shadow:0 2px 6px rgba(0,0,0,0.9);margin-top:2px;white-space:nowrap;"></div>
                         </div>
                         <!-- The ball flies from the strike point to where the total lands -->
                         <div id="fwBall-${tid}" style="position:absolute;left:${TEE_PCT}%;bottom:30px;transform:translateX(-50%);z-index:6;transition:left 0.7s cubic-bezier(0.3,0.05,0.4,1);">
@@ -1861,10 +1885,29 @@
                     </div>
                     <div style="color:rgba(255,255,255,0.45);font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;text-align:center;">Event points</div>
                     
-                    <div id="dialFeed-${tid}" style="display:flex;align-items:center;justify-content:center;gap:14px;min-height:60px;margin-top:10px;">
-                        <div style="color:rgba(255,255,255,0.55);font-size:18px;font-weight:700;">On the tee at ${block.beforePts}…</div>
+                    <div id="dialFeed-${tid}" style="display:flex;align-items:center;justify-content:center;gap:16px;min-height:78px;margin-top:8px;">
+                        <div style="color:rgba(255,255,255,0.5);font-size:20px;font-weight:700;">On the tee at ${block.beforePts}…</div>
                     </div>
-                    <div id="dialChips-${tid}" style="display:flex;justify-content:center;gap:7px;flex-wrap:wrap;margin-top:4px;max-width:820px;"></div>
+                    
+                    <!-- Scoreboard: one column per player, each scoring method landing as a
+                         big labelled tile with a running subtotal. Replaces the small pills,
+                         which were unreadable from across a room. -->
+                    <div style="display:flex;justify-content:center;gap:18px;flex-wrap:wrap;margin-top:6px;">
+                        ${(block.players || []).map(p => `
+                            <div id="fwCol-${tid}-${p.playerId}" style="min-width:260px;max-width:340px;flex:1;background:rgba(255,255,255,0.05);border:2px solid rgba(255,255,255,0.10);border-radius:14px;padding:12px 14px;transition:border-color 0.3s, background 0.3s, transform 0.3s;">
+                                <div style="display:flex;align-items:center;gap:10px;">
+                                    <div style="border:2px solid ${block.teamColor};border-radius:50%;padding:2px;">
+                                        ${renderAvatar(state.players.find(x => x.id === p.playerId) || { id: p.playerId, name: p.playerName }, 40)}
+                                    </div>
+                                    <div style="flex:1;text-align:left;">
+                                        <div style="color:white;font-size:17px;font-weight:800;line-height:1.1;">${p.playerName}</div>
+                                        <div style="color:rgba(255,255,255,0.45);font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;">tonight</div>
+                                    </div>
+                                    <div id="fwColTotal-${tid}-${p.playerId}" style="color:white;font-size:30px;font-weight:900;font-variant-numeric:tabular-nums;">0</div>
+                                </div>
+                                <div id="fwColRows-${tid}-${p.playerId}" style="margin-top:8px;"></div>
+                            </div>`).join('')}
+                    </div>
                 </div>` : '';
             
             // Stage 2 keeps only a slim result strip so the standings own the screen.
@@ -1944,9 +1987,20 @@
                         innerEnd.style.animation = 'fwBallToBadge 0.9s cubic-bezier(0.34,1.56,0.64,1) both';
                     }
                     const gInnerEnd = byId('fwGolferInner-' + d.tid);
-                    if (gInnerEnd) { gInnerEnd.textContent = '\u{1F64C}'; gInnerEnd.style.animation = 'fa-pop 0.6s ease-out'; }
+                    if (gInnerEnd) gInnerEnd.style.animation = 'fa-pop 0.6s ease-out';
+                    const gnameEnd = byId('fwGolferName-' + d.tid);
+                    if (gnameEnd) gnameEnd.textContent = '';
+                    // Release the column highlights so both players read equally at the end
+                    (d.steps || []).forEach(x => {
+                        const col = byId('fwCol-' + d.tid + '-' + x.playerId);
+                        if (!col) return;
+                        col.style.borderColor = d.color;
+                        col.style.background = 'rgba(255,255,255,0.08)';
+                        col.style.transform = 'scale(1)';
+                    });
                     const feed = byId('dialFeed-' + d.tid);
-                    if (feed) feed.innerHTML = `<div style="color:#fbbf24;font-size:30px;font-weight:900;letter-spacing:1px;animation:fa-pop 0.6s ease-out;">🏁 FINAL — ${d.after} POINTS</div>`;
+                    if (feed) feed.innerHTML = `<div style="color:#fbbf24;font-size:38px;font-weight:900;letter-spacing:1px;animation:fwScorePop 0.9s cubic-bezier(0.34,1.6,0.64,1);text-shadow:0 4px 30px rgba(251,191,36,0.5);">🏁 ${d.teamName} — ${d.after} POINTS</div>`;
+                    try { playSfx('TEAM TOTAL', 'Sounds/nsmb-new-high-score.mp3', 0.8); } catch (e) {}
                     const num = byId('dialNum-' + d.tid);
                     if (num) { num.textContent = d.after; num.style.animation = 'scaleIn 0.5s ease-out'; }
                     clearInterval(window.__teamDialTimer); window.__teamDialTimer = null;
@@ -1962,62 +2016,119 @@
                 const ball = byId('fwBall-' + d.tid);
                 const ballInner = byId('fwBallInner-' + d.tid);
                 const fill = byId('fwFill-' + d.tid);
-                // 1) the swing
+                // ── The shot, choreographed with room to breathe ──
+                // 0.0s  the player steps up (their avatar swaps in, column highlights)
+                // 0.5s  swing
+                // 0.8s  impact: ball launches, club sound
+                // 1.6s  ball lands, rivals passed get marked, score tile drops in
+                // 1.9s  player walks up to the ball
+                const sp = state.players.find(x => x.id === s.playerId)
+                    || { id: s.playerId, name: s.player };
+
+                // Step up: whose shot is this?
                 if (golferInner) {
+                    const av = golferInner.querySelector('div');
+                    if (av) av.innerHTML = renderAvatar(sp, 62);
                     golferInner.style.animation = 'none'; void golferInner.offsetHeight;
-                    golferInner.style.animation = 'fwSwing 0.5s ease-in-out';
+                    golferInner.style.animation = 'fa-pop 0.4s ease-out';
                 }
-                // 2) at impact, the ball launches from the golfer's feet
+                const gname = byId('fwGolferName-' + d.tid);
+                if (gname) gname.textContent = s.player.split(' ')[0];
+
+                // Highlight this player's scoreboard column
+                (d.steps || []).forEach(x => {
+                    const col = byId('fwCol-' + d.tid + '-' + x.playerId);
+                    if (!col) return;
+                    const on = String(x.playerId) === String(s.playerId);
+                    col.style.borderColor = on ? d.color : 'rgba(255,255,255,0.10)';
+                    col.style.background = on ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.05)';
+                    col.style.transform = on ? 'scale(1.03)' : 'scale(1)';
+                });
+
+                // Announce the shot before it happens — the anticipation beat
+                const feedEl = byId('dialFeed-' + d.tid);
+                if (feedEl) {
+                    feedEl.innerHTML = `
+                        <div style="display:flex;align-items:center;gap:14px;animation:rrCardIn 0.4s ease-out;">
+                            <div style="border:3px solid ${d.color};border-radius:50%;padding:2px;">${renderAvatar(sp, 54)}</div>
+                            <div style="text-align:left;">
+                                <div style="color:white;font-size:23px;font-weight:900;line-height:1.1;">${s.player}</div>
+                                <div style="color:${s.color};font-size:20px;font-weight:800;">${s.icon} ${s.label}</div>
+                            </div>
+                        </div>`;
+                }
+
+                // 1) the swing
                 setTimeout(() => {
-                    try { playSfx('FAIRWAY SHOT', 'Sounds/golf-hit.mp3', 0.8); } catch (e) {}
+                    if (golferInner) {
+                        golferInner.style.animation = 'none'; void golferInner.offsetHeight;
+                        golferInner.style.animation = 'fwSwing 0.6s ease-in-out';
+                    }
+                }, 500);
+
+                // 2) impact — ball launches
+                setTimeout(() => {
+                    try { playSfx('FAIRWAY SHOT', 'Sounds/golf-hit.mp3', 0.85); } catch (e) {}
                     if (ball && golfer) {
                         ball.style.transition = 'none';
                         ball.style.left = golfer.style.left || (pct(val) + '%');
                         void ball.offsetHeight;
-                        ball.style.transition = 'left 0.7s cubic-bezier(0.3,0.05,0.4,1)';
+                        ball.style.transition = 'left 0.8s cubic-bezier(0.3,0.05,0.4,1)';
                         ball.style.left = target + '%';
                     }
                     if (ballInner) {
                         ballInner.style.opacity = '1';
                         ballInner.style.animation = 'none'; void ballInner.offsetHeight;
-                        ballInner.style.animation = 'fwFlight 0.7s ease-out';
+                        ballInner.style.animation = 'fwFlight 0.8s ease-out';
                     }
                     if (fill) fill.style.width = target + '%';
-                }, 200);
-                // 3) once it lands: mark any rival the ball just went by, then walk up
-                setTimeout(() => { markPassed(val); }, 900);
+                }, 800);
+
+                // 3) the ball lands — THIS is where the points land too
+                setTimeout(() => {
+                    markPassed(val);
+
+                    const num = byId('dialNum-' + d.tid);
+                    if (num) {
+                        num.textContent = val;
+                        num.style.animation = 'none'; void num.offsetHeight;
+                        num.style.animation = 'fwScorePop 0.6s cubic-bezier(0.34,1.6,0.64,1)';
+                    }
+                    const gain = byId('dialGain-' + d.tid);
+                    if (gain && s.pts !== 0) {
+                        gain.textContent = (s.pts > 0 ? '+' : '') + s.pts;
+                        gain.style.color = s.pts > 0 ? '#10b981' : '#ef4444';
+                        gain.style.animation = 'none'; void gain.offsetHeight;
+                        gain.style.animation = 'fwGainFloat 1.4s ease-out';
+                        gain.style.opacity = '1';
+                    }
+
+                    // Drop a full-width row into the player's scoreboard column
+                    const rows = byId('fwColRows-' + d.tid + '-' + s.playerId);
+                    if (rows) {
+                        rows.insertAdjacentHTML('beforeend', `
+                            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 10px;margin-top:6px;border-radius:9px;background:${s.color}1f;border-left:4px solid ${s.color};animation:rrRowIn 0.5s cubic-bezier(0.34,1.4,0.64,1) both;">
+                                <div style="display:flex;align-items:center;gap:8px;">
+                                    <span style="font-size:17px;">${s.icon}</span>
+                                    <span style="color:white;font-size:15px;font-weight:700;">${s.label}</span>
+                                </div>
+                                <span style="color:${s.pts >= 0 ? '#4ade80' : '#f87171'};font-size:19px;font-weight:900;">${s.pts >= 0 ? '+' : ''}${s.pts}</span>
+                            </div>`);
+                    }
+                    // Running subtotal for that player
+                    const colTotal = byId('fwColTotal-' + d.tid + '-' + s.playerId);
+                    if (colTotal) {
+                        const running = (parseFloat(colTotal.textContent) || 0) + s.pts;
+                        colTotal.textContent = Math.round(running * 10) / 10;
+                        colTotal.style.animation = 'none'; void colTotal.offsetHeight;
+                        colTotal.style.animation = 'fa-pop 0.5s ease-out';
+                    }
+                }, 1600);
+
+                // 4) walk up to the ball, ready for the next shot
                 setTimeout(() => {
                     if (golfer) golfer.style.left = target + '%';
-                }, 920);
-                const num = byId('dialNum-' + d.tid);
-                if (num) {
-                    num.textContent = val;
-                    num.style.animation = 'none'; void num.offsetHeight;
-                    num.style.animation = 'fa-pop 0.45s ease-out';
-                }
-                // Floating "+N" gain, like the player pages' point pops
-                const gain = byId('dialGain-' + d.tid);
-                if (gain && s.pts !== 0) {
-                    gain.textContent = (s.pts > 0 ? '+' : '') + s.pts;
-                    gain.style.color = s.pts > 0 ? '#10b981' : '#ef4444';
-                    gain.style.animation = 'none'; void gain.offsetHeight;
-                    gain.style.animation = 'rrCardIn 0.5s ease-out';
-                    gain.style.opacity = '1';
-                }
-                // Feed: player's face + the scoring method, big and legible
-                const feed = byId('dialFeed-' + d.tid);
-                if (feed) {
-                    const sp = state.players.find(x => x.id === s.playerId) || { id: s.playerId, name: s.player };
-                    feed.innerHTML = `
-                        <div style="border:3px solid ${d.color};border-radius:50%;padding:2px;animation:scaleIn 0.4s ease-out;">${renderAvatar(sp, 56)}</div>
-                        <div style="text-align:left;animation:rrRowIn 0.4s ease-out both;">
-                            <div style="color:white;font-size:21px;font-weight:800;line-height:1.1;">${s.player}</div>
-                            <div style="color:${s.color};font-size:18px;font-weight:800;">${s.icon} ${s.label} <span style="color:white;">${s.pts >= 0 ? '+' : ''}${s.pts}</span></div>
-                        </div>`;
-                }
-                const chips = byId('dialChips-' + d.tid);
-                if (chips) chips.insertAdjacentHTML('beforeend',
-                    `<span style="background:${s.color}22;border:1px solid ${s.color};color:white;font-size:12px;font-weight:700;padding:4px 10px;border-radius:999px;animation:rrRowIn 0.4s ease-out both;">${s.icon} ${s.player.split(' ')[0]} ${s.pts >= 0 ? '+' : ''}${s.pts}</span>`);
+                }, 1900);
             }, TEAM_DIAL_TICK_MS);
         };
         
