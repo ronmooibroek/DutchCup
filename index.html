@@ -714,7 +714,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.07.28.7';
+        const APP_VERSION = '2026.07.28.8';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -6992,6 +6992,29 @@
                         <strong>Completed:</strong> ${all.filter(r => r.completed === true).length}
                     </div>
                     ${(() => {
+                        // Scheduled, but scores are already on it — someone has started
+                        // playing. Should read In Progress everywhere.
+                        const scoredButScheduled = all.filter(r => {
+                            if (r.active !== false) return false;
+                            let n = 0;
+                            (r.teams || []).forEach(t => (t.players || []).forEach(p => {
+                                n += (p.scores || []).filter(s => s !== '' && s != null).length;
+                            }));
+                            return n > 0;
+                        });
+                        if (scoredButScheduled.length === 0) return '';
+                        return `<div style="background:#fffbeb;border:2px solid #f59e0b;padding:14px;border-radius:8px;margin-bottom:8px;">
+                            <strong>⚠️ ${scoredButScheduled.length} scheduled round(s) already have scores</strong>
+                            <div style="font-size:13px;color:#92400e;margin:6px 0 10px;">
+                                Someone has started playing these, but they still show as
+                                not-started in both apps.
+                            </div>
+                            ${!state.readOnly ? `<button onclick="promoteScoredRounds()" class="btn-primary" style="width:100%;background:#f59e0b;">
+                                ▶️ Mark all ${scoredButScheduled.length} as In Progress
+                            </button>` : ''}
+                        </div>`;
+                    })()}
+                    ${(() => {
                         const broken = all.filter(isBroken);
                         if (broken.length === 0) return '';
                         return `<div style="background:#fee2e2;border:2px solid #dc2626;padding:14px;border-radius:8px;margin-bottom:8px;">
@@ -7090,6 +7113,32 @@
             } catch (err) {
                 console.error('Move round error:', err);
                 showError('Failed to move round: ' + err.message);
+            }
+        };
+
+        // Promote scheduled rounds that already have scores on them.
+        window.promoteScoredRounds = () => {
+            try {
+                const hasScores = (r) => {
+                    let n = 0;
+                    (r.teams || []).forEach(t => (t.players || []).forEach(p => {
+                        n += (p.scores || []).filter(s => s !== '' && s != null).length;
+                    }));
+                    return n > 0;
+                };
+                const targets = state.rounds.filter(r => r.active === false && hasScores(r));
+                if (targets.length === 0) { notify('Nothing to promote'); return; }
+                if (!confirm(`Mark ${targets.length} round(s) as IN PROGRESS?\n\n` +
+                    'They already have scores entered. Nothing else changes.')) return;
+                const ids = targets.map(r => r.id);
+                const next = state.rounds.map(r =>
+                    (r.active === false && hasScores(r)) ? { ...r, active: true } : r);
+                saveRoundsMerged(next, ids);
+                notify(`▶️ ${targets.length} round(s) now In Progress`);
+                showRoundsDebug();
+            } catch (err) {
+                console.error('Promote error:', err);
+                showError('Failed: ' + err.message);
             }
         };
 
@@ -24946,6 +24995,8 @@
             try {
                 const _lockRound = (lockRound === true);
                 const round = state.activeRound;
+                // Saving data on a scheduled round means it has started.
+                if (round && round.active === false) round.active = true;
                 
                 if (!round) {
                     showError('No active round found!');
