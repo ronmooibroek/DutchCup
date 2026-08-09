@@ -714,7 +714,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.07.29.3';
+        const APP_VERSION = '2026.07.29.4';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -2395,25 +2395,48 @@
                 });
             });
             
-            // From pre-event-system historic scores (no tee data — always default).
-            // Skip entries that share a timestamp with a round we already counted.
+            // From historic scores. Use the REAL slope/rating of the tee played — a
+            // differential computed against 113/72 is meaningless on a course that isn't
+            // 113/72, which skewed every handicap built from history.
+            // Tee resolution: the entry's own teeId → the player's default tee on that
+            // course → the course's first tee → 113/72 only if the course has no tees.
             (player.historicScores || []).forEach(hs => {
                 if (!hs || !hs.grossScore) return;
                 const hsDate = hs.date || 0;
                 if (roundTimestamps.has(hsDate)) return; // already counted as a round
-                const diff = calculateDifferential(hs.grossScore, USGA_DEFAULT_SLOPE, USGA_DEFAULT_RATING);
-                if (diff === null) return;
                 const course = hs.courseId ? state.courses.find(c => c.id === hs.courseId) : null;
+                const courseTees = (course && Array.isArray(course.tees)) ? course.tees : [];
+                const tee = (() => {
+                    if (courseTees.length === 0) return null;
+                    if (hs.teeId) {
+                        const own = courseTees.find(t => t.id === hs.teeId);
+                        if (own) return own;                       // 1. the tee recorded on the entry
+                    }
+                    if (player && player.defaultTeeName) {
+                        const def = courseTees.find(t => t.name === player.defaultTeeName);
+                        if (def) return def;                       // 2. the player's default tee
+                    }
+                    if (player && player.lastTeeId) {
+                        const last = courseTees.find(t => t.id === player.lastTeeId);
+                        if (last) return last;                     // 3. the last tee they used
+                    }
+                    return courseTees[0];                          // 4. the course's first tee
+                })();
+                const slope = (tee && parseFloat(tee.slope)) || USGA_DEFAULT_SLOPE;
+                const rating = (tee && parseFloat(tee.rating)) || USGA_DEFAULT_RATING;
+                const diff = calculateDifferential(hs.grossScore, slope, rating);
+                if (diff === null) return;
                 differentials.push({
                     date: hsDate,
                     differential: diff,
                     source: 'historic',
                     gross: hs.grossScore,
-                    slope: USGA_DEFAULT_SLOPE,
-                    rating: USGA_DEFAULT_RATING,
+                    slope: slope,
+                    rating: rating,
                     courseName: course ? course.name : 'Historic',
-                    teeName: null,
-                    usedDefaults: true
+                    teeName: tee ? tee.name : null,
+                    // true only when we genuinely had no tee data to work from
+                    usedDefaults: !tee
                 });
             });
             
@@ -6956,7 +6979,10 @@
                                 const used = usedSet.has(i);
                                 return `<tr style="border-bottom:1px solid #f3f4f6;${used ? 'background:#eef2ff;font-weight:700;' : ''}">
                                     <td style="padding:6px;">${new Date(d.date).toLocaleDateString('en-US', { year:'numeric', month:'short', day:'numeric' })}</td>
-                                    <td style="padding:6px;">${d.courseName || (d.source === 'historic' ? 'Historic' : '(round)')}</td>
+                                    <td style="padding:6px;">${d.courseName || (d.source === 'historic' ? 'Historic' : '(round)')}
+                                        ${d.teeName ? `<div style="font-size:11px;color:#6b7280;">${d.teeName} tee</div>` : ''}
+                                        ${d.usedDefaults ? `<div style="font-size:11px;color:#b45309;">⚠️ no tee data — 113/72 assumed</div>` : ''}
+                                    </td>
                                     <td style="padding:6px;text-align:right;">${d.gross ?? '—'}</td>
                                     <td style="padding:6px;text-align:right;color:#6b7280;">${d.slope ?? '—'}/${d.rating ?? '—'}</td>
                                     <td style="padding:6px;text-align:right;">${d.differential != null ? d.differential.toFixed(1) : '—'}</td>
