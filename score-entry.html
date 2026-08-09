@@ -521,7 +521,7 @@ document.addEventListener('visibilitychange', () => {
     try { if (document.visibilityState === 'hidden' && hasPendingEdits()) flushPendingEdits(); } catch (e) {}
 });
 
-const SE_VERSION = '2.15.0'; // BBB is per-hole PER GROUP (groups no longer collide)
+const SE_VERSION = '2.16.0'; // balls remaining defaults to 0; scorers add on 18
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
@@ -773,7 +773,9 @@ function effectiveBalls(round, playerId) {
     const pid = idStr(playerId);
     if (state.pendingEdits.balls[pid] !== undefined) return state.pendingEdits.balls[pid];
     const player = (round.teams || []).flatMap(t => t.players || []).find(p => idsEqual(p.id, playerId));
-    return (player && player.ballsRemaining != null) ? player.ballsRemaining : 3;
+    // Default 0 — balls are ADDED on 18 by whoever still has them, rather than
+    // starting everyone at 3 and expecting them to subtract.
+    return (player && player.ballsRemaining != null) ? player.ballsRemaining : 0;
 }
 
 // CTP: forgiving reader — supports {holeIdx,playerId}, {hole,playerId}, or 18-element indexed array
@@ -1500,7 +1502,7 @@ function buildBallsCard(round, groupPlayers) {
     const wrap = el('div', { class: 'balls-card' });
     wrap.appendChild(el('div', { class: 'section-header' },
         el('span', null, '🎱 Balls Remaining'),
-        el('span', { class: 'accent' }, 'end of round')
+        el('span', { class: 'accent' }, '\u00b7 add what each player still has')
     ));
 
     groupPlayers.forEach(p => {
