@@ -701,7 +701,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.07.28.4';
+        const APP_VERSION = '2026.07.28.5';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -4612,7 +4612,10 @@
                     html += `<div style="grid-column:1/-1;color:#6b7280;font-size:14px;">No par 3s on this course.</div>`;
                 }
                 _par3Holes.forEach(holeIdx => {
-                    const current = window.ctpForHole(round, holeIdx);
+                    // allRoundPlayers uses "teamIdx-playerIdx" ids, so compare in that space.
+                    const currentPlayerId = window.ctpForHole(round, holeIdx);
+                    const current = currentPlayerId
+                        ? (window.ctpPositionOf(round, currentPlayerId) || '') : '';
                     const entry = window.ctpEntries(round).find(e => e.holeIdx === holeIdx);
                     const who = entry && entry.setBy ? entry.setBy : null;
                     const when = entry && entry.setAt ? new Date(entry.setAt) : null;
@@ -20414,9 +20417,16 @@
         };
 
         // ctpIndex is now the HOLE INDEX (0-17), matching the on-course app.
-        window.updateCTP = (holeIdx, playerIdString) => {
+        window.updateCTP = (holeIdx, value) => {
             try {
-                window.setCTPForHole(state.activeRound, holeIdx, playerIdString || '', 'Admin');
+                // The picker sends a "teamIdx-playerIdx" position string; setCTPForHole
+                // wants a player id. Accept either so both callers work.
+                let playerId = value || '';
+                if (playerId && /^\d+-\d+$/.test(String(playerId))) {
+                    const resolved = window.ctpPlayerAt(state.activeRound, playerId);
+                    playerId = resolved == null ? '' : resolved;
+                }
+                window.setCTPForHole(state.activeRound, holeIdx, playerId, 'Admin');
                 // Persist straight away — CTP has to reach the phones on the course
                 // immediately, not wait for a Save Progress.
                 persistActiveRoundNow();
@@ -20431,7 +20441,7 @@
                     window.scrollTo(scrollX, scrollY);
                 }, 10);
                 
-                notify(playerIdString
+                notify(playerId
                     ? `✅ CTP set for hole ${holeIdx + 1}`
                     : `CTP cleared for hole ${holeIdx + 1}`);
             } catch (err) {
