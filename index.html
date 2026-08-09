@@ -714,7 +714,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.07.29.2';
+        const APP_VERSION = '2026.07.29.3';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -2796,6 +2796,8 @@
                 showRoundsDebug();
             } else if (state.view === 'handicapDoctor') {
                 showHandicapDoctor();
+            } else if (state.view.startsWith('handicapPlayer-')) {
+                showHandicapPlayer(state.view.replace('handicapPlayer-', ''));
             } else if (state.view === 'historicDoctor') {
                 showHistoricDoctor();
             } else if (state.view === 'export') {
@@ -6861,7 +6863,7 @@
                                         <td style="padding:8px;text-align:right;">${a.dutch ? a.dutch.handicap : '<span style="color:#9ca3af;">n/a</span>'}</td>
                                         <td style="padding:8px;text-align:right;color:#6b7280;">${a.allScores.length}</td>
                                         <td style="padding:8px;text-align:center;">
-                                            <button onclick="showHandicapPlayer(${JSON.stringify(String(p.id))})" class="btn-secondary" style="padding:5px 10px;font-size:12px;">Show working</button>
+                                            <button onclick="navigate('handicapPlayer-${p.id}')" class="btn-secondary" style="padding:5px 10px;font-size:12px;">Show working</button>
                                         </td>
                                     </tr>
                                     ${mismatch ? `<tr><td colspan="6" style="padding:2px 8px 8px;font-size:12px;color:#b91c1c;">
@@ -6888,7 +6890,7 @@
             const usedSet = new Set((a.usga && a.usga.usedIndices) ? Array.from(a.usga.usedIndices) : []);
 
             let html = `
-                <button class="back-btn" onclick="showHandicapDoctor()">← All players</button>
+                <button class="back-btn" onclick="navigate('handicapDoctor')">← All players</button>
                 <div class="card">
                     <h2>🩻 ${player.name}</h2>
                     <div style="display:flex;gap:20px;flex-wrap:wrap;margin-top:10px;">
