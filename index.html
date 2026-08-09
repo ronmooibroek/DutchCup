@@ -701,7 +701,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.07.28.1';
+        const APP_VERSION = '2026.07.28.2';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -976,8 +976,34 @@
                                 if (Array.isArray(server.bbbAwards) && server.bbbAwards.length > 0) {
                                     ar.bbbAwards = server.bbbAwards;
                                 }
-                                if (Array.isArray(server.ctpWinners) && server.ctpWinners.length > 0
-                                    && !(ar.ctpWinners || []).length) ar.ctpWinners = server.ctpWinners;
+                                // CTP: merge per hole, newest setAt wins. The old rule only
+                                // adopted server CTP when we had none, so course changes were
+                                // invisible here once the admin had set anything.
+                                try {
+                                    // Per-hole last-change-wins using the ctpMeta timestamps.
+                                    const mineSlots = window.ctpNormalize(ar);
+                                    const theirSlots = window.ctpNormalize(server);
+                                    const myMeta = ar.ctpMeta || {}, theirMeta = server.ctpMeta || {};
+                                    const merged = mineSlots.slice();
+                                    const mergedMeta = { ...myMeta };
+                                    for (let h = 0; h < 18; h++) {
+                                        const mineAt = (myMeta[h] && myMeta[h].setAt) || 0;
+                                        const theirAt = (theirMeta[h] && theirMeta[h].setAt) || 0;
+                                        const differs = mineSlots[h] !== theirSlots[h];
+                                        if (!differs) continue;
+                                        if (theirAt > mineAt) {
+                                            merged[h] = theirSlots[h];
+                                            if (theirMeta[h]) mergedMeta[h] = theirMeta[h]; else delete mergedMeta[h];
+                                        } else if (mineAt === 0 && theirAt === 0) {
+                                            merged[h] = theirSlots[h];   // no stamps: adopt the server
+                                        }
+                                    }
+                                    ar.ctpWinners = merged;
+                                    ar.ctpMeta = mergedMeta;
+                                    if ((server.ctpLog || []).length > (ar.ctpLog || []).length) {
+                                        ar.ctpLog = server.ctpLog;
+                                    }
+                                } catch (e) { console.error('CTP merge failed:', e); }
                             }
                         }
                     } catch (e) { console.error('activeRound merge failed:', e); }
@@ -2116,7 +2142,7 @@
                 total += (p.ballsRemaining || 0) * state.settings.ballPoints;
                 const playerPosition = `${teamIdx}-${playerIdx}`;
                 if (round.extra9Winners) {
-                    total += round.extra9Winners.filter(w => w === playerPosition).length * state.settings.extra9Points;
+                    total += window.extra9CountForPlayer(round, p.id) * state.settings.extra9Points;
                 }
                 if (round.ctpWinners) {
                     total += window.ctpCountForPlayer(round, p.id) * state.settings.ctpPoints;
@@ -2521,7 +2547,7 @@
                 let extra9Wins = 0;
                 if (round.extra9Winners && round.extra9Winners.length > 0) {
                     const playerPosition = `${teamIdx}-${playerIdx}`;
-                    extra9Wins = round.extra9Winners.filter(w => w === playerPosition).length;
+                    extra9Wins = window.extra9CountForPlayer(round, teamPlayer.id);
                 }
                 const extra9Points = extra9Wins * state.settings.extra9Points;
                 
@@ -4300,7 +4326,7 @@
                         let extra9Points = 0;
                         if (round.extra9Winners && round.extra9Winners.length > 0) {
                             const playerIdString = `${teamIdx}-${playerIdx}`;
-                            extra9Points = round.extra9Winners.filter(w => w === playerIdString).length * state.settings.extra9Points;
+                            extra9Points = window.extra9CountForPlayer(round, player.id) * state.settings.extra9Points;
                         }
                         
                         // Calculate CTP points for this player
@@ -4728,7 +4754,7 @@
                             let extra9Points = 0;
                             if (r.extra9Winners && r.extra9Winners.length > 0) {
                                 const playerPosition = `${r.teams.findIndex(team => team.teamId === t.teamId)}-${t.players.findIndex(player => player.id === p.id)}`;
-                                extra9Points = r.extra9Winners.filter(w => w === playerPosition).length * state.settings.extra9Points;
+                                extra9Points = window.extra9CountForPlayer(r, p.id) * state.settings.extra9Points;
                             }
                             
                             // Calculate CTP points - find this player in round's CTP winners
@@ -4773,7 +4799,7 @@
                             let extra9Points = 0;
                             if (r.extra9Winners && r.extra9Winners.length > 0) {
                                 const playerPosition = `${r.teams.findIndex(team => team.teamId === t.teamId)}-${t.players.findIndex(player => player.id === p.id)}`;
-                                extra9Points = r.extra9Winners.filter(w => w === playerPosition).length * state.settings.extra9Points;
+                                extra9Points = window.extra9CountForPlayer(r, p.id) * state.settings.extra9Points;
                             }
                             
                             let ctpPoints = 0;
@@ -20391,6 +20417,9 @@
         window.updateCTP = (holeIdx, playerIdString) => {
             try {
                 window.setCTPForHole(state.activeRound, holeIdx, playerIdString || '', 'Admin');
+                // Persist straight away — CTP has to reach the phones on the course
+                // immediately, not wait for a Save Progress.
+                persistActiveRoundNow();
                 
                 // Preserve scroll position
                 const scrollX = window.scrollX || window.pageXOffset;
@@ -20402,9 +20431,9 @@
                     window.scrollTo(scrollX, scrollY);
                 }, 10);
                 
-                if (playerIdString) {
-                    notify(`✅ CTP ${ctpIndex + 1} winner updated`);
-                }
+                notify(playerIdString
+                    ? `✅ CTP set for hole ${holeIdx + 1}`
+                    : `CTP cleared for hole ${holeIdx + 1}`);
             } catch (err) {
                 console.error('Update CTP error:', err);
                 showError('Failed to update CTP: ' + err.message);
@@ -20418,6 +20447,7 @@
                 }
                 
                 state.activeRound.extra9Winners[extra9Index] = playerIdString;
+                persistActiveRoundNow();   // reach the course immediately
                 
                 // Preserve scroll position
                 const scrollX = window.scrollX || window.pageXOffset;
@@ -20682,46 +20712,132 @@
         // Readers disagreed, so CTP set in one app scored zero in the other.
         // These helpers read every legacy shape and always write the canonical one.
         // ═══════════════════════════════════════════════════════════════
-        window.ctpEntries = (round) => {
+        window.ctpPositionOf = (round, playerId) => {
+            let pos = null;
+            ((round && round.teams) || []).forEach((t, ti) => (t.players || []).forEach((p, pi) => {
+                if (String(p.id) === String(playerId)) pos = ti + '-' + pi;
+            }));
+            return pos;
+        };
+        window.ctpPlayerAt = (round, position) => {
+            const m = String(position || '').match(/^(\d+)-(\d+)$/);
+            if (!m) return null;
+            const pl = (((round && round.teams) || [])[+m[1]] || {}).players || [];
+            return pl[+m[2]] ? pl[+m[2]].id : null;
+        };
+        // Normalise whatever is stored into the canonical 18-slot form.
+        window.ctpNormalize = (round) => {
             const cw = (round && round.ctpWinners) || [];
-            if (!Array.isArray(cw)) return [];
+            const slots = new Array(18).fill('');
+            if (!Array.isArray(cw)) return slots;
+            if (cw.length === 18 && cw.every(v => v === '' || v == null || typeof v !== 'object')) {
+                cw.forEach((v, i) => {
+                    if (v === '' || v == null) return;
+                    const s = String(v);
+                    slots[i] = /^\d+-\d+$/.test(s) ? s : (window.ctpPositionOf(round, s) || '');
+                });
+                return slots;
+            }
             const par3s = ((round && round.pars) || [])
                 .map((p, i) => (parseInt(p) === 3 ? i : -1)).filter(i => i >= 0);
-            const out = [];
             cw.forEach((item, idx) => {
                 if (item == null || item === '') return;
                 if (typeof item === 'object') {
-                    const holeIdx = (item.holeIdx != null) ? item.holeIdx
-                        : (item.hole != null ? item.hole - 1 : null);
-                    if (item.playerId != null && item.playerId !== '') {
-                        out.push({ holeIdx, playerId: String(item.playerId),
-                                   setBy: item.setBy || null, setAt: item.setAt || null,
-                                   source: item.source || null });
-                    }
+                    const h = (item.holeIdx != null) ? item.holeIdx : (item.hole != null ? item.hole - 1 : null);
+                    const pos = window.ctpPositionOf(round, item.playerId);
+                    if (h != null && h >= 0 && h < 18 && pos) slots[h] = pos;
                     return;
                 }
-                // Legacy scalar. Position strings ("1-0") resolve via the round's teams.
                 const s = String(item);
-                if (/^\d+-\d+$/.test(s)) {
-                    const [ti, pi] = s.split('-').map(Number);
-                    const pl = ((round.teams || [])[ti] || {}).players || [];
-                    if (pl[pi]) out.push({ holeIdx: par3s[idx] ?? null, playerId: String(pl[pi].id),
-                                           setBy: null, setAt: null, source: 'legacy' });
-                    return;
-                }
-                // Otherwise a player id in a positional slot (slot N = Nth par 3)
-                out.push({ holeIdx: (cw.length === 18 ? idx : (par3s[idx] ?? null)),
-                           playerId: s, setBy: null, setAt: null, source: 'legacy' });
+                const h = par3s[idx];
+                if (h == null) return;
+                slots[h] = /^\d+-\d+$/.test(s) ? s : (window.ctpPositionOf(round, s) || '');
             });
-            return out;
+            return slots;
         };
         window.ctpForHole = (round, holeIdx) => {
-            const e = window.ctpEntries(round).find(x => x.holeIdx === holeIdx);
-            return e ? e.playerId : '';
+            const slots = window.ctpNormalize(round);
+            const pid = window.ctpPlayerAt(round, slots[holeIdx]);
+            return pid == null ? '' : String(pid);
         };
-        // THE counter every scoring path should use.
-        window.ctpCountForPlayer = (round, playerId) =>
-            window.ctpEntries(round).filter(e => String(e.playerId) === String(playerId)).length;
+        window.ctpCountForPlayer = (round, playerId) => {
+            const pos = window.ctpPositionOf(round, playerId);
+            if (!pos) return 0;
+            return window.ctpNormalize(round).filter(s => s === pos).length;
+        };
+        window.ctpEntries = (round) => {
+            const meta = (round && round.ctpMeta) || {};
+            return window.ctpNormalize(round).map((s, h) => {
+                if (!s) return null;
+                const pid = window.ctpPlayerAt(round, s);
+                if (pid == null) return null;
+                const m = meta[h] || {};
+                return { holeIdx: h, playerId: String(pid),
+                         setBy: m.setBy || null, setAt: m.setAt || null, source: m.source || null };
+            }).filter(Boolean);
+        };
+
+        // Write a CTP for a hole. Stored as an 18-slot array of "teamIdx-playerIdx"
+        // position strings indexed BY HOLE — the one shape every existing scoring path
+        // already understands, so nothing else has to change. Audit lives alongside in
+        // ctpMeta / ctpLog rather than being crammed into the value.
+        window.setCTPForHole = (round, holeIdx, playerId, setBy) => {
+            const prevId = window.ctpForHole(round, holeIdx);
+            const slots = window.ctpNormalize(round);
+            slots[holeIdx] = playerId ? (window.ctpPositionOf(round, playerId) || '') : '';
+            round.ctpWinners = slots;
+
+            const now = Date.now();
+            if (!round.ctpMeta || typeof round.ctpMeta !== 'object') round.ctpMeta = {};
+            if (playerId) round.ctpMeta[holeIdx] = { setBy: setBy || 'Admin', setAt: now, source: 'admin' };
+            else delete round.ctpMeta[holeIdx];
+
+            const nameOf = (id) => {
+                let n = null;
+                (round.teams || []).forEach(t => (t.players || []).forEach(p => {
+                    if (String(p.id) === String(id)) n = p.name;
+                }));
+                return n || (id ? 'Player ' + id : null);
+            };
+            if (!Array.isArray(round.ctpLog)) round.ctpLog = [];
+            round.ctpLog.push({
+                holeIdx, at: now, by: setBy || 'Admin', source: 'admin',
+                from: prevId ? nameOf(prevId) : null,
+                to: playerId ? nameOf(playerId) : null
+            });
+            if (round.ctpLog.length > 200) round.ctpLog = round.ctpLog.slice(-200);
+        };
+
+        // Extra 9 shares CTP's history: the picker writes player ids, but several scoring
+        // paths compared "teamIdx-playerIdx" position strings, so wins scored zero depending
+        // on which screen you looked at. One counter, handling every shape.
+        window.extra9CountForPlayer = (round, playerId) => {
+            const arr = (round && round.extra9Winners) || [];
+            if (!Array.isArray(arr)) return 0;
+            let pos = null;
+            (round.teams || []).forEach((t, ti) => (t.players || []).forEach((p, pi) => {
+                if (String(p.id) === String(playerId)) pos = ti + '-' + pi;
+            }));
+            return arr.filter(w => {
+                if (w == null || w === '') return false;
+                if (typeof w === 'object') return String(w.playerId) === String(playerId);
+                const s = String(w);
+                return s === String(playerId) || (pos != null && s === pos);
+            }).length;
+        };
+
+        // Push the open round's current state into the shared rounds array right now.
+        // Used by fields that must reach other devices immediately (CTP, Extra 9).
+        window.persistActiveRoundNow = () => {
+            const ar = state.activeRound;
+            if (!ar || ar.id == null) return;
+            const next = state.rounds.map(r =>
+                (String(r.id) === String(ar.id))
+                    ? { ...r, ctpWinners: ar.ctpWinners, ctpMeta: ar.ctpMeta, ctpLog: ar.ctpLog,
+                        extra9Winners: ar.extra9Winners }
+                    : r);
+            saveRoundsMerged(next, [ar.id]);
+        };
 
         // Write a CTP for a hole in canonical form + append to the audit log.
         window.setCTPForHole = (round, holeIdx, playerId, setBy) => {
@@ -25532,7 +25648,7 @@
                             let extra9Points = 0;
                             if (r.extra9Winners && r.extra9Winners.length > 0 && teamIdx >= 0) {
                                 const playerPosition = teamIdx + '-' + playerIdx;
-                                extra9Points = r.extra9Winners.filter(w => w === playerPosition).length * state.settings.extra9Points;
+                                extra9Points = window.extra9CountForPlayer(r, p.id) * state.settings.extra9Points;
                             }
                             
                             let ctpPoints = 0;
