@@ -521,7 +521,7 @@ document.addEventListener('visibilitychange', () => {
     try { if (document.visibilityState === 'hidden' && hasPendingEdits()) flushPendingEdits(); } catch (e) {}
 });
 
-const SE_VERSION = '2.16.0'; // balls remaining defaults to 0; scorers add on 18
+const SE_VERSION = '2.17.0'; // entering scores flips a scheduled round to in progress
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
@@ -2279,6 +2279,14 @@ async function flushPendingEdits() {
                 const err = new Error('ROUND_COMPLETED');
                 err.code = 'ROUND_COMPLETED';
                 throw err;
+            }
+
+            // 0) Entering data IS starting the round. A scheduled round that has scores
+            //    on it should read as In Progress everywhere — otherwise it sits in the
+            //    "not started" list in both apps while people are out playing it.
+            if (round.active === false) {
+                round.active = true;
+                round.startedAt = round.startedAt || Date.now();
             }
 
             // 1) Scores + balls (per-player edits within current group)
