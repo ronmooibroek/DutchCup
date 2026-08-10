@@ -714,7 +714,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.07.29.4';
+        const APP_VERSION = '2026.07.29.5';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -2384,6 +2384,9 @@
                             date: ts,
                             differential: diff,
                             source: 'round',
+                            roundId: round.id,
+                            courseId: round.courseId,
+                            teeId: p.teeId || null,
                             gross: gross,
                             slope: slope,
                             rating: rating,
@@ -2400,7 +2403,7 @@
             // 113/72, which skewed every handicap built from history.
             // Tee resolution: the entry's own teeId → the player's default tee on that
             // course → the course's first tee → 113/72 only if the course has no tees.
-            (player.historicScores || []).forEach(hs => {
+            (player.historicScores || []).forEach((hs, _hsIdx) => {
                 if (!hs || !hs.grossScore) return;
                 const hsDate = hs.date || 0;
                 if (roundTimestamps.has(hsDate)) return; // already counted as a round
@@ -2430,6 +2433,9 @@
                     date: hsDate,
                     differential: diff,
                     source: 'historic',
+                    hsIndex: _hsIdx,
+                    courseId: hs.courseId || null,
+                    teeId: hs.teeId || null,
                     gross: hs.grossScore,
                     slope: slope,
                     rating: rating,
@@ -6963,12 +6969,33 @@
                     <h3 style="margin:0 0 4px;">📋 Every score that feeds this handicap</h3>
                     <p style="font-size:12px;color:#6b7280;margin:0 0 10px;">
                         Newest first. Highlighted rows are the ones the USGA index actually used.
+                        Change a tee and the differential recomputes immediately.
                     </p>
+                    ${!state.readOnly ? (() => {
+                        // Bulk helper: most players play the same tee at a given course,
+                        // so setting them one at a time is needless work.
+                        const courseIds = [...new Set(a.diffs.map(d => String(d.courseId)).filter(x => x && x !== 'null'))];
+                        if (courseIds.length === 0) return '';
+                        return `<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:10px;margin-bottom:12px;">
+                            <div style="font-size:13px;font-weight:700;margin-bottom:6px;">Set every entry at one course to the same tee</div>
+                            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                                <select id="bulkTeeCourse" onchange="renderBulkTeeOptions('${player.id}')" style="padding:7px;border:2px solid #d1d5db;border-radius:6px;font-size:13px;">
+                                    ${courseIds.map(cid => {
+                                        const co = (state.courses || []).find(x => String(x.id) === cid);
+                                        return `<option value="${cid}">${co ? co.name : 'Course ' + cid}</option>`;
+                                    }).join('')}
+                                </select>
+                                <span id="bulkTeeWrap"></span>
+                                <button onclick="applyBulkTee('${player.id}')" class="btn-secondary" style="padding:7px 14px;font-size:13px;background:#4338ca;color:white;">Apply to all</button>
+                            </div>
+                        </div>`;
+                    })() : ''}
                     <div style="overflow-x:auto;">
                     <table style="width:100%;border-collapse:collapse;font-size:13px;">
                         <thead><tr style="background:#f9fafb;">
                             <th style="text-align:left;padding:6px;">Date</th>
                             <th style="text-align:left;padding:6px;">Course</th>
+                            <th style="text-align:left;padding:6px;">Tee played</th>
                             <th style="text-align:right;padding:6px;">Gross</th>
                             <th style="text-align:right;padding:6px;">Slope/Rating</th>
                             <th style="text-align:right;padding:6px;">Differential</th>
@@ -6977,25 +7004,162 @@
                         <tbody>
                             ${a.diffs.slice(0, 20).map((d, i) => {
                                 const used = usedSet.has(i);
+                                const course = (state.courses || []).find(co => String(co.id) === String(d.courseId));
+                                const tees = (course && Array.isArray(course.tees)) ? course.tees : [];
+                                const target = d.source === 'historic'
+                                    ? `setHistoricTee('${player.id}', ${d.hsIndex}, this.value)`
+                                    : `setRoundTee('${d.roundId}', '${player.id}', this.value)`;
                                 return `<tr style="border-bottom:1px solid #f3f4f6;${used ? 'background:#eef2ff;font-weight:700;' : ''}">
                                     <td style="padding:6px;">${new Date(d.date).toLocaleDateString('en-US', { year:'numeric', month:'short', day:'numeric' })}</td>
                                     <td style="padding:6px;">${d.courseName || (d.source === 'historic' ? 'Historic' : '(round)')}
-                                        ${d.teeName ? `<div style="font-size:11px;color:#6b7280;">${d.teeName} tee</div>` : ''}
                                         ${d.usedDefaults ? `<div style="font-size:11px;color:#b45309;">⚠️ no tee data — 113/72 assumed</div>` : ''}
+                                    </td>
+                                    <td style="padding:6px;">
+                                        ${tees.length > 0 && !state.readOnly ? `
+                                            <select onchange="${target}" style="padding:4px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;max-width:150px;">
+                                                <option value="">(auto: ${d.teeName || 'default'})</option>
+                                                ${tees.map(t => `<option value="${t.id}" ${String(d.teeId) === String(t.id) ? 'selected' : ''}>${t.name} (${t.slope}/${t.rating})</option>`).join('')}
+                                            </select>`
+                                        : `<span style="font-size:12px;color:#6b7280;">${d.teeName || '—'}</span>`}
                                     </td>
                                     <td style="padding:6px;text-align:right;">${d.gross ?? '—'}</td>
                                     <td style="padding:6px;text-align:right;color:#6b7280;">${d.slope ?? '—'}/${d.rating ?? '—'}</td>
                                     <td style="padding:6px;text-align:right;">${d.differential != null ? d.differential.toFixed(1) : '—'}</td>
-                                    <td style="padding:6px;color:#6b7280;">${d.source === 'historic' ? '📜 historic' : '⛳ round'}${used ? ' · <span style="color:#4338ca;">USED</span>' : ''}</td>
+                                    <td style="padding:6px;color:#6b7280;">${d.source === 'historic' ? '📜' : '⛳'}${used ? ' <span style="color:#4338ca;">USED</span>' : ''}</td>
                                 </tr>`;
                             }).join('')}
-                            ${a.diffs.length === 0 ? '<tr><td colspan="6" style="padding:12px;color:#6b7280;">No scores on record.</td></tr>' : ''}
+                            ${a.diffs.length === 0 ? '<tr><td colspan="7" style="padding:12px;color:#6b7280;">No scores on record.</td></tr>' : ''}
                         </tbody>
                     </table>
                     </div>
                     ${a.diffs.length > 20 ? `<p style="font-size:12px;color:#6b7280;margin-top:8px;">${a.diffs.length - 20} older score(s) exist but fall outside the most recent 20.</p>` : ''}
                 </div>`;
             app.innerHTML = html;
+            setTimeout(() => { try { renderBulkTeeOptions(String(player.id)); } catch (e) {} }, 0);
+        };
+
+        // ─── Tee corrections from the Handicap Doctor ──────────────────────
+        // Setting the right tee changes the slope/rating the differential is computed
+        // against — usually the difference between a defensible handicap and a wrong
+        // one. An empty value clears it and falls back to the automatic chain.
+        window.setHistoricTee = (playerId, hsIndex, teeId) => {
+            try {
+                const players = (state.players || []).map(p => {
+                    if (String(p.id) !== String(playerId)) return p;
+                    const hs = [...(p.historicScores || [])];
+                    if (!hs[hsIndex]) return p;
+                    hs[hsIndex] = { ...hs[hsIndex] };
+                    if (teeId) hs[hsIndex].teeId = teeId; else delete hs[hsIndex].teeId;
+                    return { ...p, historicScores: hs };
+                });
+                save('players', players);
+                hsRecalcHandicaps(true);
+                notify(teeId ? '⛳ Tee set — differential recalculated' : 'Tee cleared');
+                navigate('handicapPlayer-' + playerId);
+            } catch (err) {
+                console.error('Set historic tee error:', err);
+                showError('Failed: ' + err.message);
+            }
+        };
+
+        window.setRoundTee = (roundId, playerId, teeId) => {
+            try {
+                const round = (state.rounds || []).find(r => String(r.id) === String(roundId));
+                if (!round) { showError('Round not found'); return; }
+                const course = (state.courses || []).find(co => String(co.id) === String(round.courseId));
+                const tee = teeId ? ((course && course.tees) || []).find(t => String(t.id) === String(teeId)) : null;
+                const next = (state.rounds || []).map(r => {
+                    if (String(r.id) !== String(roundId)) return r;
+                    return { ...r, teams: (r.teams || []).map(t => ({
+                        ...t,
+                        players: (t.players || []).map(p => {
+                            if (String(p.id) !== String(playerId)) return p;
+                            const np = { ...p };
+                            if (tee) {
+                                np.teeId = tee.id; np.teeName = tee.name;
+                                np.teeSlope = parseFloat(tee.slope); np.teeRating = parseFloat(tee.rating);
+                            } else {
+                                delete np.teeId; delete np.teeName;
+                                delete np.teeSlope; delete np.teeRating;
+                            }
+                            return np;
+                        })
+                    })) };
+                });
+                saveRoundsMerged(next, [round.id]);
+                hsRecalcHandicaps(true);
+                notify(tee ? `⛳ ${tee.name} tee set — differential recalculated` : 'Tee cleared');
+                navigate('handicapPlayer-' + playerId);
+            } catch (err) {
+                console.error('Set round tee error:', err);
+                showError('Failed: ' + err.message);
+            }
+        };
+
+        window.renderBulkTeeOptions = (playerId) => {
+            const sel = document.getElementById('bulkTeeCourse');
+            const wrap = document.getElementById('bulkTeeWrap');
+            if (!sel || !wrap) return;
+            const course = (state.courses || []).find(co => String(co.id) === String(sel.value));
+            const tees = (course && Array.isArray(course.tees)) ? course.tees : [];
+            wrap.innerHTML = tees.length
+                ? `<select id="bulkTeeTee" style="padding:7px;border:2px solid #d1d5db;border-radius:6px;font-size:13px;">
+                        ${tees.map(t => `<option value="${t.id}">${t.name} (${t.slope}/${t.rating})</option>`).join('')}
+                   </select>`
+                : `<span style="font-size:12px;color:#b45309;">This course has no tees defined — add them under Courses.</span>`;
+        };
+
+        window.applyBulkTee = (playerId) => {
+            try {
+                const courseId = (document.getElementById('bulkTeeCourse') || {}).value;
+                const teeId = (document.getElementById('bulkTeeTee') || {}).value;
+                if (!courseId || !teeId) { showError('Pick a course and a tee first'); return; }
+                const course = (state.courses || []).find(co => String(co.id) === String(courseId));
+                const tee = ((course && course.tees) || []).find(t => String(t.id) === String(teeId));
+                if (!tee) { showError('Tee not found'); return; }
+
+                let nHist = 0;
+                const players = (state.players || []).map(p => {
+                    if (String(p.id) !== String(playerId)) return p;
+                    const hs = (p.historicScores || []).map(h => {
+                        if (String(h.courseId) !== String(courseId)) return h;
+                        nHist++;
+                        return { ...h, teeId: tee.id };
+                    });
+                    return { ...p, historicScores: hs };
+                });
+
+                let nRounds = 0;
+                const touched = [];
+                const nextRounds = (state.rounds || []).map(r => {
+                    if (String(r.courseId) !== String(courseId)) return r;
+                    let changed = false;
+                    const teams = (r.teams || []).map(t => ({
+                        ...t,
+                        players: (t.players || []).map(p => {
+                            if (String(p.id) !== String(playerId)) return p;
+                            changed = true; nRounds++;
+                            return { ...p, teeId: tee.id, teeName: tee.name,
+                                     teeSlope: parseFloat(tee.slope), teeRating: parseFloat(tee.rating) };
+                        })
+                    }));
+                    if (!changed) return r;
+                    touched.push(r.id);
+                    return { ...r, teams };
+                });
+
+                if (nHist + nRounds === 0) { notify('Nothing to update at that course'); return; }
+                if (!confirm(`Set the ${tee.name} tee (${tee.slope}/${tee.rating}) on ${nHist} historic entr${nHist === 1 ? 'y' : 'ies'} and ${nRounds} round(s)?\n\nHandicaps will be recalculated.`)) return;
+
+                save('players', players);
+                if (touched.length) saveRoundsMerged(nextRounds, touched);
+                hsRecalcHandicaps(true);
+                notify(`⛳ ${tee.name} applied to ${nHist + nRounds} score(s)`);
+                navigate('handicapPlayer-' + playerId);
+            } catch (err) {
+                console.error('Bulk tee error:', err);
+                showError('Failed: ' + err.message);
+            }
         };
 
         window.showHistoricDoctor = () => {
