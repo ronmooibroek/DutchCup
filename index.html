@@ -714,7 +714,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.07.29.5';
+        const APP_VERSION = '2026.07.30.1';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -13925,8 +13925,20 @@
             const perfIntroSlideIndex = hasPerfIntroSlide ? slideIndex++ : -1;
             // ── INTERLEAVED REVEAL SEGMENT: [team's players…, team result] per block,
             //    worst-entering team first, leaders last. Player + team slides mixed.
-            const _seq = presentationState._revealSeq
+            // A player slide now exists only to show awards (and the champion intro).
+            // Anyone with neither has nothing to display, so drop them from the sequence
+            // rather than showing an empty slide.
+            const _champIdxAlloc = (presentationState._championIndexData != null)
+                ? presentationState._championIndexData : (individualPlayerSlides.length - 1);
+            const _seqRaw = presentationState._revealSeq
                 || individualPlayerSlides.map((_, i) => ({ k: 'p', i }));
+            const _seq = _seqRaw.filter(e => {
+                if (e.k !== 'p') return true;
+                const rec = individualPlayerSlides[e.i];
+                const hasAwards = rec && Array.isArray(rec.playerAwards) && rec.playerAwards.length > 0;
+                return hasAwards || e.i === _champIdxAlloc;
+            });
+            presentationState._revealSeq = _seq;
             const revealSeqStart = slideIndex;
             slideIndex += _seq.length;
             presentationState._revealSeqStart = revealSeqStart;
@@ -15177,11 +15189,11 @@
                             </div>
                         </div>
                     `;
-                } else if (playerStage >= (1 + champOffset) && Array.isArray(player.playerAwards) && (playerStage - 1 - champOffset) < player.playerAwards.length) {
+                } else if (playerStage >= champOffset && Array.isArray(player.playerAwards) && (playerStage - champOffset) < player.playerAwards.length) {
                     // ─── AWARD REVEAL ───
                     // Each award is its own dedicated reveal screen.
                     // For normal players: stages 1..N. For champion: stages 2..N+1 (champOffset = 1 shifts).
-                    const awardIdx = playerStage - 1 - champOffset;
+                    const awardIdx = playerStage - champOffset;
                     const award = player.playerAwards[awardIdx];
                     const totalAwards = player.playerAwards.length;
                     const _statePlayer = state.players.find(sp => sp.id == player.playerId) || { id: player.playerId, name: player.playerName };
@@ -18512,7 +18524,9 @@
                     const _champIdx = (presentationState._championIndexData != null)
                         ? presentationState._championIndexData : (psCount - 1);
                     const isChampion = _entry.i === _champIdx;
-                    const maxStage = awardCount + (isChampion ? 1 : 0);
+                    // The per-player summary page is gone. Champion: stage 0 is the intro,
+                    // then one stage per award. Everyone else: one stage per award.
+                    const maxStage = isChampion ? awardCount : Math.max(0, awardCount - 1);
                     if (step < maxStage) {
                         presentationState.playerRevealStep = step + 1;
                         renderPresentation();
@@ -18677,7 +18691,7 @@
                         const _champIdx = (presentationState._championIndexData != null)
                             ? presentationState._championIndexData : (psCount - 1);
                         const _isChampion = _e.i === _champIdx;
-                        presentationState.playerRevealStep = _awardCount + (_isChampion ? 1 : 0);
+                        presentationState.playerRevealStep = _isChampion ? _awardCount : Math.max(0, _awardCount - 1);
                         presentationState.teamRevealStep = 0;
                     }
                 } else {
