@@ -714,7 +714,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.07.30.5';
+        const APP_VERSION = '2026.08.01.1';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -2819,6 +2819,10 @@
                 renderPlayerDetailPage();
             } else if (state.view === 'settings') {
                 renderSettings();
+            } else if (state.view === 'runsheet') {
+                showRunSheet(null);
+            } else if (state.view.startsWith('runsheet-')) {
+                showRunSheet(state.view.replace('runsheet-', ''));
             } else if (state.view === 'soundstudio') {
                 showSoundStudio();
                 if ((window.__soundLibrary || []).length === 0) window.loadSoundLibrary(true);
@@ -3095,6 +3099,13 @@
                             <div>
                                 <strong>📅 Events &amp; Rounds</strong><br>
                                 <small>${state.events.length} event${state.events.length === 1 ? '' : 's'} · ${state.rounds.length} round${state.rounds.length === 1 ? '' : 's'} · schedules &amp; brackets</small>
+                            </div>
+                            <span style="font-size:24px;">→</span>
+                        </div>
+                        <div class="list-item" onclick="navigate('runsheet')">
+                            <div>
+                                <strong>🎬 Tonight's Run Sheet</strong><br>
+                                <small>Pick the storylines and the order they're told</small>
                             </div>
                             <span style="font-size:24px;">→</span>
                         </div>
@@ -7734,6 +7745,428 @@
             window.saveSoundOverrides();
             notify('↩️ All slots reset');
             showSoundStudio();
+        };
+
+        // ═══════════════════════════════════════════════════════════════
+        // STORY RANKER
+        // Finds the narratives hiding in tonight's card and scores each for
+        // drama. The producer (you) then chooses which to tell and in what
+        // order. Same engine every week, different show — because the data
+        // decides what's interesting, not a fixed running order.
+        // ═══════════════════════════════════════════════════════════════
+        window.storyPlayerPoints = (round, player) => {
+            const sp = (state.players || []).find(x => String(x.id) === String(player.id));
+            const hc = getPlayerHandicapForRound(sp, round, player);
+            const stroke = calcPlayerTotal(player.scores || [], round.pars || [], round.handicaps || [], hc);
+            const bbb = (parseInt(player.bbbTotal, 10) || 0) * (state.settings.bbbPoints || 0);
+            const ball = (parseInt(player.ballsRemaining, 10) || 0) * (state.settings.ballPoints || 0);
+            const ex9 = (window.extra9CountForPlayer ? window.extra9CountForPlayer(round, player.id) : 0)
+                        * (state.settings.extra9Points || 0);
+            const ctp = (window.ctpCountForPlayer ? window.ctpCountForPlayer(round, player.id) : 0)
+                        * (state.settings.ctpPoints || 0);
+            return { stroke, bbb, ball, ex9, ctp, total: stroke + bbb + ball + ex9 + ctp, hc };
+        };
+
+        // Rank a list of {id, v} descending; ties share a place.
+        const _rankMap = (map) => {
+            const arr = Object.keys(map).map(id => ({ id, v: map[id] })).sort((a, b) => b.v - a.v);
+            const pos = {}; let lastV = null, lastP = 0;
+            arr.forEach((e, i) => { if (e.v !== lastV) { lastP = i + 1; lastV = e.v; } pos[e.id] = lastP; });
+            return pos;
+        };
+
+        window.detectStories = (round) => {
+            if (!round || !Array.isArray(round.teams)) return [];
+            const evRounds = (state.rounds || [])
+                .filter(r => r.eventId === round.eventId && r.active !== false)
+                .sort((a, b) => (a.timestamp || a.id) - (b.timestamp || b.id));
+            const prior = evRounds.filter(r => String(r.id) !== String(round.id)
+                && (r.timestamp || r.id) < (round.timestamp || round.id));
+
+            // Tonight's numbers, and where everyone stood before
+            const tonight = {}, names = {}, teamOf = {}, cards = {};
+            round.teams.forEach(t => (t.players || []).forEach(p => {
+                const pts = window.storyPlayerPoints(round, p);
+                tonight[p.id] = pts;
+                names[p.id] = p.name;
+                teamOf[p.id] = t.teamName || 'Team';
+                cards[p.id] = { scores: p.scores || [], hc: pts.hc };
+            }));
+            const before = {};
+            prior.forEach(r => (r.teams || []).forEach(t => (t.players || []).forEach(p => {
+                before[p.id] = (before[p.id] || 0) + window.storyPlayerPoints(r, p).total;
+                names[p.id] = names[p.id] || p.name;
+            })));
+            const after = {};
+            Object.keys(names).forEach(id => {
+                after[id] = (before[id] || 0) + ((tonight[id] && tonight[id].total) || 0);
+            });
+            const posBefore = _rankMap(before), posAfter = _rankMap(after);
+            const hadHistory = prior.length > 0;
+
+            // Team level
+            const tBefore = {}, tAfter = {}, tTonight = {}, tName = {};
+            (state.teams || []).forEach(t => { tName[t.id] = t.name; });
+            prior.forEach(r => (r.teams || []).forEach(t => {
+                (t.players || []).forEach(p => {
+                    tBefore[t.teamId] = (tBefore[t.teamId] || 0) + window.storyPlayerPoints(r, p).total;
+                });
+                tName[t.teamId] = tName[t.teamId] || t.teamName;
+            }));
+            round.teams.forEach(t => {
+                let sum = 0;
+                (t.players || []).forEach(p => { sum += (tonight[p.id] && tonight[p.id].total) || 0; });
+                tTonight[t.teamId] = sum;
+                tName[t.teamId] = tName[t.teamId] || t.teamName;
+            });
+            Object.keys(tName).forEach(id => { tAfter[id] = (tBefore[id] || 0) + (tTonight[id] || 0); });
+            const tPosBefore = _rankMap(tBefore), tPosAfter = _rankMap(tAfter);
+
+            const S = [];
+            const add = (o) => { if (o && o.drama > 0) S.push(o); };
+            const nm = id => names[id] || 'Player';
+            const sortedAfter = Object.keys(after).sort((a, b) => after[b] - after[a]);
+            const sortedTeams = Object.keys(tAfter).sort((a, b) => tAfter[b] - tAfter[a]);
+
+            // ── 1. Lead change at the top (teams) ──
+            if (hadHistory && sortedTeams.length > 1) {
+                const leaderBefore = Object.keys(tBefore).sort((a, b) => tBefore[b] - tBefore[a])[0];
+                const leaderNow = sortedTeams[0];
+                if (leaderBefore && leaderNow && String(leaderBefore) !== String(leaderNow)) {
+                    add({ id: 'team-lead-change', kind: 'Lead change', drama: 95,
+                          headline: `${tName[leaderNow]} take the lead`,
+                          detail: `${tName[leaderNow]} overtake ${tName[leaderBefore]} at the top of the Cup — a ${tTonight[leaderNow]}-point night does it.`,
+                          hook: 'The lead has changed hands.' });
+                }
+            }
+            // ── 2. Lead change (individual) ──
+            if (hadHistory && sortedAfter.length > 1) {
+                const wasTop = Object.keys(before).sort((a, b) => before[b] - before[a])[0];
+                const isTop = sortedAfter[0];
+                if (wasTop && isTop && String(wasTop) !== String(isTop)) {
+                    add({ id: 'indiv-lead-change', kind: 'Lead change', drama: 88,
+                          headline: `${nm(isTop)} is the new leader`,
+                          detail: `${nm(isTop)} passes ${nm(wasTop)} at the top of the individual race, ${after[isTop]} to ${after[wasTop]}.`,
+                          hook: 'Someone new is top of the pile.' });
+                }
+            }
+            // ── 2b. Team photo finish / held on by a whisker ──
+            if (sortedTeams.length > 1) {
+                const gap = tAfter[sortedTeams[0]] - tAfter[sortedTeams[1]];
+                if (gap <= 3) {
+                    const heldOn = hadHistory &&
+                        String(Object.keys(tBefore).sort((a, b) => tBefore[b] - tBefore[a])[0]) === String(sortedTeams[0]);
+                    add({ id: 'team-photo-finish', kind: 'Tight at the top', drama: gap <= 1 ? 96 : 82,
+                        headline: heldOn
+                            ? `${tName[sortedTeams[0]]} hold on by ${gap === 0 ? 'nothing' : gap}`
+                            : `${gap === 0 ? 'Level' : gap + ' point' + (gap === 1 ? '' : 's')} between the top two`,
+                        detail: `${tName[sortedTeams[0]]} ${tAfter[sortedTeams[0]]}, ${tName[sortedTeams[1]]} ${tAfter[sortedTeams[1]]}`
+                            + (heldOn ? ` — ${tName[sortedTeams[1]]} threw everything at them tonight and came up ${gap === 0 ? 'level' : gap + ' short'}.` : '.'),
+                        hook: gap <= 1 ? 'This Cup is being decided by a single point.' : 'The top two are inseparable.' });
+                }
+            }
+            // ── 3. Photo finish at the top ──
+            if (sortedAfter.length > 1) {
+                const gap = after[sortedAfter[0]] - after[sortedAfter[1]];
+                if (gap <= 1.5) {
+                    add({ id: 'photo-finish', kind: 'Tight at the top', drama: 84,
+                          headline: `${gap === 0 ? 'Dead level' : gap + ' point' + (gap === 1 ? '' : 's')} at the top`,
+                          detail: `${nm(sortedAfter[0])} and ${nm(sortedAfter[1])} are separated by ${gap === 0 ? 'nothing at all' : gap + ' point' + (gap === 1 ? '' : 's')}.`,
+                          hook: 'It could not be tighter.' });
+                }
+            }
+            // ── 4. Biggest climb ──
+            if (hadHistory) {
+                let best = null;
+                Object.keys(names).forEach(id => {
+                    if (posBefore[id] == null || posAfter[id] == null) return;
+                    const climb = posBefore[id] - posAfter[id];
+                    if (climb >= 2 && (!best || climb > best.climb)) best = { id, climb };
+                });
+                if (best) add({ id: 'big-climb', kind: 'Mover', drama: 60 + best.climb * 6,
+                    headline: `${nm(best.id)} climbs ${best.climb} places`,
+                    detail: `A ${tonight[best.id].total}-point night lifts ${nm(best.id)} from #${posBefore[best.id]} to #${posAfter[best.id]}.`,
+                    hook: 'Somebody made a big move tonight.' });
+            }
+            // ── 5. Career night (best round of the event) ──
+            {
+                let best = null;
+                Object.keys(tonight).forEach(id => {
+                    let priorBest = 0;
+                    prior.forEach(r => (r.teams || []).forEach(t => (t.players || []).forEach(p => {
+                        if (String(p.id) !== String(id)) return;
+                        priorBest = Math.max(priorBest, window.storyPlayerPoints(r, p).total);
+                    })));
+                    const t = tonight[id].total;
+                    if (prior.length > 0 && t > priorBest && (!best || t > best.t)) best = { id, t, priorBest };
+                });
+                if (best) add({ id: 'career-night', kind: 'Career night', drama: 74,
+                    headline: `${nm(best.id)} posts their best of the event`,
+                    detail: `${best.t} points — beating their previous best of ${best.priorBest}.`,
+                    hook: 'Someone played the round of their event.' });
+            }
+            // ── 6. Take that shot away (counterfactual) ──
+            {
+                let best = null;
+                Object.keys(cards).forEach(id => {
+                    const { scores, hc } = cards[id];
+                    let worst = null;
+                    (scores || []).forEach((s, i) => {
+                        const g = parseInt(s), par = (round.pars || [])[i];
+                        if (!g || !par) return;
+                        const over = g - par;
+                        if (!worst || over > worst.over) worst = { over, hole: i + 1, gross: g, par };
+                    });
+                    if (!worst || worst.over < 3) return;
+                    // What would par on that hole have been worth?
+                    const meAfter = after[id];
+                    const ahead = sortedAfter.filter(x => after[x] > meAfter);
+                    const nearest = ahead.length ? ahead[ahead.length - 1] : null;
+                    const deficit = nearest ? after[nearest] - meAfter : 0;
+                    // Prefer the most dramatic hole among those that actually mattered
+                    if (nearest && deficit <= worst.over * 1.5 &&
+                        (!best || worst.over > best.worst.over)) {
+                        best = { id, worst, nearest, deficit };
+                    }
+                });
+                if (best) add({ id: 'take-that-away', kind: 'What if', drama: 78,
+                    headline: `Take away hole ${best.worst.hole} and ${nm(best.id)} passes ${nm(best.nearest)}`,
+                    detail: `A ${best.worst.gross} on a par ${best.worst.par} cost ${best.worst.over} shots — and ${nm(best.id)} sits just ${best.deficit} behind ${nm(best.nearest)}.`,
+                    hook: 'One hole changed the whole picture.' });
+            }
+            // ── 7. Collapse / Jekyll & Hyde ──
+            {
+                let best = null;
+                Object.keys(cards).forEach(id => {
+                    const sc = cards[id].scores || [];
+                    const f = sc.slice(0, 9).filter(s => parseInt(s) > 0);
+                    const b = sc.slice(9).filter(s => parseInt(s) > 0);
+                    if (f.length < 8 || b.length < 8) return;
+                    const fs = f.reduce((s, x) => s + parseInt(x), 0);
+                    const bs = b.reduce((s, x) => s + parseInt(x), 0);
+                    const d = bs - fs;
+                    if (Math.abs(d) >= 6 && (!best || Math.abs(d) > Math.abs(best.d))) best = { id, fs, bs, d };
+                });
+                if (best) add({ id: 'two-halves', kind: 'A game of two halves', drama: 62,
+                    headline: best.d > 0 ? `${nm(best.id)} let it slip on the back` : `${nm(best.id)} came alive after the turn`,
+                    detail: `Front nine ${best.fs}, back nine ${best.bs} — a ${Math.abs(best.d)}-shot swing between the halves.`,
+                    hook: 'One card told two completely different stories.' });
+            }
+            // ── 8. Shot of the night candidates ──
+            {
+                const cands = [];
+                Object.keys(cards).forEach(id => {
+                    const { scores, hc } = cards[id];
+                    (scores || []).forEach((s, i) => {
+                        const g = parseInt(s), par = (round.pars || [])[i];
+                        if (!g || !par) return;
+                        const idx = (round.handicaps || [])[i];
+                        let strokes = 0;
+                        if (hc >= idx) strokes = 1;
+                        if (hc >= idx + 18) strokes = 2;
+                        const net = g - strokes - par;
+                        if (net <= -2) cands.push({ id, hole: i + 1, gross: g, par, net });
+                    });
+                });
+                if (cands.length > 0) {
+                    cands.sort((a, b) => a.net - b.net);
+                    add({ id: 'shot-of-night', kind: 'Shot of the night', drama: 70,
+                        headline: `${cands.length} candidate${cands.length === 1 ? '' : 's'} for shot of the night`,
+                        detail: cands.slice(0, 3).map(x => `${nm(x.id)}: ${x.gross} on the par ${x.par} ${x.hole}`).join(' · '),
+                        hook: 'Nominate them early, vote at the end.',
+                        payload: cands.slice(0, 3) });
+                }
+            }
+            // ── 9. The Bubble (who is running out of road) ──
+            {
+                const scheduled = (state.rounds || []).filter(r =>
+                    r.eventId === round.eventId && r.active === false).length;
+                if (scheduled > 0 && sortedTeams.length > 2) {
+                    const last = sortedTeams[sortedTeams.length - 1];
+                    const leaderPts = tAfter[sortedTeams[0]];
+                    const gap = leaderPts - tAfter[last];
+                    const maxSwing = scheduled * 40;
+                    if (gap > maxSwing * 0.55) {
+                        add({ id: 'the-bubble', kind: 'The Bubble', drama: 55,
+                            headline: `${tName[last]} are running out of road`,
+                            detail: `${gap} points back with ${scheduled} round${scheduled === 1 ? '' : 's'} to play.`,
+                            hook: 'Someone needs a big week.' });
+                    }
+                }
+            }
+            // ── 10. Beat their handicap by the most ──
+            {
+                let best = null;
+                Object.keys(cards).forEach(id => {
+                    const sc = (cards[id].scores || []).filter(s => parseInt(s) > 0);
+                    if (sc.length < 18) return;
+                    const gross = sc.reduce((s, x) => s + parseInt(x), 0);
+                    const par = (round.pars || []).reduce((s, p) => s + (parseInt(p) || 0), 0) || 72;
+                    const netToPar = (gross - cards[id].hc) - par;
+                    if (!best || netToPar < best.netToPar) best = { id, netToPar, gross };
+                });
+                if (best && best.netToPar <= -2) add({ id: 'beat-handicap', kind: 'Playing above themselves', drama: 66,
+                    headline: `${nm(best.id)} played ${Math.abs(best.netToPar)} under their handicap`,
+                    detail: `Gross ${best.gross}, net ${Math.abs(best.netToPar)} under par. The committee is watching.`,
+                    hook: 'Somebody played out of their skin.' });
+            }
+            // ── 11. Team charge ──
+            {
+                let best = null;
+                Object.keys(tTonight).forEach(id => {
+                    if (!best || tTonight[id] > tTonight[best]) best = id;
+                });
+                if (best != null) add({ id: 'team-night', kind: 'Team of the night', drama: 50,
+                    headline: `${tName[best]} win the night`,
+                    detail: `${tTonight[best]} points as a pair — the best of any team tonight.`,
+                    hook: 'One team out-scored everybody.' });
+            }
+            // ── 12. Duel: two players trading places ──
+            if (hadHistory && sortedAfter.length > 1) {
+                const a = sortedAfter[0], b = sortedAfter[1];
+                if (posBefore[a] && posBefore[b] && posBefore[a] > posBefore[b]) {
+                    add({ id: 'the-duel', kind: 'The duel', drama: 72,
+                        headline: `${nm(a)} and ${nm(b)} keep swapping`,
+                        detail: `${nm(b)} led going in; ${nm(a)} leads coming out. They have traded the top spot again.`,
+                        hook: 'These two cannot get away from each other.' });
+                }
+            }
+
+            S.sort((x, y) => y.drama - x.drama);
+            return S;
+        };
+
+        // ─── The Run Sheet: you are the producer ──────────────────────────
+        // The ranker proposes; you dispose. Saved on the round so it syncs and
+        // the presentation plays exactly the show you signed off.
+        window.__runSheetRoundId = null;
+
+        window.getRunSheet = (round) => {
+            const stories = window.detectStories(round);
+            const saved = Array.isArray(round.runSheet) ? round.runSheet : null;
+            if (!saved) return stories.map((s, i) => ({ ...s, on: i < 4, order: i }));
+            const byId = {}; saved.forEach(x => { byId[x.id] = x; });
+            const merged = stories.map(s => ({
+                ...s,
+                on: byId[s.id] ? !!byId[s.id].on : false,          // new stories start off
+                order: byId[s.id] ? byId[s.id].order : 999
+            }));
+            merged.sort((a, b) => a.order - b.order || b.drama - a.drama);
+            return merged.map((s, i) => ({ ...s, order: i }));
+        };
+
+        window.saveRunSheet = (roundId, list) => {
+            const next = (state.rounds || []).map(r => (String(r.id) === String(roundId))
+                ? { ...r, runSheet: list.map(s => ({ id: s.id, on: !!s.on, order: s.order })) }
+                : r);
+            saveRoundsMerged(next, [roundId]);
+        };
+
+        window.showRunSheet = (roundId) => {
+            const app = document.getElementById('app');
+            const rounds = (state.rounds || []).filter(r =>
+                r.eventId === state.currentEventId && r.active !== false)
+                .sort((a, b) => (b.timestamp || b.id) - (a.timestamp || a.id));
+            const round = roundId
+                ? (state.rounds || []).find(r => String(r.id) === String(roundId))
+                : rounds[0];
+            window.__runSheetRoundId = round ? round.id : null;
+
+            if (!round) {
+                app.innerHTML = `<button class="back-btn" onclick="navigate('home')">← Back</button>
+                    <div class="card"><h2>🎬 Tonight's Run Sheet</h2>
+                    <p style="color:#6b7280;">No played rounds in this event yet. Score a round and the storylines appear here.</p></div>`;
+                return;
+            }
+
+            const list = window.getRunSheet(round);
+            const onCount = list.filter(s => s.on).length;
+            const heat = (d) => d >= 85 ? '#dc2626' : d >= 70 ? '#f59e0b' : d >= 55 ? '#10b981' : '#9ca3af';
+
+            app.innerHTML = `
+                <button class="back-btn" onclick="navigate('home')">← Back</button>
+                <div class="card">
+                    <h2>🎬 Tonight's Run Sheet</h2>
+                    <p style="color:#6b7280;margin-bottom:10px;">
+                        The app read tonight's card and found these storylines, ranked by how much
+                        drama they carry. Switch on the ones you want to tell, drag them into the
+                        order you want to tell them, and the presentation follows your running order.
+                    </p>
+                    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                        <select onchange="showRunSheet(this.value)" style="padding:8px;border:2px solid #d1d5db;border-radius:8px;font-size:14px;">
+                            ${rounds.map(r => `<option value="${r.id}" ${String(r.id) === String(round.id) ? 'selected' : ''}>
+                                ${r.courseName} · ${new Date(r.timestamp || r.id).toLocaleDateString('en-US', { month:'short', day:'numeric' })}
+                            </option>`).join('')}
+                        </select>
+                        <span style="font-size:14px;color:#374151;"><strong>${onCount}</strong> of ${list.length} in the show</span>
+                    </div>
+                </div>
+
+                ${list.length === 0 ? `<div class="card"><p style="color:#6b7280;">
+                    No strong storylines in this round yet — that usually means it's the first round
+                    of the event, so there's nothing to compare against.</p></div>` : ''}
+
+                <div class="card">
+                    ${list.map((s, i) => `
+                        <div style="border:2px solid ${s.on ? heat(s.drama) : '#e5e7eb'};border-radius:12px;padding:12px;margin-bottom:10px;background:${s.on ? 'white' : '#f9fafb'};opacity:${s.on ? 1 : 0.65};">
+                            <div style="display:flex;align-items:flex-start;gap:12px;">
+                                <div style="display:flex;flex-direction:column;gap:4px;">
+                                    <button onclick="moveStory(${i}, -1)" ${i === 0 ? 'disabled' : ''}
+                                            class="btn-secondary" style="padding:2px 9px;font-size:15px;${i === 0 ? 'opacity:0.3;' : ''}">▲</button>
+                                    <button onclick="moveStory(${i}, 1)" ${i === list.length - 1 ? 'disabled' : ''}
+                                            class="btn-secondary" style="padding:2px 9px;font-size:15px;${i === list.length - 1 ? 'opacity:0.3;' : ''}">▼</button>
+                                </div>
+                                <div style="flex:1;min-width:0;">
+                                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                                        <span style="background:${heat(s.drama)};color:white;font-size:10px;font-weight:800;padding:2px 8px;border-radius:999px;">${s.kind.toUpperCase()}</span>
+                                        <span style="font-size:11px;color:#6b7280;">drama ${s.drama}</span>
+                                    </div>
+                                    <div style="font-weight:800;font-size:16px;margin-top:5px;">${s.headline}</div>
+                                    <div style="font-size:13px;color:#4b5563;margin-top:3px;">${s.detail}</div>
+                                    <div style="font-size:12px;color:#6b7280;font-style:italic;margin-top:4px;">Tease: "${s.hook}"</div>
+                                </div>
+                                <label style="display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;">
+                                    <input type="checkbox" ${s.on ? 'checked' : ''} onchange="toggleStory(${i})"
+                                           style="width:26px;height:26px;">
+                                    <span style="font-size:10px;color:#6b7280;">${s.on ? 'IN' : 'OUT'}</span>
+                                </label>
+                            </div>
+                        </div>`).join('')}
+                </div>
+
+                <div class="card">
+                    <button onclick="resetRunSheet()" class="btn-secondary" style="width:100%;">
+                        ↩️ Reset to the suggested order
+                    </button>
+                </div>`;
+            window.__runSheetList = list;
+        };
+
+        window.toggleStory = (i) => {
+            const l = window.__runSheetList;
+            if (!l || !l[i]) return;
+            l[i].on = !l[i].on;
+            window.saveRunSheet(window.__runSheetRoundId, l);
+            showRunSheet(window.__runSheetRoundId);
+        };
+        window.moveStory = (i, dir) => {
+            const l = window.__runSheetList;
+            if (!l) return;
+            const j = i + dir;
+            if (j < 0 || j >= l.length) return;
+            const tmp = l[i]; l[i] = l[j]; l[j] = tmp;
+            l.forEach((s, n) => { s.order = n; });
+            window.saveRunSheet(window.__runSheetRoundId, l);
+            showRunSheet(window.__runSheetRoundId);
+        };
+        window.resetRunSheet = () => {
+            const next = (state.rounds || []).map(r => {
+                if (String(r.id) !== String(window.__runSheetRoundId)) return r;
+                const copy = { ...r }; delete copy.runSheet; return copy;
+            });
+            saveRoundsMerged(next, [window.__runSheetRoundId]);
+            notify('↩️ Back to the suggested order');
+            showRunSheet(window.__runSheetRoundId);
         };
 
         window.renderDoctors = () => {
