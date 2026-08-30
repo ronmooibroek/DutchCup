@@ -714,7 +714,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.07.30.1';
+        const APP_VERSION = '2026.07.30.2';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -2819,6 +2819,8 @@
                 renderPlayerDetailPage();
             } else if (state.view === 'settings') {
                 renderSettings();
+            } else if (state.view === 'soundstudio') {
+                showSoundStudio();
             } else if (state.view === 'doctors') {
                 renderDoctors();
             } else if (state.view === 'roundDoctor') {
@@ -3118,6 +3120,13 @@
                             <div>
                                 <strong>💾 Export / Import</strong><br>
                                 <small>Backup &amp; restore data</small>
+                            </div>
+                            <span style="font-size:24px;">→</span>
+                        </div>
+                        <div class="list-item" onclick="navigate('soundstudio')">
+                            <div>
+                                <strong>🎚️ Sound Studio</strong><br>
+                                <small>Assign a sound to every moment · synth stings, URLs or files</small>
                             </div>
                             <span style="font-size:24px;">→</span>
                         </div>
@@ -7417,6 +7426,164 @@
         };
 
         // ─── Doctors: every data-integrity tool in one place ───────────────
+        // ═══════════════════════════════════════════════════════════════
+        // SOUND STUDIO — assign a sound to every moment in the presentation.
+        // Each slot can use a repo file, any audio URL, a synthesised sting,
+        // or silence. Choices are saved on this device.
+        // ═══════════════════════════════════════════════════════════════
+        window.SOUND_SLOTS = [
+            { group: 'Opening', slot: 'anthem',   name: 'Dutch flag / anthem',    def: 'Sounds/dutch-anthem-f1-podium (1).mp3' },
+            { group: 'Opening', slot: 'field',    name: "Today's Field",          def: 'Sounds/10-walking-on-sunshine.mp3' },
+            { group: 'The reveal', slot: 'FAIRWAY SHOT', name: 'Club strike (each shot)', def: 'Sounds/golf-hit.mp3', suggest: 'golfhit' },
+            { group: 'The reveal', slot: 'TEAM TOTAL',   name: 'Team final total',        def: 'Sounds/nsmb-new-high-score.mp3', suggest: 'triumph' },
+            { group: 'The reveal', slot: 'RANK UP',      name: 'Player moves up',         def: 'Sounds/nsmb-new-high-score.mp3', suggest: 'success' },
+            { group: 'The reveal', slot: 'RANK DOWN',    name: 'Player moves down',       def: 'Sounds/priceisrightfail_1.mp3',  suggest: 'sad' },
+            { group: 'The reveal', slot: 'TEAM RANK UP',   name: 'Team moves up',         def: 'Sounds/nsmb-new-high-score.mp3', suggest: 'triumph' },
+            { group: 'The reveal', slot: 'TEAM RANK DOWN', name: 'Team moves down',       def: 'Sounds/priceisrightfail_1.mp3',  suggest: 'sad' },
+            { group: 'Net countdown', slot: 'NET COUNTDOWN #1', name: 'Lowest net (winner)', def: 'Sounds/road-rash-64-first-place.mp3',  suggest: 'fanfare' },
+            { group: 'Net countdown', slot: 'NET COUNTDOWN #2', name: 'Second',              def: 'Sounds/road-rash-64-second-place.mp3', suggest: 'chime' },
+            { group: 'Net countdown', slot: 'NET COUNTDOWN #3', name: 'Third',               def: 'Sounds/road-rash-64-third-place.mp3',  suggest: 'chime' },
+            { group: 'Net countdown', slot: 'NET COUNTDOWN #4', name: 'Last place',          def: 'Sounds/road-rash-64-last-place.mp3',   suggest: 'sad' },
+            { group: 'Net countdown', slot: 'NET REPEAT WINNER', name: 'Repeat winner',      def: 'Sounds/road-rash-64-last-place.mp3',   suggest: 'crowd_ooh' },
+            { group: 'Match play', slot: 'CART RACE',   name: 'Race music',        def: null,                    suggest: 'riser' },
+            { group: 'Match play', slot: 'CART HOP',    name: 'Each hole in the race', def: 'Sounds/sound-frogger-hop.wav', suggest: 'hop' },
+            { group: 'Match play', slot: 'MATCH FINISH', name: 'Match won',        def: 'Sounds/you-win.mp3',    suggest: 'triumph' },
+            { group: 'Finale', slot: 'CHAMPION SONG', name: 'Champion Golfer',     def: 'Sounds/All-I-do-is-win.mp3' },
+            { group: 'Finale', slot: 'closing',       name: 'Closing slideshow',   def: 'Sounds/Straight-down-the-middle-full.mp3' }
+        ];
+
+        window.showSoundStudio = () => {
+            const app = document.getElementById('app');
+            const badgeSlots = Object.keys(window.__badgeSoundMap || {})
+                .filter(k => k !== 'DEFAULT').sort();
+            const groups = [...new Set(window.SOUND_SLOTS.map(s => s.group))];
+
+            const row = (s) => {
+                const cur = window.__soundOverrides[s.slot];
+                const kind = cur ? cur.kind : 'file';
+                const isDefault = !cur;
+                const desc = isDefault
+                    ? (s.def ? `Default · ${s.def.replace(/^Sounds\//, '')}` : 'No sound set')
+                    : (kind === 'synth' ? `Synth · ${(window.SYNTH_STINGS[cur.value] || {}).label || cur.value}`
+                    : kind === 'url' ? `URL · ${String(cur.value).slice(0, 46)}${String(cur.value).length > 46 ? '…' : ''}`
+                    : kind === 'none' ? 'Silent' : `File · ${cur.value}`);
+                const id = s.slot.replace(/[^a-zA-Z0-9]/g, '_');
+                return `
+                    <div style="border:1px solid #e5e7eb;border-radius:10px;padding:12px;margin-bottom:10px;background:${isDefault ? 'white' : '#f5f3ff'};">
+                        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+                            <div style="flex:1;min-width:180px;">
+                                <strong style="font-size:15px;">${s.name}</strong>
+                                <div style="font-size:12px;color:#6b7280;margin-top:2px;">${desc}</div>
+                            </div>
+                            <button onclick="testSlot('${s.slot.replace(/'/g, "\\'")}')" class="btn-secondary" style="padding:6px 14px;font-size:13px;">▶︎ Test</button>
+                        </div>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center;">
+                            <select id="synth_${id}" onchange="setSlotSynth('${s.slot.replace(/'/g, "\\'")}', this.value)"
+                                    style="padding:7px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;">
+                                <option value="">— synth sting —</option>
+                                ${Object.keys(window.SYNTH_STINGS).map(k =>
+                                    `<option value="${k}" ${kind === 'synth' && cur.value === k ? 'selected' : ''}>${window.SYNTH_STINGS[k].label}</option>`).join('')}
+                            </select>
+                            <input id="url_${id}" type="url" placeholder="or paste an audio URL (.mp3)"
+                                   value="${kind === 'url' ? String(cur.value).replace(/"/g, '&quot;') : ''}"
+                                   style="flex:1;min-width:190px;padding:7px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;">
+                            <button onclick="setSlotUrl('${s.slot.replace(/'/g, "\\'")}', document.getElementById('url_${id}').value)" class="btn-secondary" style="padding:7px 12px;font-size:12px;">Use URL</button>
+                            ${s.def ? `<button onclick="clearSlot('${s.slot.replace(/'/g, "\\'")}')" class="btn-secondary" style="padding:7px 12px;font-size:12px;">Default</button>` : ''}
+                            <button onclick="silenceSlot('${s.slot.replace(/'/g, "\\'")}')" class="btn-secondary" style="padding:7px 12px;font-size:12px;">🔇</button>
+                        </div>
+                    </div>`;
+            };
+
+            app.innerHTML = `
+                <button class="back-btn" onclick="navigate('home')">← Back</button>
+                <div class="card">
+                    <h2>🎚️ Sound Studio</h2>
+                    <p style="color:#6b7280;margin-bottom:10px;">
+                        Every moment in the presentation, and what it plays. Pick a
+                        <strong>synth sting</strong> (generated in the browser — nothing to upload),
+                        paste any <strong>audio URL</strong>, keep the bundled file, or silence it.
+                    </p>
+                    <div style="background:#eef2ff;border-radius:8px;padding:10px;font-size:13px;">
+                        <strong>Where to find free audio URLs:</strong> Pixabay, Free Music Archive and
+                        Incompetech all serve direct .mp3 links you can paste here. The link must end
+                        in an audio file — a page link (YouTube, Spotify) won't play.
+                        <br><span style="color:#6b7280;">Choices are saved on this device.</span>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3 style="margin:0 0 10px;">🎹 Try the synth stings</h3>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                        ${Object.keys(window.SYNTH_STINGS).map(k =>
+                            `<button onclick="playSynth('${k}')" class="btn-secondary" style="padding:8px 12px;font-size:13px;">${window.SYNTH_STINGS[k].label}</button>`).join('')}
+                    </div>
+                </div>
+
+                ${groups.map(g => `
+                    <div class="card">
+                        <h3 style="margin:0 0 12px;">${g}</h3>
+                        ${window.SOUND_SLOTS.filter(s => s.group === g).map(row).join('')}
+                    </div>`).join('')}
+
+                <div class="card">
+                    <h3 style="margin:0 0 6px;">🏅 Award stings</h3>
+                    <p style="font-size:12px;color:#6b7280;margin:0 0 12px;">One per award badge.</p>
+                    ${badgeSlots.map(k => row({ slot: k, name: k, def: window.__badgeSoundMap[k] })).join('')}
+                </div>
+
+                <div class="card">
+                    <button onclick="resetAllSlots()" class="btn-secondary" style="width:100%;background:#fee2e2;color:#991b1b;">
+                        ↩️ Reset every slot to its default
+                    </button>
+                </div>`;
+        };
+
+        window.testSlot = (slot) => {
+            const entry = (window.SOUND_SLOTS || []).find(s => s.slot === slot);
+            const def = entry ? entry.def : (window.__badgeSoundMap || {})[slot];
+            const wasMuted = window.__presentationMuted;
+            window.__presentationMuted = false;      // testing should always be audible
+            window.playSlot(slot, def, 0.9);
+            window.__presentationMuted = wasMuted;
+        };
+        window.setSlotSynth = (slot, name) => {
+            if (!name) { delete window.__soundOverrides[slot]; }
+            else { window.__soundOverrides[slot] = { kind: 'synth', value: name }; }
+            window.saveSoundOverrides();
+            if (name) window.playSynth(name, 0.9);
+            showSoundStudio();
+        };
+        window.setSlotUrl = (slot, url) => {
+            const u = (url || '').trim();
+            if (!u) { showError('Paste an audio URL first'); return; }
+            if (!/^https?:\/\//i.test(u)) { showError('URL must start with http:// or https://'); return; }
+            if (!/\.(mp3|wav|ogg|m4a|aac)(\?|$)/i.test(u)) {
+                if (!confirm('That link doesn\'t look like an audio file (.mp3, .wav, .ogg, .m4a).\n\nPage links such as YouTube or Spotify will not play.\n\nUse it anyway?')) return;
+            }
+            window.__soundOverrides[slot] = { kind: 'url', value: u };
+            window.saveSoundOverrides();
+            notify('🔗 URL set — testing it now');
+            window.testSlot(slot);
+            showSoundStudio();
+        };
+        window.clearSlot = (slot) => {
+            delete window.__soundOverrides[slot];
+            window.saveSoundOverrides();
+            showSoundStudio();
+        };
+        window.silenceSlot = (slot) => {
+            window.__soundOverrides[slot] = { kind: 'none' };
+            window.saveSoundOverrides();
+            showSoundStudio();
+        };
+        window.resetAllSlots = () => {
+            if (!confirm('Reset every sound slot back to its bundled default?')) return;
+            window.__soundOverrides = {};
+            window.saveSoundOverrides();
+            notify('↩️ All slots reset');
+            showSoundStudio();
+        };
+
         window.renderDoctors = () => {
             const app = document.getElementById('app');
             // Quick health signals so the page tells you whether anything needs attention
@@ -18991,7 +19158,179 @@
         // Sound slots are now fixed in code (the live override/audition layer was removed
         // for stability). Every play passes through this trivial resolver so slot names stay
         // meaningful and swapping a clip is a one-line code change.
-        window.resolveSoundSrc = (slot, defaultSrc) => defaultSrc;
+        // ═══════════════════════════════════════════════════════════════
+        // SYNTHESISED STINGS — generated in the browser, no files to host.
+        // Short punctuation (fanfares, whooshes, buzzers) doesn't need an MP3;
+        // the Web Audio API can produce it on demand with nothing to upload.
+        // ═══════════════════════════════════════════════════════════════
+        window.__audioCtx = null;
+        window.__getAudioCtx = () => {
+            try {
+                if (!window.__audioCtx) {
+                    const Ctx = window.AudioContext || window.webkitAudioContext;
+                    if (!Ctx) return null;
+                    window.__audioCtx = new Ctx();
+                }
+                if (window.__audioCtx.state === 'suspended') window.__audioCtx.resume();
+                return window.__audioCtx;
+            } catch (e) { return null; }
+        };
+
+        // A short burst of filtered noise — the basis of whooshes, hits and applause.
+        window.__noiseBuffer = null;
+        const _noise = (ctx) => {
+            if (!window.__noiseBuffer) {
+                const len = ctx.sampleRate * 2;
+                const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+                const data = buf.getChannelData(0);
+                for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+                window.__noiseBuffer = buf;
+            }
+            const src = ctx.createBufferSource();
+            src.buffer = window.__noiseBuffer;
+            return src;
+        };
+
+        // One oscillator note with an envelope.
+        const _tone = (ctx, out, { freq, type = 'sine', start = 0, dur = 0.3,
+                                   vol = 0.3, glideTo = null, attack = 0.01 }) => {
+            const o = ctx.createOscillator();
+            const g = ctx.createGain();
+            o.type = type;
+            o.frequency.setValueAtTime(freq, ctx.currentTime + start);
+            if (glideTo) o.frequency.exponentialRampToValueAtTime(
+                Math.max(1, glideTo), ctx.currentTime + start + dur);
+            g.gain.setValueAtTime(0.0001, ctx.currentTime + start);
+            g.gain.exponentialRampToValueAtTime(vol, ctx.currentTime + start + attack);
+            g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + start + dur);
+            o.connect(g); g.connect(out);
+            o.start(ctx.currentTime + start);
+            o.stop(ctx.currentTime + start + dur + 0.05);
+        };
+
+        const _noiseHit = (ctx, out, { start = 0, dur = 0.25, vol = 0.3,
+                                       from = 800, to = 200, q = 1, type = 'bandpass' }) => {
+            const n = _noise(ctx);
+            const f = ctx.createBiquadFilter();
+            const g = ctx.createGain();
+            f.type = type; f.Q.value = q;
+            f.frequency.setValueAtTime(from, ctx.currentTime + start);
+            f.frequency.exponentialRampToValueAtTime(Math.max(20, to), ctx.currentTime + start + dur);
+            g.gain.setValueAtTime(0.0001, ctx.currentTime + start);
+            g.gain.exponentialRampToValueAtTime(vol, ctx.currentTime + start + 0.02);
+            g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + start + dur);
+            n.connect(f); f.connect(g); g.connect(out);
+            n.start(ctx.currentTime + start);
+            n.stop(ctx.currentTime + start + dur + 0.05);
+        };
+
+        // The sting library. Each entry is { label, build(ctx, out) }.
+        window.SYNTH_STINGS = {
+            fanfare:    { label: '🎺 Fanfare', build: (c, o) => {
+                            [523, 659, 784, 1047].forEach((f, i) =>
+                                _tone(c, o, { freq: f, type: 'sawtooth', start: i * 0.11, dur: i === 3 ? 0.7 : 0.16, vol: 0.22 }));
+                            _tone(c, o, { freq: 261, type: 'triangle', start: 0.33, dur: 0.7, vol: 0.16 }); } },
+            triumph:    { label: '🏆 Triumph', build: (c, o) => {
+                            [392, 523, 659, 784, 1047].forEach((f, i) =>
+                                _tone(c, o, { freq: f, type: 'square', start: i * 0.08, dur: 0.5, vol: 0.14 })); } },
+            success:    { label: '✅ Success', build: (c, o) => {
+                            [523, 784].forEach((f, i) =>
+                                _tone(c, o, { freq: f, type: 'sine', start: i * 0.09, dur: 0.35, vol: 0.3 })); } },
+            chime:      { label: '🔔 Chime', build: (c, o) => {
+                            [880, 1320, 1760].forEach((f, i) =>
+                                _tone(c, o, { freq: f, type: 'sine', start: 0, dur: 1.2 - i * 0.2, vol: 0.16 / (i + 1) })); } },
+            sparkle:    { label: '✨ Sparkle', build: (c, o) => {
+                            for (let i = 0; i < 7; i++)
+                                _tone(c, o, { freq: 1200 + Math.random() * 1800, type: 'sine',
+                                              start: i * 0.055, dur: 0.28, vol: 0.13 }); } },
+            coin:       { label: '🪙 Coin', build: (c, o) => {
+                            _tone(c, o, { freq: 988, type: 'square', start: 0, dur: 0.08, vol: 0.22 });
+                            _tone(c, o, { freq: 1319, type: 'square', start: 0.07, dur: 0.35, vol: 0.22 }); } },
+            riser:      { label: '📈 Riser', build: (c, o) => {
+                            _tone(c, o, { freq: 180, type: 'sawtooth', start: 0, dur: 1.3, vol: 0.16, glideTo: 1400 });
+                            _noiseHit(c, o, { start: 0, dur: 1.3, vol: 0.12, from: 400, to: 6000, q: 2 }); } },
+            whoosh:     { label: '💨 Whoosh', build: (c, o) =>
+                            _noiseHit(c, o, { dur: 0.5, vol: 0.28, from: 2500, to: 180, q: 1.2 }) },
+            swoosh_up:  { label: '⬆️ Swoosh up', build: (c, o) =>
+                            _noiseHit(c, o, { dur: 0.45, vol: 0.26, from: 200, to: 4000, q: 1.5 }) },
+            thud:       { label: '🥁 Thud', build: (c, o) => {
+                            _tone(c, o, { freq: 160, type: 'sine', start: 0, dur: 0.35, vol: 0.4, glideTo: 45 }); } },
+            buzzer:     { label: '❌ Buzzer', build: (c, o) => {
+                            _tone(c, o, { freq: 150, type: 'square', start: 0, dur: 0.55, vol: 0.2 });
+                            _tone(c, o, { freq: 98, type: 'square', start: 0, dur: 0.55, vol: 0.2 }); } },
+            sad:        { label: '📉 Sad trombone', build: (c, o) => {
+                            [392, 370, 349, 311].forEach((f, i) =>
+                                _tone(c, o, { freq: f, type: 'sawtooth', start: i * 0.17, dur: 0.3, vol: 0.2 })); } },
+            drumroll:   { label: '🥁 Drum roll', build: (c, o) => {
+                            for (let i = 0; i < 26; i++)
+                                _noiseHit(c, o, { start: i * (0.055 - i * 0.0012), dur: 0.05, vol: 0.15, from: 900, to: 300, q: 1 });
+                            _noiseHit(c, o, { start: 1.15, dur: 0.9, vol: 0.3, from: 6000, to: 1200, q: 0.6, type: 'highpass' }); } },
+            applause:   { label: '👏 Applause', build: (c, o) => {
+                            for (let i = 0; i < 4; i++)
+                                _noiseHit(c, o, { start: i * 0.28, dur: 1.1, vol: 0.13 - i * 0.02, from: 3000, to: 1200, q: 0.5, type: 'highpass' }); } },
+            golfhit:    { label: '⛳ Club strike', build: (c, o) => {
+                            _noiseHit(c, o, { dur: 0.09, vol: 0.42, from: 5000, to: 900, q: 0.8 });
+                            _tone(c, o, { freq: 1400, type: 'triangle', start: 0, dur: 0.07, vol: 0.18 }); } },
+            hop:        { label: '🐸 Hop', build: (c, o) =>
+                            _tone(c, o, { freq: 420, type: 'square', start: 0, dur: 0.13, vol: 0.2, glideTo: 900 }) },
+            pop:        { label: '💥 Pop', build: (c, o) => {
+                            _tone(c, o, { freq: 700, type: 'triangle', start: 0, dur: 0.11, vol: 0.3, glideTo: 180 });
+                            _noiseHit(c, o, { dur: 0.1, vol: 0.2, from: 3000, to: 600 }); } },
+            tick:       { label: '⏱️ Tick', build: (c, o) =>
+                            _noiseHit(c, o, { dur: 0.04, vol: 0.25, from: 4000, to: 2000, q: 3 }) },
+            crowd_ooh:  { label: '😮 Crowd ooh', build: (c, o) => {
+                            _tone(c, o, { freq: 300, type: 'sawtooth', start: 0, dur: 0.9, vol: 0.1, glideTo: 480, attack: 0.25 });
+                            _noiseHit(c, o, { start: 0, dur: 0.9, vol: 0.07, from: 500, to: 1500, q: 0.7 }); } }
+        };
+
+        window.playSynth = (name, vol) => {
+            try {
+                if (window.__presentationMuted) return;
+                const sting = window.SYNTH_STINGS[name];
+                const ctx = window.__getAudioCtx();
+                if (!sting || !ctx) return;
+                const out = ctx.createGain();
+                out.gain.value = (vol != null ? vol : 0.9);
+                out.connect(ctx.destination);
+                sting.build(ctx, out);
+            } catch (e) { console.warn('Synth failed:', e); }
+        };
+
+        // ═══════════════════════════════════════════════════════════════
+        // SOUND SLOTS — a slot can point at a repo file, ANY URL, a synth
+        // sting, or nothing. Overrides live per device in localStorage.
+        // ═══════════════════════════════════════════════════════════════
+        window.__soundOverrides = (() => {
+            try { return JSON.parse(localStorage.getItem('dcSoundSlots') || '{}'); }
+            catch (e) { return {}; }
+        })();
+        window.saveSoundOverrides = () => {
+            try { localStorage.setItem('dcSoundSlots', JSON.stringify(window.__soundOverrides)); } catch (e) {}
+        };
+        // → { kind: 'file'|'url'|'synth'|'none', value }
+        window.resolveSound = (slot, defaultSrc) => {
+            const o = window.__soundOverrides[slot];
+            if (o && o.kind) return o;
+            return defaultSrc ? { kind: 'file', value: defaultSrc } : { kind: 'none' };
+        };
+        // Back-compat: existing callers ask for a src string.
+        window.resolveSoundSrc = (slot, defaultSrc) => {
+            const r = window.resolveSound(slot, defaultSrc);
+            return (r.kind === 'file' || r.kind === 'url') ? r.value : null;
+        };
+        // Play whatever a slot resolves to.
+        window.playSlot = (slot, defaultSrc, vol) => {
+            const r = window.resolveSound(slot, defaultSrc);
+            if (r.kind === 'none') return;
+            if (r.kind === 'synth') { window.playSynth(r.value, vol); return; }
+            if (window.__presentationMuted) return;
+            try {
+                const a = new Audio(encodeURI(r.value));
+                a.crossOrigin = 'anonymous';
+                a.volume = (vol != null) ? vol : 0.9;
+                a.play().catch(() => {});
+            } catch (e) {}
+        };
         
         // ─── Presentation music: one generic slide-track system ───
         // A slide "owns" at most one track (keyed). Render branches call playSlideTrack;
@@ -19003,7 +19342,10 @@
             if (window.__presentationMuted) return;
             if (window.__slideTrack && window.__slideTrack.key === key) return; // already playing
             window.stopSlideTrack();
-            const resolved = window.resolveSoundSrc(key, src);
+            const r = window.resolveSound(key, src);
+            if (r.kind === 'none') return;
+            if (r.kind === 'synth') { window.playSynth(r.value, opts.vol); return; }
+            const resolved = r.value;
             if (!resolved) return;
             try {
                 const a = new Audio(encodeURI(resolved));
@@ -19019,8 +19361,11 @@
         };
         // One-shot sound effect (position stingers etc.), slot-addressable.
         window.playSfx = (slot, src, vol) => {
+            const r = window.resolveSound(slot, src);
+            if (r.kind === 'none') return;
+            if (r.kind === 'synth') { window.playSynth(r.value, vol); return; }
             if (window.__presentationMuted) return;
-            const resolved = window.resolveSoundSrc(slot, src);
+            const resolved = r.value;
             if (!resolved) return;
             try {
                 const a = new Audio(encodeURI(resolved));
@@ -19499,13 +19844,17 @@
                 if (window.__presentationMuted) return;
                 const key = (tagline || 'DEFAULT').toString().toUpperCase().trim();
                 const mapped = window.__badgeSoundMap[key] || window.__badgeSoundMap['DEFAULT'];
-                const file = mapped;
+                const r = window.resolveSound(key, mapped);
+                if (r.kind === 'none') return;
+                if (r.kind === 'synth') { window.playSynth(r.value, 0.9); return; }
+                const file = r.value;
                 if (!file) return;
                 
                 // Reuse cached Audio if available (better for rapid replays)
                 let audio = window.__badgeAudioCache[file];
                 if (!audio) {
                     audio = new Audio(encodeURI(file));
+                    audio.crossOrigin = 'anonymous';
                     audio.preload = 'auto';
                     audio.volume = 0.7;
                     window.__badgeAudioCache[file] = audio;
@@ -19652,11 +20001,18 @@
         // mute and caching the Audio element for replays. Used for slide-specific signature tracks.
         window.playMp3File = (file, volume, slot) => {
             try {
+                if (slot) {
+                    const r = window.resolveSound(slot, file);
+                    if (r.kind === 'none') return;
+                    if (r.kind === 'synth') { window.playSynth(r.value, volume); return; }
+                    file = r.value;
+                }
                 if (window.__presentationMuted) return;
                 if (!file) return;
                 let audio = window.__badgeAudioCache[file];
                 if (!audio) {
                     audio = new Audio(encodeURI(file));
+                    audio.crossOrigin = 'anonymous';
                     audio.preload = 'auto';
                     window.__badgeAudioCache[file] = audio;
                 }
