@@ -714,7 +714,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.08.01.2';
+        const APP_VERSION = '2026.08.01.3';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -8032,6 +8032,25 @@
                 }
             }
 
+            // ── Variety across the event ──
+            // A storyline told on three of seven nights stops being a story. Count how
+            // often each has already run THIS event (from earlier run sheets) and damp
+            // its drama accordingly. Next year's event starts clean, because only rounds
+            // sharing this eventId are counted.
+            const told = {};
+            prior.forEach(r => {
+                (Array.isArray(r.runSheet) ? r.runSheet : []).forEach(s => {
+                    if (s && s.on) told[s.id] = (told[s.id] || 0) + 1;
+                });
+            });
+            S.forEach(s => {
+                s.toldBefore = told[s.id] || 0;
+                if (s.toldBefore) {
+                    // Steep for the first repeat, gentler after — a genuine lead change on
+                    // night six still deserves to lead, even if we've had one before.
+                    s.drama = Math.max(10, Math.round(s.drama - (18 + (s.toldBefore - 1) * 8)));
+                }
+            });
             S.sort((x, y) => y.drama - x.drama);
             return S;
         };
@@ -8099,6 +8118,16 @@
                             </option>`).join('')}
                         </select>
                         <span style="font-size:14px;color:#374151;"><strong>${onCount}</strong> of ${list.length} in the show</span>
+                        ${(() => {
+                            const evAll = (state.rounds || []).filter(r => r.eventId === round.eventId);
+                            const played = evAll.filter(r => r.active !== false)
+                                .sort((a, b) => (a.timestamp || a.id) - (b.timestamp || b.id));
+                            const n = played.findIndex(r => String(r.id) === String(round.id)) + 1;
+                            if (!n) return '';
+                            return `<span style="background:#eef2ff;color:#3730a3;font-size:13px;font-weight:800;padding:5px 12px;border-radius:999px;">
+                                Round ${n} of ${evAll.length}
+                            </span>`;
+                        })()}
                     </div>
                 </div>
 
@@ -8120,6 +8149,7 @@
                                     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                                         <span style="background:${heat(s.drama)};color:white;font-size:10px;font-weight:800;padding:2px 8px;border-radius:999px;">${s.kind.toUpperCase()}</span>
                                         <span style="font-size:11px;color:#6b7280;">drama ${s.drama}</span>
+                                        ${s.toldBefore ? `<span style="background:#fef3c7;color:#92400e;font-size:10px;font-weight:800;padding:2px 8px;border-radius:999px;">TOLD ${s.toldBefore}× THIS EVENT</span>` : ''}
                                     </div>
                                     <div style="font-weight:800;font-size:16px;margin-top:5px;">${s.headline}</div>
                                     <div style="font-size:13px;color:#4b5563;margin-top:3px;">${s.detail}</div>
@@ -13208,22 +13238,30 @@
                         });
                         
                         // Achievement awards (rollercoaster, steady eddie, etc.)
-                        // Which awards has this player already had recently? Repeating the
-                        // same badge for the same person every week is what makes the show
-                        // feel samey, so recent winners get deprioritised.
-                        const _recentFor = (() => {
-                            const seen = {};
-                            const prev = (eventRounds || [])
-                                .filter(r => r.id !== mostRecentRound.id)
-                                .sort((a, b) => (b.timestamp || b.id) - (a.timestamp || a.id))
-                                .slice(0, 3);
-                            prev.forEach((r, depth) => {
-                                ((r.awardLog || {})[playerSlide.playerName] || []).forEach(key => {
-                                    if (seen[key] == null) seen[key] = depth;   // 0 = last round
+                        // ── Variety is measured across the EVENT, not by calendar ──
+                        // The Cup runs on consecutive days and then not again for a year, so
+                        // "did they win this last week" is the wrong question. The right one is
+                        // "have they already had this badge during THESE seven days" — and next
+                        // year starts with a clean sheet, because only rounds in the same event
+                        // are counted.
+                        const _eventAwardStats = (() => {
+                            const priorRounds = (eventRounds || []).filter(r =>
+                                String(r.id) !== String(mostRecentRound.id)
+                                && (r.timestamp || r.id) < (mostRecentRound.timestamp || mostRecentRound.id));
+                            const byPlayer = {}, usedInEvent = {};
+                            priorRounds.forEach(r => {
+                                const log = r.awardLog || {};
+                                Object.keys(log).forEach(pname => {
+                                    (log[pname] || []).forEach(key => {
+                                        byPlayer[pname] = byPlayer[pname] || {};
+                                        byPlayer[pname][key] = (byPlayer[pname][key] || 0) + 1;
+                                        usedInEvent[key] = (usedInEvent[key] || 0) + 1;
+                                    });
                                 });
                             });
-                            return seen;
+                            return { byPlayer, usedInEvent, roundsPlayed: priorRounds.length };
                         })();
+                        const _minePrev = _eventAwardStats.byPlayer[playerSlide.playerName] || {};
 
                         _achievementAwards.forEach(spec => {
                             const winners = (presentationAnalytics.awards && presentationAnalytics.awards[spec.key]) || [];
@@ -13243,8 +13281,10 @@
                                     highlightLabel: (typeof spec.highlightLabel === 'function') ? spec.highlightLabel(won) : (spec.highlightLabel || ''),
                                     highlightConnect: !!spec.highlightConnect,
                                     holeIdx: (won.holeIdx != null) ? won.holeIdx : undefined,
-                                    // 0 = won it last round, 2 = three rounds ago, null = fresh
-                                    _recency: (_recentFor[spec.key] != null) ? _recentFor[spec.key] : null
+                                    // How often THIS player has had this badge already this event…
+                                    _seenByPlayer: _minePrev[spec.key] || 0,
+                                    // …and how often the badge has appeared at all this event.
+                                    _usedInEvent: _eventAwardStats.usedInEvent[spec.key] || 0
                                 });
                             }
                         });
@@ -13275,22 +13315,32 @@
                             });
                         }
                         
-                        // ── Rotation ──
-                        // Freshness first: an award this player hasn't had recently beats one
-                        // they won last week, so the same badge doesn't follow the same person
-                        // around all season. Then cap the count — three is a highlight reel,
-                        // eight is a list.
-                        const MAX_AWARDS_PER_PLAYER = 3;
-                        awards.sort((a, b) => {
-                            const ra = (a._recency == null) ? 99 : a._recency;
-                            const rb = (b._recency == null) ? 99 : b._recency;
-                            return rb - ra;   // never-won (99) first, won-last-round (0) last
-                        });
-                        playerSlide.playerAwards = awards.slice(0, MAX_AWARDS_PER_PLAYER);
-                        // Remember what was shown so next week can rotate away from it.
+                        // ── Rotation across the event ──
+                        // A player should not collect the same badge twice in one Cup while
+                        // any fresh one is available. Among fresh badges, prefer those the
+                        // field hasn't seen much this event, so the SEGMENT stays varied too —
+                        // Ice Man every night to a different player is still repetitive.
+                        const _fresh = awards.filter(a => !a._seenByPlayer)
+                            .sort((a, b) => (a._usedInEvent || 0) - (b._usedInEvent || 0));
+                        const _repeats = awards.filter(a => a._seenByPlayer)
+                            .sort((a, b) => (a._seenByPlayer - b._seenByPlayer)
+                                         || ((a._usedInEvent || 0) - (b._usedInEvent || 0)));
+
+                        // How many to show: with a long event there's plenty to go round, so
+                        // keep it tight and let variety do the work.
+                        const _eventLength = (eventRounds || []).length
+                            + (state.rounds || []).filter(r => r.eventId === mostRecentRound.eventId && r.active === false).length;
+                        const MAX_AWARDS_PER_PLAYER = _eventLength >= 5 ? 2 : 3;
+
+                        let _chosen = _fresh.slice(0, MAX_AWARDS_PER_PLAYER);
+                        // Only fall back to a repeat if they'd otherwise have nothing at all.
+                        if (_chosen.length === 0 && _repeats.length > 0) _chosen = _repeats.slice(0, 1);
+                        playerSlide.playerAwards = _chosen;
+
+                        // Log what was shown so later rounds in THIS event rotate away from it.
                         if (!mostRecentRound.awardLog) mostRecentRound.awardLog = {};
                         mostRecentRound.awardLog[playerSlide.playerName] =
-                            playerSlide.playerAwards.map(a => a.type).filter(Boolean);
+                            _chosen.map(a => a.type).filter(Boolean);
                     });
                 }
                 
