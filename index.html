@@ -714,7 +714,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.07.30.3';
+        const APP_VERSION = '2026.07.30.4';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -7523,6 +7523,22 @@
                 </div>
 
                 <div class="card">
+                    <h3 style="margin:0 0 10px;">🩺 Audio diagnostics</h3>
+                    <p style="font-size:13px;color:#6b7280;margin:0 0 10px;">
+                        If sound isn't playing, run this — it reports exactly which step fails
+                        instead of failing silently.
+                    </p>
+                    <button onclick="runAudioDiagnostics()" class="btn-primary" style="width:100%;background:#0891b2;">
+                        ▶︎ Run audio test
+                    </button>
+                    <div id="audioDiag" style="margin-top:10px;font-size:13px;font-family:ui-monospace,monospace;white-space:pre-wrap;"></div>
+                    <p style="font-size:12px;color:#6b7280;margin-top:10px;">
+                        On iPad, check the side switch isn't set to silent and that the volume is up —
+                        Safari respects both for web audio.
+                    </p>
+                </div>
+
+                <div class="card">
                     <h3 style="margin:0 0 10px;">🎹 Try the synth stings</h3>
                     <div style="display:flex;gap:8px;flex-wrap:wrap;">
                         ${Object.keys(window.SYNTH_STINGS).map(k =>
@@ -7554,6 +7570,53 @@
                         ↩️ Reset every slot to its default
                     </button>
                 </div>`;
+        };
+
+        // Report exactly where audio is failing, step by step.
+        window.runAudioDiagnostics = async () => {
+            const el = document.getElementById('audioDiag');
+            if (!el) return;
+            const lines = [];
+            const say = (ok, msg) => { lines.push((ok ? '✅ ' : '❌ ') + msg); el.innerHTML = lines.join('<br>'); };
+            el.textContent = 'Running…';
+
+            const OC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+            say(!!OC, 'OfflineAudioContext ' + (OC ? 'available' : 'MISSING — stings cannot render'));
+            const AC = window.AudioContext || window.webkitAudioContext;
+            say(!!AC, 'AudioContext ' + (AC ? 'available' : 'missing'));
+            say(!window.__presentationMuted, 'App mute is ' + (window.__presentationMuted ? 'ON — unmute it' : 'off'));
+
+            let url = null;
+            try {
+                url = await window.renderSting('chime');
+                say(!!url, url ? `Sting rendered (${Math.round(url.length / 1024)}KB WAV)` : 'Sting render returned nothing');
+            } catch (e) { say(false, 'Sting render threw: ' + e.message); }
+
+            if (url) {
+                try {
+                    const a = new Audio(url);
+                    a.volume = 0.9;
+                    await a.play();
+                    say(true, 'WAV playback started — you should have heard a chime');
+                } catch (e) {
+                    say(false, 'WAV playback blocked: ' + (e.name || e.message) +
+                        (String(e.name).indexOf('NotAllowed') >= 0
+                            ? ' — the browser wants a direct tap; try the button again'
+                            : ''));
+                }
+            }
+
+            try {
+                const f = new Audio('Sounds/you-win.mp3');
+                f.volume = 0.9;
+                await f.play();
+                say(true, 'Repo MP3 playback started (you-win.mp3)');
+            } catch (e) {
+                say(false, 'Repo MP3 blocked: ' + (e.name || e.message));
+            }
+
+            lines.push('<span style="color:#6b7280;">If every line is ✅ but you heard nothing, the device itself is muted.</span>');
+            el.innerHTML = lines.join('<br>');
         };
 
         window.testSlot = (slot) => {
@@ -19281,17 +19344,19 @@
             document.addEventListener(evt, window.__unlockAudio, { once: false, passive: true }));
 
         // A short burst of filtered noise — the basis of whooshes, hits and applause.
-        window.__noiseBuffer = null;
+        // Buffers belong to the context that created them, so cache per context.
+        window.__noiseBuffers = new WeakMap();
         const _noise = (ctx) => {
-            if (!window.__noiseBuffer) {
-                const len = ctx.sampleRate * 2;
-                const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+            let buf = window.__noiseBuffers.get(ctx);
+            if (!buf) {
+                const len = Math.floor(ctx.sampleRate * 2);
+                buf = ctx.createBuffer(1, len, ctx.sampleRate);
                 const data = buf.getChannelData(0);
                 for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
-                window.__noiseBuffer = buf;
+                window.__noiseBuffers.set(ctx, buf);
             }
             const src = ctx.createBufferSource();
-            src.buffer = window.__noiseBuffer;
+            src.buffer = buf;
             return src;
         };
 
@@ -19330,27 +19395,27 @@
 
         // The sting library. Each entry is { label, build(ctx, out) }.
         window.SYNTH_STINGS = {
-            fanfare:    { label: '🎺 Fanfare', build: (c, o) => {
+            fanfare:    { label: '🎺 Fanfare', len: 1.4, build: (c, o) => {
                             [523, 659, 784, 1047].forEach((f, i) =>
                                 _tone(c, o, { freq: f, type: 'sawtooth', start: i * 0.11, dur: i === 3 ? 0.7 : 0.16, vol: 0.22 }));
                             _tone(c, o, { freq: 261, type: 'triangle', start: 0.33, dur: 0.7, vol: 0.16 }); } },
-            triumph:    { label: '🏆 Triumph', build: (c, o) => {
+            triumph:    { label: '🏆 Triumph', len: 1.2, build: (c, o) => {
                             [392, 523, 659, 784, 1047].forEach((f, i) =>
                                 _tone(c, o, { freq: f, type: 'square', start: i * 0.08, dur: 0.5, vol: 0.14 })); } },
             success:    { label: '✅ Success', build: (c, o) => {
                             [523, 784].forEach((f, i) =>
                                 _tone(c, o, { freq: f, type: 'sine', start: i * 0.09, dur: 0.35, vol: 0.3 })); } },
-            chime:      { label: '🔔 Chime', build: (c, o) => {
+            chime:      { label: '🔔 Chime', len: 1.5, build: (c, o) => {
                             [880, 1320, 1760].forEach((f, i) =>
                                 _tone(c, o, { freq: f, type: 'sine', start: 0, dur: 1.2 - i * 0.2, vol: 0.16 / (i + 1) })); } },
-            sparkle:    { label: '✨ Sparkle', build: (c, o) => {
+            sparkle:    { label: '✨ Sparkle', len: 1.0, build: (c, o) => {
                             for (let i = 0; i < 7; i++)
                                 _tone(c, o, { freq: 1200 + Math.random() * 1800, type: 'sine',
                                               start: i * 0.055, dur: 0.28, vol: 0.13 }); } },
             coin:       { label: '🪙 Coin', build: (c, o) => {
                             _tone(c, o, { freq: 988, type: 'square', start: 0, dur: 0.08, vol: 0.22 });
                             _tone(c, o, { freq: 1319, type: 'square', start: 0.07, dur: 0.35, vol: 0.22 }); } },
-            riser:      { label: '📈 Riser', build: (c, o) => {
+            riser:      { label: '📈 Riser', len: 1.6, build: (c, o) => {
                             _tone(c, o, { freq: 180, type: 'sawtooth', start: 0, dur: 1.3, vol: 0.16, glideTo: 1400 });
                             _noiseHit(c, o, { start: 0, dur: 1.3, vol: 0.12, from: 400, to: 6000, q: 2 }); } },
             whoosh:     { label: '💨 Whoosh', build: (c, o) =>
@@ -19362,14 +19427,14 @@
             buzzer:     { label: '❌ Buzzer', build: (c, o) => {
                             _tone(c, o, { freq: 150, type: 'square', start: 0, dur: 0.55, vol: 0.2 });
                             _tone(c, o, { freq: 98, type: 'square', start: 0, dur: 0.55, vol: 0.2 }); } },
-            sad:        { label: '📉 Sad trombone', build: (c, o) => {
+            sad:        { label: '📉 Sad trombone', len: 1.2, build: (c, o) => {
                             [392, 370, 349, 311].forEach((f, i) =>
                                 _tone(c, o, { freq: f, type: 'sawtooth', start: i * 0.17, dur: 0.3, vol: 0.2 })); } },
-            drumroll:   { label: '🥁 Drum roll', build: (c, o) => {
+            drumroll:   { label: '🥁 Drum roll', len: 2.4, build: (c, o) => {
                             for (let i = 0; i < 26; i++)
                                 _noiseHit(c, o, { start: i * (0.055 - i * 0.0012), dur: 0.05, vol: 0.15, from: 900, to: 300, q: 1 });
                             _noiseHit(c, o, { start: 1.15, dur: 0.9, vol: 0.3, from: 6000, to: 1200, q: 0.6, type: 'highpass' }); } },
-            applause:   { label: '👏 Applause', build: (c, o) => {
+            applause:   { label: '👏 Applause', len: 2.2, build: (c, o) => {
                             for (let i = 0; i < 4; i++)
                                 _noiseHit(c, o, { start: i * 0.28, dur: 1.1, vol: 0.13 - i * 0.02, from: 3000, to: 1200, q: 0.5, type: 'highpass' }); } },
             golfhit:    { label: '⛳ Club strike', build: (c, o) => {
@@ -19382,30 +19447,69 @@
                             _noiseHit(c, o, { dur: 0.1, vol: 0.2, from: 3000, to: 600 }); } },
             tick:       { label: '⏱️ Tick', build: (c, o) =>
                             _noiseHit(c, o, { dur: 0.04, vol: 0.25, from: 4000, to: 2000, q: 3 }) },
-            crowd_ooh:  { label: '😮 Crowd ooh', build: (c, o) => {
+            crowd_ooh:  { label: '😮 Crowd ooh', len: 1.2, build: (c, o) => {
                             _tone(c, o, { freq: 300, type: 'sawtooth', start: 0, dur: 0.9, vol: 0.1, glideTo: 480, attack: 0.25 });
                             _noiseHit(c, o, { start: 0, dur: 0.9, vol: 0.07, from: 500, to: 1500, q: 0.7 }); } }
         };
 
+        // ── Stings are RENDERED to a WAV file, then played through <audio> ──
+        // Realtime Web Audio playback depends on unlocking a live AudioContext, which
+        // is unreliable on iOS. OfflineAudioContext just computes samples (no unlock
+        // needed), and the resulting file plays down the same path as the MP3s.
+        const _wavFromBuffer = (buf) => {
+            const ch = buf.getChannelData(0);
+            const len = ch.length;
+            const bytes = new ArrayBuffer(44 + len * 2);
+            const view = new DataView(bytes);
+            const str = (off, s) => { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); };
+            str(0, 'RIFF'); view.setUint32(4, 36 + len * 2, true); str(8, 'WAVE');
+            str(12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true);
+            view.setUint16(22, 1, true); view.setUint32(24, buf.sampleRate, true);
+            view.setUint32(28, buf.sampleRate * 2, true); view.setUint16(32, 2, true);
+            view.setUint16(34, 16, true); str(36, 'data'); view.setUint32(40, len * 2, true);
+            let off = 44;
+            for (let i = 0; i < len; i++) {
+                const s = Math.max(-1, Math.min(1, ch[i]));
+                view.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+                off += 2;
+            }
+            let bin = '';
+            const u8 = new Uint8Array(bytes);
+            for (let i = 0; i < u8.length; i++) bin += String.fromCharCode(u8[i]);
+            return 'data:audio/wav;base64,' + btoa(bin);
+        };
+
+        window.__stingCache = {};
+        window.renderSting = async (name) => {
+            if (window.__stingCache[name]) return window.__stingCache[name];
+            const sting = window.SYNTH_STINGS[name];
+            if (!sting) return null;
+            const OC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+            if (!OC) return null;
+            const rate = 22050;
+            const secs = sting.len || 2;
+            const oc = new OC(1, Math.floor(rate * secs), rate);
+            const out = oc.createGain();
+            out.gain.value = 0.9;
+            out.connect(oc.destination);
+            sting.build(oc, out);
+            const rendered = await (oc.startRendering().then ? oc.startRendering()
+                : new Promise(res => { oc.oncomplete = e => res(e.renderedBuffer); oc.startRendering(); }));
+            const url = _wavFromBuffer(rendered);
+            window.__stingCache[name] = url;
+            return url;
+        };
+
         window.playSynth = (name, vol) => {
-            try {
-                if (window.__presentationMuted) return;
-                const sting = window.SYNTH_STINGS[name];
-                const ctx = window.__getAudioCtx();
-                if (!sting || !ctx) return;
-                const build = () => {
-                    try {
-                        const out = ctx.createGain();
-                        out.gain.value = (vol != null ? vol : 0.9);
-                        out.connect(ctx.destination);
-                        sting.build(ctx, out);
-                    } catch (e) { console.warn('Sting build failed:', e); }
-                };
-                // resume() is a PROMISE. Building before it settles schedules notes into
-                // a suspended context, which is silent — wait for it.
-                if (ctx.state === 'suspended') ctx.resume().then(build).catch(build);
-                else build();
-            } catch (e) { console.warn('Synth failed:', e); }
+            if (window.__presentationMuted) return;
+            if (!window.SYNTH_STINGS[name]) { console.warn('Unknown sting:', name); return; }
+            window.renderSting(name).then(url => {
+                if (!url) { console.warn('Sting render returned nothing:', name); return; }
+                const a = new Audio(url);
+                a.volume = (vol != null ? vol : 0.9);
+                const p = a.play();
+                if (p && p.catch) p.catch(err => console.warn('Sting playback blocked:', name, err && err.name));
+            }).catch(err => console.warn('Sting render failed:', name, err));
         };
 
         // ═══════════════════════════════════════════════════════════════
