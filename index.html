@@ -714,7 +714,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.07.30.2';
+        const APP_VERSION = '2026.07.30.3';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -2821,6 +2821,7 @@
                 renderSettings();
             } else if (state.view === 'soundstudio') {
                 showSoundStudio();
+                if ((window.__soundLibrary || []).length === 0) window.loadSoundLibrary(true);
             } else if (state.view === 'doctors') {
                 renderDoctors();
             } else if (state.view === 'roundDoctor') {
@@ -7465,8 +7466,8 @@
                 const desc = isDefault
                     ? (s.def ? `Default · ${s.def.replace(/^Sounds\//, '')}` : 'No sound set')
                     : (kind === 'synth' ? `Synth · ${(window.SYNTH_STINGS[cur.value] || {}).label || cur.value}`
-                    : kind === 'url' ? `URL · ${String(cur.value).slice(0, 46)}${String(cur.value).length > 46 ? '…' : ''}`
-                    : kind === 'none' ? 'Silent' : `File · ${cur.value}`);
+                    : kind === 'none' ? 'Silent'
+                    : `File · ${String(cur.value).replace(/^Sounds\//, '')}`);
                 const id = s.slot.replace(/[^a-zA-Z0-9]/g, '_');
                 return `
                     <div style="border:1px solid #e5e7eb;border-radius:10px;padding:12px;margin-bottom:10px;background:${isDefault ? 'white' : '#f5f3ff'};">
@@ -7484,10 +7485,15 @@
                                 ${Object.keys(window.SYNTH_STINGS).map(k =>
                                     `<option value="${k}" ${kind === 'synth' && cur.value === k ? 'selected' : ''}>${window.SYNTH_STINGS[k].label}</option>`).join('')}
                             </select>
-                            <input id="url_${id}" type="url" placeholder="or paste an audio URL (.mp3)"
-                                   value="${kind === 'url' ? String(cur.value).replace(/"/g, '&quot;') : ''}"
-                                   style="flex:1;min-width:190px;padding:7px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;">
-                            <button onclick="setSlotUrl('${s.slot.replace(/'/g, "\\'")}', document.getElementById('url_${id}').value)" class="btn-secondary" style="padding:7px 12px;font-size:12px;">Use URL</button>
+                            <select onchange="setSlotFile('${s.slot.replace(/'/g, "\\'")}', this.value)"
+                                    style="flex:1;min-width:190px;padding:7px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;">
+                                <option value="">— file from Sounds/ —</option>
+                                ${(window.__soundLibrary || []).map(f =>
+                                    `<option value="${f}" ${kind === 'file' && cur && String(cur.value) === 'Sounds/' + f ? 'selected' : ''}>${f}</option>`).join('')}
+                            </select>
+                            <input type="file" accept="audio/*" id="up_${id}" style="display:none;"
+                                   onchange="uploadSoundFile(event, '${s.slot.replace(/'/g, "\\'")}')">
+                            <button onclick="document.getElementById('up_${id}').click()" class="btn-secondary" style="padding:7px 12px;font-size:12px;background:#0891b2;color:white;">⬆️ Upload</button>
                             ${s.def ? `<button onclick="clearSlot('${s.slot.replace(/'/g, "\\'")}')" class="btn-secondary" style="padding:7px 12px;font-size:12px;">Default</button>` : ''}
                             <button onclick="silenceSlot('${s.slot.replace(/'/g, "\\'")}')" class="btn-secondary" style="padding:7px 12px;font-size:12px;">🔇</button>
                         </div>
@@ -7504,10 +7510,15 @@
                         paste any <strong>audio URL</strong>, keep the bundled file, or silence it.
                     </p>
                     <div style="background:#eef2ff;border-radius:8px;padding:10px;font-size:13px;">
-                        <strong>Where to find free audio URLs:</strong> Pixabay, Free Music Archive and
-                        Incompetech all serve direct .mp3 links you can paste here. The link must end
-                        in an audio file — a page link (YouTube, Spotify) won't play.
-                        <br><span style="color:#6b7280;">Choices are saved on this device.</span>
+                        <strong>⬆️ Upload</strong> puts a file straight into the repo's Sounds/ folder
+                        and assigns it — the iOS file picker includes Google Drive, iCloud and Files,
+                        so you can pull audio from anywhere on the device.
+                        <div style="margin-top:8px;">
+                            <button onclick="setGhToken()" class="btn-secondary" style="padding:6px 12px;font-size:12px;">
+                                🔑 ${window.getGhToken() ? 'Change' : 'Add'} upload token
+                            </button>
+                            <span style="color:#6b7280;margin-left:8px;">${window.getGhToken() ? 'Uploads enabled on this device' : 'Needed once before uploading'}</span>
+                        </div>
                     </div>
                 </div>
 
@@ -7532,6 +7543,13 @@
                 </div>
 
                 <div class="card">
+                    <p style="font-size:12px;color:#6b7280;margin:0;">
+                        ${(window.__soundLibrary || []).length} file${(window.__soundLibrary || []).length === 1 ? '' : 's'} in the Sounds/ folder.
+                        <button onclick="loadSoundLibrary(true)" class="btn-secondary" style="padding:4px 10px;font-size:12px;margin-left:8px;">↻ Refresh list</button>
+                    </p>
+                </div>
+
+                <div class="card">
                     <button onclick="resetAllSlots()" class="btn-secondary" style="width:100%;background:#fee2e2;color:#991b1b;">
                         ↩️ Reset every slot to its default
                     </button>
@@ -7553,18 +7571,89 @@
             if (name) window.playSynth(name, 0.9);
             showSoundStudio();
         };
-        window.setSlotUrl = (slot, url) => {
-            const u = (url || '').trim();
-            if (!u) { showError('Paste an audio URL first'); return; }
-            if (!/^https?:\/\//i.test(u)) { showError('URL must start with http:// or https://'); return; }
-            if (!/\.(mp3|wav|ogg|m4a|aac)(\?|$)/i.test(u)) {
-                if (!confirm('That link doesn\'t look like an audio file (.mp3, .wav, .ogg, .m4a).\n\nPage links such as YouTube or Spotify will not play.\n\nUse it anyway?')) return;
-            }
-            window.__soundOverrides[slot] = { kind: 'url', value: u };
+        window.setSlotFile = (slot, fileName) => {
+            if (!fileName) { delete window.__soundOverrides[slot]; }
+            else { window.__soundOverrides[slot] = { kind: 'file', value: 'Sounds/' + fileName }; }
             window.saveSoundOverrides();
-            notify('🔗 URL set — testing it now');
-            window.testSlot(slot);
+            if (fileName) window.testSlot(slot);
             showSoundStudio();
+        };
+
+        // ── The Sounds/ library, read straight from the repo ──
+        window.__soundLibrary = [];
+        window.loadSoundLibrary = (thenRender) => {
+            fetch('https://api.github.com/repos/ronmooibroek/DutchCup/contents/Sounds?t=' + Date.now())
+                .then(r => r.ok ? r.json() : [])
+                .then(items => {
+                    window.__soundLibrary = Array.isArray(items)
+                        ? items.filter(i => i && i.type === 'file' && /\.(mp3|wav|ogg|m4a)$/i.test(i.name))
+                               .map(i => i.name).sort((a, b) => a.localeCompare(b))
+                        : [];
+                    if (thenRender) showSoundStudio();
+                })
+                .catch(() => { if (thenRender) showSoundStudio(); });
+        };
+
+        // ── Upload an audio file straight into the repo's Sounds/ folder ──
+        // Uses a GitHub token stored ONLY in this browser's localStorage. It is never
+        // committed and never leaves the device except to call GitHub's API.
+        window.getGhToken = () => {
+            try { return localStorage.getItem('dcGhToken') || ''; } catch (e) { return ''; }
+        };
+        window.setGhToken = () => {
+            const cur = window.getGhToken();
+            const t = prompt(
+                'GitHub token for uploading sounds\n\n' +
+                'Create a fine-grained token limited to the DutchCup repository with\n' +
+                'Contents: Read and write, then paste it here.\n\n' +
+                'It is stored only in this browser and never committed.',
+                cur);
+            if (t === null) return;
+            try { localStorage.setItem('dcGhToken', t.trim()); } catch (e) {}
+            notify(t.trim() ? '🔑 Token saved on this device' : 'Token cleared');
+            showSoundStudio();
+        };
+        window.uploadSoundFile = (ev, slot) => {
+            const file = ev && ev.target && ev.target.files && ev.target.files[0];
+            if (ev && ev.target) ev.target.value = '';
+            if (!file) return;
+            const token = window.getGhToken();
+            if (!token) { showError('Add a GitHub token first (🔑 button)'); return; }
+            if (file.size > 8 * 1024 * 1024) { showError('That file is over 8MB — please trim it first'); return; }
+            const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '-');
+            notify('⏳ Uploading ' + safeName + '…');
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                try {
+                    const b64 = String(e.target.result).split(',')[1];
+                    const url = 'https://api.github.com/repos/ronmooibroek/DutchCup/contents/Sounds/' + encodeURIComponent(safeName);
+                    // Replace the file if it already exists
+                    let sha = null;
+                    try {
+                        const head = await fetch(url + '?ref=main', { headers: { Authorization: 'Bearer ' + token } });
+                        if (head.ok) sha = (await head.json()).sha;
+                    } catch (err) {}
+                    const body = { message: 'Add sound ' + safeName + ' (via Dutch Cup app)', content: b64, branch: 'main' };
+                    if (sha) body.sha = sha;
+                    const res = await fetch(url, {
+                        method: 'PUT',
+                        headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+                        body: JSON.stringify(body)
+                    });
+                    if (!res.ok) {
+                        const err = await res.json().catch(() => ({}));
+                        showError('Upload failed: ' + (err.message || res.status));
+                        return;
+                    }
+                    notify('✅ ' + safeName + ' uploaded');
+                    if (slot) window.setSlotFile(slot, safeName);
+                    window.loadSoundLibrary(true);
+                } catch (err) {
+                    console.error('Upload error:', err);
+                    showError('Upload failed: ' + err.message);
+                }
+            };
+            reader.readAsDataURL(file);
         };
         window.clearSlot = (slot) => {
             delete window.__soundOverrides[slot];
@@ -19171,10 +19260,25 @@
                     if (!Ctx) return null;
                     window.__audioCtx = new Ctx();
                 }
-                if (window.__audioCtx.state === 'suspended') window.__audioCtx.resume();
                 return window.__audioCtx;
             } catch (e) { return null; }
         };
+
+        // iOS starts every AudioContext suspended and only lets it wake inside a real
+        // user gesture. Unlock on the first touch anywhere, and play a silent buffer —
+        // without this, notes get scheduled into a sleeping context and are never heard.
+        window.__unlockAudio = () => {
+            const ctx = window.__getAudioCtx();
+            if (!ctx) return;
+            if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+            try {
+                const b = ctx.createBuffer(1, 1, 22050);
+                const s = ctx.createBufferSource();
+                s.buffer = b; s.connect(ctx.destination); s.start(0);
+            } catch (e) {}
+        };
+        ['touchstart', 'touchend', 'mousedown', 'click', 'keydown'].forEach(evt =>
+            document.addEventListener(evt, window.__unlockAudio, { once: false, passive: true }));
 
         // A short burst of filtered noise — the basis of whooshes, hits and applause.
         window.__noiseBuffer = null;
@@ -19289,10 +19393,18 @@
                 const sting = window.SYNTH_STINGS[name];
                 const ctx = window.__getAudioCtx();
                 if (!sting || !ctx) return;
-                const out = ctx.createGain();
-                out.gain.value = (vol != null ? vol : 0.9);
-                out.connect(ctx.destination);
-                sting.build(ctx, out);
+                const build = () => {
+                    try {
+                        const out = ctx.createGain();
+                        out.gain.value = (vol != null ? vol : 0.9);
+                        out.connect(ctx.destination);
+                        sting.build(ctx, out);
+                    } catch (e) { console.warn('Sting build failed:', e); }
+                };
+                // resume() is a PROMISE. Building before it settles schedules notes into
+                // a suspended context, which is silent — wait for it.
+                if (ctx.state === 'suspended') ctx.resume().then(build).catch(build);
+                else build();
             } catch (e) { console.warn('Synth failed:', e); }
         };
 
@@ -19326,7 +19438,6 @@
             if (window.__presentationMuted) return;
             try {
                 const a = new Audio(encodeURI(r.value));
-                a.crossOrigin = 'anonymous';
                 a.volume = (vol != null) ? vol : 0.9;
                 a.play().catch(() => {});
             } catch (e) {}
@@ -19854,7 +19965,6 @@
                 let audio = window.__badgeAudioCache[file];
                 if (!audio) {
                     audio = new Audio(encodeURI(file));
-                    audio.crossOrigin = 'anonymous';
                     audio.preload = 'auto';
                     audio.volume = 0.7;
                     window.__badgeAudioCache[file] = audio;
@@ -20012,7 +20122,6 @@
                 let audio = window.__badgeAudioCache[file];
                 if (!audio) {
                     audio = new Audio(encodeURI(file));
-                    audio.crossOrigin = 'anonymous';
                     audio.preload = 'auto';
                     window.__badgeAudioCache[file] = audio;
                 }
