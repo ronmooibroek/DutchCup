@@ -714,7 +714,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.07.30.4';
+        const APP_VERSION = '2026.07.30.5';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -19493,8 +19493,16 @@
             out.gain.value = 0.9;
             out.connect(oc.destination);
             sting.build(oc, out);
-            const rendered = await (oc.startRendering().then ? oc.startRendering()
-                : new Promise(res => { oc.oncomplete = e => res(e.renderedBuffer); oc.startRendering(); }));
+            // startRendering() may only be called ONCE per context. Testing its return
+            // type by calling it, then calling it again in the branch, threw
+            // "Rendering was already started" — so set the legacy callback first, call
+            // it exactly once, and take whichever form of completion arrives.
+            const legacyDone = new Promise(res => { oc.oncomplete = e => res(e.renderedBuffer); });
+            const maybePromise = oc.startRendering();
+            const rendered = (maybePromise && typeof maybePromise.then === 'function')
+                ? await maybePromise
+                : await legacyDone;
+            if (!rendered) return null;
             const url = _wavFromBuffer(rendered);
             window.__stingCache[name] = url;
             return url;
