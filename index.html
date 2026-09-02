@@ -714,7 +714,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.08.01.3';
+        const APP_VERSION = '2026.08.02.1';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -14499,6 +14499,34 @@
                 
                 // Add keyboard event listener
                 document.addEventListener('keydown', window.presentationKeyHandler);
+
+                // Warm the audio cache now, inside the tap that opened the presentation.
+                // Decoding here means every later cue — including ones fired from timers —
+                // plays instantly from memory instead of racing a network fetch.
+                try {
+                    window.__unlockAudio();
+                    // Long music (anthem, walk-on, closing, champion song) keeps streaming
+                    // through an Audio element — decoding minutes of MP3 into memory on an
+                    // iPad is wasteful, and those start on a tap anyway. Only the short cues
+                    // that fire from timers need to be resident.
+                    const TRACK_SLOTS = ['anthem', 'field', 'closing', 'divAwards', 'divMatches', 'CHAMPION SONG'];
+                    const srcs = [];
+                    (window.SOUND_SLOTS || []).forEach(s => {
+                        if (TRACK_SLOTS.indexOf(s.slot) >= 0) return;
+                        const r = window.resolveSound(s.slot, s.def);
+                        if (r && (r.kind === 'file' || r.kind === 'url') && r.value) srcs.push(r.value);
+                    });
+                    Object.keys(window.__badgeSoundMap || {}).forEach(k => {
+                        const r = window.resolveSound(k, window.__badgeSoundMap[k]);
+                        if (r && (r.kind === 'file' || r.kind === 'url') && r.value) srcs.push(r.value);
+                    });
+                    window.preloadSounds([...new Set(srcs)]);
+                    // Pre-render any synth stings assigned to a slot
+                    Object.keys(window.__soundOverrides || {}).forEach(slot => {
+                        const o = window.__soundOverrides[slot];
+                        if (o && o.kind === 'synth') window.renderSting(o.value).catch(() => {});
+                    });
+                } catch (e) { console.warn('Audio preload skipped:', e); }
                 
                 // Render presentation
                 renderPresentation();
@@ -19515,7 +19543,18 @@
             }
         };
 
+        // Advancing should never wait on an animation or a sound. Clear the timers
+        // that drive the fairway reveal / cart race / slideshow, and cut any one-shot
+        // effect still ringing, so every tap or arrow key acts immediately.
+        window.__interruptSlide = () => {
+            [ '__teamDialTimer', '__cartRaceTimer', '__closingLoopTimer' ].forEach(k => {
+                if (window[k]) { try { clearInterval(window[k]); clearTimeout(window[k]); } catch (e) {} window[k] = null; }
+            });
+            try { window.stopAllSounds(); } catch (e) {}
+        };
+
         window.nextPresentationSlide = () => {
+            window.__interruptSlide();
             // Translate presentation-space → content-space first
             const _navMap = presentationState._presentationMap || [];
             const _navEntry = _navMap[presentationState.currentSlide];
@@ -19632,6 +19671,7 @@
         };
         
         window.previousPresentationSlide = () => {
+            window.__interruptSlide();
             // Translate presentation-space → content-space first so all sub-step checks work uniformly
             const _navMapPre = presentationState._presentationMap || [];
             const _entryPre = _navMapPre[presentationState.currentSlide];
@@ -20257,10 +20297,8 @@
             if (!window.SYNTH_STINGS[name]) { console.warn('Unknown sting:', name); return; }
             window.renderSting(name).then(url => {
                 if (!url) { console.warn('Sting render returned nothing:', name); return; }
-                const a = new Audio(url);
-                a.volume = (vol != null ? vol : 0.9);
-                const p = a.play();
-                if (p && p.catch) p.catch(err => console.warn('Sting playback blocked:', name, err && err.name));
+                // Same buffer path as every other sound, so stings fire from timers too.
+                window.playFile(url, (vol != null ? vol : 0.9), false);
             }).catch(err => console.warn('Sting render failed:', name, err));
         };
 
@@ -20287,6 +20325,83 @@
             return (r.kind === 'file' || r.kind === 'url') ? r.value : null;
         };
         // Play whatever a slot resolves to.
+        // ═══════════════════════════════════════════════════════════════
+        // BUFFER PLAYBACK — the fix for "sounds mostly don't play"
+        // Almost every presentation sound fires from a setTimeout (the club
+        // strike 800ms into a swing, cart hops, countdown stings). On iOS a
+        // freshly created Audio element calling play() OUTSIDE a user gesture
+        // is blocked — which is why sound worked on some taps and not others.
+        // A single unlocked AudioContext playing pre-decoded buffers has no
+        // such restriction, so timers can fire sound reliably.
+        // ═══════════════════════════════════════════════════════════════
+        window.__bufCache = {};
+        window.__liveSources = [];
+        window.loadBuffer = async (src) => {
+            if (window.__bufCache[src]) return window.__bufCache[src];
+            const ctx = window.__getAudioCtx();
+            if (!ctx) return null;
+            const res = await fetch(encodeURI(src));
+            if (!res.ok) throw new Error('fetch ' + res.status);
+            const arr = await res.arrayBuffer();
+            const buf = await new Promise((ok, no) => {
+                // Safari still wants the callback form
+                const p = ctx.decodeAudioData(arr, ok, no);
+                if (p && p.then) p.then(ok).catch(no);
+            });
+            window.__bufCache[src] = buf;
+            return buf;
+        };
+        window.playBuffer = (buf, vol, loop) => {
+            const ctx = window.__getAudioCtx();
+            if (!ctx || !buf) return null;
+            const s = ctx.createBufferSource();
+            const g = ctx.createGain();
+            g.gain.value = (vol != null) ? vol : 0.9;
+            s.buffer = buf;
+            s.loop = !!loop;
+            s.connect(g); g.connect(ctx.destination);
+            try { s.start(0); } catch (e) { return null; }
+            window.__liveSources.push(s);
+            s.onended = () => {
+                const i = window.__liveSources.indexOf(s);
+                if (i >= 0) window.__liveSources.splice(i, 1);
+            };
+            return s;
+        };
+        // Play a file through the buffer path, falling back to an Audio element.
+        window.playFile = (src, vol, loop) => {
+            const ctx = window.__getAudioCtx();
+            const go = () => {
+                const cached = window.__bufCache[src];
+                if (cached) return window.playBuffer(cached, vol, loop);
+                window.loadBuffer(src)
+                    .then(b => { if (b) window.playBuffer(b, vol, loop); })
+                    .catch(() => {
+                        try {
+                            const a = new Audio(encodeURI(src));
+                            a.volume = (vol != null) ? vol : 0.9;
+                            a.loop = !!loop;
+                            a.play().catch(() => {});
+                        } catch (e) {}
+                    });
+                return null;
+            };
+            if (ctx && ctx.state === 'suspended') { ctx.resume().then(go).catch(go); return null; }
+            return go();
+        };
+        // Stop everything immediately — used when advancing a slide.
+        window.stopAllSounds = () => {
+            (window.__liveSources || []).forEach(s => { try { s.stop(0); } catch (e) {} });
+            window.__liveSources = [];
+        };
+        // Warm the cache for a whole deck while we still have a user gesture.
+        window.preloadSounds = (list) => {
+            (list || []).forEach(src => {
+                if (!src || window.__bufCache[src]) return;
+                window.loadBuffer(src).catch(() => {});
+            });
+        };
+
         window.playSlot = (slot, defaultSrc, vol) => {
             const r = window.resolveSound(slot, defaultSrc);
             if (r.kind === 'none') return;
@@ -20334,6 +20449,11 @@
             if (window.__presentationMuted) return;
             const resolved = r.value;
             if (!resolved) return;
+            // Buffer path: works from timers, unlike a fresh Audio element on iOS.
+            // playFile owns playback entirely (including its own Audio fallback), so
+            // there is nothing to do afterwards either way.
+            window.playFile(resolved, (vol != null) ? vol : 0.9, false);
+            return;
             try {
                 const a = new Audio(encodeURI(resolved));
                 a.volume = (vol != null) ? vol : 0.9;
