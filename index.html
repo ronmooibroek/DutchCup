@@ -714,7 +714,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.08.02.1';
+        const APP_VERSION = '2026.08.02.2';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -7591,42 +7591,52 @@
             const say = (ok, msg) => { lines.push((ok ? '✅ ' : '❌ ') + msg); el.innerHTML = lines.join('<br>'); };
             el.textContent = 'Running…';
 
-            const OC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
-            say(!!OC, 'OfflineAudioContext ' + (OC ? 'available' : 'MISSING — stings cannot render'));
-            const AC = window.AudioContext || window.webkitAudioContext;
-            say(!!AC, 'AudioContext ' + (AC ? 'available' : 'missing'));
+            window.unlockAudio();
+            say(window.audioReady, window.audioReady
+                ? `Audio pool unlocked (${window.__pool.length} channels + music)`
+                : 'Audio pool NOT unlocked');
             say(!window.__presentationMuted, 'App mute is ' + (window.__presentationMuted ? 'ON — unmute it' : 'off'));
 
-            let url = null;
-            try {
-                url = await window.renderSting('chime');
-                say(!!url, url ? `Sting rendered (${Math.round(url.length / 1024)}KB WAV)` : 'Sting render returned nothing');
-            } catch (e) { say(false, 'Sting render threw: ' + e.message); }
+            // A repo file through the real playback path
+            await new Promise(res => {
+                const a = window.playFile('Sounds/you-win.mp3', 0.9);
+                setTimeout(() => {
+                    const playing = a && !a.paused && a.currentTime > 0;
+                    say(playing, playing ? 'Repo MP3 is playing (you-win.mp3)'
+                        : 'Repo MP3 did not start' + (window.audioLastError ? ' — ' + window.audioLastError : ''));
+                    res();
+                }, 700);
+            });
 
-            if (url) {
-                try {
-                    const a = new Audio(url);
-                    a.volume = 0.9;
-                    await a.play();
-                    say(true, 'WAV playback started — you should have heard a chime');
-                } catch (e) {
-                    say(false, 'WAV playback blocked: ' + (e.name || e.message) +
-                        (String(e.name).indexOf('NotAllowed') >= 0
-                            ? ' — the browser wants a direct tap; try the button again'
-                            : ''));
+            // A synth sting through the same path
+            try {
+                const url = await window.renderSting('chime');
+                say(!!url, url ? `Sting rendered (${Math.round(url.length / 1024)}KB)` : 'Sting render failed');
+                if (url) {
+                    await new Promise(res => {
+                        const a = window.playFile(url, 0.9);
+                        setTimeout(() => {
+                            const playing = a && !a.paused && a.currentTime > 0;
+                            say(playing, playing ? 'Sting is playing — you should hear a chime'
+                                : 'Sting did not start' + (window.audioLastError ? ' — ' + window.audioLastError : ''));
+                            res();
+                        }, 700);
+                    });
                 }
-            }
+            } catch (e) { say(false, 'Sting failed: ' + e.message); }
 
-            try {
-                const f = new Audio('Sounds/you-win.mp3');
-                f.volume = 0.9;
-                await f.play();
-                say(true, 'Repo MP3 playback started (you-win.mp3)');
-            } catch (e) {
-                say(false, 'Repo MP3 blocked: ' + (e.name || e.message));
-            }
+            // Music channel
+            await new Promise(res => {
+                const m = window.playMusic('Sounds/you-win.mp3', 0.5, false);
+                setTimeout(() => {
+                    const playing = m && !m.paused && m.currentTime > 0;
+                    say(playing, playing ? 'Music channel is playing' : 'Music channel did not start');
+                    window.stopMusic();
+                    res();
+                }, 700);
+            });
 
-            lines.push('<span style="color:#6b7280;">If every line is ✅ but you heard nothing, the device itself is muted.</span>');
+            lines.push('<span style="color:#6b7280;">All ✅ but silent? Check the iPad side switch and volume.</span>');
             el.innerHTML = lines.join('<br>');
         };
 
@@ -14504,7 +14514,7 @@
                 // Decoding here means every later cue — including ones fired from timers —
                 // plays instantly from memory instead of racing a network fetch.
                 try {
-                    window.__unlockAudio();
+                    window.unlockAudio();
                     // Long music (anthem, walk-on, closing, champion song) keeps streaming
                     // through an Audio element — decoding minutes of MP3 into memory on an
                     // iPad is wasteful, and those start on a tap anyway. Only the short cues
@@ -14521,11 +14531,9 @@
                         if (r && (r.kind === 'file' || r.kind === 'url') && r.value) srcs.push(r.value);
                     });
                     window.preloadSounds([...new Set(srcs)]);
-                    // Pre-render any synth stings assigned to a slot
-                    Object.keys(window.__soundOverrides || {}).forEach(slot => {
-                        const o = window.__soundOverrides[slot];
-                        if (o && o.kind === 'synth') window.renderSting(o.value).catch(() => {});
-                    });
+                    // Pre-render every sting so the first play is instant
+                    Object.keys(window.SYNTH_STINGS || {}).forEach(k =>
+                        window.renderSting(k).catch(() => {}));
                 } catch (e) { console.warn('Audio preload skipped:', e); }
                 
                 // Render presentation
@@ -15340,9 +15348,9 @@
                         </button>
                         <button id="presentationMuteToggle" 
                                 onclick="togglePresentationMute()" 
-                                title="${window.__presentationMuted ? 'Unmute presentation audio' : 'Mute presentation audio'}"
+                                title="${window.__presentationMuted ? 'Unmute presentation audio' : (window.audioReady ? 'Mute presentation audio' : 'Tap to enable sound')}"
                                 style="background:rgba(15,23,42,0.75);color:white;border:1px solid rgba(255,255,255,0.2);padding:8px 12px;border-radius:6px;cursor:pointer;font-size:16px;box-shadow:0 2px 8px rgba(0,0,0,0.2);min-width:44px;">
-                            ${window.__presentationMuted ? '🔇' : '🔊'}
+                            ${window.__presentationMuted ? '🔇' : (window.audioReady ? '🔊' : '🔈')}
                         </button>
                         <button onclick="closePresentationMode()" 
                                 style="background:rgba(239,68,68,0.9);color:white;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-weight:600;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,0.2);">
@@ -20114,18 +20122,9 @@
         // iOS starts every AudioContext suspended and only lets it wake inside a real
         // user gesture. Unlock on the first touch anywhere, and play a silent buffer —
         // without this, notes get scheduled into a sleeping context and are never heard.
-        window.__unlockAudio = () => {
-            const ctx = window.__getAudioCtx();
-            if (!ctx) return;
-            if (ctx.state === 'suspended') ctx.resume().catch(() => {});
-            try {
-                const b = ctx.createBuffer(1, 1, 22050);
-                const s = ctx.createBufferSource();
-                s.buffer = b; s.connect(ctx.destination); s.start(0);
-            } catch (e) {}
-        };
-        ['touchstart', 'touchend', 'mousedown', 'click', 'keydown'].forEach(evt =>
-            document.addEventListener(evt, window.__unlockAudio, { once: false, passive: true }));
+        // (The AudioContext is now only used to RENDER stings offline — playback is
+        //  handled entirely by the unlocked element pool.)
+        window.__unlockAudio = () => { try { window.unlockAudio(); } catch (e) {} };
 
         // A short burst of filtered noise — the basis of whooshes, hits and applause.
         // Buffers belong to the context that created them, so cache per context.
@@ -20295,10 +20294,13 @@
         window.playSynth = (name, vol) => {
             if (window.__presentationMuted) return;
             if (!window.SYNTH_STINGS[name]) { console.warn('Unknown sting:', name); return; }
+            // Stings are rendered to a WAV data URI once, then played through the same
+            // pool as every other sound — one code path, one set of failure modes.
+            const cached = window.__stingCache[name];
+            if (cached) { window.playFile(cached, (vol != null ? vol : 0.9)); return; }
             window.renderSting(name).then(url => {
                 if (!url) { console.warn('Sting render returned nothing:', name); return; }
-                // Same buffer path as every other sound, so stings fire from timers too.
-                window.playFile(url, (vol != null ? vol : 0.9), false);
+                window.playFile(url, (vol != null ? vol : 0.9));
             }).catch(err => console.warn('Sting render failed:', name, err));
         };
 
@@ -20334,71 +20336,119 @@
         // A single unlocked AudioContext playing pre-decoded buffers has no
         // such restriction, so timers can fire sound reliably.
         // ═══════════════════════════════════════════════════════════════
-        window.__bufCache = {};
-        window.__liveSources = [];
-        window.loadBuffer = async (src) => {
-            if (window.__bufCache[src]) return window.__bufCache[src];
-            const ctx = window.__getAudioCtx();
-            if (!ctx) return null;
-            const res = await fetch(encodeURI(src));
-            if (!res.ok) throw new Error('fetch ' + res.status);
-            const arr = await res.arrayBuffer();
-            const buf = await new Promise((ok, no) => {
-                // Safari still wants the callback form
-                const p = ctx.decodeAudioData(arr, ok, no);
-                if (p && p.then) p.then(ok).catch(no);
-            });
-            window.__bufCache[src] = buf;
-            return buf;
+        // ═══════════════════════════════════════════════════════════════
+        // AUDIO ENGINE — a pool of pre-unlocked <audio> elements.
+        //
+        // The rule on iOS is about the ELEMENT, not the moment: an audio
+        // element that has been played once inside a real user gesture can
+        // afterwards be replayed from anywhere, including a setTimeout. A
+        // freshly created element cannot. Every previous approach here failed
+        // because it created elements on demand, deep inside timers.
+        //
+        // So: build a small pool up front, bless every element on the first
+        // tap, and route every sound through it. One mechanism for files,
+        // stings and music — and it never fails silently.
+        // ═══════════════════════════════════════════════════════════════
+        window.__SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=';
+        window.__pool = [];
+        window.__poolNext = 0;
+        window.__musicEl = null;
+        window.audioReady = false;
+        window.audioLastError = null;
+
+        window.initAudioPool = () => {
+            if (window.__pool.length) return;
+            for (let i = 0; i < 8; i++) {
+                const a = new Audio();
+                a.preload = 'auto';
+                window.__pool.push(a);
+            }
+            window.__musicEl = new Audio();
+            window.__musicEl.preload = 'auto';
         };
-        window.playBuffer = (buf, vol, loop) => {
-            const ctx = window.__getAudioCtx();
-            if (!ctx || !buf) return null;
-            const s = ctx.createBufferSource();
-            const g = ctx.createGain();
-            g.gain.value = (vol != null) ? vol : 0.9;
-            s.buffer = buf;
-            s.loop = !!loop;
-            s.connect(g); g.connect(ctx.destination);
-            try { s.start(0); } catch (e) { return null; }
-            window.__liveSources.push(s);
-            s.onended = () => {
-                const i = window.__liveSources.indexOf(s);
-                if (i >= 0) window.__liveSources.splice(i, 1);
+
+        // Called from a real tap. Blesses every element so later programmatic
+        // playback is permitted.
+        window.unlockAudio = () => {
+            window.initAudioPool();
+            const bless = (el) => {
+                try {
+                    el.src = window.__SILENT_WAV;
+                    const p = el.play();
+                    if (p && p.then) p.then(() => { try { el.pause(); el.currentTime = 0; } catch (e) {} })
+                                      .catch(err => { window.audioLastError = err && err.name; });
+                    else { try { el.pause(); } catch (e) {} }
+                } catch (err) { window.audioLastError = err && err.message; }
             };
-            return s;
+            window.__pool.forEach(bless);
+            if (window.__musicEl) bless(window.__musicEl);
+            window.audioReady = true;
         };
-        // Play a file through the buffer path, falling back to an Audio element.
-        window.playFile = (src, vol, loop) => {
-            const ctx = window.__getAudioCtx();
-            const go = () => {
-                const cached = window.__bufCache[src];
-                if (cached) return window.playBuffer(cached, vol, loop);
-                window.loadBuffer(src)
-                    .then(b => { if (b) window.playBuffer(b, vol, loop); })
-                    .catch(() => {
-                        try {
-                            const a = new Audio(encodeURI(src));
-                            a.volume = (vol != null) ? vol : 0.9;
-                            a.loop = !!loop;
-                            a.play().catch(() => {});
-                        } catch (e) {}
-                    });
-                return null;
-            };
-            if (ctx && ctx.state === 'suspended') { ctx.resume().then(go).catch(go); return null; }
-            return go();
+        // Any tap anywhere unlocks; harmless to run more than once.
+        ['touchend', 'mousedown', 'keydown'].forEach(evt =>
+            document.addEventListener(evt, () => { if (!window.audioReady) window.unlockAudio(); },
+                                      { passive: true }));
+
+        // Prefer an idle element; otherwise recycle round-robin.
+        window.__takeEl = () => {
+            window.initAudioPool();
+            const free = window.__pool.find(a => a.paused || a.ended);
+            if (free) return free;
+            const el = window.__pool[window.__poolNext % window.__pool.length];
+            window.__poolNext++;
+            return el;
         };
-        // Stop everything immediately — used when advancing a slide.
+
+        // THE one-shot player. Everything short goes through here.
+        window.playFile = (src, vol) => {
+            if (!src) return null;
+            const el = window.__takeEl();
+            try {
+                el.loop = false;
+                el.volume = Math.max(0, Math.min(1, (vol != null) ? vol : 0.9));
+                el.src = /^data:/.test(src) ? src : encodeURI(src);
+                el.currentTime = 0;
+                const p = el.play();
+                if (p && p.catch) p.catch(err => {
+                    window.audioLastError = (err && err.name) || 'play failed';
+                    console.warn('Audio blocked:', src, window.audioLastError);
+                });
+            } catch (err) {
+                window.audioLastError = err && err.message;
+                console.warn('Audio error:', src, err);
+            }
+            return el;
+        };
+
+        // Background music gets its own dedicated element so effects never cut it.
+        window.playMusic = (src, vol, loop) => {
+            window.initAudioPool();
+            const el = window.__musicEl;
+            if (!el || !src) return null;
+            try {
+                el.loop = !!loop;
+                el.volume = Math.max(0, Math.min(1, (vol != null) ? vol : 0.75));
+                el.src = /^data:/.test(src) ? src : encodeURI(src);
+                const p = el.play();
+                if (p && p.catch) p.catch(err => {
+                    window.audioLastError = (err && err.name) || 'music blocked';
+                    console.warn('Music blocked:', src, window.audioLastError);
+                });
+            } catch (err) { window.audioLastError = err && err.message; }
+            return el;
+        };
+        window.stopMusic = () => {
+            try { if (window.__musicEl) { window.__musicEl.pause(); } } catch (e) {}
+        };
+        // Cut the short effects only — music is left alone deliberately.
         window.stopAllSounds = () => {
-            (window.__liveSources || []).forEach(s => { try { s.stop(0); } catch (e) {} });
-            window.__liveSources = [];
+            (window.__pool || []).forEach(a => { try { a.pause(); a.currentTime = 0; } catch (e) {} });
         };
-        // Warm the cache for a whole deck while we still have a user gesture.
+        // Warm the browser cache so the first play isn't waiting on the network.
         window.preloadSounds = (list) => {
             (list || []).forEach(src => {
-                if (!src || window.__bufCache[src]) return;
-                window.loadBuffer(src).catch(() => {});
+                if (!src || /^data:/.test(src)) return;
+                try { const a = new Audio(); a.preload = 'auto'; a.src = encodeURI(src); } catch (e) {}
             });
         };
 
@@ -20407,11 +20457,7 @@
             if (r.kind === 'none') return;
             if (r.kind === 'synth') { window.playSynth(r.value, vol); return; }
             if (window.__presentationMuted) return;
-            try {
-                const a = new Audio(encodeURI(r.value));
-                a.volume = (vol != null) ? vol : 0.9;
-                a.play().catch(() => {});
-            } catch (e) {}
+            window.playFile(r.value, (vol != null) ? vol : 0.9);
         };
         
         // ─── Presentation music: one generic slide-track system ───
@@ -20429,17 +20475,12 @@
             if (r.kind === 'synth') { window.playSynth(r.value, opts.vol); return; }
             const resolved = r.value;
             if (!resolved) return;
-            try {
-                const a = new Audio(encodeURI(resolved));
-                a.loop = !!opts.loop;
-                a.volume = (opts.vol != null) ? opts.vol : 0.75;
-                window.__slideTrack = { key, audio: a };
-                a.play().catch(() => { if (window.__slideTrack && window.__slideTrack.key === key) window.__slideTrack = null; });
-            } catch (e) { window.__slideTrack = null; }
+            const el = window.playMusic(resolved, (opts.vol != null) ? opts.vol : 0.75, !!opts.loop);
+            window.__slideTrack = el ? { key, audio: el } : null;
         };
         window.stopSlideTrack = () => {
-            const t = window.__slideTrack;
-            if (t) { try { t.audio.pause(); } catch (e) {} window.__slideTrack = null; }
+            window.stopMusic();
+            window.__slideTrack = null;
         };
         // One-shot sound effect (position stingers etc.), slot-addressable.
         window.playSfx = (slot, src, vol) => {
@@ -20449,10 +20490,7 @@
             if (window.__presentationMuted) return;
             const resolved = r.value;
             if (!resolved) return;
-            // Buffer path: works from timers, unlike a fresh Audio element on iOS.
-            // playFile owns playback entirely (including its own Audio fallback), so
-            // there is nothing to do afterwards either way.
-            window.playFile(resolved, (vol != null) ? vol : 0.9, false);
+            window.playFile(resolved, (vol != null) ? vol : 0.9);
             return;
             try {
                 const a = new Audio(encodeURI(resolved));
@@ -20941,6 +20979,7 @@
                 let audio = window.__badgeAudioCache[file];
                 if (!audio) {
                     audio = new Audio(encodeURI(file));
+                    // (kept for the cached-instance path; playback below uses the pool)
                     audio.preload = 'auto';
                     audio.volume = 0.7;
                     window.__badgeAudioCache[file] = audio;
@@ -21098,6 +21137,7 @@
                 let audio = window.__badgeAudioCache[file];
                 if (!audio) {
                     audio = new Audio(encodeURI(file));
+                    // (kept for the cached-instance path; playback below uses the pool)
                     audio.preload = 'auto';
                     window.__badgeAudioCache[file] = audio;
                 }
