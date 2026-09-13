@@ -714,7 +714,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.08.02.2';
+        const APP_VERSION = '2026.08.03.1';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -7505,6 +7505,21 @@
                             <input type="file" accept="audio/*" id="up_${id}" style="display:none;"
                                    onchange="uploadSoundFile(event, '${s.slot.replace(/'/g, "\\'")}')">
                             <button onclick="document.getElementById('up_${id}').click()" class="btn-secondary" style="padding:7px 12px;font-size:12px;background:#0891b2;color:white;">⬆️ Upload</button>
+                        </div>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px;">
+                            <span style="font-size:12px;color:#6b7280;font-weight:700;">Play only</span>
+                            <input id="st_${id}" type="number" step="0.5" min="0" placeholder="from"
+                                   value="${cur && cur.start != null ? cur.start : ''}"
+                                   style="width:78px;padding:6px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;">
+                            <span style="font-size:12px;color:#6b7280;">to</span>
+                            <input id="en_${id}" type="number" step="0.5" min="0" placeholder="to"
+                                   value="${cur && cur.end != null ? cur.end : ''}"
+                                   style="width:78px;padding:6px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;">
+                            <span style="font-size:12px;color:#6b7280;">seconds</span>
+                            <button onclick="setSlotTrim('${s.slot.replace(/'/g, "\\'")}', document.getElementById('st_${id}').value, document.getElementById('en_${id}').value)"
+                                    class="btn-secondary" style="padding:6px 12px;font-size:12px;">✂️ Set &amp; test</button>
+                            ${(cur && (cur.start != null || cur.end != null))
+                                ? `<span style="font-size:12px;color:#0891b2;font-weight:700;">trimmed ${cur.start || 0}s–${cur.end != null ? cur.end + 's' : 'end'}</span>` : ''}
                             ${s.def ? `<button onclick="clearSlot('${s.slot.replace(/'/g, "\\'")}')" class="btn-secondary" style="padding:7px 12px;font-size:12px;">Default</button>` : ''}
                             <button onclick="silenceSlot('${s.slot.replace(/'/g, "\\'")}')" class="btn-secondary" style="padding:7px 12px;font-size:12px;">🔇</button>
                         </div>
@@ -7655,6 +7670,29 @@
             if (name) window.playSynth(name, 0.9);
             showSoundStudio();
         };
+        // Trim a slot to a window of the file — lets a long song serve as a short sting.
+        window.setSlotTrim = (slot, startStr, endStr) => {
+            const cur = window.__soundOverrides[slot];
+            if (!cur || (cur.kind !== 'file' && cur.kind !== 'url')) {
+                showError('Pick a file for this slot first, then set the trim.');
+                return;
+            }
+            const s = parseFloat(startStr), e = parseFloat(endStr);
+            if (startStr === '' && endStr === '') { delete cur.start; delete cur.end; }
+            else {
+                if (!isNaN(s)) cur.start = s; else delete cur.start;
+                if (!isNaN(e)) cur.end = e; else delete cur.end;
+                if (cur.start != null && cur.end != null && cur.end <= cur.start) {
+                    showError('The end must be later than the start.');
+                    return;
+                }
+            }
+            window.__soundOverrides[slot] = cur;
+            window.saveSoundOverrides();
+            window.testSlot(slot);
+            showSoundStudio();
+        };
+
         window.setSlotFile = (slot, fileName) => {
             if (!fileName) { delete window.__soundOverrides[slot]; }
             else { window.__soundOverrides[slot] = { kind: 'file', value: 'Sounds/' + fileName }; }
@@ -14779,6 +14817,13 @@
                 return `<span style="color:#9ca3af;font-size:12px;font-weight:700;">=</span>`;
             };
             
+            // Each player's own gain tonight. Previously the group badge summed everyone
+            // tied at a place, so an 8-way tie read "+3 today" when no individual had
+            // gained 3 — the number described the group, not a person.
+            const todayChip = (m) => (m.today > 0)
+                ? `<span style="background:rgba(16,185,129,0.18);color:#34d399;font-size:11px;font-weight:800;padding:2px 8px;border-radius:999px;white-space:nowrap;">+${m.today} today</span>`
+                : '';
+
             const members = (g) => {
                 if (g.members.length === 1) {
                     const m = g.members[0];
@@ -14789,6 +14834,7 @@
                             <div style="display:flex;align-items:center;gap:10px;margin-top:4px;">
                                 <div style="color:${m.teamColor || opts.subtitleColor};font-size:12px;font-weight:500;">${m.teamName}</div>
                                 ${movement(m)}
+                                ${todayChip(m)}
                             </div>
                         </div>
                     `;
@@ -14802,6 +14848,7 @@
                                 <div style="color:white;font-size:17px;font-weight:600;">${m.playerName}</div>
                                 <div style="color:#9ca3af;font-size:12px;">${m.teamName}</div>
                                 ${movement(m)}
+                                ${todayChip(m)}
                             </div>
                         `).join('')}
                     </div>
@@ -14834,7 +14881,7 @@
                                     <div style="text-align:right;flex-shrink:0;">
                                         <div style="color:white;font-size:32px;font-weight:800;line-height:1;">${g.total}</div>
                                         <div style="color:#9ca3af;font-size:10px;margin-top:3px;letter-spacing:1px;">${opts.unitLabel}</div>
-                                        ${g.today > 0 ? `
+                                        ${(g.today > 0 && g.members.length === 1) ? `
                                             <div style="margin-top:6px;background:rgba(16,185,129,0.18);border:1px solid rgba(16,185,129,0.5);border-radius:6px;padding:2px 6px;color:#10b981;font-size:11px;font-weight:700;">
                                                 +${g.today} today
                                             </div>
@@ -19560,6 +19607,12 @@
             });
             try { window.stopAllSounds(); } catch (e) {}
         };
+        // Leaving a slide for a different one: silence everything, including music, so a
+        // long file can never bleed across the show. syncPresentationMusic then starts
+        // whatever the NEW slide owns.
+        window.__leaveSlide = () => {
+            try { window.stopEverything(); window.__slideTrack = null; } catch (e) {}
+        };
 
         window.nextPresentationSlide = () => {
             window.__interruptSlide();
@@ -20399,20 +20452,60 @@
             return el;
         };
 
-        // THE one-shot player. Everything short goes through here.
-        window.playFile = (src, vol) => {
+        // THE one-shot player.
+        // opts: { start, end, keepOthers, maxSecs }
+        // An effect always replaces the effect before it — a long file left ringing was
+        // occupying channels and masking later cues. Trim points let a 3-minute song be
+        // used as a 4-second sting without playing to the end.
+        window.EFFECT_MAX_SECONDS = 12;
+        window.playFile = (src, vol, opts) => {
             if (!src) return null;
+            opts = opts || {};
+            // Kill whatever effect is currently ringing unless explicitly told not to.
+            if (!opts.keepOthers) window.stopAllSounds();
+
             const el = window.__takeEl();
+            const start = Math.max(0, parseFloat(opts.start) || 0);
+            const end = (opts.end != null && parseFloat(opts.end) > start) ? parseFloat(opts.end) : null;
+            const ceiling = (opts.maxSecs != null) ? opts.maxSecs : window.EFFECT_MAX_SECONDS;
+
+            // Clear any stop-timer or listener still attached to this element
+            if (el.__stopTimer) { clearTimeout(el.__stopTimer); el.__stopTimer = null; }
+            if (el.__onTime) { el.removeEventListener('timeupdate', el.__onTime); el.__onTime = null; }
+
+            const halt = () => {
+                try { el.pause(); el.currentTime = 0; } catch (e) {}
+                if (el.__stopTimer) { clearTimeout(el.__stopTimer); el.__stopTimer = null; }
+                if (el.__onTime) { el.removeEventListener('timeupdate', el.__onTime); el.__onTime = null; }
+            };
+
             try {
                 el.loop = false;
                 el.volume = Math.max(0, Math.min(1, (vol != null) ? vol : 0.9));
                 el.src = /^data:/.test(src) ? src : encodeURI(src);
-                el.currentTime = 0;
-                const p = el.play();
-                if (p && p.catch) p.catch(err => {
-                    window.audioLastError = (err && err.name) || 'play failed';
-                    console.warn('Audio blocked:', src, window.audioLastError);
-                });
+
+                const begin = () => {
+                    try { if (start > 0) el.currentTime = start; } catch (e) {}
+                    const p = el.play();
+                    if (p && p.catch) p.catch(err => {
+                        window.audioLastError = (err && err.name) || 'play failed';
+                        console.warn('Audio blocked:', src, window.audioLastError);
+                    });
+                };
+                // currentTime can only be set once metadata is known
+                if (start > 0 && el.readyState < 1) {
+                    el.addEventListener('loadedmetadata', begin, { once: true });
+                    el.load();
+                } else begin();
+
+                // Stop at the trim point…
+                if (end != null) {
+                    el.__onTime = () => { if (el.currentTime >= end) halt(); };
+                    el.addEventListener('timeupdate', el.__onTime);
+                }
+                // …and never let an effect run away, trimmed or not.
+                const cap = (end != null) ? (end - start) : ceiling;
+                if (cap > 0) el.__stopTimer = setTimeout(halt, (cap + 0.25) * 1000);
             } catch (err) {
                 window.audioLastError = err && err.message;
                 console.warn('Audio error:', src, err);
@@ -20421,29 +20514,65 @@
         };
 
         // Background music gets its own dedicated element so effects never cut it.
-        window.playMusic = (src, vol, loop) => {
+        window.playMusic = (src, vol, loop, opts) => {
             window.initAudioPool();
             const el = window.__musicEl;
             if (!el || !src) return null;
+            opts = opts || {};
+            const mStart = Math.max(0, parseFloat(opts.start) || 0);
+            const mEnd = (opts.end != null && parseFloat(opts.end) > mStart) ? parseFloat(opts.end) : null;
+            if (el.__onTime) { el.removeEventListener('timeupdate', el.__onTime); el.__onTime = null; }
             try {
                 el.loop = !!loop;
                 el.volume = Math.max(0, Math.min(1, (vol != null) ? vol : 0.75));
                 el.src = /^data:/.test(src) ? src : encodeURI(src);
-                const p = el.play();
-                if (p && p.catch) p.catch(err => {
-                    window.audioLastError = (err && err.name) || 'music blocked';
-                    console.warn('Music blocked:', src, window.audioLastError);
-                });
+                const begin = () => {
+                    try { if (mStart > 0) el.currentTime = mStart; } catch (e) {}
+                    const p = el.play();
+                    if (p && p.catch) p.catch(err => {
+                        window.audioLastError = (err && err.name) || 'music blocked';
+                        console.warn('Music blocked:', src, window.audioLastError);
+                    });
+                };
+                if (mStart > 0 && el.readyState < 1) {
+                    el.addEventListener('loadedmetadata', begin, { once: true });
+                    el.load();
+                } else begin();
+                // Loop back to the trim start rather than the top of the file
+                if (mEnd != null) {
+                    el.__onTime = () => {
+                        if (el.currentTime >= mEnd) {
+                            if (el.loop) { try { el.currentTime = mStart; } catch (e) {} }
+                            else { try { el.pause(); } catch (e) {} }
+                        }
+                    };
+                    el.addEventListener('timeupdate', el.__onTime);
+                }
             } catch (err) { window.audioLastError = err && err.message; }
             return el;
         };
         window.stopMusic = () => {
-            try { if (window.__musicEl) { window.__musicEl.pause(); } } catch (e) {}
+            const el = window.__musicEl;
+            if (!el) return;
+            try {
+                el.pause();
+                el.currentTime = 0;
+                el.loop = false;
+                if (el.__onTime) { el.removeEventListener('timeupdate', el.__onTime); el.__onTime = null; }
+            } catch (e) {}
         };
         // Cut the short effects only — music is left alone deliberately.
         window.stopAllSounds = () => {
-            (window.__pool || []).forEach(a => { try { a.pause(); a.currentTime = 0; } catch (e) {} });
+            (window.__pool || []).forEach(a => {
+                try {
+                    a.pause(); a.currentTime = 0;
+                    if (a.__stopTimer) { clearTimeout(a.__stopTimer); a.__stopTimer = null; }
+                    if (a.__onTime) { a.removeEventListener('timeupdate', a.__onTime); a.__onTime = null; }
+                } catch (e) {}
+            });
         };
+        // Everything off: effects AND music. Used when leaving a slide entirely.
+        window.stopEverything = () => { window.stopAllSounds(); window.stopMusic(); };
         // Warm the browser cache so the first play isn't waiting on the network.
         window.preloadSounds = (list) => {
             (list || []).forEach(src => {
@@ -20457,7 +20586,7 @@
             if (r.kind === 'none') return;
             if (r.kind === 'synth') { window.playSynth(r.value, vol); return; }
             if (window.__presentationMuted) return;
-            window.playFile(r.value, (vol != null) ? vol : 0.9);
+            window.playFile(r.value, (vol != null) ? vol : 0.9, { start: r.start, end: r.end });
         };
         
         // ─── Presentation music: one generic slide-track system ───
@@ -20475,7 +20604,8 @@
             if (r.kind === 'synth') { window.playSynth(r.value, opts.vol); return; }
             const resolved = r.value;
             if (!resolved) return;
-            const el = window.playMusic(resolved, (opts.vol != null) ? opts.vol : 0.75, !!opts.loop);
+            const el = window.playMusic(resolved, (opts.vol != null) ? opts.vol : 0.75, !!opts.loop,
+                                        { start: r.start, end: r.end });
             window.__slideTrack = el ? { key, audio: el } : null;
         };
         window.stopSlideTrack = () => {
@@ -20490,7 +20620,7 @@
             if (window.__presentationMuted) return;
             const resolved = r.value;
             if (!resolved) return;
-            window.playFile(resolved, (vol != null) ? vol : 0.9);
+            window.playFile(resolved, (vol != null) ? vol : 0.9, { start: r.start, end: r.end });
             return;
             try {
                 const a = new Audio(encodeURI(resolved));
@@ -21757,6 +21887,8 @@
                 presentationDiv.remove();
             }
             presentationState.active = false;
+            // Closing the deck must leave nothing ringing — effects, music, all of it.
+            try { window.__leaveSlide(); } catch (e) {}
             
             // Remove keyboard event listener
             if (window.presentationKeyHandler) {
