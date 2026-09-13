@@ -714,7 +714,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.08.03.2';
+        const APP_VERSION = '2026.08.04.1';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -2819,6 +2819,8 @@
                 renderPlayerDetailPage();
             } else if (state.view === 'settings') {
                 renderSettings();
+            } else if (state.view === 'milestones') {
+                showMilestoneSettings();
             } else if (state.view === 'runsheet') {
                 showRunSheet(null);
             } else if (state.view.startsWith('runsheet-')) {
@@ -3099,6 +3101,13 @@
                             <div>
                                 <strong>📅 Events &amp; Rounds</strong><br>
                                 <small>${state.events.length} event${state.events.length === 1 ? '' : 's'} · ${state.rounds.length} round${state.rounds.length === 1 ? '' : 's'} · schedules &amp; brackets</small>
+                            </div>
+                            <span style="font-size:24px;">→</span>
+                        </div>
+                        <div class="list-item" onclick="navigate('milestones')">
+                            <div>
+                                <strong>🏅 Milestones</strong><br>
+                                <small>Thresholds that trigger an announcement</small>
                             </div>
                             <span style="font-size:24px;">→</span>
                         </div>
@@ -3780,6 +3789,57 @@
                             <small style="color:#6b7280;font-size:12px;">Used automatically when creating a round, if the course has a matching tee.</small>
                         </div>
                         
+                        ${(() => {
+                            // Drill-down: the basics above, then the full working and a
+                            // side-by-side of both calculation methods for anyone who wants
+                            // to see exactly how the number was reached.
+                            let a = null;
+                            try { a = window.__hcAnalyze(player); } catch (e) {}
+                            if (!a) return '';
+                            const usgaHc = a.usga ? Math.max(0, Math.min(54, Math.round(a.usga.index))) : null;
+                            const dutchHc = a.dutch ? a.dutch.handicap : null;
+                            const usgaOn = !!(state.settings && state.settings.useUSGAHandicap);
+                            return `
+                                <details style="margin-top:16px;border:2px solid #e5e7eb;border-radius:10px;padding:12px;">
+                                    <summary style="cursor:pointer;font-weight:800;font-size:15px;color:#4338ca;">
+                                        🔍 Full calculation &amp; method comparison
+                                    </summary>
+                                    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:14px;">
+                                        <div style="flex:1;min-width:190px;border:2px solid ${usgaOn ? '#6366f1' : '#e5e7eb'};border-radius:10px;padding:12px;">
+                                            <div style="font-size:11px;font-weight:800;letter-spacing:1px;color:#3730a3;">USGA / WHS ${usgaOn ? '· ACTIVE' : ''}</div>
+                                            <div style="font-size:32px;font-weight:900;">${a.usga ? a.usga.index.toFixed(1) : '—'}</div>
+                                            ${a.usga ? `
+                                                <div style="font-size:12px;color:#6b7280;">plays off ${usgaHc}</div>
+                                                <div style="font-size:12px;margin-top:8px;line-height:1.6;">
+                                                    Lowest <strong>${a.usga.usedCount}</strong> of ${a.usga.sourceSize} differentials<br>
+                                                    Average <strong>${a.usga.average != null ? a.usga.average.toFixed(2) : '—'}</strong><br>
+                                                    Adjustment <strong>${(a.usga.adjustment > 0 ? '+' : '') + (a.usga.adjustment ?? 0)}</strong>
+                                                </div>` : '<div style="font-size:12px;color:#6b7280;">Needs 3+ scores</div>'}
+                                        </div>
+                                        <div style="flex:1;min-width:190px;border:2px solid ${!usgaOn ? '#6366f1' : '#e5e7eb'};border-radius:10px;padding:12px;">
+                                            <div style="font-size:11px;font-weight:800;letter-spacing:1px;color:#3730a3;">DUTCH CUP ${!usgaOn ? '· ACTIVE' : ''}</div>
+                                            <div style="font-size:32px;font-weight:900;">${dutchHc != null ? dutchHc : '—'}</div>
+                                            ${a.dutch ? `
+                                                <div style="font-size:12px;color:#6b7280;">avg over par × 0.80</div>
+                                                <div style="font-size:12px;margin-top:8px;line-height:1.6;">
+                                                    ${a.dutch.n} scores · sum ${a.dutch.sum > 0 ? '+' : ''}${a.dutch.sum}<br>
+                                                    Average <strong>${a.dutch.avg.toFixed(2)}</strong><br>
+                                                    × 0.80 → <strong>${a.dutch.handicap}</strong>
+                                                </div>` : '<div style="font-size:12px;color:#6b7280;">No scores</div>'}
+                                        </div>
+                                    </div>
+                                    ${(usgaHc != null && dutchHc != null && usgaHc !== dutchHc) ? `
+                                        <div style="margin-top:12px;background:#fef3c7;border-radius:8px;padding:10px;font-size:13px;">
+                                            The two methods differ by <strong>${Math.abs(usgaHc - dutchHc)}</strong> stroke${Math.abs(usgaHc - dutchHc) === 1 ? '' : 's'}
+                                            — ${usgaOn ? 'USGA' : 'Dutch Cup'} is the one in use.
+                                        </div>` : ''}
+                                    <div style="margin-top:14px;">
+                                        <button onclick="navigate('handicapPlayer-${player.id}')" class="btn-secondary" style="width:100%;background:#4338ca;color:white;">
+                                            🩻 Open the full audit — every score, tee and differential
+                                        </button>
+                                    </div>
+                                </details>`;
+                        })()}
                         ${handicapDetails.rounds.length > 0 ? `
                             <div style="margin-top:16px;">
                                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
@@ -7475,6 +7535,81 @@
         // Each team gets its own walk-up track, keyed by team id so it survives renames.
         window.teamWalkupSlot = (teamId) => 'TEAM WALKUP:' + teamId;
 
+        window.showMilestoneSettings = () => {
+            const app = document.getElementById('app');
+            const cfg = window.getMilestoneConfig();
+            app.innerHTML = `
+                <button class="back-btn" onclick="navigate('home')">← Back</button>
+                <div class="card">
+                    <h2>🏅 Milestones</h2>
+                    <p style="color:#6b7280;margin-bottom:10px;">
+                        Achievements worth stopping the room for. Set the thresholds that matter
+                        to your group — each one that gets crossed earns its own reveal slide and
+                        can have its own sound in Sound Studio.
+                    </p>
+                </div>
+                ${window.MILESTONE_DEFS.map(d => {
+                    const s = cfg[d.key];
+                    return `
+                        <div class="card" style="${s.on ? '' : 'opacity:0.6;'}">
+                            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+                                <div style="flex:1;">
+                                    <strong style="font-size:17px;">${d.emoji} ${d.name}</strong>
+                                    <div style="font-size:13px;color:#6b7280;margin-top:2px;">${d.blurb}</div>
+                                </div>
+                                <label style="display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;">
+                                    <input type="checkbox" ${s.on ? 'checked' : ''}
+                                           onchange="toggleMilestone('${d.key}')" style="width:24px;height:24px;">
+                                    <span style="font-size:10px;color:#6b7280;">${s.on ? 'ON' : 'OFF'}</span>
+                                </label>
+                            </div>
+                            ${d.kind === 'personal-best' ? `
+                                <p style="font-size:13px;color:#6b7280;margin:10px 0 0;">
+                                    No threshold — announced whenever someone beats their own record
+                                    (after at least 3 rounds on file).
+                                </p>`
+                            : `
+                                <div style="margin-top:10px;">
+                                    <label style="font-size:13px;font-weight:700;display:block;margin-bottom:5px;">
+                                        Announce at ${d.kind === 'barrier-down' ? '(going below)' : '(reaching)'}:
+                                    </label>
+                                    <input type="text" id="ms_${d.key}" value="${s.thresholds.join(', ')}"
+                                           placeholder="e.g. 100, 250, 500"
+                                           style="width:100%;padding:9px;border:2px solid #d1d5db;border-radius:8px;font-size:15px;">
+                                    <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
+                                        <button onclick="saveMilestoneThresholds('${d.key}')" class="btn-secondary" style="padding:7px 14px;font-size:13px;">Save</button>
+                                        <button onclick="resetMilestoneThresholds('${d.key}')" class="btn-secondary" style="padding:7px 14px;font-size:13px;">Default (${d.defaults.join(', ')})</button>
+                                    </div>
+                                </div>`}
+                        </div>`;
+                }).join('')}`;
+        };
+        window.toggleMilestone = (key) => {
+            const cfg = window.getMilestoneConfig();
+            cfg[key].on = !cfg[key].on;
+            save('settings', { ...state.settings, milestoneConfig: cfg });
+            showMilestoneSettings();
+        };
+        window.saveMilestoneThresholds = (key) => {
+            const el = document.getElementById('ms_' + key);
+            if (!el) return;
+            const vals = el.value.split(',').map(x => parseFloat(x.trim()))
+                .filter(x => isFinite(x));
+            if (vals.length === 0) { showError('Enter at least one number, separated by commas.'); return; }
+            const cfg = window.getMilestoneConfig();
+            cfg[key].thresholds = vals.sort((a, b) => a - b);
+            save('settings', { ...state.settings, milestoneConfig: cfg });
+            notify('✅ Thresholds saved');
+            showMilestoneSettings();
+        };
+        window.resetMilestoneThresholds = (key) => {
+            const def = window.MILESTONE_DEFS.find(d => d.key === key);
+            const cfg = window.getMilestoneConfig();
+            cfg[key].thresholds = def.defaults.slice();
+            save('settings', { ...state.settings, milestoneConfig: cfg });
+            showMilestoneSettings();
+        };
+
         window.showSoundStudio = () => {
             const app = document.getElementById('app');
             const badgeSlots = Object.keys(window.__badgeSoundMap || {})
@@ -7601,6 +7736,16 @@
                         def: null,
                         music: true
                     })).join('') || '<p style="color:#6b7280;font-size:13px;">No teams yet.</p>'}
+                </div>
+
+                <div class="card">
+                    <h3 style="margin:0 0 6px;">🏅 Milestone stings</h3>
+                    <p style="font-size:12px;color:#6b7280;margin:0 0 12px;">One per milestone type.</p>
+                    ${(window.MILESTONE_DEFS || []).map(d => row({
+                        slot: window.milestoneSlot(d.key),
+                        name: d.emoji + ' ' + d.name,
+                        def: null
+                    })).join('')}
                 </div>
 
                 <div class="card">
@@ -7818,6 +7963,145 @@
             window.saveSoundOverrides();
             notify('↩️ All slots reset');
             showSoundStudio();
+        };
+
+        // ═══════════════════════════════════════════════════════════════
+        // MILESTONES
+        // Achievements worth stopping the room for. Each has a threshold you
+        // control, a sound slot of its own, and gets its own reveal slide so
+        // they land one at a time rather than as a wall of text.
+        // ═══════════════════════════════════════════════════════════════
+        window.MILESTONE_DEFS = [
+            { key: 'careerPoints', name: 'Career points', emoji: '💯', unit: 'points',
+              blurb: 'Total event points passed a round number',
+              defaults: [100, 250, 500, 750, 1000, 1500, 2000], kind: 'cumulative' },
+            { key: 'roundsPlayed', name: 'Rounds played', emoji: '🎖️', unit: 'rounds',
+              blurb: 'Loyalty — total rounds in a Dutch Cup',
+              defaults: [10, 25, 50, 100], kind: 'cumulative' },
+            { key: 'careerBBB', name: 'Career BBB', emoji: '🎯', unit: 'BBB points',
+              blurb: 'Bingo Bango Bongo points over a career',
+              defaults: [50, 100, 250, 500], kind: 'cumulative' },
+            { key: 'careerCTP', name: 'Career closest to the pin', emoji: '📍', unit: 'CTPs',
+              blurb: 'Times they have stiffed one',
+              defaults: [5, 10, 25], kind: 'cumulative' },
+            { key: 'bestGross', name: 'Personal best gross', emoji: '⛳', unit: '',
+              blurb: 'Beat their own best round',
+              defaults: [], kind: 'personal-best' },
+            { key: 'bestPoints', name: 'Personal best points', emoji: '🚀', unit: 'points',
+              blurb: 'Beat their own best points haul',
+              defaults: [], kind: 'personal-best' },
+            { key: 'lowGross', name: 'Broke a scoring barrier', emoji: '🏅', unit: 'gross',
+              blurb: 'Gross score under a barrier for the first time',
+              defaults: [100, 95, 90, 85, 80], kind: 'barrier-down' },
+            { key: 'handicapDrop', name: 'Handicap milestone', emoji: '📉', unit: 'handicap',
+              blurb: 'Handicap dropped through a threshold',
+              defaults: [20, 15, 12, 10, 5], kind: 'barrier-down' }
+        ];
+
+        window.getMilestoneConfig = () => {
+            const saved = (state.settings && state.settings.milestoneConfig) || {};
+            const out = {};
+            window.MILESTONE_DEFS.forEach(d => {
+                const s = saved[d.key] || {};
+                out[d.key] = {
+                    on: (s.on != null) ? !!s.on : true,
+                    thresholds: Array.isArray(s.thresholds) ? s.thresholds : d.defaults.slice()
+                };
+            });
+            return out;
+        };
+        window.milestoneSlot = (key) => 'MILESTONE:' + key;
+
+        // Work out what each player crossed in THIS round.
+        window.detectMilestones = (round, eventRounds) => {
+            const cfg = window.getMilestoneConfig();
+            const out = [];
+            if (!round || !Array.isArray(round.teams)) return out;
+
+            const allRounds = (state.rounds || [])
+                .filter(r => r.active !== false)
+                .sort((a, b) => (a.timestamp || a.id) - (b.timestamp || b.id));
+            const priorRounds = allRounds.filter(r =>
+                (r.timestamp || r.id) < (round.timestamp || round.id));
+
+            const statFor = (rounds, pid) => {
+                let points = 0, bbb = 0, ctp = 0, played = 0, bestGross = null, bestPoints = null;
+                rounds.forEach(r => (r.teams || []).forEach(t => (t.players || []).forEach(p => {
+                    if (String(p.id) !== String(pid)) return;
+                    const pts = window.storyPlayerPoints(r, p);
+                    const gross = sumScores(p.scores);
+                    points += pts.total;
+                    bbb += (parseInt(p.bbbTotal, 10) || 0);
+                    ctp += (window.ctpCountForPlayer ? window.ctpCountForPlayer(r, p.id) : 0);
+                    if (gross > 0) {
+                        played++;
+                        if (bestGross === null || gross < bestGross) bestGross = gross;
+                    }
+                    if (bestPoints === null || pts.total > bestPoints) bestPoints = pts.total;
+                })));
+                return { points, bbb, ctp, played, bestGross, bestPoints };
+            };
+
+            round.teams.forEach(t => (t.players || []).forEach(p => {
+                const beforeS = statFor(priorRounds, p.id);
+                const afterS = statFor(priorRounds.concat([round]), p.id);
+                const name = p.name;
+                const sp = (state.players || []).find(x => String(x.id) === String(p.id));
+
+                const crossUp = (key, before, after) => {
+                    if (!cfg[key] || !cfg[key].on) return;
+                    cfg[key].thresholds.forEach(th => {
+                        if (before < th && after >= th) {
+                            out.push({ key, playerId: p.id, player: name, threshold: th, value: after });
+                        }
+                    });
+                };
+                crossUp('careerPoints', beforeS.points, afterS.points);
+                crossUp('roundsPlayed', beforeS.played, afterS.played);
+                crossUp('careerBBB', beforeS.bbb, afterS.bbb);
+                crossUp('careerCTP', beforeS.ctp, afterS.ctp);
+
+                // Downward barriers: gross score, handicap
+                if (cfg.lowGross && cfg.lowGross.on && afterS.bestGross != null) {
+                    const wasBest = (beforeS.bestGross == null) ? Infinity : beforeS.bestGross;
+                    cfg.lowGross.thresholds.forEach(th => {
+                        if (wasBest >= th && afterS.bestGross < th) {
+                            out.push({ key: 'lowGross', playerId: p.id, player: name,
+                                       threshold: th, value: afterS.bestGross });
+                        }
+                    });
+                }
+                if (cfg.handicapDrop && cfg.handicapDrop.on && sp) {
+                    const nowHc = parseFloat(sp.handicap);
+                    const prevHc = parseFloat(sp.previousHandicap);
+                    if (isFinite(nowHc) && isFinite(prevHc)) {
+                        cfg.handicapDrop.thresholds.forEach(th => {
+                            if (prevHc >= th && nowHc < th) {
+                                out.push({ key: 'handicapDrop', playerId: p.id, player: name,
+                                           threshold: th, value: nowHc });
+                            }
+                        });
+                    }
+                }
+                // Personal bests (only once they have a record to beat)
+                if (cfg.bestGross && cfg.bestGross.on && beforeS.played >= 3
+                    && beforeS.bestGross != null && afterS.bestGross < beforeS.bestGross) {
+                    out.push({ key: 'bestGross', playerId: p.id, player: name,
+                               threshold: beforeS.bestGross, value: afterS.bestGross });
+                }
+                if (cfg.bestPoints && cfg.bestPoints.on && beforeS.played >= 3
+                    && beforeS.bestPoints != null && afterS.bestPoints > beforeS.bestPoints) {
+                    out.push({ key: 'bestPoints', playerId: p.id, player: name,
+                               threshold: beforeS.bestPoints, value: afterS.bestPoints });
+                }
+            }));
+
+            // Biggest achievements last, so the segment builds.
+            const weight = { handicapDrop: 5, lowGross: 4, careerPoints: 3, bestGross: 3,
+                             bestPoints: 2, roundsPlayed: 2, careerBBB: 1, careerCTP: 1 };
+            out.sort((a, b) => (weight[a.key] || 0) - (weight[b.key] || 0)
+                            || a.threshold - b.threshold);
+            return out;
         };
 
         // ═══════════════════════════════════════════════════════════════
@@ -14389,6 +14673,9 @@
                 totalSlides += leaderboard.length; // Team slides
                 if (hasEventNetSlide) totalSlides++; // Event net scores (only when complete)
                 if (hasMilestonesSlide) totalSlides++;
+                totalSlides += (presentationState._milestones || []).length;
+                totalSlides += (presentationState._stories || []).length
+                             + ((presentationState._stories || []).length ? 1 : 0);
                 if (hasExtra9TeamsSlide) totalSlides++;
                 if (hasHandicapSlide) totalSlides++;
                 if (hasNextRoundSlide) totalSlides++;
@@ -14421,6 +14708,10 @@
                     teamStandings: leaderboard,
                     // Reveal-redesign payload: team blocks (worst first), interleaved sequence,
                     // and tonight's champion index (order-independent).
+                    _milestones: (() => {
+                        try { return window.detectMilestones(mostRecentRound, eventRounds) || []; }
+                        catch (e) { console.error('Milestone detection failed:', e); return []; }
+                    })(),
                     _stories: (() => {
                         try {
                             const list = window.getRunSheet(mostRecentRound) || [];
@@ -15085,6 +15376,10 @@
             presentationState._dividerTeamsSlideIndex = dividerTeamsSlideIndex;
             // The payoff: the storylines you chose, in the order you chose, just before
             // the standings land.
+            // One slide per milestone — they land individually rather than as a list.
+            const _miles = presentationState._milestones || [];
+            const milestoneSlideStart = slideIndex;
+            slideIndex += _miles.length;
             const storySlideStart = slideIndex;
             slideIndex += _stories.length;
             const oddsFinaleSlideIndex = hasOddsFinaleSlide ? slideIndex++ : -1;
@@ -15135,7 +15430,9 @@
                 nm(bracketWOverviewSlideIndex, "WINNER'S BRACKET");
                 nm(bracketLOverviewSlideIndex, "LOSER'S BRACKET");
                 nm(storyTeaseSlideIndex, 'COLD OPEN');
+                for (let i = 0; i < _miles.length; i++) nm(milestoneSlideStart + i, 'MILESTONE');
                 for (let i = 0; i < _stories.length; i++) nm(storySlideStart + i, 'STORYLINE');
+                presentationState._milestoneSlideStart = milestoneSlideStart;
                 nm(oddsFinaleSlideIndex, 'STANDINGS & ODDS');
                 nm(eventNetSlideIndex, 'EVENT NET');
                 nm(milestonesSlideIndex, 'MILESTONES');
@@ -18319,6 +18616,42 @@
                             All of it, coming up.
                         </p>
                     </div>`;
+            } else if (_miles.length > 0 && currentSlide >= milestoneSlideStart && currentSlide < milestoneSlideStart + _miles.length) {
+                // ═══ MILESTONE — one achievement, full screen ═══
+                const m = _miles[currentSlide - milestoneSlideStart];
+                const def = (window.MILESTONE_DEFS || []).find(d => d.key === m.key) || { emoji: '🏅', name: 'Milestone' };
+                const sp = (state.players || []).find(x => String(x.id) === String(m.playerId));
+                const isPB = def.kind === 'personal-best';
+                const isDown = def.kind === 'barrier-down';
+                html += `
+                    <div style="animation:fadeIn 0.6s ease-out;max-width:960px;width:100%;text-align:center;">
+                        <div style="color:#fbbf24;font-size:14px;font-weight:800;letter-spacing:5px;text-transform:uppercase;animation:slideUp 0.6s ease-out;">
+                            Milestone
+                        </div>
+                        <div style="font-size:82px;line-height:1;margin:18px 0;animation:scaleIn 0.7s 0.2s ease-out both;">${def.emoji}</div>
+                        <div style="display:flex;align-items:center;justify-content:center;gap:16px;animation:slideUp 0.7s 0.45s ease-out both;">
+                            ${sp ? `<div style="border:3px solid #fbbf24;border-radius:50%;padding:3px;">${renderAvatar(sp, 78)}</div>` : ''}
+                            <h1 style="color:white;font-size:clamp(34px,5vw,60px);font-weight:900;margin:0;text-shadow:0 6px 30px rgba(0,0,0,0.6);">
+                                ${m.player}
+                            </h1>
+                        </div>
+                        <div style="margin-top:26px;animation:fadeIn 0.9s 1s ease-out both;">
+                            <div style="color:#fbbf24;font-size:clamp(26px,3.4vw,40px);font-weight:900;">
+                                ${isPB
+                                    ? (m.key === 'bestGross' ? `New personal best — ${m.value} gross`
+                                                             : `New personal best — ${m.value} points`)
+                                    : isDown
+                                        ? (m.key === 'handicapDrop' ? `Handicap through ${m.threshold} — now ${m.value}`
+                                                                    : `Broke ${m.threshold} — shot ${m.value}`)
+                                        : `${m.threshold}${def.unit ? ' ' + def.unit : ''}`}
+                            </div>
+                            <div style="color:rgba(255,255,255,0.6);font-size:16px;margin-top:10px;">
+                                ${isPB ? `Previous best ${m.threshold}`
+                                       : isDown ? def.name
+                                       : `${def.name} · now at ${Math.round(m.value * 10) / 10}`}
+                            </div>
+                        </div>
+                    </div>`;
             } else if (_stories.length > 0 && currentSlide >= storySlideStart && currentSlide < storySlideStart + _stories.length) {
                 // ═══ THE PAYOFF — one storyline per slide ═══
                 const st = _stories[currentSlide - storySlideStart];
@@ -19744,6 +20077,12 @@
                     };
                     const slot = oneShots[_cur];
                     if (slot) playSfx(slot, null, 0.9);
+                    const _ms = presentationState._milestoneSlideStart;
+                    const _ml = presentationState._milestones || [];
+                    if (_ms != null && _cur >= _ms && _cur < _ms + _ml.length) {
+                        const m = _ml[_cur - _ms];
+                        if (m) playSfx(window.milestoneSlot(m.key), null, 0.9);
+                    }
                 }
             } catch (e) {}
             // Reset all uniform reveal steps (registry-driven), then the custom ones.
