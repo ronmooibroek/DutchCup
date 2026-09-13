@@ -714,7 +714,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.08.03.1';
+        const APP_VERSION = '2026.08.03.2';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -7446,6 +7446,14 @@
         window.SOUND_SLOTS = [
             { group: 'Opening', slot: 'anthem',   name: 'Dutch flag / anthem',    def: 'Sounds/dutch-anthem-f1-podium (1).mp3' },
             { group: 'Opening', slot: 'field',    name: "Today's Field",          def: 'Sounds/10-walking-on-sunshine.mp3' },
+            { group: 'Hole analysis', slot: 'EASIEST HOLE',  name: 'Easiest hole reveal',   def: null, suggest: 'success' },
+            { group: 'Hole analysis', slot: 'TOUGHEST HOLE', name: 'Toughest hole reveal',  def: null, suggest: 'buzzer' },
+            { group: 'BBB', slot: 'BBB BACKGROUND', name: 'BBB screen background', def: null, music: true },
+            { group: 'BBB', slot: 'BBB REVEAL',     name: 'BBB — each reveal',     def: null, suggest: 'coin' },
+            { group: 'CTP', slot: 'CTP BACKGROUND', name: 'CTP screen background', def: null, music: true },
+            { group: 'CTP', slot: 'CTP REVEAL',     name: 'CTP — each reveal',     def: null, suggest: 'chime' },
+            { group: 'CTP', slot: 'CTP WINNER',     name: 'Closest to the pin winner', def: null, suggest: 'sparkle' },
+            { group: 'Extra 9', slot: 'EXTRA9 WINNER', name: 'Extra 9 winner', def: null, suggest: 'fanfare' },
             { group: 'The reveal', slot: 'FAIRWAY SHOT', name: 'Club strike (each shot)', def: 'Sounds/golf-hit.mp3', suggest: 'golfhit' },
             { group: 'The reveal', slot: 'TEAM TOTAL',   name: 'Team final total',        def: 'Sounds/nsmb-new-high-score.mp3', suggest: 'triumph' },
             { group: 'The reveal', slot: 'RANK UP',      name: 'Player moves up',         def: 'Sounds/nsmb-new-high-score.mp3', suggest: 'success' },
@@ -7463,6 +7471,9 @@
             { group: 'Finale', slot: 'CHAMPION SONG', name: 'Champion Golfer',     def: 'Sounds/All-I-do-is-win.mp3' },
             { group: 'Finale', slot: 'closing',       name: 'Closing slideshow',   def: 'Sounds/Straight-down-the-middle-full.mp3' }
         ];
+
+        // Each team gets its own walk-up track, keyed by team id so it survives renames.
+        window.teamWalkupSlot = (teamId) => 'TEAM WALKUP:' + teamId;
 
         window.showSoundStudio = () => {
             const app = document.getElementById('app');
@@ -7577,6 +7588,20 @@
                         <h3 style="margin:0 0 12px;">${g}</h3>
                         ${window.SOUND_SLOTS.filter(s => s.group === g).map(row).join('')}
                     </div>`).join('')}
+
+                <div class="card">
+                    <h3 style="margin:0 0 4px;">🎤 Team walk-up music</h3>
+                    <p style="font-size:12px;color:#6b7280;margin:0 0 12px;">
+                        Plays when that team's "Now Revealing" slide comes up. Trim it to the
+                        best few seconds — the intro slide isn't on screen for long.
+                    </p>
+                    ${(state.teams || []).map(t => row({
+                        slot: window.teamWalkupSlot(t.id),
+                        name: t.name,
+                        def: null,
+                        music: true
+                    })).join('') || '<p style="color:#6b7280;font-size:13px;">No teams yet.</p>'}
+                </div>
 
                 <div class="card">
                     <h3 style="margin:0 0 6px;">🏅 Award stings</h3>
@@ -10489,10 +10514,11 @@
         // Team result slide: 0 = header, 1 = the fairway reveal. Standings come later,
         // all at once, in the State of the Cup finale.
         const TEAM_STAGE_MAX = 1;
+        // `sfx` fires once per reveal step on that slide.
         const UNIFORM_REVEALS = [
             { stepKey: 'netRevealStep',        indexKey: '_netSlideIndex',        countKey: '_netTopCount' },
-            { stepKey: 'ctpLeadersRevealStep', indexKey: '_ctpLeadersSlideIndex', countKey: '_ctpLeadersCount' },
-            { stepKey: 'bbbLeadersRevealStep', indexKey: '_bbbLeadersSlideIndex', countKey: '_bbbLeadersCount' },
+            { stepKey: 'ctpLeadersRevealStep', indexKey: '_ctpLeadersSlideIndex', countKey: '_ctpLeadersCount', sfx: 'CTP REVEAL' },
+            { stepKey: 'bbbLeadersRevealStep', indexKey: '_bbbLeadersSlideIndex', countKey: '_bbbLeadersCount', sfx: 'BBB REVEAL' },
             // State of the Cup: step 0 = before today, step 1 = tonight's shake-up
             { stepKey: 'oddsFinaleStep',       indexKey: '_oddsFinaleSlideIndex', maxStep: 2 },
         ];
@@ -15094,6 +15120,8 @@
                 nm(biggestMomentsSlideIndex, 'BIGGEST MOMENTS');
                 nm(holeAnalysisSlideIndex, 'EASIEST HOLE');
                 nm(hardestHoleSlideIndex, 'TOUGHEST HOLE');
+                presentationState._easiestHoleSlideIndex = holeAnalysisSlideIndex;
+                presentationState._hardestHoleSlideIndex = hardestHoleSlideIndex;
                 nm(beatComparisonSlideIndex, 'BEAT COMPARISON');
                 nm(scoringDistSlideIndex, "TODAY'S OVERALL PERFORMANCE");
                 nm(ctpLeadersSlideIndex, 'CTP LEADERS');
@@ -19628,6 +19656,8 @@
                 const idx = presentationState[r.indexKey];
                 if (!_navOnPhoto && idx >= 0 && _navContentIdx === idx && (presentationState[r.stepKey] || 0) < uniformRevealMax(r)) {
                     presentationState[r.stepKey] = (presentationState[r.stepKey] || 0) + 1;
+                    // One sting per reveal on slides that have one assigned
+                    if (r.sfx) { try { playSfx(r.sfx, null, 0.85); } catch (e) {} }
                     renderPresentation();
                     return;
                 }
@@ -19703,6 +19733,19 @@
             // Reset sub-step states when we leave their slides
             // Music follows the slide: anthem only on the flag page, outro only on the closing loop.
             try { syncPresentationMusic(); } catch (e) {}
+            // One-shot stings for slides that mark a moment rather than carry a bed
+            try {
+                const _cur = presentationState.currentSlide;
+                if (_cur !== presentationState.__lastStungSlide) {
+                    presentationState.__lastStungSlide = _cur;
+                    const oneShots = {
+                        [presentationState._easiestHoleSlideIndex]: 'EASIEST HOLE',
+                        [presentationState._hardestHoleSlideIndex]: 'TOUGHEST HOLE'
+                    };
+                    const slot = oneShots[_cur];
+                    if (slot) playSfx(slot, null, 0.9);
+                }
+            } catch (e) {}
             // Reset all uniform reveal steps (registry-driven), then the custom ones.
             // In Quick Recap mode, land slides FULLY revealed instead of starting hidden.
             for (const r of UNIFORM_REVEALS) presentationState[r.stepKey] = window.__quickRecapMode ? uniformRevealMax(r) : 0;
@@ -20594,6 +20637,11 @@
         // syncPresentationMusic (run on every slide change, both directions) stops any
         // track whose slide we've left. Mute-aware; missing MP3s fail silently.
         window.__slideTrack = null; // { key, audio }
+        // Resolve a track key that has no hard-coded default (team walk-ups, BBB/CTP beds).
+        window.__trackDefaultFor = (key) => {
+            const s = (window.SOUND_SLOTS || []).find(x => x.slot === key);
+            return s ? s.def : null;
+        };
         window.playSlideTrack = (key, src, opts) => {
             opts = opts || {};
             if (window.__presentationMuted) return;
@@ -20637,12 +20685,33 @@
             if (cur === presentationState._dividerAwardsSlideIndex) return 'divAwards';
             if (cur === presentationState._dividerMatchesSlideIndex) return 'divMatches';
             if (cur === presentationState._closingSlideIndex) return 'closing';
+            if (cur === presentationState._bbbLeadersSlideIndex) return 'BBB BACKGROUND';
+            if (cur === presentationState._ctpLeadersSlideIndex) return 'CTP BACKGROUND';
+            // A team's walk-up track belongs to that team's "Now Revealing" intro slide.
+            const seq = presentationState._revealSeq || [];
+            const start = presentationState._revealSeqStart;
+            if (start != null && cur >= start && cur < start + seq.length) {
+                const e = seq[cur - start];
+                if (e && e.k === 'ti') {
+                    const blk = (presentationState._revealBlocks || [])[e.b];
+                    if (blk) return window.teamWalkupSlot(blk.teamId);
+                }
+            }
             return null;
         };
         window.syncPresentationMusic = () => {
-            // Stop any track that doesn't belong to the slide we're now on.
+            // Stop any track that doesn't belong to the slide we're now on…
             const dedicated = window.__slideTrackKeyForCurrent();
             if (window.__slideTrack && window.__slideTrack.key !== dedicated) window.stopSlideTrack();
+            // …and start the one that does. Slots with no assigned sound resolve to
+            // silence, so this is a no-op until you set something in Sound Studio.
+            if (dedicated && (!window.__slideTrack || window.__slideTrack.key !== dedicated)) {
+                const def = window.__trackDefaultFor(dedicated);
+                const r = window.resolveSound(dedicated, def);
+                if (r && r.kind !== 'none' && r.value) {
+                    window.playSlideTrack(dedicated, def, { loop: true, vol: 0.6 });
+                }
+            }
         };
         
         window.togglePresentationMute = () => {
