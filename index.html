@@ -596,6 +596,18 @@
             70%  { transform: rotate(8deg) scale(1.03); }     /* follow-through */
             100% { transform: rotate(0deg) scale(1); }
         }
+        /* A putting stroke: small, controlled, no big shoulder turn */
+        @keyframes fwPutt {
+            0%   { transform: rotate(0deg); }
+            35%  { transform: rotate(-7deg); }
+            70%  { transform: rotate(5deg); }
+            100% { transform: rotate(0deg); }
+        }
+        /* The ball rolls along the ground instead of flying */
+        @keyframes fwRoll {
+            0%   { transform: translateY(0) rotate(0deg); }
+            100% { transform: translateY(0) rotate(1080deg); }
+        }
         /* Score lands with weight */
         @keyframes fwScorePop {
             0%   { transform: scale(1); }
@@ -714,7 +726,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.08.04.1';
+        const APP_VERSION = '2026.08.04.2';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -1796,17 +1808,20 @@
             if (stage === 1) {
                 const steps = [];
                 (block.players || []).forEach(p => {
+                    // Stroke play and BBB are the big hauls — those get a full swing and
+                    // a long ball flight. Balls, Extra 9 and CTP are small point bumps, so
+                    // they play as putts: a short roll along the ground and a putt sound.
                     const comps = [
-                        { label: 'Stroke play', pts: p.strokePoints, icon: '⛳', color: '#22c55e' },
-                        { label: 'BBB',         pts: p.bbbPoints,    icon: '🎯', color: '#f59e0b' },
-                        { label: 'Balls',       pts: p.ballPoints,   icon: '🥎', color: '#38bdf8' },
-                        { label: 'Extra 9',     pts: p.extra9Points, icon: '9️⃣', color: '#a78bfa' },
-                        { label: 'CTP',         pts: p.ctpPoints,    icon: '📍', color: '#f472b6' }
+                        { label: 'Stroke play', pts: p.strokePoints, icon: '⛳', color: '#22c55e', putt: false },
+                        { label: 'BBB',         pts: p.bbbPoints,    icon: '🎯', color: '#f59e0b', putt: false },
+                        { label: 'Balls',       pts: p.ballPoints,   icon: '🥎', color: '#38bdf8', putt: true },
+                        { label: 'Extra 9',     pts: p.extra9Points, icon: '9️⃣', color: '#a78bfa', putt: true },
+                        { label: 'CTP',         pts: p.ctpPoints,    icon: '📍', color: '#f472b6', putt: true }
                     ];
                     comps.forEach(cm => {
                         if (cm.label === 'Stroke play' || (cm.pts || 0) !== 0) {
                             steps.push({ player: p.playerName, playerId: p.playerId, label: cm.label,
-                                         pts: cm.pts || 0, icon: cm.icon, color: cm.color });
+                                         pts: cm.pts || 0, icon: cm.icon, color: cm.color, putt: !!cm.putt });
                         }
                     });
                 });
@@ -2058,28 +2073,41 @@
                         </div>`;
                 }
 
-                // 1) the swing
+                const isPutt = !!s.putt;
+
+                // 1) the stroke — a full swing, or a short putting stroke
                 setTimeout(() => {
                     if (golferInner) {
                         golferInner.style.animation = 'none'; void golferInner.offsetHeight;
-                        golferInner.style.animation = 'fwSwing 0.6s ease-in-out';
+                        golferInner.style.animation = isPutt
+                            ? 'fwPutt 0.45s ease-in-out'
+                            : 'fwSwing 0.6s ease-in-out';
                     }
                 }, 500);
 
                 // 2) impact — ball launches
                 setTimeout(() => {
-                    try { playSfx('FAIRWAY SHOT', 'Sounds/golf-hit.mp3', 0.85); } catch (e) {}
+                    try {
+                        // Putts get their own slot, so it can be a soft roll rather than a crack
+                        if (isPutt) playSfx('FAIRWAY PUTT', null, 0.85);
+                        else playSfx('FAIRWAY SHOT', 'Sounds/golf-hit.mp3', 0.85);
+                    } catch (e) {}
                     if (ball && golfer) {
                         ball.style.transition = 'none';
                         ball.style.left = golfer.style.left || (pct(val) + '%');
                         void ball.offsetHeight;
-                        ball.style.transition = 'left 0.8s cubic-bezier(0.3,0.05,0.4,1)';
+                        // A putt rolls: steady, decelerating, no arc. A shot flies.
+                        ball.style.transition = isPutt
+                            ? 'left 0.7s cubic-bezier(0.15,0.7,0.35,1)'
+                            : 'left 0.8s cubic-bezier(0.3,0.05,0.4,1)';
                         ball.style.left = target + '%';
                     }
                     if (ballInner) {
                         ballInner.style.opacity = '1';
                         ballInner.style.animation = 'none'; void ballInner.offsetHeight;
-                        ballInner.style.animation = 'fwFlight 0.8s ease-out';
+                        ballInner.style.animation = isPutt
+                            ? 'fwRoll 0.7s linear'
+                            : 'fwFlight 0.8s ease-out';
                     }
                     if (fill) fill.style.width = target + '%';
                 }, 800);
@@ -7514,7 +7542,8 @@
             { group: 'CTP', slot: 'CTP REVEAL',     name: 'CTP — each reveal',     def: null, suggest: 'chime' },
             { group: 'CTP', slot: 'CTP WINNER',     name: 'Closest to the pin winner', def: null, suggest: 'sparkle' },
             { group: 'Extra 9', slot: 'EXTRA9 WINNER', name: 'Extra 9 winner', def: null, suggest: 'fanfare' },
-            { group: 'The reveal', slot: 'FAIRWAY SHOT', name: 'Club strike (each shot)', def: 'Sounds/golf-hit.mp3', suggest: 'golfhit' },
+            { group: 'The reveal', slot: 'FAIRWAY SHOT', name: 'Club strike (stroke play & BBB)', def: 'Sounds/golf-hit.mp3', suggest: 'golfhit' },
+            { group: 'The reveal', slot: 'FAIRWAY PUTT', name: 'Putt (balls, Extra 9, CTP)', def: null, suggest: 'pop' },
             { group: 'The reveal', slot: 'TEAM TOTAL',   name: 'Team final total',        def: 'Sounds/nsmb-new-high-score.mp3', suggest: 'triumph' },
             { group: 'The reveal', slot: 'RANK UP',      name: 'Player moves up',         def: 'Sounds/nsmb-new-high-score.mp3', suggest: 'success' },
             { group: 'The reveal', slot: 'RANK DOWN',    name: 'Player moves down',       def: 'Sounds/priceisrightfail_1.mp3',  suggest: 'sad' },
