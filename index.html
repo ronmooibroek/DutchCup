@@ -726,7 +726,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.10.12.2';
+        const APP_VERSION = '2026.10.12.3';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -7714,19 +7714,23 @@
         // Each slot can use a repo file, any audio URL, a synthesised sting,
         // or silence. Choices are saved on this device.
         // ═══════════════════════════════════════════════════════════════
+        // ─── Music attribution ───
+        // "Fluffing a Duck", "Airport Lounge", "Run Amok" by Kevin MacLeod
+        // (incompetech.com) — licensed under Creative Commons: By Attribution 3.0
+        // https://creativecommons.org/licenses/by/3.0/
         window.SOUND_SLOTS = [
             { group: 'Opening', slot: 'anthem',   name: 'Dutch flag / anthem',    def: 'Sounds/dutch-anthem-f1-podium (1).mp3' },
             { group: 'Opening', slot: 'field',    name: "Today's Field",          def: 'Sounds/10-walking-on-sunshine.mp3' },
-            { group: 'Hole analysis', slot: 'EASIEST HOLE',  name: 'Easiest hole reveal',   def: null, suggest: 'success' },
-            { group: 'Hole analysis', slot: 'TOUGHEST HOLE', name: 'Toughest hole reveal',  def: null, suggest: 'buzzer' },
-            { group: 'BBB', slot: 'BBB BACKGROUND', name: 'BBB screen background', def: null, music: true },
-            { group: 'BBB', slot: 'BBB REVEAL',     name: 'BBB — each reveal',     def: null, suggest: 'coin' },
-            { group: 'CTP', slot: 'CTP BACKGROUND', name: 'CTP screen background', def: null, music: true },
-            { group: 'CTP', slot: 'CTP REVEAL',     name: 'CTP — each reveal',     def: null, suggest: 'chime' },
-            { group: 'CTP', slot: 'CTP WINNER',     name: 'Closest to the pin winner', def: null, suggest: 'sparkle' },
-            { group: 'Extra 9', slot: 'EXTRA9 WINNER', name: 'Extra 9 winner', def: null, suggest: 'fanfare' },
+            { group: 'Hole analysis', slot: 'EASIEST HOLE',  name: 'Easiest hole reveal',   def: 'synth:success', suggest: 'success' },
+            { group: 'Hole analysis', slot: 'TOUGHEST HOLE', name: 'Toughest hole reveal',  def: 'synth:buzzer', suggest: 'buzzer' },
+            { group: 'BBB', slot: 'BBB BACKGROUND', name: 'BBB screen background', def: 'Sounds/bbb-background-kevin-macleod.mp3', music: true },
+            { group: 'BBB', slot: 'BBB REVEAL',     name: 'BBB — each reveal',     def: 'synth:coin', suggest: 'coin' },
+            { group: 'CTP', slot: 'CTP BACKGROUND', name: 'CTP screen background', def: 'Sounds/ctp-background-kevin-macleod.mp3', music: true },
+            { group: 'CTP', slot: 'CTP REVEAL',     name: 'CTP — each reveal',     def: 'synth:chime', suggest: 'chime' },
+            { group: 'CTP', slot: 'CTP WINNER',     name: 'Closest to the pin winner', def: 'synth:sparkle', suggest: 'sparkle' },
+            { group: 'Extra 9', slot: 'EXTRA9 WINNER', name: 'Extra 9 winner', def: 'synth:fanfare', suggest: 'fanfare' },
             { group: 'The reveal', slot: 'FAIRWAY SHOT', name: 'Club strike (stroke play & BBB)', def: 'Sounds/golf-hit.mp3', suggest: 'golfhit' },
-            { group: 'The reveal', slot: 'FAIRWAY PUTT', name: 'Putt (balls, Extra 9, CTP)', def: null, suggest: 'pop' },
+            { group: 'The reveal', slot: 'FAIRWAY PUTT', name: 'Putt (balls, Extra 9, CTP)', def: 'synth:pop', suggest: 'pop' },
             { group: 'The reveal', slot: 'TEAM TOTAL',   name: 'Team final total',        def: 'Sounds/nsmb-new-high-score.mp3', suggest: 'triumph' },
             { group: 'The reveal', slot: 'RANK UP',      name: 'Player moves up',         def: 'Sounds/nsmb-new-high-score.mp3', suggest: 'success' },
             { group: 'The reveal', slot: 'RANK DOWN',    name: 'Player moves down',       def: 'Sounds/priceisrightfail_1.mp3',  suggest: 'sad' },
@@ -7737,7 +7741,7 @@
             { group: 'Net countdown', slot: 'NET COUNTDOWN #3', name: 'Third',               def: 'Sounds/road-rash-64-third-place.mp3',  suggest: 'chime' },
             { group: 'Net countdown', slot: 'NET COUNTDOWN #4', name: 'Last place',          def: 'Sounds/road-rash-64-last-place.mp3',   suggest: 'sad' },
             { group: 'Net countdown', slot: 'NET REPEAT WINNER', name: 'Repeat winner',      def: 'Sounds/road-rash-64-last-place.mp3',   suggest: 'crowd_ooh' },
-            { group: 'Match play', slot: 'CART RACE',   name: 'Race music',        def: null,                    suggest: 'riser' },
+            { group: 'Match play', slot: 'CART RACE',   name: 'Race music',        def: 'Sounds/cart-race-kevin-macleod.mp3', suggest: 'riser' },
             { group: 'Match play', slot: 'CART HOP',    name: 'Each hole in the race', def: 'Sounds/sound-frogger-hop.wav', suggest: 'hop' },
             { group: 'Match play', slot: 'MATCH FINISH', name: 'Match won',        def: 'Sounds/you-win.mp3',    suggest: 'triumph' },
             { group: 'Finale', slot: 'CHAMPION SONG', name: 'Champion Golfer',     def: 'Sounds/All-I-do-is-win.mp3' },
@@ -7833,7 +7837,9 @@
                 const kind = cur ? cur.kind : 'file';
                 const isDefault = !cur;
                 const desc = isDefault
-                    ? (s.def ? `Default · ${s.def.replace(/^Sounds\//, '')}` : 'No sound set')
+                    ? (s.def ? `Default · ${s.def.indexOf('synth:') === 0
+                        ? ((window.SYNTH_STINGS[s.def.slice(6)] || {}).label || s.def)
+                        : s.def.replace(/^Sounds\//, '')}` : 'No sound set')
                     : (kind === 'synth' ? `Synth · ${(window.SYNTH_STINGS[cur.value] || {}).label || cur.value}`
                     : kind === 'none' ? 'Silent'
                     : `File · ${String(cur.value).replace(/^Sounds\//, '')}`);
@@ -11013,7 +11019,7 @@
         // `sfx` fires once per reveal step on that slide.
         const UNIFORM_REVEALS = [
             { stepKey: 'netRevealStep',        indexKey: '_netSlideIndex',        countKey: '_netTopCount' },
-            { stepKey: 'ctpLeadersRevealStep', indexKey: '_ctpLeadersSlideIndex', countKey: '_ctpLeadersCount', sfx: 'CTP REVEAL' },
+            { stepKey: 'ctpLeadersRevealStep', indexKey: '_ctpLeadersSlideIndex', countKey: '_ctpLeadersCount', sfx: 'CTP REVEAL', finalSfx: 'CTP WINNER' },
             { stepKey: 'bbbLeadersRevealStep', indexKey: '_bbbLeadersSlideIndex', countKey: '_bbbLeadersCount', sfx: 'BBB REVEAL' },
             // State of the Cup: step 0 = before today, step 1 = tonight's shake-up
             { stepKey: 'oddsFinaleStep',       indexKey: '_oddsFinaleSlideIndex', maxStep: 2 },
@@ -13527,6 +13533,81 @@
                                   front: best.fSum, back: best.bSum, gap: best.gap, worseIsBack,
                                   holes: best.f.holes.filter(h => worseIsBack ? h.idx >= 9 : h.idx < 9).map(h => h.idx) }];
                     })();
+
+                    // 💥 BLOW-UP HOLE — worst single hole vs par (gross) tonight.
+                    // Triple bogey or worse to qualify; ties share the glory.
+                    A.blowUp = (() => {
+                        const w = crown(f => {
+                            let worst = null;
+                            f.holes.forEach(h => {
+                                const over = h.gross - h.par;
+                                if (over >= 3 && (!worst || over > worst.over))
+                                    worst = { over, holeIdx: h.idx, gross: h.gross, par: h.par };
+                            });
+                            return worst ? { v: worst.over, ...worst } : null;
+                        }, (a, b) => a > b);
+                        return w.length ? w : null;
+                    })();
+
+                    // 🔄 BOUNCE-BACK KING — most bounce-backs: a bogey-or-worse
+                    // followed immediately by a birdie-or-better (gross), on
+                    // consecutive holes.
+                    A.bounceBack = (() => {
+                        const w = crown(f => {
+                            const hs = f.holes.slice().sort((a, b) => a.idx - b.idx);
+                            let count = 0; const holes = [];
+                            for (let i = 0; i + 1 < hs.length; i++) {
+                                if (hs[i + 1].idx !== hs[i].idx + 1) continue;
+                                const wasBad = hs[i].gross - hs[i].par >= 1;
+                                const thenGood = hs[i + 1].par - hs[i + 1].gross >= 1;
+                                if (wasBad && thenGood) { count++; holes.push(hs[i + 1].idx); }
+                            }
+                            return count > 0 ? { v: count, count, holes } : null;
+                        }, (a, b) => a > b);
+                        return w.length ? w : null;
+                    })();
+
+                    // 🎣 BALL MAGNET — fewest balls remaining at the end of the
+                    // round. Water hazards send their regards.
+                    A.ballMagnet = (() => {
+                        const remainingOf = (f) => {
+                            let remaining = null;
+                            mostRecentRound.teams.forEach(team => {
+                                const pl = (team.players || []).find(x => String(x.id) === String(f.playerId));
+                                if (pl && pl.ballsRemaining != null) remaining = pl.ballsRemaining;
+                            });
+                            return remaining;
+                        };
+                        const withBalls = FUN.map(f => ({ f, remaining: remainingOf(f) }))
+                                             .filter(x => x.remaining != null);
+                        if (withBalls.length < 2) return null;
+                        const minR = Math.min(...withBalls.map(x => x.remaining));
+                        const maxR = Math.max(...withBalls.map(x => x.remaining));
+                        // Only a real story if someone is down to 1 or 0 while others kept theirs
+                        if (minR > 1 || minR >= maxR) return null;
+                        return withBalls.filter(x => x.remaining === minR)
+                            .map(x => ({ player: x.f.player, team: x.f.team, teamColor: x.f.teamColor,
+                                          remaining: x.remaining, lost: maxR - x.remaining }));
+                    })();
+
+                    // 🎯 THE SNIPER — most closest-to-the-pin holes won tonight.
+                    A.sniper = (() => {
+                        const cw = mostRecentRound.ctpWinners || [];
+                        const byPlayerId = {};
+                        cw.forEach(slot => {
+                            if (!slot || typeof slot !== 'string') return;
+                            const m = slot.match(/^(\d+)-(\d+)$/);
+                            if (!m) return;
+                            const team = (mostRecentRound.teams || [])[+m[1]];
+                            const pl = team && (team.players || [])[+m[2]];
+                            if (pl && pl.id != null) byPlayerId[String(pl.id)] = (byPlayerId[String(pl.id)] || 0) + 1;
+                        });
+                        const w = crown(f => {
+                            const c = byPlayerId[String(f.playerId)] || 0;
+                            return c > 0 ? { v: c, count: c } : null;
+                        }, (a, b) => a > b);
+                        return w.length ? w : null;
+                    })();
                 })();
                 
                 // ─── PER-PLAYER AWARD ATTACHMENT ───
@@ -13757,7 +13838,31 @@
                           tagline: w => `Front ${w.front} / back ${w.back}`,
                           description: 'Two completely different golfers shared one scorecard tonight. One of them should not be allowed back.',
                           detail: w => `${w.gap}-stroke split · Dr. ${w.worseIsBack ? 'Front' : 'Back'} vs Mr. ${w.worseIsBack ? 'Back' : 'Front'}`,
-                          holes: w => w.holes, highlightLabel: w => `Mr. ${w.worseIsBack ? 'Back' : 'Front'} Was Here` }
+                          holes: w => w.holes, highlightLabel: w => `Mr. ${w.worseIsBack ? 'Back' : 'Front'} Was Here` },
+                        { key: 'blowUp', label: 'BLOW-UP HOLE', emoji: '💥',
+                          color: '#f97316', flair: 'tumble',
+                          tagline: w => `Hole ${w.holeIdx + 1}: a ${w.gross} on a par ${w.par}`,
+                          description: 'One hole went full fireworks. The rest of the card was just trying to keep up.',
+                          detail: w => `+${w.over} on hole ${w.holeIdx + 1}`,
+                          holes: w => [w.holeIdx], highlightLabel: 'The Scene Of The Crime' },
+                        { key: 'bounceBack', label: 'BOUNCE-BACK KING', emoji: '🔄',
+                          color: '#22c55e', flair: 'loop',
+                          tagline: w => `${w.count} bounce-back${w.count === 1 ? '' : 's'}`,
+                          description: 'Bogey or worse... then birdie or better on the very next hole. Amnesia is a skill.',
+                          detail: w => `${w.count} bounce-back${w.count === 1 ? '' : 's'} tonight`,
+                          holes: w => w.holes, highlightLabel: 'Short Memory' },
+                        { key: 'ballMagnet', label: 'BALL MAGNET', emoji: '🎣',
+                          color: '#0ea5e9', flair: 'splash',
+                          tagline: w => `${w.remaining} ball${w.remaining === 1 ? '' : 's'} left`,
+                          description: 'The water hazards have filed a formal thank-you. New balls are on the way — again.',
+                          detail: w => `Down to ${w.remaining} after losing ${w.lost}`,
+                          highlightLabel: '' },
+                        { key: 'sniper', label: 'THE SNIPER', emoji: '🎯',
+                          color: '#eab308', flair: 'magic',
+                          tagline: w => `${w.count} CTP${w.count === 1 ? '' : 's'} won`,
+                          description: 'Closest to the pin, again and again. The flagstick has started flinching.',
+                          detail: w => `Won ${w.count} closest-to-the-pin hole${w.count === 1 ? '' : 's'}`,
+                          highlightLabel: '' }
                     ];
                     
                     // Build the awards list for each player
@@ -15930,6 +16035,12 @@
                                 style="background:${window.__quickRecapMode ? 'rgba(251,191,36,0.85)' : 'rgba(15,23,42,0.75)'};color:${window.__quickRecapMode ? '#1f2937' : 'white'};border:1px solid rgba(255,255,255,0.2);padding:8px 12px;border-radius:6px;cursor:pointer;font-size:14px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,0.2);">
                             ⚡${window.__quickRecapMode ? ' QUICK' : ''}
                         </button>
+                        <button id="presentationSoundboardToggle"
+                                onclick="toggleSoundboard()"
+                                title="MC soundboard — one-tap stingers"
+                                style="background:rgba(15,23,42,0.75);color:white;border:1px solid rgba(255,255,255,0.2);padding:8px 12px;border-radius:6px;cursor:pointer;font-size:16px;box-shadow:0 2px 8px rgba(0,0,0,0.2);min-width:44px;">
+                            🎛️
+                        </button>
                         <button id="presentationMuteToggle" 
                                 onclick="togglePresentationMute()" 
                                 title="${window.__presentationMuted ? 'Unmute presentation audio' : (window.audioReady ? 'Mute presentation audio' : 'Tap to enable sound')}"
@@ -17149,7 +17260,8 @@
                             honey:   { e: ['🍯', '🐝', '🐝'],        anim: 'fa-twinkle', n: 8 },
                             swiper:  { e: ['🦊', '💨'],              anim: 'ex9-sway',   n: 6 },
                             robbed:  { e: ['🚨', '💰', '👮'],        anim: 'fa-pop',     n: 7 },
-                            bigbird: { e: ['🦅', '🦅', '🪶'],        anim: 'ex9-sway',   n: 7 }
+                            bigbird: { e: ['🦅', '🦅', '🪶'],        anim: 'ex9-sway',   n: 7 },
+                            splash:  { e: ['💧', '🌊', '🎣'],        anim: 'ex9-fall',   n: 8 }
                         };
                         const r = recipes[award.flair];
                         if (!r) return '';
@@ -19775,6 +19887,12 @@
                 `;
             } else if (currentSlide === extra9TeamsSlideIndex) {
                 // EXTRA 9 TEAMS SLIDE - Snake draft based on gross scores
+                try {
+                    if (presentationState.__lastStungSlide !== 'extra9') {
+                        presentationState.__lastStungSlide = 'extra9';
+                        setTimeout(() => { try { playSfx('EXTRA9 WINNER', null, 0.9); } catch (e) {} }, 400);
+                    }
+                } catch (e) {}
                 html += `
                     <div style="animation:slideUp 0.8s ease-out;max-width:1100px;width:100%;">
                         <h1 style="color:white;font-size:clamp(34px, 4.5vw, 46px);margin:0 0 16px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
@@ -20200,9 +20318,14 @@
             for (const r of UNIFORM_REVEALS) {
                 const idx = presentationState[r.indexKey];
                 if (!_navOnPhoto && idx >= 0 && _navContentIdx === idx && (presentationState[r.stepKey] || 0) < uniformRevealMax(r)) {
-                    presentationState[r.stepKey] = (presentationState[r.stepKey] || 0) + 1;
+                    const _newStep = (presentationState[r.stepKey] || 0) + 1;
+                    presentationState[r.stepKey] = _newStep;
                     // One sting per reveal on slides that have one assigned
                     if (r.sfx) { try { playSfx(r.sfx, null, 0.85); } catch (e) {} }
+                    // ...and a winner sting when the final reveal lands
+                    if (r.finalSfx && _newStep >= uniformRevealMax(r)) {
+                        setTimeout(() => { try { playSfx(r.finalSfx, null, 0.9); } catch (e) {} }, 650);
+                    }
                     renderPresentation();
                     return;
                 }
@@ -20966,6 +21089,9 @@
         window.resolveSound = (slot, defaultSrc) => {
             const o = window.__soundOverrides[slot];
             if (o && o.kind) return o;
+            // Slot defaults may name a synth sting ('synth:coin') instead of a file.
+            if (typeof defaultSrc === 'string' && defaultSrc.indexOf('synth:') === 0)
+                return { kind: 'synth', value: defaultSrc.slice(6) };
             return defaultSrc ? { kind: 'file', value: defaultSrc } : { kind: 'none' };
         };
         // Back-compat: existing callers ask for a src string.
@@ -21213,7 +21339,8 @@
         };
         // One-shot sound effect (position stingers etc.), slot-addressable.
         window.playSfx = (slot, src, vol) => {
-            const r = window.resolveSound(slot, src);
+            const effectiveSrc = (src != null) ? src : window.__trackDefaultFor(slot);
+            const r = window.resolveSound(slot, effectiveSrc);
             if (r.kind === 'none') return;
             if (r.kind === 'synth') { window.playSynth(r.value, vol); return; }
             if (window.__presentationMuted) return;
@@ -21271,6 +21398,47 @@
             // Update the toggle button label if it's currently rendered
             const btn = document.getElementById('presentationMuteToggle');
             if (btn) btn.textContent = window.__presentationMuted ? '🔇' : '🔊';
+        };
+
+        // ─── MC SOUNDBOARD ───
+        // One-tap stingers for whoever's running the show. Big buttons, instant
+        // playback through the regular audio pool, honors the presentation mute.
+        window.__SOUNDBOARD = [
+            { emoji: '🥁', label: 'Drumroll',     play: () => window.playSynth('drumroll', 0.95) },
+            { emoji: '🎺', label: 'Fanfare',      play: () => window.playSynth('fanfare', 0.9) },
+            { emoji: '👏', label: 'Applause',     play: () => window.playSynth('applause', 0.9) },
+            { emoji: '📣', label: 'Crowd cheer',  play: () => window.playFile('Sounds/cheering-5sec.mp3', 0.9, { keepOthers: true }) },
+            { emoji: '⛳', label: 'Golf clap',    play: () => window.playFile('Sounds/golfclap.mp3', 0.9, { keepOthers: true }) },
+            { emoji: '😮', label: 'Crowd ooh',    play: () => window.playSynth('crowd_ooh', 0.9) },
+            { emoji: '📉', label: 'Sad trombone', play: () => window.playSynth('sad', 0.9) },
+            { emoji: '💨', label: 'Whoosh',       play: () => window.playSynth('whoosh', 0.85) },
+        ];
+        window.toggleSoundboard = () => {
+            const existing = document.getElementById('mcSoundboard');
+            if (existing) { existing.remove(); return; }
+            const ov = document.createElement('div');
+            ov.id = 'mcSoundboard';
+            ov.style.cssText = 'position:fixed;left:16px;bottom:16px;z-index:3000;background:rgba(15,23,42,0.95);'
+                + 'border:2px solid rgba(255,255,255,0.25);border-radius:14px;padding:14px;'
+                + 'box-shadow:0 8px 30px rgba(0,0,0,0.5);max-width:min(92vw,480px);';
+            ov.innerHTML =
+                '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">'
+                + '<span style="color:white;font-weight:800;font-size:15px;">🎛️ MC Soundboard</span>'
+                + '<button onclick="toggleSoundboard()" style="background:rgba(255,255,255,0.15);color:white;border:none;'
+                + 'border-radius:6px;padding:4px 10px;cursor:pointer;font-size:14px;">✕</button></div>'
+                + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">'
+                + window.__SOUNDBOARD.map((b, i) =>
+                    `<button onclick="window.__SOUNDBOARD[${i}].play()" `
+                    + `style="background:rgba(255,255,255,0.12);color:white;border:1px solid rgba(255,255,255,0.2);`
+                    + `border-radius:10px;padding:12px 4px;cursor:pointer;display:flex;flex-direction:column;`
+                    + `align-items:center;gap:4px;font-size:22px;" `
+                    + `onmouseover="this.style.background='rgba(255,255,255,0.25)'" `
+                    + `onmouseout="this.style.background='rgba(255,255,255,0.12)'">`
+                    + `${b.emoji}<span style="font-size:10px;font-weight:700;">${b.label}</span></button>`
+                ).join('') + '</div>'
+                + (window.__presentationMuted
+                    ? '<div style="color:#fbbf24;font-size:12px;margin-top:8px;">🔇 Muted — unmute (🔊) to hear these.</div>' : '');
+            document.body.appendChild(ov);
         };
         
         // ─── Weather forecast helpers (Open-Meteo, no API key required) ───
@@ -21598,7 +21766,11 @@
             'HONEY POT':            'Sounds/cheering.mp3',
             'SWIPER':               'Sounds/whoosh-wind.mp3',
             "I'VE BEEN ROBBED":     'Sounds/priceisrightfail_1.mp3',
-            'LONG LIVE THE KING':   'Sounds/road-rash-64-first-place.mp3'
+            'LONG LIVE THE KING':   'Sounds/road-rash-64-first-place.mp3',
+            'BLOW-UP HOLE':         'Sounds/SteamEngineCrash-15sec.mp3',
+            'BOUNCE-BACK KING':     'Sounds/magic-fairy.mp3',
+            'BALL MAGNET':          'Sounds/cheering-5sec.mp3',
+            'THE SNIPER':           'Sounds/cheering-5sec.mp3'
         };
         
         // Cache for Audio elements so they don't reload on every play
