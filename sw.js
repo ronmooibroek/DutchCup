@@ -5,7 +5,7 @@
 //   • App HTML pages → network-first (so updates always reach devices), cache fallback.
 //   • Versioned CDN assets (gstatic SDKs) → cache-first with background refresh.
 const SW_VERSION = 'dutchcup-v1';
-const APP_SHELL = ['./score-entry.html', './index.html'];
+const APP_SHELL = ['./score-entry.html', './index.html', './leaderboard.html'];
 
 self.addEventListener('install', (event) => {
     event.waitUntil(

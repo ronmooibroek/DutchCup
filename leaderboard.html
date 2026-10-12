@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#065f46">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Dutch Cup — Live Leaderboard</title>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+<style>
+/* ═══ DUTCH CUP LEADERBOARD — read-only, built for spectators ═══
+   Same design system as the score-entry app: cream card stock, fairway green. */
+*, *::before, *::after { box-sizing: border-box; }
+:root {
+    --card: #FDFBF3;
+    --ink: #1E2A20;
+    --ink-soft: #5A6B5E;
+    --fairway: #2E7D4F;
+    --fairway-dk: #1F5C39;
+    --flag: #D64541;
+    --sand: #E8DFC8;
+    --sky: #EFF5F0;
+    --birdie: #1B7F4B;
+    --eagle: #B8860B;
+    --bogey: #C97B2D;
+    --dbl: #C0392B;
+    --radius: 14px;
+    --shadow: 0 2px 10px rgba(30,42,32,0.10);
+}
+html, body {
+    margin: 0; padding: 0;
+    background: var(--sky);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    font-size: 17px;
+}
+button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
+
+.app-header {
+    background: var(--card);
+    border-bottom: 3px solid var(--fairway);
+    padding: 12px 16px 10px;
+    position: sticky; top: 0; z-index: 100;
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+}
+.header-text { min-width: 0; }
+#header-title { font-size: 19px; font-weight: 800; margin: 0; letter-spacing: -0.2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#header-subtitle { font-size: 13px; color: var(--ink-soft); margin: 1px 0 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.header-actions { display: flex; gap: 6px; flex-shrink: 0; align-items: center; }
+.hdr-btn {
+    background: none; border: 1.5px solid var(--sand); color: var(--ink-soft);
+    font-size: 13px; font-weight: 700; padding: 7px 11px; border-radius: 999px; cursor: pointer;
+}
+.hdr-btn.primary { background: var(--fairway); border-color: var(--fairway); color: #fff; }
+
+.live-dot {
+    display: inline-block; width: 9px; height: 9px; border-radius: 50%;
+    background: var(--flag); margin-right: 5px; vertical-align: 1px;
+    animation: pulse 1.6s ease-in-out infinite;
+}
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+.container { max-width: 640px; margin: 0 auto; padding: 14px 12px 40px; }
+.card {
+    background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
+    padding: 14px; margin-bottom: 12px; border: 1px solid var(--sand);
+}
+.center-state { text-align: center; padding: 48px 20px; color: var(--ink-soft); }
+.spinner {
+    width: 34px; height: 34px; margin: 0 auto;
+    border: 4px solid var(--sand); border-top-color: var(--fairway); border-radius: 50%;
+    animation: spin 0.9s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.muted { color: var(--ink-soft); font-size: 14px; }
+.error-msg { color: #991b1b; font-weight: 600; }
+
+/* ─── Round picker ─── */
+.round-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    width: 100%; text-align: left; background: var(--card);
+    border: 1px solid var(--sand); border-radius: var(--radius);
+    padding: 13px 14px; margin-bottom: 10px; cursor: pointer; box-shadow: var(--shadow);
+}
+.round-row:active { transform: scale(0.99); }
+.round-name { font-weight: 800; font-size: 16px; }
+.round-sub { font-size: 13px; color: var(--ink-soft); margin-top: 2px; }
+.pill {
+    font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.4px;
+    padding: 4px 9px; border-radius: 999px; white-space: nowrap;
+}
+.pill.in-progress { background: #dcfce7; color: #166534; }
+.pill.today { background: #fef3c7; color: #92400e; }
+.pill.scheduled { background: #e0e7ff; color: #3730a3; }
+.pill.done { background: #f3f4f6; color: #6b7280; }
+
+/* ─── Standings ─── */
+.team-card { padding: 0; overflow: hidden; }
+.team-head {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+    padding: 12px 14px 8px; border-bottom: 2px solid var(--sand);
+}
+.team-name { font-weight: 800; font-size: 17px; }
+.team-rank {
+    font-size: 12px; font-weight: 800; color: var(--ink-soft);
+    background: var(--sky); border-radius: 8px; padding: 2px 8px; margin-right: 6px;
+}
+.team-pts { font-weight: 800; font-size: 20px; color: var(--fairway-dk); white-space: nowrap; }
+.team-pts small { font-size: 11px; color: var(--ink-soft); font-weight: 700; }
+.player-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 14px; border-bottom: 1px solid var(--sand);
+}
+.player-row:last-child { border-bottom: none; }
+.player-name { flex: 1; min-width: 0; font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.player-meta { font-size: 12px; color: var(--ink-soft); white-space: nowrap; }
+.player-pts { font-weight: 800; font-size: 17px; min-width: 44px; text-align: right; }
+.score-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.score-dot.albatross { background: #6d28d9; } .score-dot.eagle { background: var(--eagle); }
+.score-dot.birdie { background: var(--birdie); } .score-dot.par-score { background: #9ca3af; }
+.score-dot.bogey { background: var(--bogey); } .score-dot.double { background: var(--dbl); }
+.score-dot.worse { background: #7f1d1d; }
+
+.bonus-line { font-size: 12px; color: var(--ink-soft); padding: 8px 14px 10px; border-top: 1px dashed var(--sand); }
+.foot-note { text-align: center; color: var(--ink-soft); font-size: 12px; margin-top: 18px; }
+.share-ok { color: var(--fairway-dk); font-weight: 700; font-size: 13px; }
+</style>
+</head>
+<body>
+
+<header class="app-header">
+    <div class="header-text">
+        <h1 id="header-title">Dutch Cup</h1>
+        <div id="header-subtitle"><span class="live-dot"></span>Live leaderboard</div>
+    </div>
+    <div class="header-actions">
+        <span id="share-ok" class="share-ok" style="display:none;">Copied ✓</span>
+        <button class="hdr-btn primary" id="share-btn" style="display:none;">🔗 Share</button>
+        <button class="hdr-btn" id="rounds-btn" style="display:none;">Rounds</button>
+    </div>
+</header>
+
+<div class="container" id="app">
+    <div class="center-state">
+        <div class="spinner"></div>
+        <p class="muted" style="margin-top:14px;">Loading leaderboard…</p>
+    </div>
+</div>
+
+<div class="foot-note" id="foot-version">Dutch Cup Live Leaderboard</div>
+
+<script>
+'use strict';
+// ─── Dutch Cup LIVE LEADERBOARD — read-only. This page never writes to Firestore. ───
+const LB_VERSION = '2026.10.12.2';
+
+function showFatalError(msg, detail) {
+    const appEl = document.getElementById('app');
+    const escape = s => String(s).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+    appEl.innerHTML = '<div class="card"><h2 style="color:#991b1b;">⚠️ Error</h2>'
+        + '<div class="error-msg">' + escape(msg) + '</div>'
+        + (detail ? '<p class="muted">' + escape(detail) + '</p>' : '') + '</div>';
+}
+
+// ─── Firebase init (read-only: firestore only) ──────────────────────────
+const firebaseConfig = {
+    apiKey: "AIzaSyBNc104mTZIwHbg4tYUhYNv3n2GS6Z1Ijo",
+    authDomain: "dutchcup.firebaseapp.com",
+    projectId: "dutchcup",
+    storageBucket: "dutchcup.firebasestorage.app",
+    messagingSenderId: "643789311462",
+    appId: "1:643789311462:web:cfd7fc01ccf4a0171b9a27",
+    measurementId: "G-YMP33N5C55"
+};
+const LEAGUE_ID = "dutch-cup-2024";
+
+let firestoreDb = null;
+let roundsCol = null;
+let settingsRef = null;
+let playersRef = null;
+try {
+    if (typeof firebase === 'undefined') throw new Error('Firebase SDK failed to load. Check your internet connection.');
+    firebase.initializeApp(firebaseConfig);
+    firestoreDb = firebase.firestore();
+    // Rounds are sharded: one doc per round at data/rounds/items/{roundId}.
+    roundsCol = firestoreDb.collection('leagues').doc(LEAGUE_ID).collection('data').doc('rounds').collection('items');
+    settingsRef = firestoreDb.collection('leagues').doc(LEAGUE_ID).collection('data').doc('settings');
+    playersRef = firestoreDb.collection('leagues').doc(LEAGUE_ID).collection('data').doc('players');
+} catch (err) {
+    document.addEventListener('DOMContentLoaded', () => {
+        try { document.getElementById('foot-version').textContent = 'Dutch Cup Live Leaderboard · v' + LB_VERSION; } catch (e) {}
+        showFatalError('Could not initialize Firebase: ' + (err.message || err), err.stack);
+    });
+}
+
+// ─── State ──────────────────────────────────────────────────────────────
+const state = {
+    allRounds: [],
+    selectedRoundId: null,
+    round: null,            // the selected round object (live)
+    leaguePlayers: [],
+    useUSGA: false,
+    unsubRound: null,
+    unsubPicker: null
+};
+
+const urlParams = new URLSearchParams(window.location.search);
+const urlRoundId = urlParams.get('roundId');
+
+// ─── Helpers ────────────────────────────────────────────────────────────
+function $(sel) { return document.querySelector(sel); }
+function el(tag, attrs, ...children) {
+    const e = document.createElement(tag);
+    if (attrs) for (const k in attrs) {
+        const v = attrs[k];
+        if (v == null) continue;
+        if (k === 'class') e.className = v;
+        else if (k === 'style') e.style.cssText = v;
+        else if (k.startsWith('on') && typeof v === 'function') e.addEventListener(k.slice(2), v);
+        else e.setAttribute(k, v);
+    }
+    for (const c of children) {
+        if (c == null || c === false) continue;
+        e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+    }
+    return e;
+}
+const idStr = v => (v == null ? '' : String(v));
+const idsEqual = (a, b) => idStr(a) === idStr(b);
+
+function setHeader(title, subtitleHtml) {
+    if (title) $('#header-title').textContent = title;
+    if (subtitleHtml !== undefined) $('#header-subtitle').innerHTML = subtitleHtml;
+}
+
+function formatRoundDate(round) {
+    if (round.timestamp) {
+        const d = new Date(round.timestamp);
+        return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+            + ' at ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    }
+    return round.date || 'Unknown date';
+}
+
+// ─── Scoring (mirrors score-entry.html exactly) ─────────────────────────
+// Defaults only — overwritten by the league's real settings from Firestore.
+let POINTS = { albatross: 10, eagle: 7, birdie: 5, par: 2, bogey: 1, doubleOrWorse: 0 };
+let BONUS = { bbb: 1, ball: 1, extra9: 5, ctp: 2 };
+function getPoints(netToPar) {
+    if (netToPar <= -3) return POINTS.albatross;
+    if (netToPar === -2) return POINTS.eagle;
+    if (netToPar === -1) return POINTS.birdie;
+    if (netToPar === 0)  return POINTS.par;
+    if (netToPar === 1)  return POINTS.bogey;
+    return POINTS.doubleOrWorse;
+}
+
+const LB_USGA_DEFAULT_SLOPE = 113;
+const LB_USGA_DEFAULT_RATING = 72.0;
+function lbCourseHandicap(index, slope, rating, par) {
+    const i = parseFloat(index), s = parseFloat(slope), r = parseFloat(rating), p = parseFloat(par);
+    if (!isFinite(i) || !isFinite(s) || !isFinite(r) || !isFinite(p) || s <= 0) return null;
+    return Math.round(i * (s / 113) + (r - p));
+}
+function handicapForRound(round, teamPlayer) {
+    const raw = (teamPlayer && teamPlayer.handicap !== undefined && teamPlayer.handicap !== null)
+        ? parseInt(teamPlayer.handicap, 10) || 0 : 0;
+    if (!state.useUSGA) return raw;
+    const lp = (state.leaguePlayers || []).find(p => idsEqual(p.id, teamPlayer && teamPlayer.id));
+    const index = (lp && typeof lp.handicapIndex === 'number') ? lp.handicapIndex : null;
+    if (index === null) return raw;
+    const slope = (teamPlayer && teamPlayer.teeSlope) || LB_USGA_DEFAULT_SLOPE;
+    const rating = (teamPlayer && teamPlayer.teeRating) || LB_USGA_DEFAULT_RATING;
+    const coursePar = Array.isArray(round && round.pars)
+        ? round.pars.reduce((s, p) => s + (parseInt(p) || 0), 0) : 72;
+    const ch = lbCourseHandicap(index, slope, rating, coursePar);
+    return (ch === null) ? raw : ch;
+}
+function strokesOnHole(handicap, holeHandicapIdx) {
+    let s = 0;
+    if (handicap >= holeHandicapIdx) s = 1;
+    if (handicap >= holeHandicapIdx + 18) s = 2;
+    return s;
+}
+function classForScore(grossScore, par, strokes) {
+    if (grossScore === '' || grossScore == null) return '';
+    const g = parseInt(grossScore, 10);
+    if (isNaN(g)) return '';
+    const netToPar = (g - strokes) - par;
+    if (netToPar <= -3) return 'albatross';
+    if (netToPar === -2) return 'eagle';
+    if (netToPar === -1) return 'birdie';
+    if (netToPar === 0)  return 'par-score';
+    if (netToPar === 1)  return 'bogey';
+    if (netToPar === 2)  return 'double';
+    return 'worse';
+}
+
+// Read-only score reader (no pending edits on this page).
+function roundScore(round, playerId, holeIdx) {
+    const player = (round.teams || []).flatMap(t => t.players || []).find(p => idsEqual(p.id, playerId));
+    if (!player || !Array.isArray(player.scores)) return '';
+    const v = player.scores[holeIdx];
+    return (v === '' || v == null) ? '' : String(v);
+}
+
+// CTP reader — same forgiving formats as the scoring app.
+function roundCTP(round, holeIdx) {
+    const cw = round.ctpWinners;
+    if (!Array.isArray(cw)) return '';
+    for (const item of cw) {
+        if (item && typeof item === 'object') {
+            const itemHole = (item.holeIdx != null) ? item.holeIdx
+                          : (item.hole != null) ? (item.hole - 1) : null;
+            if (itemHole === holeIdx) return idStr(item.playerId);
+        }
+    }
+    if (cw.length === 18 && (typeof cw[holeIdx] === 'string' || typeof cw[holeIdx] === 'number')) {
+        const v = String(cw[holeIdx] ?? '');
+        if (!v) return '';
+        const m = v.match(/^(\d+)-(\d+)$/);
+        if (m) {
+            const pl = ((round.teams || [])[+m[1]] || {}).players || [];
+            return pl[+m[2]] ? idStr(pl[+m[2]].id) : '';
+        }
+        return idStr(v);
+    }
+    const par3s = (round.pars || []).map((p, i) => (parseInt(p) === 3 ? i : -1)).filter(i => i >= 0);
+    const slot = par3s.indexOf(holeIdx);
+    if (slot >= 0 && cw[slot] != null && cw[slot] !== '' && typeof cw[slot] !== 'object') {
+        const s = String(cw[slot]);
+        const m = s.match(/^(\d+)-(\d+)$/);
+        if (m) {
+            const pl = ((round.teams || [])[+m[1]] || {}).players || [];
+            return pl[+m[2]] ? idStr(pl[+m[2]].id) : '';
+        }
+        return idStr(s);
+    }
+    return '';
+}
+
+function computePlayerTotals(round, p) {
+    let gross = 0, strokePoints = 0, thru = 0;
+    const hc = handicapForRound(round, p);
+    for (let h = 0; h < 18; h++) {
+        const s = roundScore(round, p.id, h);
+        if (s === '' || s == null) continue;
+        const n = parseInt(s, 10);
+        if (isNaN(n)) continue;
+        thru++;
+        gross += n;
+        const par = (round.pars || [])[h];
+        const holeHc = (round.handicaps || [])[h];
+        const strokes = strokesOnHole(hc, holeHc);
+        strokePoints += getPoints((n - strokes) - par);
+    }
+    const bbbCount = parseInt(p.bbbTotal, 10) || 0;
+    const bbbPoints = bbbCount * BONUS.bbb;
+    const ballPoints = (parseInt(p.ballsRemaining, 10) || 0) * BONUS.ball;
+    let pos = null;
+    (round.teams || []).forEach((t, ti) => (t.players || []).forEach((pl, pi) => {
+        if (idsEqual(pl.id, p.id)) pos = ti + '-' + pi;
+    }));
+    const countWins = (arr) => {
+        if (!Array.isArray(arr) || pos == null) return 0;
+        return arr.filter(w => String(w) === pos || idsEqual(w, p.id)
+            || (w && w.playerId != null && idsEqual(w.playerId, p.id))).length;
+    };
+    const extra9Points = countWins(round.extra9Winners) * BONUS.extra9;
+    let ctpWins = 0;
+    for (let h = 0; h < 18; h++) {
+        if (idsEqual(roundCTP(round, h), p.id)) ctpWins++;
+    }
+    const ctpPoints = ctpWins * BONUS.ctp;
+    const points = strokePoints + bbbPoints + ballPoints + extra9Points + ctpPoints;
+    return { gross, points, thru, strokePoints, bbbPoints, ballPoints, extra9Points, ctpPoints };
+}
+
+// ─── Round helpers ──────────────────────────────────────────────────────
+function isRoundDateInPast(round) {
+    const ts = round.timestamp || round.id || 0;
+    if (!ts) return false;
+    const roundDay = new Date(ts); roundDay.setHours(0, 0, 0, 0);
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    return roundDay.getTime() < today.getTime();
+}
+function isRoundDateToday(round) {
+    const ts = round.timestamp || round.id || 0;
+    if (!ts) return false;
+    const roundDay = new Date(ts); roundDay.setHours(0, 0, 0, 0);
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    return roundDay.getTime() === today.getTime();
+}
+function isAllScored(round) {
+    const teams = round.teams || [];
+    let anyAssigned = false;
+    for (const team of teams) {
+        for (const p of (team.players || [])) {
+            if (!p.groupNumber) continue;
+            anyAssigned = true;
+            if (!Array.isArray(p.scores) || p.scores.length !== 18) return false;
+            for (let h = 0; h < 18; h++) {
+                if (p.scores[h] === '' || p.scores[h] == null) return false;
+            }
+        }
+    }
+    return anyAssigned;
+}
+function isRoundCompleted(round) {
+    if (!round) return false;
+    if (round.completed === true) return true;
+    if (round.active === false) return false;
+    return isRoundDateInPast(round) && isAllScored(round);
+}
+function isRoundSelectable(round) {
+    if (!round) return false;
+    if (round.active === false) return true;
+    return !isRoundCompleted(round);
+}
+function getSelectableRounds(rounds) {
+    return (rounds || []).filter(r => isRoundSelectable(r));
+}
+function roundStatusLabel(round) {
+    if (round.completed === true) return { text: 'Final', cls: 'done' };
+    if (round.active !== false) return { text: 'In progress', cls: 'in-progress' };
+    if (isRoundDateToday(round)) return { text: 'Today', cls: 'today' };
+    return { text: 'Scheduled', cls: 'scheduled' };
+}
+
+// ─── Rendering ──────────────────────────────────────────────────────────
+function render() {
+    if (state.selectedRoundId == null) renderPicker();
+    else renderBoard();
+}
+
+function renderPicker() {
+    setHeader('Dutch Cup', '<span class="live-dot"></span>Live leaderboard — pick a round');
+    $('#share-btn').style.display = 'none';
+    $('#rounds-btn').style.display = 'none';
+    const app = $('#app');
+    app.innerHTML = '';
+
+    const selectable = getSelectableRounds(state.allRounds)
+        .slice()
+        .sort((a, b) => {
+            const aLive = a.active !== false ? 0 : 1;
+            const bLive = b.active !== false ? 0 : 1;
+            if (aLive !== bLive) return aLive - bLive;
+            return (a.timestamp || 0) - (b.timestamp || 0);
+        });
+
+    if (selectable.length === 0) {
+        app.appendChild(el('div', { class: 'card center-state' },
+            el('p', { class: 'muted' }, 'No upcoming or in-progress rounds right now.')));
+        return;
+    }
+    app.appendChild(el('p', { class: 'muted', style: 'margin:0 2px 10px;' },
+        'Follow the action live — scores update as they\u2019re entered on the course.'));
+    selectable.forEach(r => {
+        const st = roundStatusLabel(r);
+        app.appendChild(el('button', {
+            class: 'round-row',
+            onclick: () => selectRound(idStr(r.id))
+        },
+            el('div', {},
+                el('div', { class: 'round-name' }, r.courseName || 'Round'),
+                el('div', { class: 'round-sub' }, formatRoundDate(r))),
+            el('span', { class: 'pill ' + st.cls }, st.text)));
+    });
+}
+
+function teamStandings(round) {
+    return (round.teams || []).map((t, ti) => {
+        const players = (t.players || []).map(p => ({ p, t: computePlayerTotals(round, p) }));
+        players.sort((a, b) => b.t.points - a.t.points);
+        const pts = players.reduce((s, x) => s + x.t.points, 0);
+        return { team: t, idx: ti, players, pts };
+    }).sort((a, b) => b.pts - a.pts);
+}
+
+function renderBoard() {
+    const round = state.round;
+    const app = $('#app');
+    app.innerHTML = '';
+    $('#rounds-btn').style.display = '';
+    $('#share-btn').style.display = '';
+
+    if (!round) {
+        setHeader('Dutch Cup', '<span class="live-dot"></span>Live leaderboard');
+        app.appendChild(el('div', { class: 'card center-state' },
+            el('p', { class: 'error-msg' }, 'Round not found.'),
+            el('p', { class: 'muted' }, 'It may have been deleted — pick another round.')));
+        return;
+    }
+
+    const st = roundStatusLabel(round);
+    setHeader(round.courseName || 'Dutch Cup',
+        '<span class="live-dot"></span>' + escapeHtml(formatRoundDate(round)) + ' · ' + st.text);
+
+    const standings = teamStandings(round);
+    const anyScores = standings.some(tm => tm.players.some(x => x.t.thru > 0));
+
+    if (!anyScores) {
+        app.appendChild(el('div', { class: 'card center-state' },
+            el('p', { class: 'muted' }, 'No scores yet — play is about to begin. Check back soon.')));
+    }
+
+    standings.forEach((tm, rank) => {
+        const card = el('div', { class: 'card team-card' });
+        const head = el('div', { class: 'team-head' },
+            el('div', {}, el('span', { class: 'team-rank' }, '#' + (rank + 1)),
+                el('span', { class: 'team-name' }, tm.team.name || ('Team ' + (tm.idx + 1)))),
+            el('div', { class: 'team-pts' }, String(tm.pts), el('small', {}, ' pts')));
+        card.appendChild(head);
+        tm.players.forEach(({ p, t }) => {
+            // form dot: colour of the most recent scored hole
+            let dotCls = '';
+            const scores = Array.isArray(p.scores) ? p.scores : [];
+            for (let h = 17; h >= 0; h--) {
+                const s = scores[h];
+                if (s !== '' && s != null) {
+                    const par = (round.pars || [])[h];
+                    const holeHc = (round.handicaps || [])[h];
+                    dotCls = classForScore(s, par, strokesOnHole(handicapForRound(round, p), holeHc));
+                    break;
+                }
+            }
+            card.appendChild(el('div', { class: 'player-row' },
+                dotCls ? el('span', { class: 'score-dot ' + dotCls }) : el('span', { class: 'score-dot', style: 'background:#e5e7eb;' }),
+                el('div', { class: 'player-name' }, p.name || 'Player'),
+                el('div', { class: 'player-meta' }, t.thru > 0 ? ('Thru ' + t.thru + ' · ' + t.gross) : '—'),
+                el('div', { class: 'player-pts' }, String(t.points))));
+        });
+        const bonusBits = [];
+        const tot = (k) => tm.players.reduce((s, x) => s + (x.t[k] || 0), 0);
+        if (tot('bbbPoints') > 0) bonusBits.push('BBB ' + tot('bbbPoints'));
+        if (tot('ctpPoints') > 0) bonusBits.push('CTP ' + tot('ctpPoints'));
+        if (tot('extra9Points') > 0) bonusBits.push('Extra 9 ' + tot('extra9Points'));
+        if (tot('ballPoints') > 0) bonusBits.push('Balls ' + tot('ballPoints'));
+        if (bonusBits.length > 0) card.appendChild(el('div', { class: 'bonus-line' }, 'incl. ' + bonusBits.join(' · ')));
+        app.appendChild(card);
+    });
+}
+
+function escapeHtml(s) {
+    return String(s).replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
+}
+
+// ─── Round selection + live subscription ────────────────────────────────
+function selectRound(roundId) {
+    state.selectedRoundId = idStr(roundId);
+    try {
+        const url = new URL(window.location.href);
+        url.searchParams.set('roundId', state.selectedRoundId);
+        window.history.replaceState(null, '', url.toString());
+    } catch (e) {}
+    subscribeToRound();
+    render();
+}
+
+function subscribeToRound() {
+    if (state.unsubRound) { try { state.unsubRound(); } catch (e) {} state.unsubRound = null; }
+    if (!roundsCol || state.selectedRoundId == null) return;
+    state.unsubRound = roundsCol.doc(state.selectedRoundId).onSnapshot(doc => {
+        state.round = (doc.exists && doc.data().value) ? doc.data().value : null;
+        render();
+    }, err => {
+        console.error('Round listen error:', err);
+        showFatalError('Connection error: ' + (err.message || err), 'Code: ' + (err.code || '?'));
+    });
+}
+
+function subscribeToPicker() {
+    if (state.unsubPicker) return;
+    state.unsubPicker = roundsCol.orderBy('shardOrder').onSnapshot(qsnap => {
+        const arr = [];
+        qsnap.forEach(d => { const v = d.data() && d.data().value; if (v) arr.push(v); });
+        state.allRounds = arr;
+        // If a ?roundId= was given, jump straight to it once we know the rounds.
+        if (state.selectedRoundId == null && urlRoundId) {
+            const wanted = arr.find(r => idsEqual(r.id, urlRoundId));
+            if (wanted) { selectRound(idStr(wanted.id)); return; }
+        }
+        // Don't clobber the board while its own snapshot is still in flight.
+        if (state.selectedRoundId == null || state.round) render();
+    }, err => {
+        console.error('Rounds listen error:', err);
+        showFatalError('Connection error: ' + (err.message || err), 'Code: ' + (err.code || '?'));
+    });
+}
+
+// ─── Share ──────────────────────────────────────────────────────────────
+function shareUrl() {
+    const url = new URL(window.location.href);
+    if (state.selectedRoundId) url.searchParams.set('roundId', state.selectedRoundId);
+    return url.toString();
+}
+async function copyShareLink() {
+    const link = shareUrl();
+    try {
+        await navigator.clipboard.writeText(link);
+    } catch (e) {
+        // clipboard API unavailable (older browsers) — fall back to prompt
+        window.prompt('Copy this link:', link);
+        return;
+    }
+    const ok = $('#share-ok');
+    ok.style.display = '';
+    setTimeout(() => { ok.style.display = 'none'; }, 1600);
+}
+
+// ─── Init ───────────────────────────────────────────────────────────────
+function init() {
+    if (!roundsCol) return;
+    try { document.getElementById('foot-version').textContent = 'Dutch Cup Live Leaderboard · v' + LB_VERSION; } catch (e) {}
+
+    $('#share-btn').addEventListener('click', copyShareLink);
+    $('#rounds-btn').addEventListener('click', () => {
+        if (state.unsubRound) { try { state.unsubRound(); } catch (e) {} state.unsubRound = null; }
+        state.selectedRoundId = null;
+        state.round = null;
+        try {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('roundId');
+            window.history.replaceState(null, '', url.toString());
+        } catch (e) {}
+        subscribeToPicker();
+        render();
+    });
+
+    // League settings (POINTS/BONUS) + player indexes for USGA mode — read-only.
+    try {
+        if (settingsRef) settingsRef.onSnapshot(d => {
+            if (!d.exists) return;
+            const s = d.data().value || {};
+            POINTS = {
+                albatross: s.albatrossPoints ?? POINTS.albatross,
+                eagle: s.eaglePoints ?? POINTS.eagle,
+                birdie: s.birdiePoints ?? POINTS.birdie,
+                par: s.parPoints ?? POINTS.par,
+                bogey: s.bogeyPoints ?? POINTS.bogey,
+                doubleOrWorse: s.doubleBogeyPoints ?? POINTS.doubleOrWorse
+            };
+            BONUS = {
+                bbb: s.bbbPoints ?? BONUS.bbb,
+                ball: s.ballPoints ?? BONUS.ball,
+                extra9: s.extra9Points ?? BONUS.extra9,
+                ctp: s.ctpPoints ?? BONUS.ctp
+            };
+            state.useUSGA = s.useUSGAHandicap === true;
+            render();
+        }, () => {});
+        if (playersRef) playersRef.onSnapshot(d => {
+            if (d.exists) {
+                state.leaguePlayers = Array.isArray(d.data().value) ? d.data().value : [];
+                render();
+            }
+        }, () => {});
+    } catch (e) { console.warn('Settings listeners unavailable:', e); }
+
+    if (urlRoundId) {
+        // Jump straight to the shared round; verify it exists via one read, then subscribe.
+        state.selectedRoundId = idStr(urlRoundId);
+        $('#share-btn').style.display = '';
+        $('#rounds-btn').style.display = '';
+        setHeader('Dutch Cup', '<span class="live-dot"></span>Live leaderboard');
+        // Also load the picker list in the background so "Rounds" works instantly.
+        subscribeToPicker();
+        subscribeToRound();
+    } else {
+        subscribeToPicker();
+    }
+}
+
+// Service worker: same offline shell as the other pages.
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js')
+        .catch(err => console.warn('Service worker registration failed:', err));
+}
+
+init();
+</script>
+</body>
+</html>
