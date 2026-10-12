@@ -430,7 +430,7 @@ const firebaseConfig = {
 const LEAGUE_ID = "dutch-cup-2024";
 
 let firestoreDb = null;
-let roundsRef = null;
+let roundsCol = null;   // rounds live as individual docs: data/rounds/items/{roundId}
 let eventsRef = null;
 let currentEventRef = null;
 let settingsRef = null;
@@ -440,7 +440,9 @@ try {
     if (typeof firebase === 'undefined') throw new Error('Firebase SDK failed to load. Check your internet connection.');
     firebase.initializeApp(firebaseConfig);
     firestoreDb = firebase.firestore();
-    roundsRef = firestoreDb.collection('leagues').doc(LEAGUE_ID).collection('data').doc('rounds');
+    // Rounds are sharded: one Firestore document per round (see migrateRoundsToShards).
+    // The old single `data/rounds` doc is migrated away on first load.
+    roundsCol = firestoreDb.collection('leagues').doc(LEAGUE_ID).collection('data').doc('rounds').collection('items');
     // Bracket lives on the event object, so the match tab needs these too.
     eventsRef = firestoreDb.collection('leagues').doc(LEAGUE_ID).collection('data').doc('events');
     currentEventRef = firestoreDb.collection('leagues').doc(LEAGUE_ID).collection('data').doc('currentEventId');
@@ -460,6 +462,52 @@ try {
     } catch (e) {}
         showFatalError('Could not initialize Firebase: ' + (err.message || err), err.stack);
     });
+}
+
+// ─── Rounds sharding ────────────────────────────────────────────────────
+// Rounds used to live in ONE Firestore document (data/rounds → {value: [...]});
+// that doc was approaching Firestore's 1 MB limit, so each round now gets its
+// own document: data/rounds/items/{roundId} → { value, updatedAt, shardOrder }.
+// The one-time migration below is idempotent — safe if several devices run it.
+const roundDocRef = (roundId) => roundsCol.doc(String(roundId));
+
+let _roundsMigrationDone = false;
+async function migrateRoundsToShards() {
+    if (_roundsMigrationDone || !firestoreDb || !roundsCol) return;
+    _roundsMigrationDone = true;
+    try {
+        const roundsDoc = firestoreDb.collection('leagues').doc(LEAGUE_ID)
+            .collection('data').doc('rounds');
+        const snap = await roundsDoc.get();
+        const legacy = (snap.exists && Array.isArray(snap.data().value)) ? snap.data().value : null;
+        if (!legacy || legacy.length === 0) return;      // nothing to migrate
+        const existing = await roundsCol.limit(1).get();
+        if (!existing.empty) {
+            await roundsDoc.set({ value: null, migratedToShards: true,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+            return;
+        }
+        const CHUNK = 400;   // stay under Firestore's 500-write batch limit
+        for (let i = 0; i < legacy.length; i += CHUNK) {
+            const batch = firestoreDb.batch();
+            legacy.slice(i, i + CHUNK).forEach((r, j) => {
+                if (!r) return;
+                if (r.id == null) r.id = 'migrated-' + (i + j);   // deterministic fallback
+                batch.set(roundsCol.doc(String(r.id)), {
+                    value: r,
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    shardOrder: i + j
+                });
+            });
+            await batch.commit();
+        }
+        await roundsDoc.set({ value: null, migratedToShards: true,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+        console.log('✅ Rounds migrated to sharded documents:', legacy.length);
+    } catch (err) {
+        console.error('Rounds migration failed (will retry next load):', err);
+        _roundsMigrationDone = false;
+    }
 }
 
 // ─── Photo helpers ──────────────────────────────────────────────────────
@@ -521,7 +569,7 @@ document.addEventListener('visibilitychange', () => {
     try { if (document.visibilityState === 'hidden' && hasPendingEdits()) flushPendingEdits(); } catch (e) {}
 });
 
-const SE_VERSION = '2.17.0'; // entering scores flips a scheduled round to in progress
+const SE_VERSION = '2.18.0'; // sharded rounds + offline support
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
@@ -849,7 +897,9 @@ function effectiveBBB(round, holeIdx) {
 
 // ─── Init ───────────────────────────────────────────────────────────────
 async function init() {
-    if (!roundsRef) return;
+    if (!roundsCol) return;
+    restorePendingEdits();   // offline queue from a previous session, if any
+    updateOnlineStatus();
     try {
         // Bracket data — silent if unavailable; the match tab just says so.
     try {
@@ -888,9 +938,13 @@ async function init() {
         }, () => {});
     } catch (e) { console.warn('Bracket listeners unavailable:', e); }
 
-    state.unsubscribe = roundsRef.onSnapshot(handleRoundsSnapshot, (err) => {
+    try {
+        await migrateRoundsToShards();
+    } catch (e) { console.warn('Migration check failed:', e); }
+
+    state.unsubscribe = roundsCol.orderBy('shardOrder').onSnapshot(handleRoundsSnapshot, (err) => {
             console.error('Listen error:', err);
-            showFatalError('Connection error: ' + (err.message || err), 'Code: ' + (err.code || '?'));
+            handleListenError(err);
         });
     } catch (err) {
         console.error('Init error:', err);
@@ -898,10 +952,14 @@ async function init() {
     }
 }
 
-function handleRoundsSnapshot(doc) {
-    if (!doc.exists) { showFatalError('No rounds data found in the league.'); return; }
-    const data = doc.data();
-    state.allRounds = Array.isArray(data.value) ? data.value : [];
+function handleRoundsSnapshot(qsnap) {
+    const arr = [];
+    qsnap.forEach(d => {
+        const v = d.data() && d.data().value;
+        if (v) arr.push(v);
+    });
+    cacheRoundsForOffline(arr);
+    state.allRounds = arr;
 
     if (state.selectedRoundId == null) {
         if (urlRoundId) {
@@ -1146,6 +1204,7 @@ window.__switchPlayer = function() {
 // SCORE ENTRY VIEW
 // ═══════════════════════════════════════════════════════════════════════
 function renderScoreEntry() {
+    adoptRestoredPendingEdits();
     // If the leaderboard is open, keep showing it (live data refreshes route here).
     if (state.board) { renderLeaderboard(); return; }
     const round = getRoundById(state.selectedRoundId);
@@ -2217,6 +2276,122 @@ function hasPendingEdits() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// OFFLINE SUPPORT — the course often has dead signal. Three layers:
+//  1. pendingEdits are persisted to localStorage on every tap → survive reloads.
+//  2. The last rounds snapshot is cached → the app opens offline from cache.
+//  3. A service worker (sw.js) caches the app shell + Firebase SDKs → the page
+//     itself loads with no signal.
+// ═══════════════════════════════════════════════════════════════════════
+const LS_PENDING_KEY = 'dcPendingEdits';
+const LS_ROUNDS_CACHE_KEY = 'dcRoundsCache';
+
+function persistPendingEdits() {
+    try {
+        if (hasPendingEdits() && state.selectedRoundId != null) {
+            localStorage.setItem(LS_PENDING_KEY, JSON.stringify({
+                roundId: idStr(state.selectedRoundId),
+                edits: state.pendingEdits,
+                savedAt: Date.now()
+            }));
+        } else {
+            localStorage.removeItem(LS_PENDING_KEY);
+        }
+    } catch (e) { /* storage blocked/full — the in-memory queue still works */ }
+}
+
+// Parked (not yet merged): adopted once the matching round is selected/rendered.
+function restorePendingEdits() {
+    try {
+        const raw = localStorage.getItem(LS_PENDING_KEY);
+        if (!raw) return;
+        const saved = JSON.parse(raw);
+        if (saved && saved.edits && typeof saved.edits === 'object') {
+            state.__restoredPending = { roundId: idStr(saved.roundId), edits: saved.edits };
+            if (hasPendingEditsLike(saved.edits)) setStatus('Unsaved ✎', 'saving');
+        }
+    } catch (e) { console.warn('Could not restore pending edits:', e); }
+}
+
+function hasPendingEditsLike(edits) {
+    return !!(edits && (Object.keys(edits.scores || {}).length > 0
+        || Object.keys(edits.ctpWinners || {}).length > 0
+        || Object.keys(edits.balls || {}).length > 0
+        || Object.keys(edits.bbb || {}).length > 0));
+}
+
+function mergePendingEdits(target, source) {
+    if (!source) return;
+    Object.keys(source.scores || {}).forEach(pid => {
+        target.scores[pid] = Object.assign({}, target.scores[pid], source.scores[pid]);
+    });
+    Object.assign(target.ctpWinners, source.ctpWinners || {});
+    Object.assign(target.balls, source.balls || {});
+    Object.assign(target.bbb, source.bbb || {});
+}
+
+// Merge parked offline edits into the live queue once their round is on screen.
+// Idempotent — safe to call from every render/flush path.
+function adoptRestoredPendingEdits() {
+    const rp = state.__restoredPending;
+    if (!rp) return;
+    if (state.selectedRoundId == null || !idsEqual(state.selectedRoundId, rp.roundId)) return;
+    mergePendingEdits(state.pendingEdits, rp.edits);
+    state.__restoredPending = null;
+    if (hasPendingEdits()) { setStatus('Unsaved ✎', 'saving'); persistPendingEdits(); }
+}
+
+function cacheRoundsForOffline(arr) {
+    try {
+        localStorage.setItem(LS_ROUNDS_CACHE_KEY, JSON.stringify({ at: Date.now(), rounds: arr }));
+    } catch (e) { /* cache is best-effort */ }
+}
+
+function loadCachedRounds() {
+    try {
+        const raw = localStorage.getItem(LS_ROUNDS_CACHE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed.rounds) ? parsed : null;
+    } catch (e) { return null; }
+}
+
+// Firestore unreachable: fall back to the last cached snapshot instead of a
+// dead-end error screen. The live listener keeps retrying on its own.
+function handleListenError(err) {
+    if (err && (err.code === 'unavailable' || err.code === 'failed-precondition')) {
+        const cached = loadCachedRounds();
+        if (cached && cached.rounds.length > 0) {
+            console.warn('Firestore unreachable — opening from cached rounds.');
+            updateOnlineStatus();
+            handleRoundsSnapshot({ forEach: (fn) => cached.rounds.forEach((r) => fn({ data: () => ({ value: r }) })) });
+            return;
+        }
+    }
+    showFatalError('Connection error: ' + (err.message || err), 'Code: ' + (err.code || '?'));
+}
+
+function updateOnlineStatus() {
+    const offline = !navigator.onLine;
+    let pill = document.getElementById('offline-pill');
+    if (!offline) { if (pill) pill.style.display = 'none'; return; }
+    if (!pill) {
+        pill = document.createElement('span');
+        pill.id = 'offline-pill';
+        pill.className = 'save-status';
+        pill.style.cssText = 'display:inline-block;background:#fef3c7;color:#92400e;border:1px solid #f59e0b;margin-right:6px;';
+        const actions = document.querySelector('.header-actions');
+        if (actions) actions.insertBefore(pill, actions.firstChild);
+    }
+    pill.textContent = '📴 Offline — scores stay on this device';
+    pill.style.display = 'inline-block';
+}
+window.addEventListener('online', () => {
+    updateOnlineStatus();
+    if (hasPendingEdits()) flushPendingEdits();
+});
+window.addEventListener('offline', updateOnlineStatus);
+
+// ═══════════════════════════════════════════════════════════════════════
 // SAVE — Firestore transaction (last-save-wins)
 // ═══════════════════════════════════════════════════════════════════════
 // Taps no longer trigger a per-tap save. Edits collect locally and flush on hole
@@ -2224,6 +2399,7 @@ function hasPendingEdits() {
 // tap-during-save race entirely on the course.
 function markUnsaved() {
     setStatus('Unsaved \u270e', 'saving');
+    persistPendingEdits();   // offline safety: the queue now survives reloads
 }
 
 // Remove from pendingEdits exactly the leaf values a successful flush wrote —
@@ -2253,6 +2429,7 @@ function prunePendingEdits(saved) {
 }
 
 async function flushPendingEdits() {
+    adoptRestoredPendingEdits();
     if (state.saving) { state.pendingTimer = setTimeout(flushPendingEdits, 400); return; }
     if (!hasPendingEdits()) { setStatus('', ''); return; }
 
@@ -2265,13 +2442,11 @@ async function flushPendingEdits() {
 
     try {
         await firestoreDb.runTransaction(async (tx) => {
-            const snap = await tx.get(roundsRef);
-            if (!snap.exists) throw new Error('Rounds doc missing');
-            const data = snap.data();
-            const rounds = Array.isArray(data.value) ? JSON.parse(JSON.stringify(data.value)) : [];
-
-            const round = rounds.find(r => idsEqual(r.id, state.selectedRoundId));
-            if (!round) throw new Error('Round no longer exists');
+            const ref = roundDocRef(state.selectedRoundId);
+            const snap = await tx.get(ref);
+            if (!snap.exists) throw new Error('Round doc missing');
+            const round = JSON.parse(JSON.stringify(snap.data().value || {}));
+            if (!round || round.id == null) throw new Error('Round no longer exists');
             // Reject the write if the round has been finalized by the main app since these edits were started.
             // The transaction will throw here; the catch block below puts edits back so the user doesn't lose them
             // (though the round being locked means they're stuck unless reopened in the main app).
@@ -2416,8 +2591,8 @@ async function flushPendingEdits() {
                 });
             }
 
-            tx.set(roundsRef, {
-                value: rounds,
+            tx.set(ref, {
+                value: round,
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp()
             });
         });
@@ -2426,6 +2601,7 @@ async function flushPendingEdits() {
 
         // Prune exactly what this flush saved; anything re-edited mid-flight survives.
         prunePendingEdits(edits);
+        persistPendingEdits();
 
         if (hasPendingEdits()) {
             flushPendingEdits();
@@ -2443,6 +2619,7 @@ async function flushPendingEdits() {
             setStatus('Round was finalized — edits not saved', 'error');
             // Drop pending edits (they'd never save anyway) and kick back to picker
             state.pendingEdits = { scores: {}, ctpWinners: {}, balls: {}, bbb: {} };
+            persistPendingEdits();
             if (state.pendingTimer) { clearTimeout(state.pendingTimer); state.pendingTimer = null; }
             // Show a brief alert then bounce to the round picker so the now-locked round is gone from view
             setTimeout(() => {
@@ -2454,6 +2631,11 @@ async function flushPendingEdits() {
                 state.currentHole = 0;
                 render();
             }, 100);
+            return;
+        }
+        if (!navigator.onLine) {
+            // Offline: edits are persisted on-device; the 'online' listener flushes.
+            setStatus('📴 Offline — will save when reconnected', 'error');
             return;
         }
         setStatus('Save failed — retrying', 'error');
@@ -2599,16 +2781,15 @@ async function uploadRoundPhotos(fileList) {
             
             // Transactionally merge this photo into round.photos[]
             await firestoreDb.runTransaction(async (tx) => {
-                const snap = await tx.get(roundsRef);
-                if (!snap.exists) throw new Error('Rounds doc missing');
-                const data = snap.data();
-                const rounds = Array.isArray(data.value) ? JSON.parse(JSON.stringify(data.value)) : [];
-                const round = rounds.find(r => idsEqual(r.id, roundId));
-                if (!round) throw new Error('Round no longer exists');
+                const ref = roundDocRef(roundId);
+                const snap = await tx.get(ref);
+                if (!snap.exists) throw new Error('Round doc missing');
+                const round = JSON.parse(JSON.stringify(snap.data().value || {}));
+                if (!round || round.id == null) throw new Error('Round no longer exists');
                 if (!Array.isArray(round.photos)) round.photos = [];
                 round.photos.push(entry);
-                tx.set(roundsRef, {
-                    value: rounds,
+                tx.set(ref, {
+                    value: round,
                     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                 });
             });
@@ -2658,16 +2839,15 @@ async function removeRoundPhoto(index) {
     try {
         // 1) Remove from Firestore via transaction
         await firestoreDb.runTransaction(async (tx) => {
-            const snap = await tx.get(roundsRef);
-            if (!snap.exists) throw new Error('Rounds doc missing');
-            const data = snap.data();
-            const rounds = Array.isArray(data.value) ? JSON.parse(JSON.stringify(data.value)) : [];
-            const r = rounds.find(r => idsEqual(r.id, roundId));
-            if (!r) throw new Error('Round no longer exists');
-            if (!Array.isArray(r.photos)) return;
-            r.photos.splice(index, 1);
-            tx.set(roundsRef, {
-                value: rounds,
+            const ref = roundDocRef(roundId);
+            const snap = await tx.get(ref);
+            if (!snap.exists) throw new Error('Round doc missing');
+            const round = JSON.parse(JSON.stringify(snap.data().value || {}));
+            if (!round || round.id == null) throw new Error('Round no longer exists');
+            if (!Array.isArray(round.photos)) return;
+            round.photos.splice(index, 1);
+            tx.set(ref, {
+                value: round,
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp()
             });
         });
@@ -2687,22 +2867,21 @@ async function togglePhotoTag(index, playerId) {
     setStatus('Saving tag…', 'saving');
     try {
         await firestoreDb.runTransaction(async (tx) => {
-            const snap = await tx.get(roundsRef);
-            if (!snap.exists) throw new Error('Rounds doc missing');
-            const data = snap.data();
-            const rounds = Array.isArray(data.value) ? JSON.parse(JSON.stringify(data.value)) : [];
-            const r = rounds.find(r => idsEqual(r.id, roundId));
-            if (!r || !Array.isArray(r.photos) || !r.photos[index]) return;
-            let photo = r.photos[index];
+            const ref = roundDocRef(roundId);
+            const snap = await tx.get(ref);
+            if (!snap.exists) throw new Error('Round doc missing');
+            const round = JSON.parse(JSON.stringify(snap.data().value || {}));
+            if (!round || round.id == null || !Array.isArray(round.photos) || !round.photos[index]) return;
+            let photo = round.photos[index];
             // Legacy string photo → object so it can carry tags
             if (typeof photo === 'string') photo = { url: photo };
             if (!Array.isArray(photo.playerIds)) photo.playerIds = [];
             const pos = photo.playerIds.findIndex(id => idsEqual(id, playerId));
             if (pos >= 0) photo.playerIds.splice(pos, 1);
             else photo.playerIds.push(playerId);
-            r.photos[index] = photo;
-            tx.set(roundsRef, {
-                value: rounds,
+            round.photos[index] = photo;
+            tx.set(ref, {
+                value: round,
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp()
             });
         });
@@ -2739,6 +2918,13 @@ window.addEventListener('beforeunload', (e) => {
 });
 
 window.__dutchCup = { state, flushPendingEdits, getRoundById };
+
+// Service worker: cache the app shell + Firebase SDKs so the page loads even
+// with no signal on the course. (sw.js sits next to this file in the repo.)
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js')
+        .catch(err => console.warn('Service worker registration failed:', err));
+}
 
 init();
 </script>

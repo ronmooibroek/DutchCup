@@ -726,7 +726,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.08.04.2';
+        const APP_VERSION = '2026.10.12.1';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -779,10 +779,76 @@
             useFirebase = false;
         }
         
+        // ─── Rounds sharding ─────────────────────────────────────────────────
+        // The rounds array outgrew a single Firestore document (1 MB limit), so each
+        // round now lives in its own document:
+        //   leagues/{LEAGUE_ID}/data/rounds/items/{roundId} → { value, updatedAt, shardOrder }
+        // db.get/set/listen('rounds') keep their array-based interface — every caller
+        // in the app is unchanged. A one-time migration of the legacy doc runs lazily
+        // and is idempotent, so it's safe if several devices trigger it at once.
+        const roundsItemsCol = () => firestoreDb
+            .collection('leagues').doc(LEAGUE_ID)
+            .collection('data').doc('rounds')
+            .collection('items');
+
+        let _roundsMigrationDone = false;
+        async function migrateRoundsToShards() {
+            if (_roundsMigrationDone || !useFirebase || !firestoreDb) return;
+            _roundsMigrationDone = true;
+            try {
+                const roundsDoc = firestoreDb.collection('leagues').doc(LEAGUE_ID)
+                    .collection('data').doc('rounds');
+                const snap = await roundsDoc.get();
+                const legacy = (snap.exists && Array.isArray(snap.data().value)) ? snap.data().value : null;
+                if (!legacy || legacy.length === 0) return;      // nothing to migrate
+                const existing = await roundsDoc.collection('items').limit(1).get();
+                if (!existing.empty) {
+                    // Another device already migrated; retire the legacy doc.
+                    await roundsDoc.set({ value: null, migratedToShards: true,
+                        updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+                    return;
+                }
+                const CHUNK = 400;   // stay under Firestore's 500-write batch limit
+                for (let i = 0; i < legacy.length; i += CHUNK) {
+                    const batch = firestoreDb.batch();
+                    legacy.slice(i, i + CHUNK).forEach((r, j) => {
+                        if (!r) return;
+                        if (r.id == null) r.id = 'migrated-' + (i + j);   // deterministic fallback
+                        batch.set(roundsDoc.collection('items').doc(String(r.id)), {
+                            value: r,
+                            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                            shardOrder: i + j
+                        });
+                    });
+                    await batch.commit();
+                }
+                await roundsDoc.set({ value: null, migratedToShards: true,
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+                console.log('✅ Rounds migrated to sharded documents:', legacy.length);
+            } catch (err) {
+                console.error('Rounds migration failed (will retry next load):', err);
+                _roundsMigrationDone = false;
+            }
+        }
+
+        // Service worker: cache the app shell + Firebase SDKs so both pages open
+        // even with no signal on the course. (sw.js sits next to this file.)
+        if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+            navigator.serviceWorker.register('./sw.js')
+                .catch(err => console.warn('Service worker registration failed:', err));
+        }
+
         // Database helpers
         const db = {
+            // In-memory cache of the rounds array (+ per-round shard orders), kept
+            // fresh by getRoundsSharded / setRoundsSharded / the rounds listener.
+            _roundsCache: null,
+            _roundsOrder: null,
+
             // Get data from Firebase or localStorage
             get: async (key) => {
+                // Rounds are sharded — callers still get a plain array.
+                if (key === 'rounds') return db.getRoundsSharded();
                 if (useFirebase && firestoreDb) {
                     try {
                         const doc = await firestoreDb
@@ -805,11 +871,86 @@
                     return db.getLocal(key);
                 }
             },
+
+            // Sharded rounds read: one document per round, returned as the
+            // plain array the rest of the app expects (original order kept).
+            getRoundsSharded: async () => {
+                await migrateRoundsToShards();
+                if (useFirebase && firestoreDb) {
+                    try {
+                        const qsnap = await roundsItemsCol().orderBy('shardOrder').get();
+                        const arr = [];
+                        const order = {};
+                        qsnap.forEach(d => {
+                            const data = d.data() || {};
+                            if (data.value) {
+                                arr.push(data.value);
+                                order[d.id] = data.shardOrder;
+                            }
+                        });
+                        db._roundsCache = arr;
+                        db._roundsOrder = order;
+                        db.setLocal('rounds', arr);   // keep the offline backup fresh
+                        return arr;
+                    } catch (error) {
+                        console.error('Firebase sharded rounds get error:', error);
+                        return db.getLocal('rounds');
+                    }
+                }
+                return db.getLocal('rounds');
+            },
+
+            // Sharded rounds write: diff against the cache and touch only the
+            // documents that changed — no more rewriting one giant document.
+            setRoundsSharded: async (arr) => {
+                if (!useFirebase || !firestoreDb) return true;
+                await migrateRoundsToShards();
+                try {
+                    const prev = Array.isArray(db._roundsCache) ? db._roundsCache : [];
+                    const prevById = {};
+                    prev.forEach(r => { if (r && r.id != null) prevById[String(r.id)] = r; });
+                    const col = roundsItemsCol();
+                    const batch = firestoreDb.batch();
+                    let ops = 0;
+                    const seen = {};
+                    arr.forEach((r, i) => {
+                        if (!r || r.id == null) return;
+                        const k = String(r.id);
+                        seen[k] = true;
+                        const p = prevById[k];
+                        if (!p || JSON.stringify(p) !== JSON.stringify(r)) {
+                            batch.set(col.doc(k), {
+                                value: r,
+                                updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                                shardOrder: i
+                            });
+                            ops++;
+                        } else if (db._roundsOrder && db._roundsOrder[k] !== i) {
+                            batch.set(col.doc(k), { shardOrder: i }, { merge: true });
+                            ops++;
+                        }
+                    });
+                    Object.keys(prevById).forEach(k => {
+                        if (!seen[k]) { batch.delete(col.doc(k)); ops++; }
+                    });
+                    if (ops > 0) await batch.commit();
+                    db._roundsCache = arr;
+                    db._roundsOrder = {};
+                    arr.forEach((r, i) => { if (r && r.id != null) db._roundsOrder[String(r.id)] = i; });
+                    return true;
+                } catch (error) {
+                    console.error('Firebase sharded rounds set error:', error);
+                    return false;
+                }
+            },
             
             // Set data to Firebase or localStorage
             set: async (key, value) => {
                 // Always save to localStorage as backup
                 db.setLocal(key, value);
+
+                // Rounds are sharded — diff-write only the changed documents.
+                if (key === 'rounds') return db.setRoundsSharded(Array.isArray(value) ? value : []);
                 
                 if (useFirebase && firestoreDb) {
                     try {
@@ -854,6 +995,30 @@
             
             // Listen to real-time updates from Firebase
             listen: (key, callback) => {
+                // Rounds: listen to the shards subcollection and rebuild the array.
+                if (key === 'rounds') {
+                    if (useFirebase && firestoreDb) {
+                        migrateRoundsToShards().catch(() => {});
+                        return roundsItemsCol().orderBy('shardOrder').onSnapshot((qsnap) => {
+                            const arr = [];
+                            const order = {};
+                            qsnap.forEach(d => {
+                                const data = d.data() || {};
+                                if (data.value) {
+                                    arr.push(data.value);
+                                    order[d.id] = data.shardOrder;
+                                }
+                            });
+                            db._roundsCache = arr;
+                            db._roundsOrder = order;
+                            db.setLocal('rounds', arr);   // keep the offline backup fresh
+                            callback(arr);
+                        }, (error) => {
+                            console.error('Firebase rounds listen error:', error);
+                        });
+                    }
+                    return null;
+                }
                 if (useFirebase && firestoreDb) {
                     return firestoreDb
                         .collection('leagues')
@@ -1157,46 +1322,64 @@
     }
 
         // Save helper
-        // ─── Merge-safe rounds writer ────────────────────────────────────────
-        // Both apps store ALL rounds in one Firestore document, so a plain write of a
-        // stale in-memory array silently erases whatever another device just entered.
-        // This takes the SERVER copy as the base and splices in only the rounds this
-        // device actually touched — "last change wins" per round, not per whole array.
+        // ─── Sharded rounds writer ───────────────────────────────────────────
+        // Rounds live as individual documents (leagues/{ID}/data/rounds/items/{roundId}),
+        // so each device only writes the rounds IT touched — no read-modify-write of a
+        // giant shared array, and two devices scoring different rounds never conflict.
+        // "Last change wins" per round, exactly like the old per-round merge semantics.
         window.saveRoundsMerged = async (nextRounds, changedIds) => {
             const touched = (changedIds || []).map(String);
             state.rounds = nextRounds;                     // optimistic local update
+            db.setLocal('rounds', nextRounds);              // local backup
+            const afterSave = () => {
+                // Post-save hook: when rounds change, trigger bracket auto-resolve.
+                if (typeof window.__bracketAutoResolve === 'function' && state.currentEventId) {
+                    try { window.__bracketAutoResolve(state.currentEventId); }
+                    catch (err) { console.error('Bracket auto-resolve error:', err); }
+                }
+            };
+            if (!useFirebase || !firestoreDb) { afterSave(); return; }
             try {
-                let base = null;
-                if (useFirebase && firestoreDb) {
-                    const doc = await firestoreDb.collection('leagues').doc(LEAGUE_ID)
-                        .collection('data').doc('rounds').get();
-                    if (doc.exists) base = doc.data().value;
+                await migrateRoundsToShards();
+                if (touched.length === 0) {
+                    await db.setRoundsSharded(nextRounds);  // nothing specific touched: diff-write
+                } else {
+                    const col = roundsItemsCol();
+                    const mineById = {};
+                    nextRounds.forEach(r => { if (r && r.id != null) mineById[String(r.id)] = r; });
+                    const batch = firestoreDb.batch();
+                    touched.forEach(key => {
+                        const r = mineById[key];
+                        if (r) {
+                            const order = nextRounds.findIndex(x => x && String(x.id) === key);
+                            batch.set(col.doc(key), {
+                                value: r,
+                                updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                                shardOrder: order >= 0 ? order : Date.now()
+                            });
+                        } else {
+                            batch.delete(col.doc(key));      // deliberately deleted
+                        }
+                    });
+                    // Keep ordering consistent for untouched rounds whose index shifted
+                    // (e.g. a deletion moved everything after it up one slot).
+                    const orderMap = db._roundsOrder || {};
+                    nextRounds.forEach((r, i) => {
+                        if (!r || r.id == null) return;
+                        const k = String(r.id);
+                        if (!touched.includes(k) && orderMap[k] !== undefined && orderMap[k] !== i) {
+                            batch.set(col.doc(k), { shardOrder: i }, { merge: true });
+                        }
+                    });
+                    await batch.commit();
+                    db._roundsCache = nextRounds;
+                    db._roundsOrder = {};
+                    nextRounds.forEach((r, i) => { if (r && r.id != null) db._roundsOrder[String(r.id)] = i; });
                 }
-                if (!Array.isArray(base) || touched.length === 0) {
-                    save('rounds', nextRounds);            // no server copy: plain write
-                    return;
-                }
-                const mineById = {};
-                nextRounds.forEach(r => { if (r && r.id != null) mineById[String(r.id)] = r; });
-                // Server rounds win, EXCEPT the ones this device changed.
-                const merged = base.map(sr => {
-                    const key = String(sr && sr.id);
-                    return touched.includes(key) && mineById[key] ? mineById[key] : sr;
-                });
-                // Anything new here that the server hasn't seen yet
-                nextRounds.forEach(r => {
-                    if (r && r.id != null && !base.some(sr => String(sr && sr.id) === String(r.id))) {
-                        merged.push(r);
-                    }
-                });
-                // Rounds this device deliberately deleted
-                const finalMerged = merged.filter(r =>
-                    !(r && r.id != null && touched.includes(String(r.id)) && !mineById[String(r.id)]));
-                save('rounds', finalMerged);
             } catch (err) {
-                console.error('Merged rounds save failed, writing directly:', err);
-                save('rounds', nextRounds);
+                console.error('Sharded rounds save failed:', err);
             }
+            afterSave();
         };
         
         // Commit a finished round by ID. Since activateRound now leaves the round in the
