@@ -726,7 +726,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.10.13.4';
+        const APP_VERSION = '2026.10.13.5';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -14331,7 +14331,13 @@
                                 pointsPerSkin: _skRes.settings.pointsPerSkin,
                                 liveCarry: _skRes.liveCarry,
                                 holesDecided: _skRes.holes.filter(h => h.winnerId).length,
-                                kingOfTies: _skRes.kingOfTies || null
+                                kingOfTies: _skRes.kingOfTies || null,
+                                // Scorecard overlay support: per-hole win/tie/carry detail,
+                                // full totals (all players, skins desc), and the round id so
+                                // the overlay can rebuild per-player net scores on demand.
+                                holes: _skRes.holes,
+                                allTotals: _skRes.totals,
+                                roundId: mostRecentRound.id
                             };
                         }
                     }
@@ -15359,6 +15365,12 @@
                 // Setup keyboard navigation
                 window.presentationKeyHandler = (e) => {
                     if (!presentationState.active) return;
+
+                    // Skins scorecard overlay open → Escape closes it, not the presentation.
+                    if (e.key === 'Escape') {
+                        const _skm = document.getElementById('skinsScorecardModal');
+                        if (_skm) { e.preventDefault(); _skm.remove(); return; }
+                    }
                     
                     if (e.key === 'ArrowRight' || e.key === 'Right') {
                         e.preventDefault();
@@ -20164,6 +20176,8 @@
                 const _skTop = _sk.winners.slice(0, 3);
                 const _skMedal = ['🥇', '🥈', '🥉'];
                 const _skFmt = (n) => String(Math.round(n * 100) / 100);
+                // Stash for the clickable scorecard overlay (window.openSkinsScorecard).
+                presentationState.__skinsDetail = _sk;
                 html += `
                     <div style="animation:slideUp 0.8s ease-out;max-width:1000px;width:100%;">
                         <h1 style="color:white;font-size:clamp(34px, 4.5vw, 46px);margin:0 0 16px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
@@ -20183,7 +20197,7 @@
                         ` : ''}
                         <div style="display:grid;grid-template-columns:repeat(${Math.min(3, _skTop.length)}, 1fr);gap:24px;">
                             ${_skTop.map((w, i) => `
-                                <div style="background:linear-gradient(135deg, #f59e0b30 0%, #f59e0b10 100%);border:4px solid ${i === 0 ? '#fbbf24' : '#a8a29e'};border-radius:20px;padding:28px;text-align:center;box-shadow:0 12px 32px rgba(0,0,0,0.3);${i === 0 ? 'transform:scale(1.06);' : ''}">
+                                <div onclick="event.stopPropagation();window.openSkinsScorecard();" role="button" tabindex="0" title="Tap for the full net scorecard" style="background:linear-gradient(135deg, #f59e0b30 0%, #f59e0b10 100%);border:4px solid ${i === 0 ? '#fbbf24' : '#a8a29e'};border-radius:20px;padding:28px;text-align:center;box-shadow:0 12px 32px rgba(0,0,0,0.3);cursor:pointer;${i === 0 ? 'transform:scale(1.06);' : ''}">
                                     <div style="font-size:52px;margin-bottom:8px;">${_skMedal[i] || '🏅'}</div>
                                     <div style="color:white;font-size:26px;font-weight:700;margin-bottom:6px;">${w.name}</div>
                                     <div style="color:#fcd34d;font-size:20px;font-weight:700;">${_skFmt(w.skins)} skin${w.skins === 1 ? '' : 's'}</div>
@@ -20194,12 +20208,15 @@
                         ${_sk.winners.length > 3 ? `
                             <div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:24px;">
                                 ${_sk.winners.slice(3).map(w => `
-                                    <div style="background:rgba(255,255,255,0.08);border:2px solid rgba(255,255,255,0.2);border-radius:10px;padding:8px 14px;color:white;font-size:14px;">
+                                    <div onclick="event.stopPropagation();window.openSkinsScorecard();" role="button" tabindex="0" title="Tap for the full net scorecard" style="background:rgba(255,255,255,0.08);border:2px solid rgba(255,255,255,0.2);border-radius:10px;padding:8px 14px;color:white;font-size:14px;cursor:pointer;">
                                         ${w.name} · <strong style="color:#fcd34d;">${_skFmt(w.skins)}</strong> · <strong style="color:#6ee7b7;">+${_skFmt(w.points)} pts</strong>
                                     </div>
                                 `).join('')}
                             </div>
                         ` : ''}
+                        <p style="color:rgba(255,255,255,0.45);font-size:14px;margin:26px 0 0;font-style:italic;">
+                            Tap any card for the full net scorecard 👆
+                        </p>
                     </div>
                 `;
             } else if (currentSlide === nextRoundSlideIndex) {
@@ -24538,6 +24555,155 @@
 
         // Thin wrapper: { playerId: skinsEventPoints } for a round ({} when off).
         window.skinsPointsForRound = (round) => window.skinsForRound(round).points;
+
+        // ─── SKINS SCORECARD OVERLAY (presentation mode) ───
+        // Pure helper: per-player per-hole NET scores for a round.
+        // Returns { players: [{id, name}], nets: { [playerId]: [net|null × 18] } }.
+        // Net = gross − handicap strokes, using the same stroke formula as
+        // computeSkins (round.handicaps hole ratings; 1 stroke when hc >= rating,
+        // 2 when hc >= rating + 18). No DOM, no state — unit-testable.
+        window.skinsNetMatrix = (round, hcMap) => {
+            const players = [];
+            (round.teams || []).forEach(team => (team.players || []).forEach(p => {
+                players.push({ id: p.id, name: p.name, scores: p.scores || [] });
+            }));
+            const hcaps = (round && round.handicaps) || [];
+            const strokesOn = (hc, i) => {
+                const holeHcap = parseInt(hcaps[i]) || (i + 1);
+                let s = 0;
+                if (hc >= holeHcap) s = 1;
+                if (hc >= holeHcap + 18) s = 2;
+                return s;
+            };
+            const nets = {};
+            players.forEach(pl => {
+                const hc = (hcMap && hcMap[pl.id] != null) ? hcMap[pl.id] : 0;
+                nets[pl.id] = [];
+                for (let i = 0; i < 18; i++) {
+                    const gross = parseInt(pl.scores[i]);
+                    nets[pl.id].push((isNaN(gross) || gross <= 0) ? null : gross - strokesOn(hc, i));
+                }
+            });
+            return { players, nets };
+        };
+
+        // Pure helper: classify a scorecard cell for the skins overlay.
+        // holes = computeSkins holes array (or the stashed analytics copy).
+        // Returns 'empty' (no net score) | 'won' (won the skin outright) |
+        //         'tied' (tied for the skin) | 'plain'.
+        window.skinsCellKind = (holes, pid, i, net) => {
+            if (net == null) return 'empty';
+            const h = holes && holes[i];
+            if (!h) return 'plain';
+            if (h.winnerId != null && String(h.winnerId) === String(pid)) return 'won';
+            if ((h.tiedIds || []).some(id => String(id) === String(pid))) return 'tied';
+            return 'plain';
+        };
+
+        // Presentation SKINS slide → tap any card → full net-score scorecard overlay.
+        // Net scores only; won/tied skins highlighted; carryovers marked with 🔁.
+        // Pure DOM overlay — no impact on the slide pipeline. Closes via ✕,
+        // tap-outside, or Escape (see presentationKeyHandler).
+        window.openSkinsScorecard = () => {
+            try { if (document.getElementById('skinsScorecardModal')) return; } catch (e) {}
+            const detail = (typeof presentationState !== 'undefined' && presentationState.__skinsDetail) || null;
+            if (!detail || !detail.holes) return;
+            const round = ((typeof state !== 'undefined' && state.rounds) || [])
+                .find(r => String(r.id) === String(detail.roundId));
+            if (!round) return;
+            // Handicap map — same resolution pattern as the analytics builder.
+            const hcMap = {};
+            (round.teams || []).forEach(team => (team.players || []).forEach(p => {
+                const sp = ((typeof state !== 'undefined' && state.players) || [])
+                    .find(s => String(s.id) === String(p.id));
+                try { hcMap[p.id] = getPlayerHandicapForRound(sp, round, p) || 0; }
+                catch (e) { hcMap[p.id] = (p.handicap || 0); }
+            }));
+            const skm = window.skinsNetMatrix(round, hcMap);
+            const holes = detail.holes;
+            const totals = detail.allTotals || [];
+            const skinsById = {};
+            const orderRank = {};
+            totals.forEach((t, idx) => {
+                skinsById[String(t.id)] = t.skins || 0;
+                orderRank[String(t.id)] = idx;
+            });
+            const ordered = skm.players.slice().sort((a, b) => {
+                const ra = orderRank[String(a.id)], rb = orderRank[String(b.id)];
+                const va = (ra == null ? 1e9 : ra), vb = (rb == null ? 1e9 : rb);
+                return (va - vb) || String(a.name).localeCompare(String(b.name));
+            });
+            const kotIds = {};
+            (detail.kingOfTies || []).forEach(k => { kotIds[String(k.id)] = true; });
+            const pars = round.pars || [];
+            const CELL = {
+                empty: 'color:rgba(255,255,255,0.25);',
+                won: 'background:linear-gradient(135deg,#10b981,#059669);color:#04150f;font-weight:800;',
+                tied: 'background:rgba(245,158,11,0.22);color:#fcd34d;font-weight:700;box-shadow:inset 0 0 0 2px #f59e0b;',
+                plain: 'color:rgba(255,255,255,0.85);'
+            };
+            const holeMark = (h) => {
+                if (!h) return '';
+                if (h.status === 'split-final') return '<div style="font-size:12px;line-height:1.2;">👑</div>';
+                if (h.status === 'tie-carry' || (h.carriedOut || 0) > 0) return '<div style="font-size:12px;line-height:1.2;">🔁</div>';
+                if (h.status === 'won-carry' && (h.skinsValue || 0) > 1)
+                    return '<div style="font-size:10px;color:#6ee7b7;font-weight:800;line-height:1.2;">' + h.skinsValue + '×</div>';
+                return '';
+            };
+            const dateStr = (() => { try { return new Date(round.timestamp).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }); } catch (e) { return ''; } })();
+            const thead = '<tr>' +
+                '<th style="position:sticky;left:0;background:#232052;z-index:2;color:#a5b4fc;font-size:11px;font-weight:700;letter-spacing:1px;text-align:left;padding:10px 12px;min-width:150px;">PLAYER</th>' +
+                holes.map((h, i) =>
+                    '<th style="color:white;font-size:14px;font-weight:700;padding:8px 4px;min-width:46px;text-align:center;">' +
+                    '<div>' + (i + 1) + '</div>' +
+                    '<div style="font-size:10px;color:rgba(255,255,255,0.5);font-weight:600;">' + (pars[i] != null ? 'p' + pars[i] : '&nbsp;') + '</div>' +
+                    holeMark(h) +
+                    '</th>').join('') +
+                '<th style="color:#fcd34d;font-size:11px;font-weight:700;letter-spacing:1px;padding:10px 12px;min-width:64px;text-align:center;">SKINS</th>' +
+                '</tr>';
+            const tbody = ordered.map(pl => {
+                let s = '<td style="position:sticky;left:0;background:#232052;z-index:1;color:white;font-size:14px;font-weight:700;padding:10px 12px;white-space:nowrap;">' +
+                    (kotIds[String(pl.id)] ? '👑 ' : '') + pl.name + '</td>';
+                for (let i = 0; i < 18; i++) {
+                    const net = skm.nets[pl.id][i];
+                    const kind = window.skinsCellKind(holes, pl.id, i, net);
+                    s += '<td style="text-align:center;font-size:15px;padding:9px 4px;' + CELL[kind] + '">' +
+                        (net == null ? '–' : net) + '</td>';
+                }
+                const sk = skinsById[String(pl.id)] || 0;
+                s += '<td style="text-align:center;font-size:15px;font-weight:800;color:#fcd34d;padding:9px 12px;">' +
+                    (sk > 0 ? (Math.round(sk * 100) / 100) : '–') + '</td>';
+                return '<tr style="border-top:1px solid rgba(255,255,255,0.08);">' + s + '</tr>';
+            }).join('');
+            const modal = document.createElement('div');
+            modal.id = 'skinsScorecardModal';
+            modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.82);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;animation:fadeIn 0.2s ease-out;';
+            modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+            modal.innerHTML =
+                '<div style="background:linear-gradient(135deg,#1e1b4b 0%,#312e81 100%);border:2px solid rgba(255,255,255,0.2);border-radius:16px;max-width:1180px;width:100%;max-height:92vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.5);" onclick="event.stopPropagation()">' +
+                '<div style="display:flex;justify-content:space-between;align-items:flex-start;padding:22px 26px 14px;flex-shrink:0;">' +
+                '<div>' +
+                '<div style="color:#a5b4fc;font-size:11px;font-weight:700;letter-spacing:2px;margin-bottom:4px;">🃏 SKINS SCORECARD · NET ONLY</div>' +
+                '<div style="color:white;font-size:24px;font-weight:800;line-height:1.15;">' + (round.courseName || 'Skins') + '</div>' +
+                '<div style="color:rgba(255,255,255,0.6);font-size:14px;margin-top:2px;">' + dateStr + ' · ' + detail.pointsPerSkin + ' pts per skin</div>' +
+                '</div>' +
+                '<button onclick="document.getElementById(\'skinsScorecardModal\').remove()" style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:white;min-width:40px;height:40px;border-radius:50%;cursor:pointer;font-size:20px;line-height:1;display:flex;align-items:center;justify-content:center;flex-shrink:0;" aria-label="Close">✕</button>' +
+                '</div>' +
+                '<div style="overflow:auto;padding:0 26px;flex:1;min-height:0;">' +
+                '<table style="border-collapse:collapse;width:100%;min-width:980px;">' +
+                '<thead>' + thead + '</thead><tbody>' + tbody + '</tbody></table>' +
+                '</div>' +
+                '<div style="padding:14px 26px 22px;flex-shrink:0;border-top:1px solid rgba(255,255,255,0.1);margin-top:12px;">' +
+                '<div style="display:flex;flex-wrap:wrap;gap:8px 20px;color:rgba(255,255,255,0.78);font-size:13px;">' +
+                '<span><span style="display:inline-block;width:14px;height:14px;border-radius:4px;background:#10b981;vertical-align:-2px;margin-right:6px;"></span>Won the skin</span>' +
+                '<span><span style="display:inline-block;width:14px;height:14px;border-radius:4px;background:rgba(245,158,11,0.35);border:2px solid #f59e0b;vertical-align:-2px;margin-right:6px;"></span>Tied for the skin</span>' +
+                '<span>🔁 Skin carried over (pot grew)</span>' +
+                '<span>👑 King of Ties</span>' +
+                '</div>' +
+                '</div>' +
+                '</div>';
+            document.body.appendChild(modal);
+        };
 
         // Push the open round's current state into the shared rounds array right now.
         // Used by fields that must reach other devices immediately (CTP, Extra 9).
