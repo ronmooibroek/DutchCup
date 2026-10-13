@@ -726,7 +726,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.10.13.1';
+        const APP_VERSION = '2026.10.13.2';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -1062,6 +1062,7 @@
                 ballPoints: 1,
                 extra9Points: 5,
                 ctpPoints: 2,
+                skinsPoints: 0.5,   // league default points per skin (per-round override wins)
                 useUSGAHandicap: false,
                 requireAdminPassword: true   // when false, admin access is granted automatically
             },
@@ -1999,7 +2000,8 @@
                         { label: 'BBB',         pts: p.bbbPoints,    icon: '🎯', color: '#f59e0b', putt: false },
                         { label: 'Balls',       pts: p.ballPoints,   icon: '🥎', color: '#38bdf8', putt: true },
                         { label: 'Extra 9',     pts: p.extra9Points, icon: '9️⃣', color: '#a78bfa', putt: true },
-                        { label: 'CTP',         pts: p.ctpPoints,    icon: '📍', color: '#f472b6', putt: true }
+                        { label: 'CTP',         pts: p.ctpPoints,    icon: '📍', color: '#f472b6', putt: true },
+                        { label: 'Skins',       pts: p.skinsPoints,  icon: '🃏', color: '#f59e0b', putt: true }
                     ];
                     comps.forEach(cm => {
                         if (cm.label === 'Stroke play' || (cm.pts || 0) !== 0) {
@@ -2456,6 +2458,7 @@
         const computeTeamRoundTotal = (round, teamInRound, teamIdx) => {
             if (!round || !teamInRound || !teamInRound.players) return 0;
             let total = 0;
+            const _skinsPts = window.skinsPointsForRound(round);
             teamInRound.players.forEach((p, playerIdx) => {
                 const statePlayer = state.players.find(sp => sp.id === p.id);
                 const effectiveHc = getPlayerHandicapForRound(statePlayer, round, p);
@@ -2469,6 +2472,7 @@
                 if (round.ctpWinners) {
                     total += window.ctpCountForPlayer(round, p.id) * state.settings.ctpPoints;
                 }
+                total += _skinsPts[p.id] || 0; // skins event points
             });
             return total;
         };
@@ -2923,7 +2927,12 @@
                 }
                 const ctpPoints = ctpWins * state.settings.ctpPoints;
                 
-                const roundTotal = strokePoints + bbbPoints + ballPoints + extra9Points + ctpPoints;
+                // Skins: always net; points count toward the event total
+                const _skinsBrk = window.skinsForRound(round);
+                const skinsCount = _skinsBrk.counts[teamPlayer.id] || 0;
+                const skinsPoints = _skinsBrk.points[teamPlayer.id] || 0;
+                
+                const roundTotal = strokePoints + bbbPoints + ballPoints + extra9Points + ctpPoints + skinsPoints;
                 const grossStrokes = sumScores(teamPlayer.scores);
                 
                 breakdowns.push({
@@ -2937,6 +2946,8 @@
                     ballPoints: ballPoints,
                     ctpPoints: ctpPoints,
                     extra9Points: extra9Points,
+                    skinsPoints: skinsPoints,
+                    skinsCount: skinsCount,
                     roundTotal: roundTotal,
                     grossStrokes: grossStrokes,
                     bbbTotal: teamPlayer.bbbTotal || 0,
@@ -4761,6 +4772,8 @@
                     return parseInt(a) - parseInt(b);
                 });
                 
+                // Skins points for this round — added to each player's total below
+                const _roundSkinsPts = window.skinsPointsForRound(round);
                 sortedGroupKeys.forEach(groupKey => {
                     // Add group header
                     if (groupKey !== 'unassigned') {
@@ -4816,7 +4829,8 @@
                             ctpPoints = window.ctpCountForPlayer(round, player.id) * state.settings.ctpPoints;
                         }
                         
-                        const grandTotal = strokePlayPoints + bbbPoints + ballPoints + extra9Points + ctpPoints;
+                        const grandTotal = strokePlayPoints + bbbPoints + ballPoints + extra9Points + ctpPoints + (_roundSkinsPts[player.id] || 0);
+                        const skinsPoints = _roundSkinsPts[player.id] || 0;
                         
                         // Calculate gross score total
                         const grossTotal = sumScores(player.scores);
@@ -4864,7 +4878,7 @@
                                         </button>
                                         <div>
                                             <div style="font-size:32px;font-weight:700;color:#FF9A00;">${grandTotal}</div>
-                                            <div style="font-size:11px;color:#6b7280;">${strokePlayPoints} stroke • ${bbbPoints} BBB • ${ballPoints} balls${extra9Points > 0 ? ` • ${extra9Points} extra9` : ''}${ctpPoints > 0 ? ` • ${ctpPoints} CTP` : ''}</div>
+                                            <div style="font-size:11px;color:#6b7280;">${strokePlayPoints} stroke • ${bbbPoints} BBB • ${ballPoints} balls${extra9Points > 0 ? ` • ${extra9Points} extra9` : ''}${ctpPoints > 0 ? ` • ${ctpPoints} CTP` : ''}${skinsPoints > 0 ? ` • 🃏 ${skinsPoints} skins` : ''}</div>
                                         </div>
                                     </div>
                                 </div>
@@ -5130,9 +5144,10 @@
                 {
                     const sk = round.skins || {};
                     const skEnabled = sk.enabled !== false;
-                    const skScoring = sk.scoring === 'gross' ? 'gross' : 'net';
                     const skCarry = sk.carryover !== false;
-                    const skValue = sk.valuePerSkin || 0;
+                    // Per-round override → league default → 0.5
+                    const leagueSkinsDefault = (state.settings && state.settings.skinsPoints != null) ? state.settings.skinsPoints : 0.5;
+                    const skPts = sk.pointsPerSkin != null ? sk.pointsPerSkin : leagueSkinsDefault;
                     // Resolve each player's effective handicap for net skins scoring
                     const _hcMap = {};
                     (round.teams || []).forEach(team => (team.players || []).forEach(p => {
@@ -5140,9 +5155,8 @@
                         try { _hcMap[p.id] = getPlayerHandicapForRound(_sp, round, p) || 0; }
                         catch (e) { _hcMap[p.id] = (p.handicap || 0); }
                     }));
-                    const _skins = window.computeSkins(round, _hcMap);
+                    const _skins = window.computeSkins(round, _hcMap, skPts);
                     const _fmtN = (n) => String(Math.round(n * 100) / 100);
-                    const _fmt$ = (n) => '$' + (Math.round(n * 100) / 100).toFixed(2);
                     const _holeRow = (h) => {
                         let who = '<span style="color:#9ca3af;">–</span>';
                         let val = '<span style="color:#9ca3af;">–</span>';
@@ -5180,18 +5194,11 @@
                         </div>
                         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:14px;">
                             <div>
-                                <label style="display:block;margin-bottom:6px;font-weight:600;font-size:12px;color:#92400e;">Scoring:</label>
-                                <select onchange="updateSkinsSetting('scoring', this.value)"
-                                        style="width:100%;padding:8px;border:2px solid #f59e0b;border-radius:6px;font-size:14px;">
-                                    <option value="net" ${skScoring === 'net' ? 'selected' : ''}>Net (handicap)</option>
-                                    <option value="gross" ${skScoring === 'gross' ? 'selected' : ''}>Gross</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label style="display:block;margin-bottom:6px;font-weight:600;font-size:12px;color:#92400e;">$ per skin:</label>
-                                <input type="number" value="${skValue}" min="0" step="1"
-                                       onchange="updateSkinsSetting('valuePerSkin', parseFloat(this.value) || 0)"
+                                <label style="display:block;margin-bottom:6px;font-weight:600;font-size:12px;color:#92400e;">Pts per skin:</label>
+                                <input type="number" value="${skPts}" min="0" step="0.5"
+                                       onchange="updateSkinsSetting('pointsPerSkin', parseFloat(this.value) || 0)"
                                        style="width:100%;padding:8px;border:2px solid #f59e0b;border-radius:6px;font-size:14px;">
+                                <div style="font-size:11px;color:#a16207;margin-top:4px;">League default: ${_fmtN(leagueSkinsDefault)} pts</div>
                             </div>
                             <div style="display:flex;align-items:flex-end;padding-bottom:8px;">
                                 <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:#92400e;cursor:pointer;">
@@ -5212,7 +5219,7 @@
                                     <div style="background:#fef3c7;border:2px solid #f59e0b;border-radius:10px;padding:8px 12px;font-size:13px;">
                                         <strong style="color:#92400e;">${t.name}</strong>
                                         <span style="color:#78350f;"> · ${_fmtN(t.skins)} skin${t.skins === 1 ? '' : 's'}</span>
-                                        ${_skins.settings.valuePerSkin > 0 ? `<span style="color:#065f46;font-weight:700;"> · ${_fmt$(t.winnings)}</span>` : ''}
+                                        <span style="color:#065f46;font-weight:700;"> · +${_fmtN(t.points)} pts</span>
                                     </div>
                                 `).join('') || '<div style="color:#a16207;font-size:13px;">No skins won yet.</div>'}
                                 ${_skins.liveCarry > 0 ? `
@@ -5232,8 +5239,8 @@
                             </table>
                             </div>
                             <div style="background:#fef3c7;padding:10px;border-radius:6px;margin-top:12px;font-size:12px;color:#92400e;">
-                                💡 Lowest ${skScoring} score wins the hole outright. Ties ${skCarry ? 'carry the skin forward — the pot builds 🔥' : 'win nothing'}.
-                                ${skValue > 0 ? ` Each skin is worth ${_fmt$(skValue)}.` : ''}
+                                💡 Lowest net score wins the hole outright. Ties ${skCarry ? 'carry the skin forward — the pot builds 🔥' : 'win nothing'}.
+                                Each skin is worth ${_fmtN(_skins.settings.pointsPerSkin)} event pts, added to the player's total.
                             </div>
                         `)}
                     </div>
@@ -5308,6 +5315,7 @@
                 const eventRounds = state.rounds.filter(r => r.eventId === state.currentEventId && r.active !== false);
                 
                 eventRounds.forEach((r, rIdx) => {
+                    const _skinsPtsMap = window.skinsPointsForRound(r);
                     r.teams.forEach(t => {
                         if (!stats[t.teamId]) {
                             // Get current team name from state.teams (not the old name from round data)
@@ -5325,7 +5333,8 @@
                                 bbbPoints: 0,
                                 ballPoints: 0,
                                 extra9Points: 0,
-                                ctpPoints: 0
+                                ctpPoints: 0,
+                                skinsPoints: 0
                             };
                         }
                         // Don't use stored t.totalPoints - recalculate from individual players
@@ -5362,7 +5371,7 @@
                                 ctpPoints = r.ctpWinners.filter(w => w === playerPosition).length * state.settings.ctpPoints;
                             }
                             
-                            const playerTotal = strokePoints + bbbPoints + ballPoints + extra9Points + ctpPoints;
+                            const playerTotal = strokePoints + bbbPoints + ballPoints + extra9Points + ctpPoints + (_skinsPtsMap[p.id] || 0);
                             
                             stats[t.teamId].players[p.id].points += playerTotal;
                             
@@ -5372,19 +5381,21 @@
                             stats[t.teamId].ballPoints += ballPoints;
                             stats[t.teamId].extra9Points += extra9Points;
                             stats[t.teamId].ctpPoints += ctpPoints;
+                            stats[t.teamId].skinsPoints += (_skinsPtsMap[p.id] || 0);
                         });
                     });
                 });
                 
                 // Calculate team points from sum of categories (not from stored totalPoints)
                 Object.values(stats).forEach(team => {
-                    team.points = team.strokePoints + team.bbbPoints + team.ballPoints + team.ctpPoints + team.extra9Points;
+                    team.points = team.strokePoints + team.bbbPoints + team.ballPoints + team.ctpPoints + team.extra9Points + team.skinsPoints;
                 });
                 
                 // Calculate wins by recalculating team totals for each round
                 eventRounds.forEach(r => {
                     // Recalculate team totals for this round
                     const roundTotals = {};
+                    const _skinsW = window.skinsPointsForRound(r);
                     r.teams.forEach(t => {
                         let teamTotal = 0;
                         t.players.forEach(p => {
@@ -5405,7 +5416,7 @@
                                 ctpPoints = r.ctpWinners.filter(w => w === playerPosition).length * state.settings.ctpPoints;
                             }
                             
-                            teamTotal += strokePoints + bbbPoints + ballPoints + extra9Points + ctpPoints;
+                            teamTotal += strokePoints + bbbPoints + ballPoints + extra9Points + ctpPoints + (_skinsW[p.id] || 0);
                         });
                         roundTotals[t.teamId] = teamTotal;
                     });
@@ -5489,7 +5500,7 @@
                                         </div>
                                         
                                         <div style="background:rgba(255,255,255,0.5);padding:6px;border-radius:4px;">
-                                            <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;">
+                                            <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:4px;">
                                                 <div style="background:${teamColor};padding:4px;border-radius:3px;text-align:center;">
                                                     <div style="font-size:12px;color:rgba(${isDark ? '255,255,255' : '0,0,0'},${labelOpacity});font-weight:600;">⛳</div>
                                                     <div style="font-size:20px;font-weight:700;color:${textColor};">${team.strokePoints.toFixed(1)}</div>
@@ -5509,6 +5520,10 @@
                                                 <div style="background:${teamColor};padding:4px;border-radius:3px;text-align:center;">
                                                     <div style="font-size:12px;color:rgba(${isDark ? '255,255,255' : '0,0,0'},${labelOpacity});font-weight:600;">🏆</div>
                                                     <div style="font-size:20px;font-weight:700;color:${textColor};">${team.extra9Points.toFixed(1)}</div>
+                                                </div>
+                                                <div style="background:${teamColor};padding:4px;border-radius:3px;text-align:center;">
+                                                    <div style="font-size:12px;color:rgba(${isDark ? '255,255,255' : '0,0,0'},${labelOpacity});font-weight:600;">🃏</div>
+                                                    <div style="font-size:20px;font-weight:700;color:${textColor};">${team.skinsPoints.toFixed(1)}</div>
                                                 </div>
                                             </div>
                                         </div>
@@ -6149,10 +6164,11 @@
                 acc.ballPoints += b.ballPoints;
                 acc.ctpPoints += b.ctpPoints;
                 acc.extra9Points += b.extra9Points;
+                acc.skinsPoints += (b.skinsPoints || 0);
                 acc.roundTotal += b.roundTotal;
                 acc.grossStrokes += b.grossStrokes;
                 return acc;
-            }, { strokePoints: 0, bbbPoints: 0, ballPoints: 0, ctpPoints: 0, extra9Points: 0, roundTotal: 0, grossStrokes: 0 });
+            }, { strokePoints: 0, bbbPoints: 0, ballPoints: 0, ctpPoints: 0, extra9Points: 0, skinsPoints: 0, roundTotal: 0, grossStrokes: 0 });
             
             // Render hole-by-hole scorecard for ONE round (solo, no match-play coloring)
             const renderRoundScorecard = (b) => {
@@ -6251,11 +6267,12 @@
                         <td style="padding:8px 6px;text-align:center;font-size:13px;">${b.bbbPoints}</td>
                         <td style="padding:8px 6px;text-align:center;font-size:13px;">${b.ballPoints}</td>
                         <td style="padding:8px 6px;text-align:center;font-size:13px;">${b.extra9Points}</td>
+                        <td style="padding:8px 6px;text-align:center;font-size:13px;" title="${b.skinsCount || 0} skins">🃏 ${b.skinsPoints || 0}</td>
                         <td style="padding:8px 6px;text-align:center;font-size:13px;font-weight:700;color:${teamColor};">${b.roundTotal}</td>
                         <td style="padding:8px 6px;text-align:center;font-size:12px;color:#6b7280;">${b.grossStrokes}</td>
                     </tr>
                     <tr id="audit-sc-${rowKey}" style="display:none;">
-                        <td colspan="10" style="padding:0;background:white;">${renderRoundScorecard(b)}</td>
+                        <td colspan="11" style="padding:0;background:white;">${renderRoundScorecard(b)}</td>
                     </tr>
                 `;
             }).join('');
@@ -6268,6 +6285,7 @@
                     <td style="padding:10px 6px;text-align:center;font-size:13px;font-weight:700;">${agg.bbbPoints}</td>
                     <td style="padding:10px 6px;text-align:center;font-size:13px;font-weight:700;">${agg.ballPoints}</td>
                     <td style="padding:10px 6px;text-align:center;font-size:13px;font-weight:700;">${agg.extra9Points}</td>
+                    <td style="padding:10px 6px;text-align:center;font-size:13px;font-weight:700;">${agg.skinsPoints}</td>
                     <td style="padding:10px 6px;text-align:center;font-size:14px;font-weight:800;color:${teamColor};">${agg.roundTotal}</td>
                     <td style="padding:10px 6px;text-align:center;font-size:12px;color:#6b7280;">${agg.grossStrokes}</td>
                 </tr>
@@ -6298,13 +6316,14 @@
                                     <th style="padding:8px 6px;text-align:center;font-size:11px;color:#6b7280;font-weight:700;">🎯 BBB</th>
                                     <th style="padding:8px 6px;text-align:center;font-size:11px;color:#6b7280;font-weight:700;">⚪ Balls</th>
                                     <th style="padding:8px 6px;text-align:center;font-size:11px;color:#6b7280;font-weight:700;">🏆 Extra9</th>
+                                    <th style="padding:8px 6px;text-align:center;font-size:11px;color:#6b7280;font-weight:700;">🃏 Skins</th>
                                     <th style="padding:8px 6px;text-align:center;font-size:11px;color:#6b7280;font-weight:700;">Total</th>
                                     <th style="padding:8px 6px;text-align:center;font-size:11px;color:#6b7280;font-weight:700;">Gross</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 ${breakdowns.length === 0
-                                    ? `<tr><td colspan="10" style="padding:30px;text-align:center;color:#9ca3af;">No rounds played in this event.</td></tr>`
+                                    ? `<tr><td colspan="11" style="padding:30px;text-align:center;color:#9ca3af;">No rounds played in this event.</td></tr>`
                                     : summaryRows + totalsRow
                                 }
                             </tbody>
@@ -6346,6 +6365,7 @@
                 const playerStats = {};
                 
                 eventRounds.forEach((round, roundIdx) => {
+                    const _psSkins = window.skinsPointsForRound(round);
                     round.teams.forEach(team => {
                         team.players.forEach(player => {
                             if (!playerStats[player.id]) {
@@ -6363,6 +6383,7 @@
                                     totalBallPoints: 0,
                                     totalCTPPoints: 0,
                                     totalExtra9Points: 0,
+                                    totalSkinsPoints: 0,
                                     totalPoints: 0,
                                     totalGrossStrokes: 0,
                                     albatrosses: 0,
@@ -6404,7 +6425,7 @@
                                 }
                             }
                             
-                            const roundTotal = strokePoints + bbbPoints + ballPoints + extra9Points + ctpPoints;
+                            const roundTotal = strokePoints + bbbPoints + ballPoints + extra9Points + ctpPoints + (_psSkins[player.id] || 0);
                             
                             // Calculate gross strokes for this round
                             const grossStrokes = sumScores(player.scores);
@@ -6415,6 +6436,7 @@
                             playerStats[player.id].totalBallPoints += ballPoints;
                             playerStats[player.id].totalCTPPoints += ctpPoints;
                             playerStats[player.id].totalExtra9Points += extra9Points;
+                            playerStats[player.id].totalSkinsPoints += (_psSkins[player.id] || 0);
                             playerStats[player.id].totalPoints += roundTotal;
                             playerStats[player.id].totalGrossStrokes += grossStrokes;
                             playerStats[player.id].totalBBB += (player.bbbTotal || 0);
@@ -6447,6 +6469,7 @@
                                 strokePoints: strokePoints,
                                 bbbPoints: bbbPoints,
                                 ballPoints: ballPoints,
+                                skinsPoints: (_psSkins[player.id] || 0),
                                 total: roundTotal,
                                 bbbTotal: player.bbbTotal || 0,
                                 ballsRemaining: player.ballsRemaining || 0
@@ -6463,7 +6486,8 @@
                         avgStroke: p.totalStrokePoints / p.rounds,
                         avgBBB: p.totalBBBPoints / p.rounds,
                         avgBalls: p.totalBallPoints / p.rounds,
-                        avgExtra9: p.totalExtra9Points / p.rounds
+                        avgExtra9: p.totalExtra9Points / p.rounds,
+                        avgSkins: p.totalSkinsPoints / p.rounds
                     }))
                     .sort((a, b) => b.totalPoints - a.totalPoints);
                 
@@ -6563,6 +6587,12 @@
                                         <div style="font-size:10px;color:rgba(255,255,255,0.8);font-weight:600;margin-bottom:3px;">🏆 EXTRA9</div>
                                         <div style="font-size:18px;font-weight:700;color:white;">${player.totalExtra9Points}</div>
                                         <div style="font-size:10px;color:rgba(255,255,255,0.7);">${(player.totalExtra9Points / state.settings.extra9Points).toFixed(0)} wins</div>
+                                    </div>
+                                    
+                                    <div style="background:${teamColor};padding:8px;border-radius:6px;">
+                                        <div style="font-size:10px;color:rgba(255,255,255,0.8);font-weight:600;margin-bottom:3px;">🃏 SKINS</div>
+                                        <div style="font-size:18px;font-weight:700;color:white;">${player.totalSkinsPoints}</div>
+                                        <div style="font-size:10px;color:rgba(255,255,255,0.7);">${player.avgSkins.toFixed(1)} avg</div>
                                     </div>
                                 </div>
                             </div>
@@ -6673,6 +6703,13 @@
                             <input type="number" id="ctpPoints" value="${state.settings.ctpPoints}" 
                                    min="0" max="10" step="0.1"
                                    style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;">
+                        </div>
+                        <div>
+                            <label style="display:block;margin-bottom:6px;font-weight:600;">🃏 Skins</label>
+                            <input type="number" id="skinsPoints" value="${state.settings.skinsPoints != null ? state.settings.skinsPoints : 0.5}" 
+                                   min="0" max="10" step="0.5" title="League default points per skin — a round can override this in its Skins Game card"
+                                   style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;">
+                            <div style="font-size:11px;color:#6b7280;margin-top:4px;">Pts per skin (default)</div>
                         </div>
                     </div>
                     
@@ -11172,6 +11209,7 @@
                             ballPoints: 0,
                             ctpPoints: 0,
                             extra9Points: 0,
+                            skinsPoints: 0,
                             wins: 0,
                             players: {}
                         };
@@ -11185,6 +11223,7 @@
                     const freshRoundTotals = []; // [{ roundId, teamTotals: { teamId -> total } }]
                     rounds.forEach(r => {
                         const thisRoundTotals = {};
+                        const _stSkins = window.skinsPointsForRound(r);
                         r.teams.forEach((t, teamIdx) => {
                             let teamRoundTotal = 0;
                             t.players.forEach((p, playerIdx) => {
@@ -11208,8 +11247,9 @@
                                 const ctpPoints = r.ctpWinners
                                     ? r.ctpWinners.filter(w => w === playerPosition).length * state.settings.ctpPoints
                                     : 0;
+                                const skinsPoints = _stSkins[p.id] || 0;
                                 
-                                const playerTotal = strokePoints + bbbPoints + ballPoints + extra9Points + ctpPoints;
+                                const playerTotal = strokePoints + bbbPoints + ballPoints + extra9Points + ctpPoints + skinsPoints;
                                 teamRoundTotal += playerTotal;
                                 
                                 if (stats[t.teamId]) {
@@ -11218,6 +11258,7 @@
                                     stats[t.teamId].ballPoints += ballPoints;
                                     stats[t.teamId].extra9Points += extra9Points;
                                     stats[t.teamId].ctpPoints += ctpPoints;
+                                    stats[t.teamId].skinsPoints += skinsPoints;
                                 }
                             });
                             thisRoundTotals[t.teamId] = teamRoundTotal;
@@ -11227,7 +11268,7 @@
                     
                     // Calculate team points
                     Object.values(stats).forEach(team => {
-                        team.points = team.strokePoints + team.bbbPoints + team.ballPoints + team.ctpPoints + team.extra9Points;
+                        team.points = team.strokePoints + team.bbbPoints + team.ballPoints + team.ctpPoints + team.extra9Points + team.skinsPoints;
                     });
                     
                     // Calculate wins using freshly-computed per-round team totals
@@ -11490,6 +11531,7 @@
                 
                 // Calculate ALL PLAYER PERFORMANCES for today's round
                 const allPlayerPerformances = [];
+                const _tonightSkins = window.skinsPointsForRound(mostRecentRound);
                 mostRecentRound.teams.forEach((team, teamIdx) => {
                     const stateTeam = state.teams.find(t => t.id === team.teamId);
                     const teamName = stateTeam ? stateTeam.name : 'Unknown';
@@ -11520,7 +11562,8 @@
                             ctpPoints = mostRecentRound.ctpWinners.filter(w => w === playerPosition).length * state.settings.ctpPoints;
                         }
                         
-                        const totalPoints = strokePoints + bbbPoints + ballPoints + extra9Points + ctpPoints;
+                        const skinsPoints = _tonightSkins[player.id] || 0;
+                        const totalPoints = strokePoints + bbbPoints + ballPoints + extra9Points + ctpPoints + skinsPoints;
                         
                         // Use the per-round USGA-aware course handicap so it matches the award computations.
                         // Without this, the inline cell renderer (which uses player.handicap directly)
@@ -11539,6 +11582,7 @@
                             ballPoints: ballPoints,
                             extra9Points: extra9Points,
                             ctpPoints: ctpPoints,
+                            skinsPoints: skinsPoints,
                             totalPoints: totalPoints,
                             // handicap is what the cell rendering uses to derive strokes per hole.
                             // It must agree with the award computations, so use the USGA-aware course handicap.
@@ -11584,9 +11628,11 @@
                     p.eventBallPoints = 0;
                     p.eventExtra9Points = 0;
                     p.eventCTPPoints = 0;
+                    p.eventSkinsPoints = 0;
                     p.eventTotalPoints = 0;
                     
                     eventRounds.forEach((round, roundIdx) => {
+                        const _evSkins = window.skinsPointsForRound(round);
                         round.teams.forEach((team, teamIdx) => {
                             const playerInRound = team.players.find(pl => pl.id === p.playerId);
                             if (playerInRound) {
@@ -11621,11 +11667,14 @@
                                     const ctpCount = round.ctpWinners.filter(w => w === playerPosition).length;
                                     p.eventCTPPoints += ctpCount * state.settings.ctpPoints;
                                 }
+                                
+                                // Skins points (always net; added to the event total)
+                                p.eventSkinsPoints += _evSkins[p.playerId] || 0;
                             }
                         });
                     });
                     
-                    p.eventTotalPoints = p.eventStrokePoints + p.eventBBBPoints + p.eventBallPoints + p.eventExtra9Points + p.eventCTPPoints;
+                    p.eventTotalPoints = p.eventStrokePoints + p.eventBBBPoints + p.eventBallPoints + p.eventExtra9Points + p.eventCTPPoints + p.eventSkinsPoints;
                     
                     // Historical scores (last 20 gross scores from all time)
                     p.historicalScores = [];
@@ -14274,12 +14323,12 @@
                             try { _skHcMap[player.id] = getPlayerHandicapForRound(_sp2, mostRecentRound, player) || 0; }
                             catch (e) { _skHcMap[player.id] = player.handicap || 0; }
                         }));
-                        const _skRes = window.computeSkins(mostRecentRound, _skHcMap);
+                        const _skSum = window.skinsForRound(mostRecentRound);
+                        const _skRes = window.computeSkins(mostRecentRound, _skHcMap, _skSum.pointsPerSkin);
                         if (_skRes.decided) {
                             presentationAnalytics.skins = {
                                 winners: _skRes.totals.filter(t => t.skins > 0),
-                                scoring: _skRes.settings.scoring,
-                                valuePerSkin: _skRes.settings.valuePerSkin,
+                                pointsPerSkin: _skRes.settings.pointsPerSkin,
                                 liveCarry: _skRes.liveCarry,
                                 holesDecided: _skRes.holes.filter(h => h.winnerId).length
                             };
@@ -14627,6 +14676,7 @@
                     
                     // 3. Top team daily points
                     const teamDailyPoints = [];
+                    const _tdSkins = window.skinsPointsForRound(mostRecentRound);
                     mostRecentRound.teams.forEach(team => {
                         const stateTeam = state.teams.find(t => t.id === team.teamId);
                         let teamTotal = 0;
@@ -14645,7 +14695,7 @@
                                 const playerPosition = `${mostRecentRound.teams.indexOf(team)}-${playerIdx}`;
                                 ctpPoints = mostRecentRound.ctpWinners.filter(w => w === playerPosition).length * state.settings.ctpPoints;
                             }
-                            teamTotal += strokePoints + bbbPoints + ballPoints + extra9Points + ctpPoints;
+                            teamTotal += strokePoints + bbbPoints + ballPoints + extra9Points + ctpPoints + (_tdSkins[player.id] || 0);
                         });
                         teamDailyPoints.push({
                             teamName: stateTeam ? stateTeam.name : 'Unknown',
@@ -15940,6 +15990,7 @@
                     eventRounds.forEach((round, rIdx) => {
                         // Build the round's leaderboard (player → total points)
                         const leaderboard = [];
+                        const _ffSkins = (typeof window.skinsPointsForRound === 'function') ? window.skinsPointsForRound(round) : {};
                         if (Array.isArray(round.teams)) {
                             round.teams.forEach(team => {
                                 if (!Array.isArray(team.players)) return;
@@ -15950,7 +16001,8 @@
                                     const ball = p.ballPoints || ((p.ballsRemaining || 0) * (state.settings.ballPoints || 0));
                                     const e9 = p.extra9Points || 0;
                                     const ctp = p.ctpPoints || 0;
-                                    const total = stroke + bbb + ball + e9 + ctp;
+                                    const skins = _ffSkins[p.id] || 0;
+                                    const total = stroke + bbb + ball + e9 + ctp + skins;
                                     leaderboard.push({ playerId: p.id, name: p.name, points: total });
                                     
                                     if (!(p.id in playerPoints)) playerPoints[p.id] = [];
@@ -15966,7 +16018,8 @@
                                              + (p.bbbPoints || 0)
                                              + (p.ballPoints || 0)
                                              + (p.extra9Points || 0)
-                                             + (p.ctpPoints || 0);
+                                             + (p.ctpPoints || 0)
+                                             + (_ffSkins[p.id] || 0);
                                 }, 0);
                                 teamPointsByRound[team.id].push({ name: team.name, points: teamTotal });
                             });
@@ -17604,6 +17657,10 @@
                                                 <div style="color:white;font-size:14px;">CTP</div>
                                                 <div style="color:white;font-size:20px;font-weight:700;">${player.ctpPoints}</div>
                                             </div>
+                                            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:rgba(255,255,255,0.03);border-radius:6px;">
+                                                <div style="color:white;font-size:14px;">🃏 Skins</div>
+                                                <div style="color:white;font-size:20px;font-weight:700;">${player.skinsPoints}</div>
+                                            </div>
                                             <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:linear-gradient(135deg,rgba(16,185,129,0.25),rgba(16,185,129,0.15));border:2px solid #10b981;border-radius:6px;margin-top:4px;">
                                                 <div style="color:white;font-size:15px;font-weight:700;">TODAY</div>
                                                 <div style="color:white;font-size:26px;font-weight:700;">${player.totalPoints}</div>
@@ -17634,6 +17691,10 @@
                                             <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:rgba(255,255,255,0.03);border-radius:6px;">
                                                 <div style="color:white;font-size:14px;">CTP</div>
                                                 <div style="color:white;font-size:20px;font-weight:700;">${player.eventCTPPoints}</div>
+                                            </div>
+                                            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:rgba(255,255,255,0.03);border-radius:6px;">
+                                                <div style="color:white;font-size:14px;">🃏 Skins</div>
+                                                <div style="color:white;font-size:20px;font-weight:700;">${player.eventSkinsPoints}</div>
                                             </div>
                                             <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:linear-gradient(135deg,rgba(139,92,246,0.25),rgba(139,92,246,0.15));border:2px solid #8b5cf6;border-radius:6px;margin-top:4px;">
                                                 <div style="color:white;font-size:15px;font-weight:700;">TOTAL</div>
@@ -19540,6 +19601,7 @@
                                         <h3 style="color:#10b981;font-size:16px;font-weight:700;margin:0 0 10px;">👥 Player Breakdown</h3>
                                         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;">
                                             ${mostRecentRound.teams.find(t => t.teamId === team.id)?.players.map(player => {
+                                                const _pbSkins = window.skinsPointsForRound(mostRecentRound);
                                                 const _effHc = getPlayerHandicapForRound(state.players.find(sp => sp.id === player.id), mostRecentRound, player);
                             const strokePoints = calcPlayerTotal(player.scores, mostRecentRound.pars, mostRecentRound.handicaps, _effHc);
                                                 const bbbPoints = (player.bbbTotal || 0) * state.settings.bbbPoints;
@@ -19559,7 +19621,7 @@
                                                     ctpPoints = mostRecentRound.ctpWinners.filter(w => w === playerPosition).length * state.settings.ctpPoints;
                                                 }
                                                 
-                                                const playerTotal = strokePoints + bbbPoints + ballPoints + extra9Points + ctpPoints;
+                                                const playerTotal = strokePoints + bbbPoints + ballPoints + extra9Points + ctpPoints + (_pbSkins[player.id] || 0);
                                                 
                                                 return '<div style="background:rgba(255,255,255,0.1);border-radius:6px;padding:8px;">' +
                                                     '<div style="color:white;font-size:13px;font-weight:700;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + player.name + '</div>' +
@@ -20097,7 +20159,7 @@
                         setTimeout(() => { try { playSfx('SKINS WINNER', null, 0.9); } catch (e) {} }, 400);
                     }
                 } catch (e) {}
-                const _sk = analytics.skins || { winners: [], scoring: 'net', valuePerSkin: 0, liveCarry: 0, holesDecided: 0 };
+                const _sk = analytics.skins || { winners: [], pointsPerSkin: 0.5, liveCarry: 0, holesDecided: 0 };
                 const _skTop = _sk.winners.slice(0, 3);
                 const _skMedal = ['🥇', '🥈', '🥉'];
                 const _skFmt = (n) => String(Math.round(n * 100) / 100);
@@ -20107,10 +20169,10 @@
                             🃏 Skins Game
                         </h1>
                         <p style="color:#a5b4fc;font-size:20px;margin:0 0 12px;">
-                            Lowest ${_sk.scoring} score takes the hole • ties carry the pot 🔥
+                            Lowest net score takes the hole • ties carry the pot 🔥 • ${_skFmt(_sk.pointsPerSkin)} pts per skin
                         </p>
                         <p style="color:#818cf8;font-size:16px;margin:0 0 30px;font-style:italic;">
-                            ${_sk.holesDecided} skins decided${_sk.valuePerSkin > 0 ? ` • $${_sk.valuePerSkin} per skin` : ''}
+                            ${_sk.holesDecided} skins decided
                             ${_sk.liveCarry > 0 ? ` • ${_skFmt(_sk.liveCarry)} still live in the pot` : ''}
                         </p>
                         <div style="display:grid;grid-template-columns:repeat(${Math.min(3, _skTop.length)}, 1fr);gap:24px;">
@@ -20119,7 +20181,7 @@
                                     <div style="font-size:52px;margin-bottom:8px;">${_skMedal[i] || '🏅'}</div>
                                     <div style="color:white;font-size:26px;font-weight:700;margin-bottom:6px;">${w.name}</div>
                                     <div style="color:#fcd34d;font-size:20px;font-weight:700;">${_skFmt(w.skins)} skin${w.skins === 1 ? '' : 's'}</div>
-                                    ${_sk.valuePerSkin > 0 ? `<div style="color:#6ee7b7;font-size:18px;font-weight:700;margin-top:6px;">$${(Math.round(w.winnings * 100) / 100).toFixed(2)}</div>` : ''}
+                                    <div style="color:#6ee7b7;font-size:18px;font-weight:700;margin-top:6px;">+${_skFmt(w.points)} pts</div>
                                 </div>
                             `).join('')}
                         </div>
@@ -20127,7 +20189,7 @@
                             <div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:24px;">
                                 ${_sk.winners.slice(3).map(w => `
                                     <div style="background:rgba(255,255,255,0.08);border:2px solid rgba(255,255,255,0.2);border-radius:10px;padding:8px 14px;color:white;font-size:14px;">
-                                        ${w.name} · <strong style="color:#fcd34d;">${_skFmt(w.skins)}</strong>
+                                        ${w.name} · <strong style="color:#fcd34d;">${_skFmt(w.skins)}</strong> · <strong style="color:#6ee7b7;">+${_skFmt(w.points)} pts</strong>
                                     </div>
                                 `).join('')}
                             </div>
@@ -24214,25 +24276,31 @@
         };
 
         // ─── SKINS GAME ───
-        // Side game computed from per-hole gross/net scores. Classic rules: the
-        // outright lowest score on a hole wins the skin; a tie carries the skin
-        // forward (when carryover is on) so the pot builds hole to hole.
+        // Side game computed from per-hole NET scores (always net — no gross
+        // option). Classic rules: the outright lowest net score on a hole wins
+        // the skin; a tie carries the skin forward (when carryover is on) so
+        // the pot builds hole to hole. Each skin is worth pointsPerSkin EVENT
+        // POINTS (default 0.5), added to the player's overall event scoring.
         // Per-round settings live on round.skins:
-        //   { enabled, scoring: 'net'|'gross', carryover: bool, valuePerSkin: number }
+        //   { enabled, carryover: bool, pointsPerSkin: number }
         // hcMap: { playerId: effectiveHandicap } — callers resolve each player's
         // handicap (e.g. via getPlayerHandicapForRound); missing entries count as 0.
+        // pointsPerSkinOverride: league/global default, applied only when the
+        // round has no explicit pointsPerSkin (callers: prefer window.skinsForRound).
+        // Precedence: round.skins.pointsPerSkin → override → 0.5.
         // Returns { settings, holes[18], totals, decided, liveCarry }.
         //   holes[i] = { hole, winnerId, winnerName, tiedIds, tiedNames,
         //                skinsValue, carriedIn, carriedOut, splitValue,
         //                status: 'won'|'won-carry'|'tie-carry'|'tie-dead'|'split-final'|'pending' }
-        //   totals   = [{ id, name, skins, winnings }] sorted by skins desc
-        window.computeSkins = (round, hcMap) => {
+        //   totals   = [{ id, name, skins, points }] sorted by skins desc
+        window.computeSkins = (round, hcMap, pointsPerSkinOverride) => {
             const sk = (round && round.skins) || {};
+            const pps = sk.pointsPerSkin != null ? sk.pointsPerSkin
+                : (pointsPerSkinOverride != null ? pointsPerSkinOverride : 0.5);
             const settings = {
                 enabled: sk.enabled !== false,
-                scoring: sk.scoring === 'gross' ? 'gross' : 'net',
                 carryover: sk.carryover !== false,
-                valuePerSkin: Math.max(0, parseFloat(sk.valuePerSkin) || 0)
+                pointsPerSkin: Math.max(0, parseFloat(pps) || 0)
             };
             const players = [];
             (round.teams || []).forEach(team => (team.players || []).forEach(p => {
@@ -24254,7 +24322,7 @@
                     const gross = parseInt(pl.scores[i]);
                     if (isNaN(gross) || gross <= 0) return;
                     const hc = (hcMap && hcMap[pl.id] != null) ? hcMap[pl.id] : 0;
-                    const score = settings.scoring === 'net' ? gross - strokesOn(hc, i) : gross;
+                    const score = gross - strokesOn(hc, i); // always net
                     contenders.push({ id: pl.id, name: pl.name, gross, score });
                 });
                 const h = { hole: i + 1, winnerId: null, winnerName: null, tiedIds: [],
@@ -24296,7 +24364,7 @@
                     liveCarry = carry;
                 }
             }
-            const totals = players.map(pl => ({ id: pl.id, name: pl.name, skins: 0, winnings: 0 }));
+            const totals = players.map(pl => ({ id: pl.id, name: pl.name, skins: 0, points: 0 }));
             const byId = {};
             totals.forEach(t => { byId[t.id] = t; });
             holes.forEach(h => {
@@ -24305,11 +24373,41 @@
                     h.tiedIds.forEach(id => { if (byId[id]) byId[id].skins += h.splitValue; });
                 }
             });
-            totals.forEach(t => { t.winnings = t.skins * settings.valuePerSkin; });
+            totals.forEach(t => { t.points = Math.round(t.skins * settings.pointsPerSkin * 100) / 100; });
             totals.sort((a, b) => b.skins - a.skins);
             const decided = holes.some(h => h.status === 'won' || h.status === 'won-carry' || h.status === 'split-final');
             return { settings, holes, totals, decided, liveCarry };
         };
+
+        // Skins summary for a round:
+        //   { points: {playerId: eventPts}, counts: {playerId: skinsWon},
+        //     pointsPerSkin, enabled }
+        // Always net. pointsPerSkin resolution: round.skins.pointsPerSkin →
+        // league default (state.settings.skinsPoints) → 0.5. Skins points are
+        // EVENT POINTS and must be added to the player's overall total wherever
+        // totals are aggregated (standings, round detail, presentation, etc.).
+        window.skinsForRound = (round) => {
+            const empty = { points: {}, counts: {}, pointsPerSkin: 0.5, enabled: false };
+            if (!round || !Array.isArray(round.teams)) return empty;
+            const sk = round.skins || {};
+            if (sk.enabled === false) return { ...empty, enabled: false };
+            const leagueDefault = (typeof state !== 'undefined' && state.settings && state.settings.skinsPoints != null)
+                ? state.settings.skinsPoints : 0.5;
+            const pps = sk.pointsPerSkin != null ? sk.pointsPerSkin : leagueDefault;
+            const hcMap = {};
+            round.teams.forEach(team => (team.players || []).forEach(p => {
+                const sp = (typeof state !== 'undefined' && state.players || []).find(s => String(s.id) === String(p.id));
+                try { hcMap[p.id] = getPlayerHandicapForRound(sp, round, p) || 0; }
+                catch (e) { hcMap[p.id] = (p.handicap || 0); }
+            }));
+            const res = window.computeSkins(round, hcMap, pps);
+            const points = {}, counts = {};
+            res.totals.forEach(t => { points[t.id] = t.points || 0; counts[t.id] = t.skins || 0; });
+            return { points, counts, pointsPerSkin: res.settings.pointsPerSkin, enabled: true };
+        };
+
+        // Thin wrapper: { playerId: skinsEventPoints } for a round ({} when off).
+        window.skinsPointsForRound = (round) => window.skinsForRound(round).points;
 
         // Push the open round's current state into the shared rounds array right now.
         // Used by fields that must reach other devices immediately (CTP, Extra 9).
@@ -24319,7 +24417,7 @@
             const next = state.rounds.map(r =>
                 (String(r.id) === String(ar.id))
                     ? { ...r, ctpWinners: ar.ctpWinners, ctpMeta: ar.ctpMeta, ctpLog: ar.ctpLog,
-                        extra9Winners: ar.extra9Winners }
+                        extra9Winners: ar.extra9Winners, skins: ar.skins }
                     : r);
             saveRoundsMerged(next, [ar.id]);
         };
@@ -28286,6 +28384,7 @@
                 
                 round.teams = round.teams.map((t, teamIdx) => {
                     let totalPoints = 0;
+                    const _svSkins = window.skinsPointsForRound(round);
                     
                     const updatedPlayers = t.players.map((p, playerIdx) => {
                         // Calculate individual point breakdowns (USGA-aware)
@@ -28310,7 +28409,7 @@
                         }
                         
                         // Add to team total
-                        totalPoints += strokePoints + bbbPoints + ballPoints + extra9Points + ctpPoints;
+                        totalPoints += strokePoints + bbbPoints + ballPoints + extra9Points + ctpPoints + (_svSkins[p.id] || 0);
                         
                         // Snapshot tee data for USGA handicap calc (Phase 2 will use these).
                         // teeId/teeName/teeSlope/teeRating are frozen at save time so later course
@@ -29157,6 +29256,7 @@
                         
                         // Recalculate points for this team in this round
                         let roundTotal = 0;
+                        const _phSkins = window.skinsPointsForRound(r);
                         t.players.forEach((p, playerIdx) => {
                             const teamIdx = r.teams.findIndex(team => team.teamId === t.teamId);
                             const _effHc = getPlayerHandicapForRound(state.players.find(sp => sp.id === p.id), r, p);
@@ -29176,7 +29276,7 @@
                                 ctpPoints = r.ctpWinners.filter(w => w === playerPosition).length * state.settings.ctpPoints;
                             }
                             
-                            roundTotal += strokePoints + bbbPoints + ballPoints + extra9Points + ctpPoints;
+                            roundTotal += strokePoints + bbbPoints + ballPoints + extra9Points + ctpPoints + (_phSkins[p.id] || 0);
                         });
                         
                         stats[t.teamId].currentPoints += roundTotal;
@@ -29397,6 +29497,7 @@
                 
                 // Helper to build complete player card HTML
                 const buildPlayerCard = (player, playerIdx, currentTeam, displayTeamName = false) => {
+                    const _bcSkins = window.skinsPointsForRound(round);
                     const _effHc = getPlayerHandicapForRound(state.players.find(sp => sp.id === player.id), round, player);
                     const playerStrokePoints = calcPlayerTotal(player.scores, round.pars, round.handicaps, _effHc);
                     const grossScore = sumScores(player.scores);
@@ -29423,7 +29524,7 @@
                         }
                     }
                     
-                    const totalPoints = playerStrokePoints + bbbPoints + ballPoints + extra9Points + ctpPoints;
+                    const totalPoints = playerStrokePoints + bbbPoints + ballPoints + extra9Points + ctpPoints + (_bcSkins[player.id] || 0);
                     
                     const front9 = player.scores.slice(0, 9).map((score, holeIdx) => 
                         renderHoleScore(score, holeIdx, round.pars[holeIdx], round.handicaps[holeIdx], player.handicap)
@@ -29665,6 +29766,7 @@
                     ballPoints: parseOrDefault('ballPoints', 1),
                     extra9Points: parseOrDefault('extra9Points', 5),
                     ctpPoints: parseOrDefault('ctpPoints', 2),
+                    skinsPoints: parseOrDefault('skinsPoints', 0.5),
                     useUSGAHandicap: !!(document.getElementById('useUSGAHandicapToggle') && document.getElementById('useUSGAHandicapToggle').checked),
                     // Admin password toggle only renders in admin mode; preserve existing value if the control isn't in the DOM
                     requireAdminPassword: document.getElementById('requireAdminPasswordToggle')
@@ -29697,6 +29799,7 @@
                     ballPoints: 1,
                     extra9Points: 5,
                     ctpPoints: 2,
+                    skinsPoints: 0.5,
                     useUSGAHandicap: false,
                     requireAdminPassword: (state.settings && state.settings.requireAdminPassword !== false)
                 };

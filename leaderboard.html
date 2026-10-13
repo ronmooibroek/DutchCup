@@ -248,7 +248,7 @@ function formatRoundDate(round) {
 // ─── Scoring (mirrors score-entry.html exactly) ─────────────────────────
 // Defaults only — overwritten by the league's real settings from Firestore.
 let POINTS = { albatross: 10, eagle: 7, birdie: 5, par: 2, bogey: 1, doubleOrWorse: 0 };
-let BONUS = { bbb: 1, ball: 1, extra9: 5, ctp: 2 };
+let BONUS = { bbb: 1, ball: 1, extra9: 5, ctp: 2, skins: 0.5 };
 function getPoints(netToPar) {
     if (netToPar <= -3) return POINTS.albatross;
     if (netToPar === -2) return POINTS.eagle;
@@ -342,6 +342,67 @@ function roundCTP(round, holeIdx) {
     return '';
 }
 
+// ── SKINS GAME ── always net. pointsPerSkin: round override → league setting → 0.5.
+// Skins points are event points, added to the player's total.
+// Returns { points: {id: pts}, counts: {id: skins}, pointsPerSkin }.
+function computeSkinsMaps(round) {
+    const out = { points: {}, counts: {}, pointsPerSkin: 0.5 };
+    if (!round) return out;
+    const sk = (round && round.skins) || {};
+    if (sk.enabled === false || !Array.isArray(round.teams)) return out;
+    const ppsRaw = (sk.pointsPerSkin != null) ? sk.pointsPerSkin
+        : ((typeof BONUS !== 'undefined' && BONUS.skins != null) ? BONUS.skins : 0.5);
+    const pointsPerSkin = Math.max(0, parseFloat(ppsRaw) || 0);
+    out.pointsPerSkin = pointsPerSkin;
+    const players = [];
+    (round.teams || []).forEach(team => (team.players || []).forEach(p => {
+        players.push({ id: p.id, hc: handicapForRound(round, p) || 0 });
+        out.points[String(p.id)] = 0;
+        out.counts[String(p.id)] = 0;
+    }));
+    const hcaps = round.handicaps || [];
+    const strokesOn = (hc, i) => {
+        const holeHcap = parseInt(hcaps[i]) || (i + 1);
+        let s = 0;
+        if (hc >= holeHcap) s = 1;
+        if (hc >= holeHcap + 18) s = 2;
+        return s;
+    };
+    const k = (id) => String(id);
+    let carry = 0;
+    for (let i = 0; i < 18; i++) {
+        const contenders = [];
+        players.forEach(pl => {
+            const s = roundScore(round, pl.id, i);
+            if (s === '' || s == null) return;
+            const n = parseInt(s, 10);
+            if (isNaN(n) || n <= 0) return;
+            contenders.push({ id: pl.id, score: n - strokesOn(pl.hc, i) }); // always net
+        });
+        if (!contenders.length) continue;
+        const best = Math.min.apply(null, contenders.map(c => c.score));
+        const leaders = contenders.filter(c => c.score === best);
+        if (leaders.length === 1) {
+            out.counts[k(leaders[0].id)] += 1 + carry;
+            carry = 0;
+        } else if (sk.carryover !== false) {
+            if (i === 17) {
+                // Split the whole pot on the last hole, including hole 18's own
+                // skin — mirrors the admin app's split-final rule.
+                const split = (carry + 1) / leaders.length;
+                leaders.forEach(l => { out.counts[k(l.id)] += split; });
+                carry = 0;
+            } else {
+                carry += 1;
+            }
+        }
+    }
+    players.forEach(pl => {
+        out.points[k(pl.id)] = Math.round((out.counts[k(pl.id)] || 0) * pointsPerSkin * 100) / 100;
+    });
+    return out;
+}
+
 function computePlayerTotals(round, p) {
     let gross = 0, strokePoints = 0, thru = 0;
     const hc = handicapForRound(round, p);
@@ -375,8 +436,11 @@ function computePlayerTotals(round, p) {
         if (idsEqual(roundCTP(round, h), p.id)) ctpWins++;
     }
     const ctpPoints = ctpWins * BONUS.ctp;
-    const points = strokePoints + bbbPoints + ballPoints + extra9Points + ctpPoints;
-    return { gross, points, thru, strokePoints, bbbPoints, ballPoints, extra9Points, ctpPoints };
+    const _sk = computeSkinsMaps(round);
+    const skinsPoints = _sk.points[String(p.id)] || 0;
+    const skinsCount = _sk.counts[String(p.id)] || 0;
+    const points = strokePoints + bbbPoints + ballPoints + extra9Points + ctpPoints + skinsPoints;
+    return { gross, points, thru, strokePoints, bbbPoints, ballPoints, extra9Points, ctpPoints, skinsPoints, skinsCount };
 }
 
 // ─── Round helpers ──────────────────────────────────────────────────────
@@ -540,6 +604,7 @@ function renderBoard() {
         if (tot('ctpPoints') > 0) bonusBits.push('CTP ' + tot('ctpPoints'));
         if (tot('extra9Points') > 0) bonusBits.push('Extra 9 ' + tot('extra9Points'));
         if (tot('ballPoints') > 0) bonusBits.push('Balls ' + tot('ballPoints'));
+        if (tot('skinsPoints') > 0) bonusBits.push('🃏 Skins ' + tot('skinsPoints'));
         if (bonusBits.length > 0) card.appendChild(el('div', { class: 'bonus-line' }, 'incl. ' + bonusBits.join(' · ')));
         app.appendChild(card);
     });
@@ -648,7 +713,8 @@ function init() {
                 bbb: s.bbbPoints ?? BONUS.bbb,
                 ball: s.ballPoints ?? BONUS.ball,
                 extra9: s.extra9Points ?? BONUS.extra9,
-                ctp: s.ctpPoints ?? BONUS.ctp
+                ctp: s.ctpPoints ?? BONUS.ctp,
+                skins: s.skinsPoints ?? BONUS.skins
             };
             state.useUSGA = s.useUSGAHandicap === true;
             render();
