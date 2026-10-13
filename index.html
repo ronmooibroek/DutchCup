@@ -726,7 +726,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.10.13.2';
+        const APP_VERSION = '2026.10.13.3';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -4523,10 +4523,6 @@
             const app = document.getElementById('app');
             const round = state.activeRound;
             
-            // Initialize selectedPlayers if not exists
-            if (!state.selectedPlayers) {
-                state.selectedPlayers = new Set();
-            }
             
             // Find the course for this round, and its tee sets
             const roundCourse = state.courses.find(c => c.id === round.courseId);
@@ -4572,11 +4568,9 @@
             const renderTeeDropdown = (p) => {
                 if (courseTees.length === 0) return '';
                 return `
-                    <div style="margin-top:6px;" onclick="event.stopPropagation()">
+                    <div style="margin-top:6px;" onclick="event.stopPropagation()" ontouchstart="event.stopPropagation()" onmousedown="event.stopPropagation()">
                         <select onchange="updatePlayerTee(${p.teamIdx}, ${p.playerIdx}, this.value)"
                                 onclick="event.stopPropagation()"
-                                ondragstart="event.stopPropagation()"
-                                draggable="false"
                                 style="width:100%;padding:4px 6px;font-size:11px;border:1px solid #d1d5db;border-radius:4px;background:white;">
                             ${courseTees.map(t => `
                                 <option value="${t.id}" ${p.teeId === t.id ? 'selected' : ''}>${t.name}</option>
@@ -4586,6 +4580,34 @@
                 `;
             };
             
+            // Group badge colors for the tap-based assignment UI
+            const GS_GROUP_COLORS = ['#0ea5e9', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#ec4899', '#14b8a6', '#f97316'];
+
+            // Player bubble: tap cycles to the next group, hold unassigns
+            const renderGsChip = (p) => {
+                const badge = p.groupNumber ? p.groupNumber : '–';
+                const color = p.groupNumber ? GS_GROUP_COLORS[(p.groupNumber - 1) % GS_GROUP_COLORS.length] : '#9ca3af';
+                return `
+                    <div oncontextmenu="return false"
+                         ontouchstart="gsPressStart(${p.teamIdx}, ${p.playerIdx})"
+                         ontouchend="gsPressEnd(${p.teamIdx}, ${p.playerIdx})"
+                         ontouchmove="gsPressCancel()"
+                         ontouchcancel="gsPressCancel()"
+                         onmousedown="gsPressStart(${p.teamIdx}, ${p.playerIdx})"
+                         onmouseup="gsPressEnd(${p.teamIdx}, ${p.playerIdx})"
+                         onmouseleave="gsPressCancel()"
+                         onclick="gsTap(${p.teamIdx}, ${p.playerIdx})"
+                         style="display:flex;align-items:center;gap:10px;background:white;border:2px solid ${color};border-radius:12px;padding:10px;min-height:60px;cursor:pointer;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:manipulation;">
+                        <div style="width:38px;height:38px;border-radius:50%;background:${color};color:white;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:19px;flex-shrink:0;">${badge}</div>
+                        <div style="flex:1;min-width:0;">
+                            <strong style="font-size:15px;">${p.playerName}</strong><br>
+                            <small style="color:#6b7280;">${p.teamName} • HC ${p.handicap}</small>
+                            ${renderTeeDropdown(p)}
+                        </div>
+                    </div>
+                `;
+            };
+
             app.innerHTML = `
                 <button class="back-btn" onclick="navigate('${isEditingScheduled ? 'home' : 'newRound'}')">← Back</button>
                 <div class="card">
@@ -4619,82 +4641,54 @@
                         <small style="color:#065f46;font-size:12px;">You can change the course before starting this round</small>
                     </div>
                     
-                    <p style="color:#6b7280;margin-bottom:20px;">
-                        <strong>Tap</strong> to select players • <strong>Hold & drag</strong> to move selected players
-                        ${state.selectedPlayers.size > 0 ? `<br><span style="color:#0ea5e9;">✓ ${state.selectedPlayers.size} player${state.selectedPlayers.size === 1 ? '' : 's'} selected</span>` : ''}
+                    <p style="color:#6b7280;margin-bottom:16px;">
+                        👆 <strong>Tap</strong> a player to move them to the next group • <strong>Hold</strong> to unassign
+                        ${unassigned.length > 0 ? `<br><span style="color:#dc2626;font-weight:600;">⚠️ ${unassigned.length} player${unassigned.length === 1 ? '' : 's'} unassigned</span>` : `<br><span style="color:#10b981;font-weight:600;">✓ Everyone assigned</span>`}
                     </p>
-                    
-                    <div style="display:grid;grid-template-columns:1fr 2fr;gap:20px;">
-                        <!-- Unassigned Players -->
-                        <div>
-                            <h3 style="margin:0 0 12px 0;font-size:16px;">👥 Players (${unassigned.length})</h3>
-                            <div id="unassigned-zone" 
-                                 ondrop="dropPlayer(event, null)" 
-                                 ondragover="allowDrop(event)"
-                                 style="min-height:400px;background:#f9fafb;border:2px dashed #d1d5db;border-radius:8px;padding:12px;">
-                                ${unassigned.map(p => {
-                                    const isSelected = state.selectedPlayers.has(p.key);
-                                    return `
-                                    <div draggable="true" 
-                                         onclick="togglePlayerSelect('${p.key}')"
-                                         ondragstart="dragStart(event, ${p.teamIdx}, ${p.playerIdx})"
-                                         ondragend="dragEnd(event)"
-                                         class="draggable-player"
-                                         data-team="${p.teamIdx}"
-                                         data-player="${p.playerIdx}"
-                                         style="background:${isSelected ? '#dbeafe' : 'white'};padding:12px;margin-bottom:8px;border-radius:6px;cursor:move;border:2px solid ${isSelected ? '#0ea5e9' : '#e5e7eb'};">
-                                        ${isSelected ? '<div style="position:absolute;top:4px;right:4px;width:20px;height:20px;background:#0ea5e9;color:white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;">✓</div>' : ''}
-                                        <strong>${p.playerName}</strong><br>
-                                        <small style="color:#6b7280;">Team: ${p.teamName} • HC: ${p.handicap}</small>
-                                        ${renderTeeDropdown(p)}
+
+                    <!-- Quick actions -->
+                    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px;">
+                        <button onclick="gsAutoFill()" class="btn-secondary" style="padding:16px;font-size:15px;font-weight:700;">⚡ Auto-fill</button>
+                        <button onclick="gsShuffle()" class="btn-secondary" style="padding:16px;font-size:15px;font-weight:700;">🎲 Shuffle</button>
+                        <button onclick="gsClearGroups()" class="btn-secondary" style="padding:16px;font-size:15px;font-weight:700;">🧹 Clear</button>
+                    </div>
+
+                    <!-- Unassigned Players -->
+                    <div style="margin-bottom:20px;">
+                        <h3 style="margin:0 0 10px 0;font-size:16px;">👥 Unassigned (${unassigned.length})</h3>
+                        <div style="background:#f9fafb;border:2px dashed #d1d5db;border-radius:10px;padding:12px;">
+                            ${unassigned.length === 0 ? '<div style="text-align:center;color:#10b981;font-weight:600;padding:8px;">✓ All players assigned</div>' : `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;">${unassigned.map(p => renderGsChip(p)).join('')}</div>`}
+                        </div>
+                    </div>
+
+                    <!-- Groups -->
+                    <div>
+                        <h3 style="margin:0 0 10px 0;font-size:16px;">🏌️ Groups</h3>
+                        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;">
+                            ${Array.from({length: numGroups}, (_, i) => {
+                                const groupNum = i + 1;
+                                const groupPlayers = groups[groupNum] || [];
+                                const color = GS_GROUP_COLORS[(groupNum - 1) % GS_GROUP_COLORS.length];
+                                const count = groupPlayers.length;
+                                const countColor = count === 4 ? '#10b981' : (count > 4 ? '#ef4444' : '#9ca3af');
+                                const avgHc = count > 0 ? (groupPlayers.reduce((s, p) => s + (p.handicap || 0), 0) / count) : null;
+                                return `
+                                    <div style="background:white;border:2px solid ${color};border-radius:12px;padding:12px;">
+                                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:${avgHc !== null ? '4px' : '10px'};">
+                                            <span style="display:flex;align-items:center;gap:8px;">
+                                                <span style="width:30px;height:30px;border-radius:50%;background:${color};color:white;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:16px;">${groupNum}</span>
+                                                <strong style="font-size:16px;">Group ${groupNum}</strong>
+                                            </span>
+                                            <span style="font-size:13px;font-weight:700;color:${countColor};background:#f3f4f6;padding:4px 10px;border-radius:999px;">${count}/4</span>
+                                        </div>
+                                        ${avgHc !== null ? `<div style="font-size:12px;color:#6b7280;margin-bottom:8px;">Avg HC ${avgHc.toFixed(1)}</div>` : ''}
+                                        <div style="display:grid;gap:8px;">
+                                            ${groupPlayers.map(p => renderGsChip(p)).join('')}
+                                            ${count === 0 ? '<div style="text-align:center;color:#9ca3af;padding:16px;font-size:13px;">Tap players to add</div>' : ''}
+                                        </div>
                                     </div>
                                 `;
-                                }).join('')}
-                            </div>
-                        </div>
-                        
-                        <!-- Groups -->
-                        <div>
-                            <h3 style="margin:0 0 12px 0;font-size:16px;">🏌️ Groups</h3>
-                            <div style="display:grid;gap:12px;">
-                                ${Array.from({length: numGroups}, (_, i) => {
-                                    const groupNum = i + 1;
-                                    const groupPlayers = groups[groupNum] || [];
-                                    const isFull = groupPlayers.length >= 4;
-                                    return `
-                                        <div style="background:#f0f9ff;border:2px solid #0ea5e9;border-radius:8px;padding:12px;">
-                                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                                                <strong style="color:#0369a1;">Group ${groupNum}</strong>
-                                                <span style="font-size:12px;color:#6b7280;">${groupPlayers.length}/4</span>
-                                            </div>
-                                            <div id="group-${groupNum}-zone"
-                                                 ondrop="dropPlayer(event, ${groupNum})" 
-                                                 ondragover="allowDrop(event)"
-                                                 style="min-height:180px;background:${isFull ? '#dcfce7' : 'white'};border:2px dashed ${isFull ? '#10b981' : '#cbd5e1'};border-radius:6px;padding:8px;">
-                                                ${groupPlayers.map(p => {
-                                                    const isSelected = state.selectedPlayers.has(p.key);
-                                                    return `
-                                                    <div draggable="true" 
-                                                         onclick="togglePlayerSelect('${p.key}')"
-                                                         ondragstart="dragStart(event, ${p.teamIdx}, ${p.playerIdx})"
-                                                         ondragend="dragEnd(event)"
-                                                         class="draggable-player"
-                                                         data-team="${p.teamIdx}"
-                                                         data-player="${p.playerIdx}"
-                                                         style="position:relative;background:${isSelected ? '#dbeafe' : 'white'};padding:8px;margin-bottom:6px;border-radius:4px;cursor:move;border:2px solid ${isSelected ? '#0ea5e9' : '#10b981'};">
-                                                        ${isSelected ? '<div style="position:absolute;top:4px;right:4px;width:18px;height:18px;background:#0ea5e9;color:white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;">✓</div>' : ''}
-                                                        <strong style="font-size:14px;">${p.playerName}</strong><br>
-                                                        <small style="color:#6b7280;font-size:11px;">Team: ${p.teamName} • HC: ${p.handicap}</small>
-                                                        ${renderTeeDropdown(p)}
-                                                    </div>
-                                                `;
-                                                }).join('')}
-                                                ${groupPlayers.length === 0 ? '<div style="text-align:center;color:#9ca3af;padding:20px;font-size:13px;">Drop players here</div>' : ''}
-                                            </div>
-                                        </div>
-                                    `;
-                                }).join('')}
-                            </div>
+                            }).join('')}
                         </div>
                     </div>
                     
@@ -4713,7 +4707,7 @@
                     `}
                     
                     <div style="background:#e0f2fe;padding:12px;border-radius:8px;margin-top:12px;">
-                        <small style="color:#0369a1;">💡 Tip: Tap to select multiple players, then hold & drag to move them all together.</small>
+                        <small style="color:#0369a1;">💡 Tip: Tap a player to move them to the next group. Hold to unassign. ⚡ auto-fills balanced groups by handicap.</small>
                     </div>
                 </div>
             `;
@@ -23157,18 +23151,139 @@
             }
         };
 
-        window.togglePlayerSelect = (playerKey) => {
-            if (!state.selectedPlayers) {
-                state.selectedPlayers = new Set();
+        // ---------- Fast tap-based group assignment (replaces drag & drop) ----------
+
+        // Pure: next group in the cycle unassigned -> 1 -> ... -> N -> unassigned
+        function gsNextGroup(current, numGroups) {
+            if (numGroups < 1) return null;
+            if (!current) return 1;
+            return current >= numGroups ? null : current + 1;
+        }
+
+        // Pure: snake-draft assignment by handicap (balances groups).
+        // handicaps: array aligned with players. Returns group numbers aligned the same way.
+        function gsSnakeAssign(handicaps, numGroups) {
+            const order = handicaps.map((hc, i) => ({ hc: hc || 0, i }))
+                .sort((a, b) => a.hc - b.hc || a.i - b.i);
+            const result = new Array(handicaps.length);
+            order.forEach((entry, k) => {
+                const round = Math.floor(k / numGroups);
+                const slot = (round % 2 === 0) ? (k % numGroups) : (numGroups - 1 - (k % numGroups));
+                result[entry.i] = slot + 1;
+            });
+            return result;
+        }
+
+        // Pure: random assignment, dealt round-robin. rand: optional () => [0,1).
+        function gsShuffleAssign(count, numGroups, rand) {
+            const order = Array.from({ length: count }, (_, i) => i);
+            const r = rand || Math.random;
+            for (let i = order.length - 1; i > 0; i--) {
+                const j = Math.floor(r() * (i + 1));
+                const t = order[i]; order[i] = order[j]; order[j] = t;
             }
-            
-            if (state.selectedPlayers.has(playerKey)) {
-                state.selectedPlayers.delete(playerKey);
-            } else {
-                state.selectedPlayers.add(playerKey);
+            const result = new Array(count);
+            order.forEach((origIdx, dealPos) => {
+                result[origIdx] = (dealPos % numGroups) + 1;
+            });
+            return result;
+        }
+
+        const gsNumGroupsForRound = (round) => {
+            const total = round.teams.reduce((n, t) => n + t.players.length, 0);
+            return Math.ceil(total / 4);
+        };
+
+        const gsCyclePlayer = (teamIdx, playerIdx) => {
+            try {
+                const round = state.activeRound;
+                if (!round || !round.teams[teamIdx] || !round.teams[teamIdx].players[playerIdx]) return;
+                const player = round.teams[teamIdx].players[playerIdx];
+                player.groupNumber = gsNextGroup(player.groupNumber || null, gsNumGroupsForRound(round));
+                renderGroupSetup();
+            } catch (err) { console.error('Cycle group error:', err); }
+        };
+
+        const gsUnassignPlayer = (teamIdx, playerIdx) => {
+            try {
+                const round = state.activeRound;
+                if (!round || !round.teams[teamIdx] || !round.teams[teamIdx].players[playerIdx]) return;
+                round.teams[teamIdx].players[playerIdx].groupNumber = null;
+                renderGroupSetup();
+                notify('↩️ Player unassigned');
+            } catch (err) { console.error('Unassign error:', err); }
+        };
+
+        // Tap vs long-press plumbing (works for touch and mouse).
+        // Press-and-hold 550ms = unassign; release earlier = cycle to next group.
+        window.gsPressStart = (teamIdx, playerIdx) => {
+            if (Date.now() - (window.__gsTouchAt || 0) < 800) return; // ignore ghost mouse events after touch
+            window.__gsPress = { teamIdx, playerIdx };
+            window.__gsLongFired = false;
+            clearTimeout(window.__gsTimer);
+            window.__gsTimer = setTimeout(() => {
+                window.__gsLongFired = true;
+                gsUnassignPlayer(teamIdx, playerIdx);
+            }, 550);
+        };
+        window.gsPressEnd = (teamIdx, playerIdx) => {
+            const press = window.__gsPress;
+            if (!press) return; // no active press (ghost event)
+            clearTimeout(window.__gsTimer);
+            window.__gsPress = null;
+            window.__gsTouchAt = Date.now();
+            if (!window.__gsLongFired && press.teamIdx === teamIdx && press.playerIdx === playerIdx) {
+                gsCyclePlayer(teamIdx, playerIdx);
             }
-            
-            renderGroupSetup();
+        };
+        window.gsPressCancel = () => {
+            clearTimeout(window.__gsTimer);
+            window.__gsPress = null;
+        };
+        window.gsTap = (teamIdx, playerIdx) => {
+            if (Date.now() - (window.__gsTouchAt || 0) < 800) return; // already handled via press
+            gsCyclePlayer(teamIdx, playerIdx);
+        };
+
+        const gsFlatPlayers = (round) => {
+            const flat = [];
+            round.teams.forEach((team, teamIdx) => {
+                team.players.forEach((player, playerIdx) => flat.push({ teamIdx, playerIdx, handicap: player.handicap || 0 }));
+            });
+            return flat;
+        };
+
+        window.gsAutoFill = () => {
+            try {
+                const round = state.activeRound;
+                if (!round) return;
+                const flat = gsFlatPlayers(round);
+                const assign = gsSnakeAssign(flat.map(f => f.handicap), gsNumGroupsForRound(round));
+                flat.forEach((f, i) => { round.teams[f.teamIdx].players[f.playerIdx].groupNumber = assign[i]; });
+                renderGroupSetup();
+                notify('⚡ Groups auto-filled (balanced by handicap)');
+            } catch (err) { console.error('Auto-fill error:', err); showError('Failed to auto-fill groups'); }
+        };
+
+        window.gsShuffle = () => {
+            try {
+                const round = state.activeRound;
+                if (!round) return;
+                const flat = gsFlatPlayers(round);
+                const assign = gsShuffleAssign(flat.length, gsNumGroupsForRound(round));
+                flat.forEach((f, i) => { round.teams[f.teamIdx].players[f.playerIdx].groupNumber = assign[i]; });
+                renderGroupSetup();
+                notify('🎲 Groups shuffled');
+            } catch (err) { console.error('Shuffle error:', err); showError('Failed to shuffle groups'); }
+        };
+
+        window.gsClearGroups = () => {
+            try {
+                const round = state.activeRound;
+                if (!round) return;
+                round.teams.forEach(t => t.players.forEach(p => { p.groupNumber = null; }));
+                renderGroupSetup();
+            } catch (err) { console.error('Clear groups error:', err); }
         };
         
         window.updatePlayerTee = (teamIdx, playerIdx, teeId) => {
@@ -23182,55 +23297,6 @@
             } catch (err) {
                 console.error('Update player tee error:', err);
                 showError('Failed to update tee: ' + err.message);
-            }
-        };
-        
-        window.dragStart = (event, teamIdx, playerIdx) => {
-            const playerKey = `${teamIdx}-${playerIdx}`;
-            
-            // If this player isn't selected, select only this player
-            if (!state.selectedPlayers || !state.selectedPlayers.has(playerKey)) {
-                state.selectedPlayers = new Set([playerKey]);
-            }
-            
-            // Pass all selected players in drag data
-            event.dataTransfer.effectAllowed = 'move';
-            event.dataTransfer.setData('text/plain', JSON.stringify({
-                selectedPlayers: Array.from(state.selectedPlayers)
-            }));
-            event.target.style.opacity = '0.5';
-        };
-        
-        window.dragEnd = (event) => {
-            event.target.style.opacity = '1';
-        };
-        
-        window.allowDrop = (event) => {
-            event.preventDefault();
-            event.dataTransfer.dropEffect = 'move';
-        };
-        
-        window.dropPlayer = (event, groupNum) => {
-            event.preventDefault();
-            event.stopPropagation();
-            
-            try {
-                const data = JSON.parse(event.dataTransfer.getData('text/plain'));
-                const { selectedPlayers } = data;
-                
-                // Move all selected players to the target group
-                selectedPlayers.forEach(playerKey => {
-                    const [teamIdx, playerIdx] = playerKey.split('-').map(Number);
-                    state.activeRound.teams[teamIdx].players[playerIdx].groupNumber = groupNum;
-                });
-                
-                // Clear selection after drop
-                state.selectedPlayers = new Set();
-                
-                // Re-render
-                renderGroupSetup();
-            } catch (err) {
-                console.error('Drop player error:', err);
             }
         };
         
