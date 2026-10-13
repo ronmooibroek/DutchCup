@@ -345,6 +345,37 @@ function roundCTP(round, holeIdx) {
 // ── SKINS GAME ── always net. pointsPerSkin: round override → league setting → 0.5.
 // Skins points are event points, added to the player's total.
 // Returns { points: {id: pts}, counts: {id: skins}, pointsPerSkin }.
+// King of Ties: distribute an unresolved skins pot (P skins) among the players
+// who tied skins during the round. tieInfo: { playerId: { ties, best } }.
+// The leader(s) — most ties, lowest tied score breaking ties — take ceil(P/2),
+// split equally; the other tied players split the remainder. If everyone
+// involved is tied for first, the pot is split evenly. Mirrors the admin app.
+function kingOfTiesShares(tieInfo, pot) {
+    const shares = {}, leaders = [];
+    const eligible = Object.keys(tieInfo).filter(id => tieInfo[id].ties > 0);
+    if (!eligible.length || !(pot > 0)) return { shares, leaders };
+    eligible.sort((a, b) => (tieInfo[b].ties - tieInfo[a].ties) ||
+                           (tieInfo[a].best - tieInfo[b].best));
+    const top = tieInfo[eligible[0]];
+    const first = eligible.filter(id => tieInfo[id].ties === top.ties &&
+                                        tieInfo[id].best === top.best);
+    first.forEach(id => leaders.push(id));
+    if (first.length === eligible.length) {
+        first.forEach(id => { shares[id] = pot / first.length; });
+        return { shares, leaders };
+    }
+    const leaderShare = Math.ceil(pot / 2);
+    const rest = pot - leaderShare;
+    const others = eligible.filter(id => first.indexOf(id) < 0);
+    first.forEach(id => { shares[id] = leaderShare / first.length; });
+    if (others.length > 0) {
+        others.forEach(id => { shares[id] = rest / others.length; });
+    } else {
+        first.forEach(id => { shares[id] = pot / first.length; });
+    }
+    return { shares, leaders };
+}
+
 function computeSkinsMaps(round) {
     const out = { points: {}, counts: {}, pointsPerSkin: 0.5 };
     if (!round) return out;
@@ -370,6 +401,7 @@ function computeSkinsMaps(round) {
     };
     const k = (id) => String(id);
     let carry = 0;
+    const tieInfo = {}; // k(playerId) -> { ties, best } for the King of Ties rule
     for (let i = 0; i < 18; i++) {
         const contenders = [];
         players.forEach(pl => {
@@ -386,11 +418,19 @@ function computeSkinsMaps(round) {
             out.counts[k(leaders[0].id)] += 1 + carry;
             carry = 0;
         } else if (sk.carryover !== false) {
+            leaders.forEach(l => {
+                const ti = tieInfo[k(l.id)] || (tieInfo[k(l.id)] = { ties: 0, best: Infinity });
+                ti.ties += 1;
+                if (best < ti.best) ti.best = best;
+            });
             if (i === 17) {
-                // Split the whole pot on the last hole, including hole 18's own
-                // skin — mirrors the admin app's split-final rule.
-                const split = (carry + 1) / leaders.length;
-                leaders.forEach(l => { out.counts[k(l.id)] += split; });
+                // King of Ties: unresolved pot goes by tie involvement, not an
+                // even split among the 18th-hole tiers — mirrors the admin app.
+                const pot = carry + 1; // hole 18's own skin joins the pot
+                const kot = kingOfTiesShares(tieInfo, pot);
+                Object.keys(kot.shares).forEach(id => {
+                    out.counts[id] = (out.counts[id] || 0) + kot.shares[id];
+                });
                 carry = 0;
             } else {
                 carry += 1;

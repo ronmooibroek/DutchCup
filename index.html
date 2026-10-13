@@ -726,7 +726,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.10.13.3';
+        const APP_VERSION = '2026.10.13.4';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -5165,8 +5165,14 @@
                         } else if (h.status === 'tie-dead') {
                             who = `<span style="color:#9ca3af;">Tie — no skin</span>`;
                         } else if (h.status === 'split-final') {
-                            who = `<span style="color:#92400e;">Split: ${h.tiedNames.join(', ')}</span>`;
-                            val = `<strong style="color:#b45309;">${_fmtN(h.splitValue)} ea</strong>`;
+                            if (h.finalShares && h.kingOfTies && h.kingOfTies.length) {
+                                const _kotName = (id) => { const _t = _skins.totals.find(x => String(x.id) === String(id)); return _t ? _t.name : String(id); };
+                                who = `<span style="color:#92400e;">👑 King of Ties: ${h.kingOfTies.map(k => k.name).join(', ')}</span>`;
+                                val = `<strong style="color:#b45309;">${Object.keys(h.finalShares).map(id => `${_kotName(id)} ${_fmtN(h.finalShares[id])}`).join(' · ')}</strong>`;
+                            } else {
+                                who = `<span style="color:#92400e;">Split: ${h.tiedNames.join(', ')}</span>`;
+                                val = `<strong style="color:#b45309;">${_fmtN(h.splitValue)} ea</strong>`;
+                            }
                         }
                         return `<tr style="border-top:1px solid #fde68d;">
                             <td style="padding:6px 8px;text-align:center;font-weight:700;color:#92400e;">${h.hole}</td>
@@ -14324,7 +14330,8 @@
                                 winners: _skRes.totals.filter(t => t.skins > 0),
                                 pointsPerSkin: _skRes.settings.pointsPerSkin,
                                 liveCarry: _skRes.liveCarry,
-                                holesDecided: _skRes.holes.filter(h => h.winnerId).length
+                                holesDecided: _skRes.holes.filter(h => h.winnerId).length,
+                                kingOfTies: _skRes.kingOfTies || null
                             };
                         }
                     }
@@ -20169,6 +20176,11 @@
                             ${_sk.holesDecided} skins decided
                             ${_sk.liveCarry > 0 ? ` • ${_skFmt(_sk.liveCarry)} still live in the pot` : ''}
                         </p>
+                        ${_sk.kingOfTies && _sk.kingOfTies.length ? `
+                            <p style="color:#fcd34d;font-size:22px;margin:-18px 0 26px;font-weight:700;">
+                                👑 King of Ties: ${_sk.kingOfTies.map(k => k.name).join(', ')}
+                            </p>
+                        ` : ''}
                         <div style="display:grid;grid-template-columns:repeat(${Math.min(3, _skTop.length)}, 1fr);gap:24px;">
                             ${_skTop.map((w, i) => `
                                 <div style="background:linear-gradient(135deg, #f59e0b30 0%, #f59e0b10 100%);border:4px solid ${i === 0 ? '#fbbf24' : '#a8a29e'};border-radius:20px;padding:28px;text-align:center;box-shadow:0 12px 32px rgba(0,0,0,0.3);${i === 0 ? 'transform:scale(1.06);' : ''}">
@@ -24354,11 +24366,45 @@
         // pointsPerSkinOverride: league/global default, applied only when the
         // round has no explicit pointsPerSkin (callers: prefer window.skinsForRound).
         // Precedence: round.skins.pointsPerSkin → override → 0.5.
-        // Returns { settings, holes[18], totals, decided, liveCarry }.
-        //   holes[i] = { hole, winnerId, winnerName, tiedIds, tiedNames,
-        //                skinsValue, carriedIn, carriedOut, splitValue,
-        //                status: 'won'|'won-carry'|'tie-carry'|'tie-dead'|'split-final'|'pending' }
+        // Returns { settings, holes[18], totals, decided, liveCarry, kingOfTies }.
+        //   holes[i] = { hole, winnerId, winnerName, tiedIds, tiedNames, tiedScore,
+        //                skinsValue, carriedIn, carriedOut, splitValue, finalShares,
+        //                kingOfTies, status: 'won'|'won-carry'|'tie-carry'|'tie-dead'|'split-final'|'pending' }
         //   totals   = [{ id, name, skins, points }] sorted by skins desc
+        //   kingOfTies = [{ id, name }] when the King of Ties rule fired, else null
+        // King of Ties: distribute an unresolved skins pot (P skins) among the
+        // players who tied skins during the round. tieInfo: { playerId: { ties, best } }
+        // (ties = holes tied for low net, best = lowest tied net score).
+        // The leader(s) — most ties, lowest tied score breaking ties — take
+        // ceil(P/2), split equally; the other tied players split the remainder.
+        // If everyone involved is tied for first, the pot is split evenly.
+        // Pure function (no DOM/state) — duplicated in leaderboard.html and
+        // score-entry.html, which carry self-contained ports of the skins math.
+        window.kingOfTiesShares = (tieInfo, pot) => {
+            const shares = {}, leaders = [];
+            const eligible = Object.keys(tieInfo).filter(id => tieInfo[id].ties > 0);
+            if (!eligible.length || !(pot > 0)) return { shares, leaders };
+            eligible.sort((a, b) => (tieInfo[b].ties - tieInfo[a].ties) ||
+                                   (tieInfo[a].best - tieInfo[b].best));
+            const top = tieInfo[eligible[0]];
+            const first = eligible.filter(id => tieInfo[id].ties === top.ties &&
+                                                tieInfo[id].best === top.best);
+            first.forEach(id => leaders.push(id));
+            if (first.length === eligible.length) {
+                first.forEach(id => { shares[id] = pot / first.length; });
+                return { shares, leaders };
+            }
+            const leaderShare = Math.ceil(pot / 2);
+            const rest = pot - leaderShare;
+            const others = eligible.filter(id => first.indexOf(id) < 0);
+            first.forEach(id => { shares[id] = leaderShare / first.length; });
+            if (others.length > 0) {
+                others.forEach(id => { shares[id] = rest / others.length; });
+            } else {
+                first.forEach(id => { shares[id] = pot / first.length; });
+            }
+            return { shares, leaders };
+        };
         window.computeSkins = (round, hcMap, pointsPerSkinOverride) => {
             const sk = (round && round.skins) || {};
             const pps = sk.pointsPerSkin != null ? sk.pointsPerSkin
@@ -24392,8 +24438,9 @@
                     contenders.push({ id: pl.id, name: pl.name, gross, score });
                 });
                 const h = { hole: i + 1, winnerId: null, winnerName: null, tiedIds: [],
-                            tiedNames: [], skinsValue: 0, carriedIn: carry, carriedOut: 0,
-                            splitValue: 0, status: 'pending' };
+                            tiedNames: [], tiedScore: null, skinsValue: 0, carriedIn: carry,
+                            carriedOut: 0, splitValue: 0, finalShares: null, kingOfTies: null,
+                            status: 'pending' };
                 if (contenders.length > 0) {
                     const best = Math.min.apply(null, contenders.map(c => c.score));
                     const leaders = contenders.filter(c => c.score === best);
@@ -24406,6 +24453,7 @@
                     } else {
                         h.tiedIds = leaders.map(l => l.id);
                         h.tiedNames = leaders.map(l => l.name);
+                        h.tiedScore = best; // low net score of the tie, for King of Ties ranking
                         if (settings.carryover) {
                             h.status = 'tie-carry';
                             carry += 1;
@@ -24417,15 +24465,31 @@
                 }
                 holes.push(h);
             }
-            // Leftover carry: if hole 18 was decided by a tie, split the pot among
-            // the tied players (casual "split the pot" rule). Otherwise the carry is
-            // still live (round in progress) and rolls on.
+            // Leftover carry: hole 18 produced no outright winner. King of Ties
+            // rule — the unresolved pot is distributed by tie involvement across
+            // the round (most tied skins first, lowest tied score breaking ties).
+            // Otherwise the carry is still live (round in progress) and rolls on.
             let liveCarry = 0;
+            let kingOfTies = null;
             const last = holes[17];
             if (carry > 0) {
                 if (last.status === 'tie-carry' && last.tiedIds.length > 0) {
+                    const tieInfo = {};
+                    holes.forEach(h => {
+                        if (h.tiedIds && h.tiedIds.length > 1 && h.tiedScore != null) {
+                            h.tiedIds.forEach(id => {
+                                const ti = tieInfo[id] || (tieInfo[id] = { ties: 0, best: Infinity });
+                                ti.ties += 1;
+                                if (h.tiedScore < ti.best) ti.best = h.tiedScore;
+                            });
+                        }
+                    });
+                    const kot = window.kingOfTiesShares(tieInfo, carry);
                     last.status = 'split-final';
-                    last.splitValue = carry / last.tiedIds.length;
+                    last.splitValue = 0;
+                    last.finalShares = kot.shares;
+                    last.kingOfTies = kot.leaders.map(id => ({ id, name: (players.find(p => String(p.id) === String(id)) || {}).name || String(id) }));
+                    kingOfTies = last.kingOfTies;
                 } else {
                     liveCarry = carry;
                 }
@@ -24435,14 +24499,14 @@
             totals.forEach(t => { byId[t.id] = t; });
             holes.forEach(h => {
                 if (h.winnerId && byId[h.winnerId]) byId[h.winnerId].skins += h.skinsValue;
-                if (h.status === 'split-final') {
-                    h.tiedIds.forEach(id => { if (byId[id]) byId[id].skins += h.splitValue; });
+                if (h.status === 'split-final' && h.finalShares) {
+                    Object.keys(h.finalShares).forEach(id => { if (byId[id]) byId[id].skins += h.finalShares[id]; });
                 }
             });
             totals.forEach(t => { t.points = Math.round(t.skins * settings.pointsPerSkin * 100) / 100; });
             totals.sort((a, b) => b.skins - a.skins);
             const decided = holes.some(h => h.status === 'won' || h.status === 'won-carry' || h.status === 'split-final');
-            return { settings, holes, totals, decided, liveCarry };
+            return { settings, holes, totals, decided, liveCarry, kingOfTies };
         };
 
         // Skins summary for a round:
