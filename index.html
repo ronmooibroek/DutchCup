@@ -726,7 +726,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.10.13.12';
+        const APP_VERSION = '2026.10.13.13';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -7921,7 +7921,14 @@
             { group: 'Match play', slot: 'CART HOP',    name: 'Each hole in the race', def: 'Sounds/sound-frogger-hop.wav', suggest: 'hop' },
             { group: 'Match play', slot: 'MATCH FINISH', name: 'Match won',        def: 'Sounds/you-win.mp3',    suggest: 'triumph' },
             { group: 'Finale', slot: 'CHAMPION SONG', name: 'Champion Golfer',     def: 'Sounds/All-I-do-is-win.mp3' },
-            { group: 'Finale', slot: 'closing',       name: 'Closing slideshow',   def: 'Sounds/long-and-winding-road.mp3' }
+            { group: 'Finale', slot: 'closing',       name: 'Closing slideshow',   def: 'Sounds/long-and-winding-road.mp3' },
+            // Show moments — these play custom built-in synths by default; assigning
+            // a file/synth/silence here takes control through the slot system.
+            { group: 'Show moments', slot: 'TEAM INTRO FANFARE',   name: 'Team intro fanfare',   def: null, defNote: 'Built-in synth (default)' },
+            { group: 'Show moments', slot: 'TEAM COUNTDOWN STINGER', name: 'Team countdown stinger', def: null, defNote: 'Built-in synth (default)' },
+            { group: 'Show moments', slot: 'WINNING TEAM FANFARE', name: 'Winning team fanfare', def: null, defNote: 'Built-in synth (default)' },
+            { group: 'Show moments', slot: 'WINNER CELEBRATION',   name: 'Winner celebration',   def: null, defNote: 'Built-in synth (default)' },
+            { group: 'Match play', slot: 'ELIMINATED', name: 'Player eliminated', def: null, defNote: 'Built-in synth (default)' }
         ];
 
         // Each team gets its own walk-up track, keyed by team id so it survives renames.
@@ -8004,8 +8011,10 @@
 
         window.showSoundStudio = () => {
             const app = document.getElementById('app');
+            const _migratedAwardLabels = {};
+            (window.__AWARD_DEFS || []).forEach(d => { _migratedAwardLabels[d.label] = true; });
             const badgeSlots = Object.keys(window.__badgeSoundMap || {})
-                .filter(k => k !== 'DEFAULT').sort();
+                .filter(k => k !== 'DEFAULT' && !_migratedAwardLabels[k]).sort();
             const groups = [...new Set(window.SOUND_SLOTS.map(s => s.group))];
 
             const row = (s) => {
@@ -8015,7 +8024,7 @@
                 const desc = isDefault
                     ? (s.def ? `Default · ${s.def.indexOf('synth:') === 0
                         ? ((window.SYNTH_STINGS[s.def.slice(6)] || {}).label || s.def)
-                        : s.def.replace(/^Sounds\//, '')}` : 'No sound set')
+                        : s.def.replace(/^Sounds\//, '')}` : (s.defNote || 'No sound set'))
                     : (kind === 'synth' ? `Synth · ${(window.SYNTH_STINGS[cur.value] || {}).label || cur.value}`
                     : kind === 'none' ? 'Silent'
                     : `File · ${String(cur.value).replace(/^Sounds\//, '')}`);
@@ -15802,6 +15811,8 @@
                 
                 // Reset celebration flag
                 presentationState.isWinnerSlide = false;
+                // Reset each render; the award-reveal branch sets it when an award is showing.
+                presentationState.__currentAward = null;
                 
             // Calculate slide indices - NEW ORDER
             let slideIndex = 1; // Slide 0 is the Dutch-flag anthem page
@@ -17184,6 +17195,11 @@
                     // For normal players: stages 1..N. For champion: stages 2..N+1 (champOffset = 1 shifts).
                     const awardIdx = playerStage - champOffset;
                     const award = player.playerAwards[awardIdx];
+                    // Stash for the sound system: per-award slot playback + the
+                    // soundboard's "This award" panel.
+                    presentationState.__currentAward = award && award.type
+                        ? { type: award.type, label: award.label || award.type, player: player.playerName, idx: awardIdx }
+                        : null;
                     const totalAwards = player.playerAwards.length;
                     const _statePlayer = state.players.find(sp => sp.id == player.playerId) || { id: player.playerId, name: player.playerName };
                     
@@ -20582,11 +20598,17 @@
             // Trigger celebration effects if showing the winner
             if (presentationState.isWinnerSlide) {
                 setTimeout(() => {
-                    if (typeof playWinnerCelebration === 'function') {
-                        playWinnerCelebration();
-                    } else {
-                        console.error('playWinnerCelebration not found!');
-                    }
+                    try {
+                        // Award reveals play their own award slot — never the generic
+                        // winner-celebration sound. Each award owns its moment.
+                        if (presentationState.__currentAward) {
+                            if (typeof window.__playAwardSlot === 'function') window.__playAwardSlot();
+                        } else if (typeof playWinnerCelebration === 'function') {
+                            playWinnerCelebration();
+                        } else {
+                            console.error('playWinnerCelebration not found!');
+                        }
+                    } catch (e) { console.error(e); }
                     if (typeof createConfetti === 'function') {
                         createConfetti();
                     } else {
@@ -20936,6 +20958,8 @@
         // Designed to build anticipation right before the team countdown reveal.
         // Volume is honored against the user's app-wide mute (window.__presentationMuted).
         window.playTeamIntroFanfare = () => {
+            // Slot-routed: an assigned file/synth/silence wins, otherwise the built-in synth below plays.
+            if (window.__playSlotOr('TEAM INTRO FANFARE', 0.9)) return;
             try {
                 if (window.__presentationMuted) return;
                 const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -21416,10 +21440,75 @@
         // SOUND SLOTS — a slot can point at a repo file, ANY URL, a synth
         // sting, or nothing. Overrides live per device in localStorage.
         // ═══════════════════════════════════════════════════════════════
+        // ─── PER-AWARD SOUND SLOTS ───
+        // Every player award owns a slot 'award:<type>' so each award gets its
+        // own music/sound instead of sharing the generic award-screen sound.
+        // Defaults come from the legacy badge sound map (same files the old
+        // per-badge "Award stings" used), so the show sounds identical until
+        // Ron reassigns them. Awards with no legacy mapping default to silent.
+        window.__AWARD_DEFS = [
+            { type: 'bigBird',       label: 'BIG BIRD AWARD',    def: 'Sounds/cheering.mp3' },
+            { type: 'faceplant',     label: 'FACEPLANT',         def: 'Sounds/priceisrightfail_1.mp3' },
+            { type: 'sandbagger',    label: 'SANDBAGGER ALERT',  def: 'Sounds/cheering.mp3' },
+            { type: 'par5Predator',  label: 'PAR-5 PREDATOR',    def: 'Sounds/nsmb-new-high-score.mp3' },
+            { type: 'groundhog',     label: 'GROUNDHOG DAY',     def: 'Sounds/mario-sonic-olympics-channel-menu.mp3' },
+            { type: 'photocopier',   label: 'THE PHOTOCOPIER',   def: 'Sounds/camera_zLdd1zp.mp3' },
+            { type: 'vulture',       label: 'VULTURE',           def: 'Sounds/golfclap.mp3' },
+            { type: 'jekyllHyde',    label: 'JEKYLL & HYDE',     def: 'Sounds/whoosh-wind.mp3' },
+            { type: 'honeyPot',      label: 'HONEY POT',         def: 'Sounds/cheering.mp3' },
+            { type: 'swiper',        label: 'SWIPER',            def: 'Sounds/whoosh-wind.mp3' },
+            { type: 'robbed',        label: "I'VE BEEN ROBBED",  def: 'Sounds/priceisrightfail_1.mp3' },
+            { type: 'blowUp',        label: 'BLOW-UP HOLE',      def: 'Sounds/SteamEngineCrash-15sec.mp3' },
+            { type: 'bounceBack',    label: 'BOUNCE-BACK KING',  def: 'Sounds/magic-fairy.mp3' },
+            { type: 'ballMagnet',    label: 'BALL MAGNET',       def: 'Sounds/cheering-5sec.mp3' },
+            { type: 'sniper',        label: 'THE SNIPER',        def: 'Sounds/cheering-5sec.mp3' },
+            { type: 'grind',         label: 'GRINDER',           def: 'Sounds/you-win.mp3' },
+            { type: 'rollercoaster', label: 'ROLLERCOASTER',     def: null },
+            { type: 'steadyEddie',   label: 'STEADY EDDIE',      def: null },
+            { type: 'onFire',        label: 'ON FIRE',           def: null },
+            { type: 'dialedIn',      label: 'DIALED IN',         def: null },
+            { type: 'par3Specialist',label: 'PAR-3 SPECIALIST',  def: null },
+            { type: 'metronome',     label: 'THE METRONOME',     def: null },
+            { type: 'comeback',      label: 'COMEBACK KID',      def: null },
+            { type: 'iceMan',        label: 'ICE MAN',           def: null },
+            { type: 'closer',        label: 'THE CLOSER',        def: null },
+            { type: 'fastStart',     label: 'OUT OF THE GATE',   def: null },
+            { type: 'theWall',       label: 'THE WALL',          def: null },
+            { type: 'birdieMachine', label: 'BIRDIE MACHINE',    def: null },
+            { type: 'bbb',           label: 'BBB WINNER',        def: null },
+            { type: 'ctp',           label: 'CLOSEST TO PIN',    def: null },
+            { type: 'extra9',        label: 'EXTRA 9',           def: null },
+            { type: 'clutch',        label: 'CLUTCH',            def: null }
+        ];
+        window.__awardSlotDef = (type) => {
+            const d = (window.__AWARD_DEFS || []).find(x => x.type === type);
+            return d ? (d.def || null) : null;
+        };
+        window.__awardSlotLabel = (type) => {
+            const d = (window.__AWARD_DEFS || []).find(x => x.type === type);
+            return d ? d.label : String(type);
+        };
+        // One-time migration: any legacy per-badge overrides (e.g. 'BIG BIRD
+        // AWARD' set in Sound Studio) move to the new per-award slots
+        // ('award:bigBird') so Ron's tweaks survive the migration.
+        window.__migrateAwardOverrides = () => {
+            try {
+                let moved = 0;
+                (window.__AWARD_DEFS || []).forEach(d => {
+                    const nk = 'award:' + d.type;
+                    if (!window.__soundOverrides[nk] && window.__soundOverrides[d.label]) {
+                        window.__soundOverrides[nk] = window.__soundOverrides[d.label];
+                        moved++;
+                    }
+                });
+                if (moved && typeof window.saveSoundOverrides === 'function') window.saveSoundOverrides();
+            } catch (e) {}
+        };
         window.__soundOverrides = (() => {
             try { return JSON.parse(localStorage.getItem('dcSoundSlots') || '{}'); }
             catch (e) { return {}; }
         })();
+        window.__migrateAwardOverrides();
         window.saveSoundOverrides = () => {
             try { localStorage.setItem('dcSoundSlots', JSON.stringify(window.__soundOverrides)); } catch (e) {}
             // Mirror into Firestore settings so assignments + trims survive
@@ -21440,6 +21529,7 @@
                 if (ss && Object.keys(ss).length) {
                     window.__soundOverrides = JSON.parse(JSON.stringify(ss));
                     try { localStorage.setItem('dcSoundSlots', JSON.stringify(window.__soundOverrides)); } catch (e) {}
+                    if (typeof window.__migrateAwardOverrides === 'function') window.__migrateAwardOverrides();
                 }
             } catch (e) {}
         };
@@ -21714,6 +21804,51 @@
             } catch (e) {}
         };
         // Which track key does the current slide own?
+        // ─── Slot-routed custom synths ───
+        // Sounds that used to play hardcoded synth compositions now check their
+        // slot first: if Ron assigned something (file/synth/silence), the slot
+        // wins (trim honored); otherwise the caller falls through to its
+        // original built-in sound. Returns true when the slot took over.
+        window.__playSlotOr = (slot, vol) => {
+            try {
+                const o = window.__soundOverrides[slot];
+                if (o && o.kind) {
+                    if (o.kind === 'none') return true;
+                    if (o.kind === 'synth') { window.playSynth(o.value, vol); return true; }
+                    if ((o.kind === 'file' || o.kind === 'url') && o.value) {
+                        if (window.__presentationMuted) return true;
+                        window.playFile(o.value, vol, { start: o.start, end: o.end });
+                        return true;
+                    }
+                    return true;
+                }
+            } catch (e) {}
+            return false;
+        };
+        // ─── Per-award slot playback ───
+        // Each award reveal plays its own 'award:<type>' slot (trim-honored;
+        // one-shot vs 🎵 music per the slot's toggle) instead of the generic
+        // winner-celebration sound. An award music bed never outlives its award.
+        window.__playAwardSlot = () => {
+            try {
+                if (typeof presentationState === 'undefined' || !presentationState.active) return;
+                const a = presentationState.__currentAward;
+                const key = (a && a.type) ? 'award:' + a.type : null;
+                if (window.__slideTrack && String(window.__slideTrack.key).indexOf('award:') === 0
+                    && window.__slideTrack.key !== key) {
+                    try { window.stopSlideTrack(); } catch (e) {}
+                }
+                const stamp = key ? (key + '|' + (a.player || '') + '|' + (a.idx || 0)) : '';
+                if (stamp === presentationState.__lastAwardSlotPlayed) return;
+                presentationState.__lastAwardSlotPlayed = stamp;
+                if (!key) return;
+                const def = window.__awardSlotDef(a.type);
+                const r = window.resolveSound(key, def);
+                if (!r || r.kind === 'none' || !r.value) return;
+                if (r.music) { window.playSlideTrack(key, def, { vol: 0.75 }); return; }
+                playSfx(key, def, 0.9, { maxSecs: 600 });
+            } catch (e) {}
+        };
         window.__slideTrackKeyForCurrent = () => {
             if (!presentationState.active) return null;
             const cur = presentationState.currentSlide;
@@ -21865,6 +22000,9 @@
             const out = [];
             try {
                 if (typeof presentationState === 'undefined' || !presentationState.active) return out;
+                // On an award reveal the award's own slot leads — not the generic screen slot.
+                const aw = presentationState.__currentAward;
+                if (aw && aw.type) out.push({ slot: 'award:' + aw.type, music: false });
                 const key = window.__slideTrackKeyForCurrent ? window.__slideTrackKeyForCurrent() : null;
                 if (key) out.push({ slot: key, music: true });
                 const scrKey = window.__screenSlotKeyForCurrent ? window.__screenSlotKeyForCurrent() : null;
@@ -21887,6 +22025,10 @@
             if (String(slot).indexOf('TEAM WALKUP:') === 0) return { name: 'Team walk-up', def: null };
             if (String(slot).indexOf('screen:') === 0) return { name: 'Screen · ' + String(slot).slice(7), def: null };
             if (String(slot) === 'transition:slide-change') return { name: 'Slide-change transition', def: null };
+            if (String(slot).indexOf('award:') === 0) {
+                const t = String(slot).slice(6);
+                return { name: 'Award · ' + window.__awardSlotLabel(t), def: window.__awardSlotDef(t) };
+            }
             return { name: String(slot), def: null };
         };
 
@@ -21913,13 +22055,15 @@
         };
 
         window.__sbIsScreenSlot = (slot) => String(slot).indexOf('screen:') === 0;
+        window.__sbIsAwardSlot = (slot) => String(slot).indexOf('award:') === 0;
+        window.__sbHasMusicToggle = (slot) => window.__sbIsScreenSlot(slot) || window.__sbIsAwardSlot(slot);
 
         window.__sbDirty = (slot) => {
             const a = window.__sbStagedFor(slot), b = window.__sbCommitted(slot);
             const nz = (v) => (v == null ? null : v);
             return a.kind !== b.kind || a.value !== b.value ||
                 nz(a.start) !== nz(b.start) || nz(a.end) !== nz(b.end) ||
-                (window.__sbIsScreenSlot(slot) && !!a.music !== !!b.music);
+                (window.__sbHasMusicToggle(slot) && !!a.music !== !!b.music);
         };
 
         window.__sbLabel = (st) => {
@@ -22000,7 +22144,7 @@
             const nz = (v) => (v == null ? null : v);
             const sameAsDefault = st.kind === def.kind && st.value === def.value &&
                 nz(st.start) === nz(def.start) && nz(st.end) === nz(def.end) &&
-                (!window.__sbIsScreenSlot(slot) || !!st.music === !!def.music);
+                (!window.__sbHasMusicToggle(slot) || !!st.music === !!def.music);
             if (sameAsDefault) { delete window.__soundOverrides[slot]; }
             else if (st.kind === 'none' || !st.value) { window.__soundOverrides[slot] = { kind: 'none' }; }
             else {
@@ -22009,7 +22153,7 @@
                     if (st.start != null) rec.start = st.start;
                     if (st.end != null) rec.end = st.end;
                 }
-                if (st.music && window.__sbIsScreenSlot(slot)) rec.music = true;
+                if (st.music && window.__sbHasMusicToggle(slot)) rec.music = true;
                 window.__soundOverrides[slot] = rec;
             }
             window.saveSoundOverrides();   // localStorage + Firestore settings
@@ -22020,7 +22164,11 @@
                 const _curScr = window.__screenSlotKeyForCurrent ? window.__screenSlotKeyForCurrent() : null;
                 if (window.__slideTrack && (window.__slideTrack.key === slot || slot === _curScr)) {
                     window.stopSlideTrack();
-                    if (typeof window.syncPresentationMusic === 'function') window.syncPresentationMusic();
+                    if (window.__sbIsAwardSlot(slot)) {
+                        // Restart the award's music bed so the saved change is heard now.
+                        try { presentationState.__lastAwardSlotPlayed = null; } catch (e) {}
+                        if (typeof window.__playAwardSlot === 'function') window.__playAwardSlot();
+                    } else if (typeof window.syncPresentationMusic === 'function') window.syncPresentationMusic();
                 }
             } catch (e) {}
             notify('✅ Sound saved for this screen');
@@ -22060,6 +22208,7 @@
             const esc = window.__sbEsc;
             const dirty = window.__sbDirty(slot);
             const isScreen = window.__sbIsScreenSlot(slot);
+            const isAward = window.__sbIsAwardSlot(slot);
             const canTrim = st.kind === 'file' || st.kind === 'url';
             const lib = window.__soundLibrary || [];
             const defLabel = isScreen ? '— silent (default) —' : '— default —';
@@ -22080,7 +22229,7 @@
                 + `</div>`
                 + `<button onclick="window.__sbTest('${q}', ${music ? 'true' : 'false'})" style="background:#059669;color:white;border:none;border-radius:8px;padding:10px 14px;font-size:13px;font-weight:800;cursor:pointer;white-space:nowrap;">▶ Test</button>`
                 + `</div>`
-                + (isScreen ? `<div style="display:flex;gap:6px;margin-top:8px;">${tBtn(false, '▶ One-shot')}${tBtn(true, '🎵 Music')}</div>` : '')
+                + ((isScreen || isAward) ? `<div style="display:flex;gap:6px;margin-top:8px;">${tBtn(false, '▶ One-shot')}${tBtn(true, '🎵 Music')}</div>` : '')
                 + `<select onchange="window.__sbPickFile('${q}', this.value)" style="width:100%;margin-top:8px;padding:9px;border:1px solid rgba(255,255,255,0.25);border-radius:8px;font-size:13px;background:rgba(255,255,255,0.12);color:white;">`
                 + `<option value="" ${selVal === '' ? 'selected' : ''} style="color:black;">${defLabel}</option>`
                 + (selVal === '__keep__' ? `<option value="__keep__" selected disabled style="color:black;">Keep · ${esc(window.__sbLabel(st))}</option>` : '')
@@ -22123,8 +22272,14 @@
             }
             let _slideNm = '';
             try { _slideNm = presentationState._slideNameOf ? presentationState._slideNameOf(presentationState.currentSlide) : ''; } catch (e) {}
-            host.innerHTML = '<div style="color:white;font-weight:800;font-size:14px;margin:2px 0 8px;">🎵 This screen'
-                + (_slideNm ? ' · ' + window.__sbEsc(_slideNm) : '') + '</div>'
+            let _headLabel = '🎵 This screen';
+            try {
+                const _aw0 = presentationState.__currentAward;
+                if (_aw0 && _aw0.type && slots.length && String(slots[0].slot).indexOf('award:') === 0)
+                    _headLabel = '🎵 This award · ' + _aw0.label;
+            } catch (e) {}
+            host.innerHTML = '<div style="color:white;font-weight:800;font-size:14px;margin:2px 0 8px;">' + window.__sbEsc(_headLabel)
+                + ((_headLabel === '🎵 This screen' && _slideNm) ? ' · ' + window.__sbEsc(_slideNm) : '') + '</div>'
                 + slots.map(({ slot, music }) => window.__sbSlotCard(slot, music)).join('')
                 + '<div style="color:rgba(255,255,255,0.5);font-size:11px;margin:-2px 0 10px;">Test plays your edits · Save writes them to every device.</div>';
             window.__sbRenderedSlots = slots.map(s => s.slot);
@@ -22161,6 +22316,10 @@
                 list.forEach(({ name }) => out.push({ slot: 'screen:' + name, group: 'Screens' }));
             } catch (e) {}
             out.push({ slot: 'transition:slide-change', group: 'Transitions' });
+            // Every award owns a slot too — browsable here for pre-show setup.
+            try {
+                (window.__AWARD_DEFS || []).forEach(d => out.push({ slot: 'award:' + d.type, group: 'Awards' }));
+            } catch (e) {}
             // Slots already saved from a week with a different deck stay editable.
             try {
                 Object.keys(window.__soundOverrides || {}).forEach(k => {
@@ -22188,7 +22347,7 @@
                 return (meta.name + ' ' + window.__sbLabel(window.__sbCommitted(o.slot))).toLowerCase().indexOf(q) >= 0;
             });
             let html = '';
-            ['Screens', 'Transitions'].forEach(g => {
+            ['Screens', 'Transitions', 'Awards'].forEach(g => {
                 const rows = items.filter(o => o.group === g);
                 if (!rows.length) return;
                 html += `<div style="color:rgba(255,255,255,0.6);font-size:11px;font-weight:800;letter-spacing:1px;margin:8px 0 4px;">${g.toUpperCase()} (${rows.length})</div>`;
@@ -22203,7 +22362,7 @@
                     if (open) html += window.__sbSlotCard(o.slot, false);
                 });
             });
-            if (!html) html = '<div style="color:rgba(255,255,255,0.5);font-size:12px;">No screens match.</div>';
+            if (!html) html = '<div style="color:rgba(255,255,255,0.5);font-size:12px;">No sounds match.</div>';
             rowsHost.innerHTML = html;
             // Track the expanded card's trim inputs + duration like the main panel.
             if (window.__sbExpanded && !window.__sbRenderedSlots.includes(window.__sbExpanded))
@@ -22223,10 +22382,10 @@
             const open = !!window.__sbAllOpen;
             const count = window.__sbAllList().length;
             host.innerHTML = `<button onclick="window.__sbToggleAllList()" style="width:100%;text-align:left;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.18);border-radius:10px;padding:11px 12px;cursor:pointer;display:block;">`
-                + `<div style="color:white;font-weight:800;font-size:13px;">🗂 All screens &amp; transitions (${count}) ${open ? '▴' : '▾'}</div>`
-                + `<div style="color:rgba(255,255,255,0.55);font-size:11px;margin-top:2px;">${open ? 'Tap to collapse' : 'Tap to browse every screen'}</div></button>`
+                + `<div style="color:white;font-weight:800;font-size:13px;">🗂 All sounds (${count}) ${open ? '▴' : '▾'}</div>`
+                + `<div style="color:rgba(255,255,255,0.55);font-size:11px;margin-top:2px;">${open ? 'Tap to collapse' : 'Tap to browse every screen, transition & award'}</div></button>`
                 + (open
-                    ? `<input id="sbAllQ" placeholder="Search screens…" value="${window.__sbEsc(window.__sbAllQ || '')}" oninput="window.__sbAllQ=this.value;window.__sbRenderAllRows();" style="width:100%;padding:9px;margin:8px 0;border:1px solid rgba(255,255,255,0.25);border-radius:8px;font-size:13px;background:rgba(255,255,255,0.12);color:white;box-sizing:border-box;">`
+                    ? `<input id="sbAllQ" placeholder="Search sounds…" value="${window.__sbEsc(window.__sbAllQ || '')}" oninput="window.__sbAllQ=this.value;window.__sbRenderAllRows();" style="width:100%;padding:9px;margin:8px 0;border:1px solid rgba(255,255,255,0.25);border-radius:8px;font-size:13px;background:rgba(255,255,255,0.12);color:white;box-sizing:border-box;">`
                       + '<div id="sbAllRows"></div>'
                     : '');
             if (!open) return;
@@ -22481,6 +22640,8 @@
         // Position-countdown stinger — short, punchy: kick-drum thump + brass C-major stab.
         // Used before each team-standings reveal.
         window.playPositionCountdownStinger = () => {
+            // Slot-routed: an assigned file/synth/silence wins, otherwise the built-in synth below plays.
+            if (window.__playSlotOr('TEAM COUNTDOWN STINGER', 0.9)) return;
             try {
                 if (window.__presentationMuted) return;
                 const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -22875,6 +23036,8 @@
         // Layered sound: a heavy bass thump + a descending sawtooth swoop + a brief noise crash.
         // ~1.5 seconds total. Punchier and shorter than the sad trombone (which is for record-worsts).
         window.playEliminatedSound = () => {
+            // Slot-routed: an assigned file/synth/silence wins, otherwise the built-in synth below plays.
+            if (window.__playSlotOr('ELIMINATED', 0.9)) return;
             try {
                 if (window.__presentationMuted) return;
                 const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -23083,6 +23246,8 @@
         // Winning-team celebration fanfare — bigger, longer, more elaborate than champion fanfare.
         // Triumphant ascending sequence + held major chord + applause-like noise wash.
         window.playWinningTeamFanfare = () => {
+            // Slot-routed: an assigned file/synth/silence wins, otherwise the built-in synth below plays.
+            if (window.__playSlotOr('WINNING TEAM FANFARE', 0.9)) return;
             try {
                 if (window.__presentationMuted) return;
                 const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -23346,6 +23511,9 @@
         };
 
         window.playWinnerCelebration = () => {
+            // Slot-routed: an assigned file/synth/silence wins, otherwise the built-in synth below plays.
+            // (Not called on award reveals — those play their own award slot.)
+            if (window.__playSlotOr('WINNER CELEBRATION', 0.9)) return;
             try {
                 // Create Web Audio API context
                 const AudioContext = window.AudioContext || window.webkitAudioContext;
