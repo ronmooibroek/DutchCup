@@ -726,7 +726,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.10.13.5';
+        const APP_VERSION = '2026.10.13.6';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -790,6 +790,21 @@
             .collection('leagues').doc(LEAGUE_ID)
             .collection('data').doc('rounds')
             .collection('items');
+
+        // Sort round shard entries by shardOrder. Documents missing shardOrder
+        // (e.g. written by an older client) sort LAST — a server
+        // orderBy('shardOrder') would silently exclude them from the list
+        // entirely, orphaning the round in every app.
+        function sortRoundShards(entries) {
+            return entries.slice().sort((a, b) => {
+                const ma = (a.shardOrder === undefined || a.shardOrder === null);
+                const mb = (b.shardOrder === undefined || b.shardOrder === null);
+                if (ma && mb) return 0;
+                if (ma) return 1;
+                if (mb) return -1;
+                return a.shardOrder - b.shardOrder;
+            });
+        }
 
         let _roundsMigrationDone = false;
         async function migrateRoundsToShards() {
@@ -878,15 +893,19 @@
                 await migrateRoundsToShards();
                 if (useFirebase && firestoreDb) {
                     try {
-                        const qsnap = await roundsItemsCol().orderBy('shardOrder').get();
-                        const arr = [];
-                        const order = {};
+                        // Unordered read + client-side sort: a server orderBy would
+                        // silently drop docs missing shardOrder; here they sort last.
+                        const qsnap = await roundsItemsCol().get();
+                        const entries = [];
                         qsnap.forEach(d => {
                             const data = d.data() || {};
-                            if (data.value) {
-                                arr.push(data.value);
-                                order[d.id] = data.shardOrder;
-                            }
+                            if (data.value) entries.push({ id: d.id, shardOrder: data.shardOrder, value: data.value });
+                        });
+                        const arr = [];
+                        const order = {};
+                        sortRoundShards(entries).forEach(e => {
+                            arr.push(e.value);
+                            order[e.id] = e.shardOrder;
                         });
                         db._roundsCache = arr;
                         db._roundsOrder = order;
@@ -999,15 +1018,17 @@
                 if (key === 'rounds') {
                     if (useFirebase && firestoreDb) {
                         migrateRoundsToShards().catch(() => {});
-                        return roundsItemsCol().orderBy('shardOrder').onSnapshot((qsnap) => {
-                            const arr = [];
-                            const order = {};
+                        return roundsItemsCol().onSnapshot((qsnap) => {
+                            const entries = [];
                             qsnap.forEach(d => {
                                 const data = d.data() || {};
-                                if (data.value) {
-                                    arr.push(data.value);
-                                    order[d.id] = data.shardOrder;
-                                }
+                                if (data.value) entries.push({ id: d.id, shardOrder: data.shardOrder, value: data.value });
+                            });
+                            const arr = [];
+                            const order = {};
+                            sortRoundShards(entries).forEach(e => {
+                                arr.push(e.value);
+                                order[e.id] = e.shardOrder;
                             });
                             db._roundsCache = arr;
                             db._roundsOrder = order;

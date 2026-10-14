@@ -471,6 +471,21 @@ try {
 // The one-time migration below is idempotent — safe if several devices run it.
 const roundDocRef = (roundId) => roundsCol.doc(String(roundId));
 
+// Sort round shard entries by shardOrder. Documents missing shardOrder (e.g.
+// written by an older client before the field existed) sort LAST — a server
+// orderBy('shardOrder') would silently exclude them from the list entirely,
+// orphaning the round in every app.
+function sortRoundShards(entries) {
+    return entries.slice().sort((a, b) => {
+        const ma = (a.shardOrder === undefined || a.shardOrder === null);
+        const mb = (b.shardOrder === undefined || b.shardOrder === null);
+        if (ma && mb) return 0;
+        if (ma) return 1;
+        if (mb) return -1;
+        return a.shardOrder - b.shardOrder;
+    });
+}
+
 let _roundsMigrationDone = false;
 async function migrateRoundsToShards() {
     if (_roundsMigrationDone || !firestoreDb || !roundsCol) return;
@@ -943,7 +958,7 @@ async function init() {
         await migrateRoundsToShards();
     } catch (e) { console.warn('Migration check failed:', e); }
 
-    state.unsubscribe = roundsCol.orderBy('shardOrder').onSnapshot(handleRoundsSnapshot, (err) => {
+    state.unsubscribe = roundsCol.onSnapshot(handleRoundsSnapshot, (err) => {
             console.error('Listen error:', err);
             handleListenError(err);
         });
@@ -954,11 +969,13 @@ async function init() {
 }
 
 function handleRoundsSnapshot(qsnap) {
-    const arr = [];
+    const entries = [];
     qsnap.forEach(d => {
-        const v = d.data() && d.data().value;
-        if (v) arr.push(v);
+        const dd = d.data() || {};
+        if (dd.value) entries.push({ shardOrder: dd.shardOrder, value: dd.value });
     });
+    // Client-side sort (missing shardOrder sorts last) — never drop a round.
+    const arr = sortRoundShards(entries).map(e => e.value);
     cacheRoundsForOffline(arr);
     state.allRounds = arr;
 
@@ -2703,7 +2720,7 @@ async function flushPendingEdits() {
             tx.set(ref, {
                 value: round,
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            });
+            }, { merge: true });  // merge: preserve shardOrder + any doc-level metadata
         });
 
         state.saving = false;
@@ -2900,7 +2917,7 @@ async function uploadRoundPhotos(fileList) {
                 tx.set(ref, {
                     value: round,
                     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-                });
+                }, { merge: true });  // merge: preserve shardOrder + any doc-level metadata
             });
             succeeded++;
         } catch (err) {
@@ -2958,7 +2975,7 @@ async function removeRoundPhoto(index) {
             tx.set(ref, {
                 value: round,
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            });
+            }, { merge: true });  // merge: preserve shardOrder + any doc-level metadata
         });
         // 2) Best-effort: delete the file from Storage
         if (photoPath) await deletePhotoAtPath(photoPath);
@@ -2992,7 +3009,7 @@ async function togglePhotoTag(index, playerId) {
             tx.set(ref, {
                 value: round,
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            });
+            }, { merge: true });  // merge: preserve shardOrder + any doc-level metadata
         });
         setStatus('Tag saved ✓', 'saved');
     } catch (err) {

@@ -187,6 +187,20 @@ try {
     firestoreDb = firebase.firestore();
     // Rounds are sharded: one doc per round at data/rounds/items/{roundId}.
     roundsCol = firestoreDb.collection('leagues').doc(LEAGUE_ID).collection('data').doc('rounds').collection('items');
+
+// Sort round shard entries by shardOrder. Documents missing shardOrder (e.g.
+// written by an older client) sort LAST — a server orderBy('shardOrder')
+// would silently exclude them from the list entirely, orphaning the round.
+function sortRoundShards(entries) {
+    return entries.slice().sort((a, b) => {
+        const ma = (a.shardOrder === undefined || a.shardOrder === null);
+        const mb = (b.shardOrder === undefined || b.shardOrder === null);
+        if (ma && mb) return 0;
+        if (ma) return 1;
+        if (mb) return -1;
+        return a.shardOrder - b.shardOrder;
+    });
+}
     settingsRef = firestoreDb.collection('leagues').doc(LEAGUE_ID).collection('data').doc('settings');
     playersRef = firestoreDb.collection('leagues').doc(LEAGUE_ID).collection('data').doc('players');
 } catch (err) {
@@ -680,9 +694,11 @@ function subscribeToRound() {
 
 function subscribeToPicker() {
     if (state.unsubPicker) return;
-    state.unsubPicker = roundsCol.orderBy('shardOrder').onSnapshot(qsnap => {
-        const arr = [];
-        qsnap.forEach(d => { const v = d.data() && d.data().value; if (v) arr.push(v); });
+    state.unsubPicker = roundsCol.onSnapshot(qsnap => {
+        const entries = [];
+        qsnap.forEach(d => { const dd = d.data() || {}; if (dd.value) entries.push({ shardOrder: dd.shardOrder, value: dd.value }); });
+        // Client-side sort (missing shardOrder sorts last) — never drop a round.
+        const arr = sortRoundShards(entries).map(e => e.value);
         state.allRounds = arr;
         // If a ?roundId= was given, jump straight to it once we know the rounds.
         if (state.selectedRoundId == null && urlRoundId) {
