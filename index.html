@@ -726,7 +726,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.10.13.8';
+        const APP_VERSION = '2026.10.13.9';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -1101,6 +1101,9 @@
                 state.events = await db.get('events') || [];
                 state.currentEventId = await db.get('currentEventId') || null;
                 state.settings = await db.get('settings') || state.settings;
+                // Sound slots: the Firestore-shared copy wins over this device's
+                // localStorage copy, so in-presentation sound edits apply everywhere.
+                try { if (window.__adoptSettingsSoundSlots) window.__adoptSettingsSoundSlots(); } catch (e) {}
                 // Backfill newer settings that might be missing from old saved settings objects
                 if (state.settings.requireAdminPassword === undefined) {
                     state.settings.requireAdminPassword = true;
@@ -8264,7 +8267,7 @@
 
         // ── The Sounds/ library, read straight from the repo ──
         window.__soundLibrary = [];
-        window.loadSoundLibrary = (thenRender) => {
+        window.loadSoundLibrary = (thenRender, cb) => {
             fetch('https://api.github.com/repos/ronmooibroek/DutchCup/contents/Sounds?t=' + Date.now())
                 .then(r => r.ok ? r.json() : [])
                 .then(items => {
@@ -8273,8 +8276,9 @@
                                .map(i => i.name).sort((a, b) => a.localeCompare(b))
                         : [];
                     if (thenRender) showSoundStudio();
+                    if (cb) { try { cb(); } catch (e) {} }
                 })
-                .catch(() => { if (thenRender) showSoundStudio(); });
+                .catch(() => { if (thenRender) showSoundStudio(); if (cb) { try { cb(); } catch (e) {} } });
         };
 
         // ── Upload an audio file straight into the repo's Sounds/ folder ──
@@ -21379,6 +21383,26 @@
         })();
         window.saveSoundOverrides = () => {
             try { localStorage.setItem('dcSoundSlots', JSON.stringify(window.__soundOverrides)); } catch (e) {}
+            // Mirror into Firestore settings so assignments + trims survive
+            // reloads and apply on every device. The localStorage copy above
+            // keeps the sounds working offline; settings is the shared truth.
+            try {
+                if (typeof state !== 'undefined' && state && state.settings && typeof save === 'function') {
+                    state.settings.soundSlots = JSON.parse(JSON.stringify(window.__soundOverrides));
+                    save('settings', state.settings);
+                }
+            } catch (e) { console.warn('soundSlots settings mirror failed:', e); }
+        };
+        // Prefer the Firestore-shared sound slots over this device's local copy.
+        // Called once after settings load; localStorage remains the fallback.
+        window.__adoptSettingsSoundSlots = () => {
+            try {
+                const ss = state.settings && state.settings.soundSlots;
+                if (ss && Object.keys(ss).length) {
+                    window.__soundOverrides = JSON.parse(JSON.stringify(ss));
+                    try { localStorage.setItem('dcSoundSlots', JSON.stringify(window.__soundOverrides)); } catch (e) {}
+                }
+            } catch (e) {}
         };
         // → { kind: 'file'|'url'|'synth'|'none', value }
         window.resolveSound = (slot, defaultSrc) => {
@@ -21685,6 +21709,8 @@
                     window.playSlideTrack(dedicated, def, { loop: true, vol: 0.6 });
                 }
             }
+            // Keep the in-presentation sound panel on the current slide, if open.
+            try { if (document.getElementById('sbSlidePanel')) window.__sbRenderPanel(); } catch (e) {}
         };
         
         window.togglePresentationMute = () => {
@@ -21721,6 +21747,7 @@
                 + '<span style="color:white;font-weight:800;font-size:15px;">🎛️ MC Soundboard</span>'
                 + '<button onclick="toggleSoundboard()" style="background:rgba(255,255,255,0.15);color:white;border:none;'
                 + 'border-radius:6px;padding:4px 10px;cursor:pointer;font-size:14px;">✕</button></div>'
+                + window.__sbSectionHtml()
                 + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">'
                 + window.__SOUNDBOARD.map((b, i) =>
                     `<button onclick="window.__SOUNDBOARD[${i}].play()" `
@@ -21734,8 +21761,273 @@
                 + (window.__presentationMuted
                     ? '<div style="color:#fbbf24;font-size:12px;margin-top:8px;">🔇 Muted — unmute (🔊) to hear these.</div>' : '');
             document.body.appendChild(ov);
+            window.__sbRenderPanel();
         };
         
+        // ─── IN-PRESENTATION SOUND PANEL ───
+        // Opened from the MC soundboard during the show: shows the sound slot(s)
+        // belonging to the CURRENT slide, with test / trim / reassign / save —
+        // the musical flow can be tuned without leaving the presentation.
+        // Trim never touches the MP3; it only stores a playback window
+        // {start,end} which playFile/playMusic already honor. Saves go through
+        // saveSoundOverrides() → localStorage + Firestore settings, and the
+        // show picks them up immediately via resolveSound().
+        window.__sbStaged = {};        // slot -> {kind, value, start, end} (unsaved edits)
+        window.__sbDurCache = {};     // src -> duration seconds
+        window.__sbRenderedSlots = []; // slots currently drawn (for input sync)
+        window.__sbLibLoading = false;
+        window.__sbQ = (s) => String(s).replace(/'/g, "\\'");
+        window.__sbEsc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+                                         .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+        // Sound slots belonging to the slide we're on right now.
+        window.__sbSlotsForCurrentSlide = () => {
+            const out = [];
+            try {
+                if (typeof presentationState === 'undefined' || !presentationState.active) return out;
+                const key = window.__slideTrackKeyForCurrent ? window.__slideTrackKeyForCurrent() : null;
+                if (key) out.push({ slot: key, music: true });
+                const nm = presentationState._slideNameOf
+                    ? presentationState._slideNameOf(presentationState.currentSlide) : null;
+                if (nm === 'SKINS' && !out.some(s => s.slot === 'SKINS WINNER'))
+                    out.push({ slot: 'SKINS WINNER', music: false });
+            } catch (e) {}
+            return out;
+        };
+
+        // Slot metadata: SOUND_SLOTS when known, else synthesized for dynamic slots
+        // (dividers and team walk-ups aren't in SOUND_SLOTS but are still settable).
+        window.__sbSlotMeta = (slot) => {
+            const d = (window.SOUND_SLOTS || []).find(s => s.slot === slot);
+            if (d) return { name: d.name, def: d.def || null };
+            if (slot === 'divAwards') return { name: 'Awards divider', def: 'Sounds/masters-theme-14sec.mp3' };
+            if (slot === 'divMatches') return { name: 'Matches divider', def: 'Sounds/nfl-theme-song-hq-mp3cutnet.mp3' };
+            if (String(slot).indexOf('TEAM WALKUP:') === 0) return { name: 'Team walk-up', def: null };
+            return { name: String(slot), def: null };
+        };
+
+        window.__sbDefaultStaged = (slot) => {
+            const def = window.__sbSlotMeta(slot).def;
+            if (typeof def === 'string' && def.indexOf('synth:') === 0)
+                return { kind: 'synth', value: def.slice(6) };
+            return def ? { kind: 'file', value: def } : { kind: 'none' };
+        };
+
+        window.__sbCommitted = (slot) => {
+            const o = window.__soundOverrides[slot];
+            if (o && o.kind) return { kind: o.kind, value: o.value, start: o.start, end: o.end };
+            return window.__sbDefaultStaged(slot);
+        };
+
+        window.__sbStagedFor = (slot) => {
+            if (!window.__sbStaged[slot]) {
+                const c = window.__sbCommitted(slot);
+                window.__sbStaged[slot] = { kind: c.kind, value: c.value, start: c.start, end: c.end };
+            }
+            return window.__sbStaged[slot];
+        };
+
+        window.__sbDirty = (slot) => {
+            const a = window.__sbStagedFor(slot), b = window.__sbCommitted(slot);
+            const nz = (v) => (v == null ? null : v);
+            return a.kind !== b.kind || a.value !== b.value ||
+                nz(a.start) !== nz(b.start) || nz(a.end) !== nz(b.end);
+        };
+
+        window.__sbLabel = (st) => {
+            if (!st || st.kind === 'none' || !st.value) return 'Silent';
+            if (st.kind === 'synth') return 'Synth · ' + ((window.SYNTH_STINGS[st.value] || {}).label || st.value);
+            return 'File · ' + String(st.value).replace(/^Sounds\//, '');
+        };
+
+        window.__sbFmt = (secs) => {
+            if (!isFinite(secs)) return '';
+            const m = Math.floor(secs / 60), s = Math.floor(secs % 60);
+            return m + ':' + String(s).padStart(2, '0');
+        };
+
+        // Pull the trim inputs into the staged object. Returns '' or an error.
+        window.__sbSyncTrimInputs = (slot) => {
+            const st = window.__sbStagedFor(slot);
+            const id = String(slot).replace(/[^a-zA-Z0-9]/g, '_');
+            const sEl = document.getElementById('sb_st_' + id);
+            const eEl = document.getElementById('sb_en_' + id);
+            if (!sEl || !eEl) return '';
+            const sRaw = sEl.value.trim(), eRaw = eEl.value.trim();
+            const s = sRaw === '' ? null : parseFloat(sRaw);
+            const e = eRaw === '' ? null : parseFloat(eRaw);
+            if ((sRaw !== '' && !(s >= 0)) || (eRaw !== '' && !(e > 0)))
+                return 'Trim times must be numbers, in seconds.';
+            if (s != null && e != null && e <= s) return 'The end must be later than the start.';
+            st.start = s; st.end = e;
+            return '';
+        };
+
+        // Test — plays the STAGED values exactly as the show would (trim honored).
+        window.__sbTest = (slot, music) => {
+            const err = window.__sbSyncTrimInputs(slot);
+            if (err) { showError(err); return; }
+            const st = window.__sbStagedFor(slot);
+            const wasMuted = window.__presentationMuted;
+            window.__presentationMuted = false;   // a test should always be audible
+            try {
+                if (st.kind === 'synth') { window.playSynth(st.value, 0.9); }
+                else if ((st.kind === 'file' || st.kind === 'url') && st.value) {
+                    if (music) window.playMusic(st.value, 0.75, false, { start: st.start, end: st.end });
+                    else window.playFile(st.value, 0.9, { start: st.start, end: st.end });
+                }
+            } finally { window.__presentationMuted = wasMuted; }
+        };
+
+        window.__sbPickFile = (slot, fileName) => {
+            window.__sbSyncTrimInputs(slot);
+            const st = window.__sbStagedFor(slot);
+            if (!fileName) { const d = window.__sbDefaultStaged(slot); st.kind = d.kind; st.value = d.value; }
+            else if (fileName === '__none__') { st.kind = 'none'; delete st.value; }
+            else { st.kind = 'file'; st.value = 'Sounds/' + fileName; }
+            window.__sbRenderPanel();
+        };
+
+        window.__sbClearTrim = (slot) => {
+            const st = window.__sbStagedFor(slot);
+            st.start = null; st.end = null;
+            window.__sbRenderPanel();
+        };
+
+        // Save — commit staged edits; the show picks them up immediately.
+        window.__sbSave = (slot, music) => {
+            const err = window.__sbSyncTrimInputs(slot);
+            if (err) { showError(err); return; }
+            const st = window.__sbStagedFor(slot);
+            const def = window.__sbDefaultStaged(slot);
+            const nz = (v) => (v == null ? null : v);
+            const sameAsDefault = st.kind === def.kind && st.value === def.value &&
+                nz(st.start) === nz(def.start) && nz(st.end) === nz(def.end);
+            if (sameAsDefault) { delete window.__soundOverrides[slot]; }
+            else if (st.kind === 'none' || !st.value) { window.__soundOverrides[slot] = { kind: 'none' }; }
+            else {
+                const rec = { kind: st.kind, value: st.value };
+                if (st.kind === 'file' || st.kind === 'url') {
+                    if (st.start != null) rec.start = st.start;
+                    if (st.end != null) rec.end = st.end;
+                }
+                window.__soundOverrides[slot] = rec;
+            }
+            window.saveSoundOverrides();   // localStorage + Firestore settings
+            delete window.__sbStaged[slot];
+            // If this slide's track is playing, restart it so the change is heard now.
+            try {
+                if (music && window.__slideTrack && window.__slideTrack.key === slot) {
+                    window.stopSlideTrack();
+                    window.playSlideTrack(slot, window.__sbSlotMeta(slot).def, { loop: true, vol: 0.6 });
+                }
+            } catch (e) {}
+            notify('✅ Sound saved for this screen');
+            window.__sbRenderPanel();
+        };
+
+        // Track duration (metadata only — the file itself is never modified).
+        window.__sbLoadDuration = (src, id) => {
+            const el = document.getElementById('sb_dur_' + id);
+            if (!el) return;
+            if (!src || /^data:/.test(src)) { el.textContent = ''; return; }
+            if (window.__sbDurCache[src] != null) {
+                el.textContent = '⏱ ' + window.__sbFmt(window.__sbDurCache[src]); return;
+            }
+            el.textContent = '⏱ …';
+            try {
+                const a = new Audio();
+                a.preload = 'metadata';
+                a.addEventListener('loadedmetadata', () => {
+                    window.__sbDurCache[src] = a.duration;
+                    const t = document.getElementById('sb_dur_' + id);
+                    if (t) t.textContent = '⏱ ' + window.__sbFmt(a.duration);
+                }, { once: true });
+                a.addEventListener('error', () => {
+                    const t = document.getElementById('sb_dur_' + id);
+                    if (t) t.textContent = '';
+                }, { once: true });
+                a.src = encodeURI(src);
+            } catch (e) { el.textContent = ''; }
+        };
+
+        window.__sbSlotCard = (slot, music) => {
+            const meta = window.__sbSlotMeta(slot);
+            const st = window.__sbStagedFor(slot);
+            const id = String(slot).replace(/[^a-zA-Z0-9]/g, '_');
+            const q = window.__sbQ(slot);
+            const esc = window.__sbEsc;
+            const dirty = window.__sbDirty(slot);
+            const canTrim = st.kind === 'file' || st.kind === 'url';
+            const lib = window.__soundLibrary || [];
+            let selVal;
+            if (st.kind === 'none') selVal = '__none__';
+            else if (!dirty) selVal = '';
+            else if (st.kind === 'file' && st.value && st.value.indexOf('Sounds/') === 0) selVal = st.value.slice(7);
+            else selVal = '__keep__';
+            const trimNote = (st.start != null || st.end != null)
+                ? ` · ✂️ ${st.start != null ? st.start + 's' : '0s'}–${st.end != null ? st.end + 's' : 'end'}` : '';
+            return `<div style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.16);border-radius:10px;padding:10px;margin-bottom:10px;">`
+                + `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">`
+                + `<div style="flex:1;min-width:0;">`
+                + `<div style="color:white;font-weight:800;font-size:13px;">🎵 ${esc(meta.name)}</div>`
+                + `<div style="color:rgba(255,255,255,0.65);font-size:11px;margin-top:2px;">${esc(window.__sbLabel(st))}${trimNote}${dirty ? ' · <span style="color:#fbbf24;font-weight:700;">unsaved</span>' : ''}</div>`
+                + `</div>`
+                + `<button onclick="window.__sbTest('${q}', ${music ? 'true' : 'false'})" style="background:#059669;color:white;border:none;border-radius:8px;padding:10px 14px;font-size:13px;font-weight:800;cursor:pointer;white-space:nowrap;">▶ Test</button>`
+                + `</div>`
+                + `<select onchange="window.__sbPickFile('${q}', this.value)" style="width:100%;margin-top:8px;padding:9px;border:1px solid rgba(255,255,255,0.25);border-radius:8px;font-size:13px;background:rgba(255,255,255,0.12);color:white;">`
+                + `<option value="" ${selVal === '' ? 'selected' : ''} style="color:black;">— default —</option>`
+                + (selVal === '__keep__' ? `<option value="__keep__" selected disabled style="color:black;">Keep · ${esc(window.__sbLabel(st))}</option>` : '')
+                + lib.map(f => `<option value="${esc(f)}" ${f === selVal ? 'selected' : ''} style="color:black;">${esc(f)}</option>`).join('')
+                + `<option value="__none__" ${selVal === '__none__' ? 'selected' : ''} style="color:black;">🔇 Silent</option>`
+                + `</select>`
+                + `<div style="display:flex;gap:6px;align-items:center;margin-top:8px;flex-wrap:wrap;${canTrim ? '' : 'opacity:0.45;'}">`
+                + `<span style="color:rgba(255,255,255,0.7);font-size:11px;font-weight:700;">Play only</span>`
+                + `<input id="sb_st_${id}" type="number" step="0.5" min="0" inputmode="decimal" placeholder="from" value="${st.start != null ? st.start : ''}" ${canTrim ? '' : 'disabled'} style="width:64px;padding:8px;border:1px solid rgba(255,255,255,0.25);border-radius:6px;font-size:13px;background:rgba(255,255,255,0.12);color:white;">`
+                + `<span style="color:rgba(255,255,255,0.7);font-size:11px;">to</span>`
+                + `<input id="sb_en_${id}" type="number" step="0.5" min="0" inputmode="decimal" placeholder="to" value="${st.end != null ? st.end : ''}" ${canTrim ? '' : 'disabled'} style="width:64px;padding:8px;border:1px solid rgba(255,255,255,0.25);border-radius:6px;font-size:13px;background:rgba(255,255,255,0.12);color:white;">`
+                + `<span style="color:rgba(255,255,255,0.7);font-size:11px;">sec</span>`
+                + `<span id="sb_dur_${id}" style="color:rgba(255,255,255,0.55);font-size:11px;"></span>`
+                + (canTrim ? `<button onclick="window.__sbClearTrim('${q}')" style="background:rgba(255,255,255,0.12);color:white;border:1px solid rgba(255,255,255,0.2);border-radius:6px;padding:7px 10px;font-size:11px;cursor:pointer;">Full track</button>`
+                           : `<span style="color:rgba(255,255,255,0.45);font-size:11px;">trim applies to files</span>`)
+                + `</div>`
+                + `<button onclick="window.__sbSave('${q}', ${music ? 'true' : 'false'})" style="width:100%;margin-top:10px;background:#4f46e5;color:white;border:none;border-radius:8px;padding:11px;font-size:14px;font-weight:800;cursor:pointer;${dirty ? '' : 'opacity:0.55;'}">💾 Save</button>`
+                + `</div>`;
+        };
+
+        window.__sbSectionHtml = () => {
+            try {
+                if (typeof presentationState === 'undefined' || !presentationState.active) return '';
+            } catch (e) { return ''; }
+            return '<div id="sbSlidePanel" style="margin-bottom:4px;"></div>';
+        };
+
+        window.__sbRenderPanel = () => {
+            const host = document.getElementById('sbSlidePanel');
+            if (!host) return;
+            // Stash any in-progress typing into staged state before re-drawing.
+            (window.__sbRenderedSlots || []).forEach(s => { try { window.__sbSyncTrimInputs(s); } catch (e) {} });
+            const slots = window.__sbSlotsForCurrentSlide();
+            if (!slots.length) {
+                host.innerHTML = '<div style="color:rgba(255,255,255,0.55);font-size:12px;margin-bottom:10px;">This screen has no sound of its own.</div>';
+                window.__sbRenderedSlots = [];
+                return;
+            }
+            host.innerHTML = '<div style="color:white;font-weight:800;font-size:13px;margin:2px 0 8px;">🎵 This screen</div>'
+                + slots.map(({ slot, music }) => window.__sbSlotCard(slot, music)).join('')
+                + '<div style="color:rgba(255,255,255,0.5);font-size:11px;margin:-2px 0 10px;">Test plays your edits · Save writes them to every device.</div>';
+            window.__sbRenderedSlots = slots.map(s => s.slot);
+            slots.forEach(({ slot }) => {
+                const st = window.__sbStagedFor(slot);
+                if ((st.kind === 'file' || st.kind === 'url') && st.value)
+                    window.__sbLoadDuration(st.value, String(slot).replace(/[^a-zA-Z0-9]/g, '_'));
+            });
+            if (!(window.__soundLibrary || []).length && !window.__sbLibLoading) {
+                window.__sbLibLoading = true;
+                window.loadSoundLibrary(null, () => { window.__sbLibLoading = false; window.__sbRenderPanel(); });
+            }
+        };
+
         // ─── Weather forecast helpers (Open-Meteo, no API key required) ───
         // Two-step: geocode the location string → fetch a forecast for that lat/lng.
         // Results cached in-memory for the session so the same location isn't re-fetched.
