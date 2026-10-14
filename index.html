@@ -726,7 +726,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.10.13.11';
+        const APP_VERSION = '2026.10.13.12';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -21818,7 +21818,8 @@
             ov.id = 'mcSoundboard';
             ov.style.cssText = 'position:fixed;left:16px;bottom:16px;z-index:3000;background:rgba(15,23,42,0.95);'
                 + 'border:2px solid rgba(255,255,255,0.25);border-radius:14px;padding:14px;'
-                + 'box-shadow:0 8px 30px rgba(0,0,0,0.5);max-width:min(92vw,480px);';
+                + 'box-shadow:0 8px 30px rgba(0,0,0,0.5);max-width:min(92vw,480px);'
+                + 'max-height:min(92vh,860px);overflow-y:auto;';
             ov.innerHTML =
                 '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">'
                 + '<span style="color:white;font-weight:800;font-size:15px;">🎛️ MC Soundboard</span>'
@@ -21839,6 +21840,7 @@
                 + (window.__presentationMuted
                     ? '<div style="color:#fbbf24;font-size:12px;margin-top:8px;">🔇 Muted — unmute (🔊) to hear these.</div>' : '');
             document.body.appendChild(ov);
+            window.__sbAllOpen = false; // always open clean: current screen first, full list collapsed
             window.__sbRenderPanel();
         };
         
@@ -22115,11 +22117,14 @@
             if (!slots.length) {
                 host.innerHTML = '<div style="color:rgba(255,255,255,0.55);font-size:12px;margin-bottom:10px;">This screen has no sound of its own.</div>';
                 window.__sbRenderedSlots = [];
-                // The browsable "All screens & transitions" list lives below the stingers.
+                // The collapsible "All screens & transitions" list lives below the stingers.
                 window.__sbRenderAllList();
                 return;
             }
-            host.innerHTML = '<div style="color:white;font-weight:800;font-size:13px;margin:2px 0 8px;">🎵 This screen</div>'
+            let _slideNm = '';
+            try { _slideNm = presentationState._slideNameOf ? presentationState._slideNameOf(presentationState.currentSlide) : ''; } catch (e) {}
+            host.innerHTML = '<div style="color:white;font-weight:800;font-size:14px;margin:2px 0 8px;">🎵 This screen'
+                + (_slideNm ? ' · ' + window.__sbEsc(_slideNm) : '') + '</div>'
                 + slots.map(({ slot, music }) => window.__sbSlotCard(slot, music)).join('')
                 + '<div style="color:rgba(255,255,255,0.5);font-size:11px;margin:-2px 0 10px;">Test plays your edits · Save writes them to every device.</div>';
             window.__sbRenderedSlots = slots.map(s => s.slot);
@@ -22132,15 +22137,23 @@
                 window.__sbLibLoading = true;
                 window.loadSoundLibrary(null, () => { window.__sbLibLoading = false; window.__sbRenderPanel(); });
             }
-            // The browsable "All screens & transitions" list lives below the stingers.
+            // The collapsible "All screens & transitions" list lives below the stingers.
             window.__sbRenderAllList();
         };
 
         // ─── ALL SCREENS & TRANSITIONS ───
         // Every screen:<NAME> slot in deck order + the transition slot, each with
         // its current assignment; tap a row to open the same Test/Trim/Save editor.
+        // Collapsed by default — Ron's workflow is the current screen; the full
+        // list is one tap away.
         window.__sbAllQ = '';
         window.__sbExpanded = null;
+        window.__sbAllOpen = false;
+        window.__sbToggleAllList = () => {
+            (window.__sbRenderedSlots || []).forEach(s => { try { window.__sbSyncTrimInputs(s); } catch (e) {} });
+            window.__sbAllOpen = !window.__sbAllOpen;
+            window.__sbRenderPanel();
+        };
         window.__sbAllList = () => {
             const out = [];
             try {
@@ -22206,10 +22219,17 @@
             if (!host) return;
             let active = false;
             try { active = typeof presentationState !== 'undefined' && !!presentationState.active; } catch (e) {}
-            if (!active) { host.innerHTML = ''; window.__sbExpanded = null; return; }
-            host.innerHTML = '<div style="color:white;font-weight:800;font-size:13px;margin:2px 0 8px;">🗂 All screens &amp; transitions</div>'
-                + `<input id="sbAllQ" placeholder="Search screens…" value="${window.__sbEsc(window.__sbAllQ || '')}" oninput="window.__sbAllQ=this.value;window.__sbRenderAllRows();" style="width:100%;padding:9px;margin-bottom:8px;border:1px solid rgba(255,255,255,0.25);border-radius:8px;font-size:13px;background:rgba(255,255,255,0.12);color:white;box-sizing:border-box;">`
-                + '<div id="sbAllRows"></div>';
+            if (!active) { host.innerHTML = ''; window.__sbExpanded = null; window.__sbAllOpen = false; return; }
+            const open = !!window.__sbAllOpen;
+            const count = window.__sbAllList().length;
+            host.innerHTML = `<button onclick="window.__sbToggleAllList()" style="width:100%;text-align:left;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.18);border-radius:10px;padding:11px 12px;cursor:pointer;display:block;">`
+                + `<div style="color:white;font-weight:800;font-size:13px;">🗂 All screens &amp; transitions (${count}) ${open ? '▴' : '▾'}</div>`
+                + `<div style="color:rgba(255,255,255,0.55);font-size:11px;margin-top:2px;">${open ? 'Tap to collapse' : 'Tap to browse every screen'}</div></button>`
+                + (open
+                    ? `<input id="sbAllQ" placeholder="Search screens…" value="${window.__sbEsc(window.__sbAllQ || '')}" oninput="window.__sbAllQ=this.value;window.__sbRenderAllRows();" style="width:100%;padding:9px;margin:8px 0;border:1px solid rgba(255,255,255,0.25);border-radius:8px;font-size:13px;background:rgba(255,255,255,0.12);color:white;box-sizing:border-box;">`
+                      + '<div id="sbAllRows"></div>'
+                    : '');
+            if (!open) return;
             window.__sbRenderAllRows();
             if (!(window.__soundLibrary || []).length && !window.__sbLibLoading) {
                 window.__sbLibLoading = true;
