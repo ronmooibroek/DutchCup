@@ -726,7 +726,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.10.13.9';
+        const APP_VERSION = '2026.10.13.10';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -15955,7 +15955,11 @@
             // its position shifts with player counts and conditional slides.
             {
                 const _sn = {};
-                const nm = (i, name) => { if (i >= 0) _sn[i] = name; };
+                // Deck-ordered unique slide names — drives the soundboard's
+                // "All screens & transitions" list and screen:<NAME> slot keys.
+                presentationState._slideNameList = [];
+                const _seenNm = {};
+                const nm = (i, name) => { if (i >= 0) { _sn[i] = name; if (!_seenNm[name]) { _seenNm[name] = 1; presentationState._slideNameList.push({ index: i, name }); } } };
                 nm(0, 'OPENING FLAG');
                 nm(titleContentSlideIndex, 'TITLE PAGE');
                 nm(teaserSlideIndex, 'COLD OPEN');
@@ -15991,6 +15995,15 @@
                 nm(closingSlideIndex, 'CLOSING SLIDESHOW');
                 const _seqStart = revealSeqStart, _seqArr = _seq;
                 const _mStart = bracketCombinedSlideStart, _mCount = bracketCombinedSlideCount;
+                // Dynamic ranges resolved by _slideNameOf: add the group names that exist.
+                {
+                    const _kinds = {};
+                    for (const e of _seqArr) _kinds[e.k] = 1;
+                    if (_kinds['p']) presentationState._slideNameList.push({ index: _seqStart, name: 'PLAYER SLIDES' });
+                    if (_kinds['t']) presentationState._slideNameList.push({ index: _seqStart, name: 'TEAM SLIDES' });
+                    if (_kinds['ti']) presentationState._slideNameList.push({ index: _seqStart, name: 'TEAM INTRO SLIDES' });
+                    if (_mStart >= 0 && _mCount > 0) presentationState._slideNameList.push({ index: _mStart, name: 'MATCH SLIDES' });
+                }
                 presentationState._slideNameOf = (idx) => {
                     if (_sn[idx]) return _sn[idx];
                     if (idx >= _seqStart && idx < _seqStart + _seqArr.length) {
@@ -20717,6 +20730,14 @@
                         const m = _ml[_cur - _ms];
                         if (m) playSfx(window.milestoneSlot(m.key), null, 0.9);
                     }
+                    // Per-screen slot: the one-shot version plays on arrival; the
+                    // 🎵 Music version is the slide's bed (syncPresentationMusic).
+                    const _scrKey = window.__screenSlotKeyFor ? window.__screenSlotKeyFor(_cur) : null;
+                    if (_scrKey) {
+                        const _sr = window.resolveSound(_scrKey, null);
+                        if (_sr && _sr.kind !== 'none' && !_sr.music && _sr.value)
+                            playSfx(_scrKey, null, 0.9, { maxSecs: 600 });
+                    }
                 }
             } catch (e) {}
             // Reset all uniform reveal steps (registry-driven), then the custom ones.
@@ -20743,6 +20764,8 @@
                 if (previousSlide === 1) {
                     playSlideTransition();
                 }
+                // Assignable sting for the slide-change fade (silent by default).
+                try { window.playScreenTransition(); } catch (e) {}
                 renderPresentation();
             }
         };
@@ -20882,6 +20905,22 @@
                 if (presentationState.currentSlide === 1) {
                     playSlideTransition();
                 }
+                // One-shot stings + per-screen slot on arrival (same guard as forward
+                // nav: sub-stage re-renders must not refire).
+                try {
+                    const _curB = presentationState.currentSlide;
+                    if (_curB !== presentationState.__lastStungSlide) {
+                        presentationState.__lastStungSlide = _curB;
+                        const _scrKeyB = window.__screenSlotKeyFor ? window.__screenSlotKeyFor(_curB) : null;
+                        if (_scrKeyB) {
+                            const _srB = window.resolveSound(_scrKeyB, null);
+                            if (_srB && _srB.kind !== 'none' && !_srB.music && _srB.value)
+                                playSfx(_scrKeyB, null, 0.9, { maxSecs: 600 });
+                        }
+                    }
+                } catch (e) {}
+                // Assignable sting for the slide-change fade (silent by default).
+                try { window.playScreenTransition(); } catch (e) {}
                 renderPresentation();
             }
         };
@@ -21657,7 +21696,7 @@
             window.__slideTrack = null;
         };
         // One-shot sound effect (position stingers etc.), slot-addressable.
-        window.playSfx = (slot, src, vol) => {
+        window.playSfx = (slot, src, vol, opts) => {
             const effectiveSrc = (src != null) ? src : window.__trackDefaultFor(slot);
             const r = window.resolveSound(slot, effectiveSrc);
             if (r.kind === 'none') return;
@@ -21665,7 +21704,8 @@
             if (window.__presentationMuted) return;
             const resolved = r.value;
             if (!resolved) return;
-            window.playFile(resolved, (vol != null) ? vol : 0.9, { start: r.start, end: r.end });
+            window.playFile(resolved, (vol != null) ? vol : 0.9,
+                Object.assign({ start: r.start, end: r.end }, opts || {}));
             return;
             try {
                 const a = new Audio(encodeURI(resolved));
@@ -21696,17 +21736,54 @@
             }
             return null;
         };
+        // ─── Per-screen + transition sound slots ───
+        // Every slide owns a stable slot 'screen:<NAME>' (names from _slideNameOf,
+        // identical every week even as positions shift). Every slide change owns
+        // 'transition:slide-change'. Both default to silent: resolveSound(slot,
+        // null) → {kind:'none'}. Slot records may carry music:true → the slot is
+        // the slide's looping bed (see syncPresentationMusic); otherwise one-shot.
+        window.__screenSlotKeyFor = (idx) => {
+            try {
+                if (typeof presentationState === 'undefined' || !presentationState.active) return null;
+                if (idx == null || idx < 0) return null;
+                const nm = presentationState._slideNameOf ? presentationState._slideNameOf(idx) : null;
+                return nm ? 'screen:' + nm : null;
+            } catch (e) { return null; }
+        };
+        window.__screenSlotKeyForCurrent = () => {
+            try {
+                if (typeof presentationState === 'undefined' || !presentationState.active) return null;
+                return window.__screenSlotKeyFor(presentationState.currentSlide);
+            } catch (e) { return null; }
+        };
+        window.TRANSITION_SLOT = 'transition:slide-change';
+        // One-shot sting for the slide-change fade. Plays over music (never cuts it).
+        window.playScreenTransition = () => {
+            const r = window.resolveSound(window.TRANSITION_SLOT, null);
+            if (!r || r.kind === 'none' || !r.value) return;
+            if (r.kind === 'synth') { window.playSynth(r.value, 0.85); return; }
+            if (window.__presentationMuted) return;
+            window.playFile(r.value, 0.85, { start: r.start, end: r.end, maxSecs: 600 });
+        };
         window.syncPresentationMusic = () => {
-            // Stop any track that doesn't belong to the slide we're now on…
+            // A screen slot set to 🎵 Music takes over the slide's music bed;
+            // otherwise the slide's dedicated default track plays as before.
             const dedicated = window.__slideTrackKeyForCurrent();
-            if (window.__slideTrack && window.__slideTrack.key !== dedicated) window.stopSlideTrack();
+            const screenKey = window.__screenSlotKeyForCurrent();
+            let activeKey = dedicated;
+            if (screenKey) {
+                const sr = window.resolveSound(screenKey, null);
+                if (sr && sr.kind !== 'none' && sr.music && sr.value) activeKey = screenKey;
+            }
+            // Stop any track that doesn't belong to the slide we're now on…
+            if (window.__slideTrack && window.__slideTrack.key !== activeKey) window.stopSlideTrack();
             // …and start the one that does. Slots with no assigned sound resolve to
             // silence, so this is a no-op until you set something in Sound Studio.
-            if (dedicated && (!window.__slideTrack || window.__slideTrack.key !== dedicated)) {
-                const def = window.__trackDefaultFor(dedicated);
-                const r = window.resolveSound(dedicated, def);
+            if (activeKey && (!window.__slideTrack || window.__slideTrack.key !== activeKey)) {
+                const def = window.__trackDefaultFor(activeKey);
+                const r = window.resolveSound(activeKey, def);
                 if (r && r.kind !== 'none' && r.value) {
-                    window.playSlideTrack(dedicated, def, { loop: true, vol: 0.6 });
+                    window.playSlideTrack(activeKey, def, { loop: true, vol: 0.6 });
                 }
             }
             // Keep the in-presentation sound panel on the current slide, if open.
@@ -21758,6 +21835,7 @@
                     + `onmouseout="this.style.background='rgba(255,255,255,0.12)'">`
                     + `${b.emoji}<span style="font-size:10px;font-weight:700;">${b.label}</span></button>`
                 ).join('') + '</div>'
+                + '<div id="sbAllSlots" style="margin-top:12px;"></div>'
                 + (window.__presentationMuted
                     ? '<div style="color:#fbbf24;font-size:12px;margin-top:8px;">🔇 Muted — unmute (🔊) to hear these.</div>' : '');
             document.body.appendChild(ov);
@@ -21787,6 +21865,8 @@
                 if (typeof presentationState === 'undefined' || !presentationState.active) return out;
                 const key = window.__slideTrackKeyForCurrent ? window.__slideTrackKeyForCurrent() : null;
                 if (key) out.push({ slot: key, music: true });
+                const scrKey = window.__screenSlotKeyForCurrent ? window.__screenSlotKeyForCurrent() : null;
+                if (scrKey && !out.some(s => s.slot === scrKey)) out.push({ slot: scrKey, music: false });
                 const nm = presentationState._slideNameOf
                     ? presentationState._slideNameOf(presentationState.currentSlide) : null;
                 if (nm === 'SKINS' && !out.some(s => s.slot === 'SKINS WINNER'))
@@ -21803,6 +21883,8 @@
             if (slot === 'divAwards') return { name: 'Awards divider', def: 'Sounds/masters-theme-14sec.mp3' };
             if (slot === 'divMatches') return { name: 'Matches divider', def: 'Sounds/nfl-theme-song-hq-mp3cutnet.mp3' };
             if (String(slot).indexOf('TEAM WALKUP:') === 0) return { name: 'Team walk-up', def: null };
+            if (String(slot).indexOf('screen:') === 0) return { name: 'Screen · ' + String(slot).slice(7), def: null };
+            if (String(slot) === 'transition:slide-change') return { name: 'Slide-change transition', def: null };
             return { name: String(slot), def: null };
         };
 
@@ -21815,29 +21897,34 @@
 
         window.__sbCommitted = (slot) => {
             const o = window.__soundOverrides[slot];
-            if (o && o.kind) return { kind: o.kind, value: o.value, start: o.start, end: o.end };
+            if (o && o.kind) return { kind: o.kind, value: o.value, start: o.start, end: o.end, music: o.music };
             return window.__sbDefaultStaged(slot);
         };
 
-        window.__sbStagedFor = (slot) => {
+        window.__sbStagedFor = (slot, musicDefault) => {
             if (!window.__sbStaged[slot]) {
                 const c = window.__sbCommitted(slot);
-                window.__sbStaged[slot] = { kind: c.kind, value: c.value, start: c.start, end: c.end };
+                window.__sbStaged[slot] = { kind: c.kind, value: c.value, start: c.start, end: c.end,
+                    music: (c.music != null ? !!c.music : !!musicDefault) };
             }
             return window.__sbStaged[slot];
         };
+
+        window.__sbIsScreenSlot = (slot) => String(slot).indexOf('screen:') === 0;
 
         window.__sbDirty = (slot) => {
             const a = window.__sbStagedFor(slot), b = window.__sbCommitted(slot);
             const nz = (v) => (v == null ? null : v);
             return a.kind !== b.kind || a.value !== b.value ||
-                nz(a.start) !== nz(b.start) || nz(a.end) !== nz(b.end);
+                nz(a.start) !== nz(b.start) || nz(a.end) !== nz(b.end) ||
+                (window.__sbIsScreenSlot(slot) && !!a.music !== !!b.music);
         };
 
         window.__sbLabel = (st) => {
             if (!st || st.kind === 'none' || !st.value) return 'Silent';
-            if (st.kind === 'synth') return 'Synth · ' + ((window.SYNTH_STINGS[st.value] || {}).label || st.value);
-            return 'File · ' + String(st.value).replace(/^Sounds\//, '');
+            const mus = st.music ? ' · 🎵 music' : '';
+            if (st.kind === 'synth') return 'Synth · ' + ((window.SYNTH_STINGS[st.value] || {}).label || st.value) + mus;
+            return 'File · ' + String(st.value).replace(/^Sounds\//, '') + mus;
         };
 
         window.__sbFmt = (secs) => {
@@ -21863,20 +21950,28 @@
             return '';
         };
 
-        // Test — plays the STAGED values exactly as the show would (trim honored).
-        window.__sbTest = (slot, music) => {
+        // Test — plays the STAGED values exactly as the show would (trim honored,
+        // one-shot vs 🎵 music taken from the staged toggle).
+        window.__sbTest = (slot, musicDefault) => {
             const err = window.__sbSyncTrimInputs(slot);
             if (err) { showError(err); return; }
-            const st = window.__sbStagedFor(slot);
+            const st = window.__sbStagedFor(slot, musicDefault);
             const wasMuted = window.__presentationMuted;
             window.__presentationMuted = false;   // a test should always be audible
             try {
                 if (st.kind === 'synth') { window.playSynth(st.value, 0.9); }
                 else if ((st.kind === 'file' || st.kind === 'url') && st.value) {
-                    if (music) window.playMusic(st.value, 0.75, false, { start: st.start, end: st.end });
+                    if (st.music) window.playMusic(st.value, 0.75, false, { start: st.start, end: st.end });
                     else window.playFile(st.value, 0.9, { start: st.start, end: st.end });
                 }
             } finally { window.__presentationMuted = wasMuted; }
+        };
+
+        // One-shot ↔ 🎵 Music toggle for screen slots (staged until Save).
+        window.__sbSetMusic = (slot, music) => {
+            window.__sbSyncTrimInputs(slot);
+            window.__sbStagedFor(slot).music = !!music;
+            window.__sbRenderPanel();
         };
 
         window.__sbPickFile = (slot, fileName) => {
@@ -21898,11 +21993,12 @@
         window.__sbSave = (slot, music) => {
             const err = window.__sbSyncTrimInputs(slot);
             if (err) { showError(err); return; }
-            const st = window.__sbStagedFor(slot);
+            const st = window.__sbStagedFor(slot, music);
             const def = window.__sbDefaultStaged(slot);
             const nz = (v) => (v == null ? null : v);
             const sameAsDefault = st.kind === def.kind && st.value === def.value &&
-                nz(st.start) === nz(def.start) && nz(st.end) === nz(def.end);
+                nz(st.start) === nz(def.start) && nz(st.end) === nz(def.end) &&
+                (!window.__sbIsScreenSlot(slot) || !!st.music === !!def.music);
             if (sameAsDefault) { delete window.__soundOverrides[slot]; }
             else if (st.kind === 'none' || !st.value) { window.__soundOverrides[slot] = { kind: 'none' }; }
             else {
@@ -21911,15 +22007,18 @@
                     if (st.start != null) rec.start = st.start;
                     if (st.end != null) rec.end = st.end;
                 }
+                if (st.music && window.__sbIsScreenSlot(slot)) rec.music = true;
                 window.__soundOverrides[slot] = rec;
             }
             window.saveSoundOverrides();   // localStorage + Firestore settings
             delete window.__sbStaged[slot];
-            // If this slide's track is playing, restart it so the change is heard now.
+            // If the saved slot drives the current slide's music, restart it so the
+            // change is heard now; otherwise leave the show's audio untouched.
             try {
-                if (music && window.__slideTrack && window.__slideTrack.key === slot) {
+                const _curScr = window.__screenSlotKeyForCurrent ? window.__screenSlotKeyForCurrent() : null;
+                if (window.__slideTrack && (window.__slideTrack.key === slot || slot === _curScr)) {
                     window.stopSlideTrack();
-                    window.playSlideTrack(slot, window.__sbSlotMeta(slot).def, { loop: true, vol: 0.6 });
+                    if (typeof window.syncPresentationMusic === 'function') window.syncPresentationMusic();
                 }
             } catch (e) {}
             notify('✅ Sound saved for this screen');
@@ -21953,13 +22052,17 @@
 
         window.__sbSlotCard = (slot, music) => {
             const meta = window.__sbSlotMeta(slot);
-            const st = window.__sbStagedFor(slot);
+            const st = window.__sbStagedFor(slot, music);
             const id = String(slot).replace(/[^a-zA-Z0-9]/g, '_');
             const q = window.__sbQ(slot);
             const esc = window.__sbEsc;
             const dirty = window.__sbDirty(slot);
+            const isScreen = window.__sbIsScreenSlot(slot);
             const canTrim = st.kind === 'file' || st.kind === 'url';
             const lib = window.__soundLibrary || [];
+            const defLabel = isScreen ? '— silent (default) —' : '— default —';
+            const musOn = !!st.music;
+            const tBtn = (m, label) => `<button onclick="window.__sbSetMusic('${q}', ${m ? 'true' : 'false'})" style="flex:1;padding:9px 6px;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;border:1px solid rgba(255,255,255,0.25);${(musOn === m) ? 'background:#4f46e5;color:white;' : 'background:rgba(255,255,255,0.10);color:rgba(255,255,255,0.75);'}">${label}</button>`;
             let selVal;
             if (st.kind === 'none') selVal = '__none__';
             else if (!dirty) selVal = '';
@@ -21975,8 +22078,9 @@
                 + `</div>`
                 + `<button onclick="window.__sbTest('${q}', ${music ? 'true' : 'false'})" style="background:#059669;color:white;border:none;border-radius:8px;padding:10px 14px;font-size:13px;font-weight:800;cursor:pointer;white-space:nowrap;">▶ Test</button>`
                 + `</div>`
+                + (isScreen ? `<div style="display:flex;gap:6px;margin-top:8px;">${tBtn(false, '▶ One-shot')}${tBtn(true, '🎵 Music')}</div>` : '')
                 + `<select onchange="window.__sbPickFile('${q}', this.value)" style="width:100%;margin-top:8px;padding:9px;border:1px solid rgba(255,255,255,0.25);border-radius:8px;font-size:13px;background:rgba(255,255,255,0.12);color:white;">`
-                + `<option value="" ${selVal === '' ? 'selected' : ''} style="color:black;">— default —</option>`
+                + `<option value="" ${selVal === '' ? 'selected' : ''} style="color:black;">${defLabel}</option>`
                 + (selVal === '__keep__' ? `<option value="__keep__" selected disabled style="color:black;">Keep · ${esc(window.__sbLabel(st))}</option>` : '')
                 + lib.map(f => `<option value="${esc(f)}" ${f === selVal ? 'selected' : ''} style="color:black;">${esc(f)}</option>`).join('')
                 + `<option value="__none__" ${selVal === '__none__' ? 'selected' : ''} style="color:black;">🔇 Silent</option>`
@@ -22011,6 +22115,8 @@
             if (!slots.length) {
                 host.innerHTML = '<div style="color:rgba(255,255,255,0.55);font-size:12px;margin-bottom:10px;">This screen has no sound of its own.</div>';
                 window.__sbRenderedSlots = [];
+                // The browsable "All screens & transitions" list lives below the stingers.
+                window.__sbRenderAllList();
                 return;
             }
             host.innerHTML = '<div style="color:white;font-weight:800;font-size:13px;margin:2px 0 8px;">🎵 This screen</div>'
@@ -22022,6 +22128,89 @@
                 if ((st.kind === 'file' || st.kind === 'url') && st.value)
                     window.__sbLoadDuration(st.value, String(slot).replace(/[^a-zA-Z0-9]/g, '_'));
             });
+            if (!(window.__soundLibrary || []).length && !window.__sbLibLoading) {
+                window.__sbLibLoading = true;
+                window.loadSoundLibrary(null, () => { window.__sbLibLoading = false; window.__sbRenderPanel(); });
+            }
+            // The browsable "All screens & transitions" list lives below the stingers.
+            window.__sbRenderAllList();
+        };
+
+        // ─── ALL SCREENS & TRANSITIONS ───
+        // Every screen:<NAME> slot in deck order + the transition slot, each with
+        // its current assignment; tap a row to open the same Test/Trim/Save editor.
+        window.__sbAllQ = '';
+        window.__sbExpanded = null;
+        window.__sbAllList = () => {
+            const out = [];
+            try {
+                const list = (typeof presentationState !== 'undefined' && presentationState._slideNameList) || [];
+                list.forEach(({ name }) => out.push({ slot: 'screen:' + name, group: 'Screens' }));
+            } catch (e) {}
+            out.push({ slot: 'transition:slide-change', group: 'Transitions' });
+            // Slots already saved from a week with a different deck stay editable.
+            try {
+                Object.keys(window.__soundOverrides || {}).forEach(k => {
+                    if ((k.indexOf('screen:') === 0 || k.indexOf('transition:') === 0)
+                        && !out.some(o => o.slot === k))
+                        out.push({ slot: k, group: k.indexOf('screen:') === 0 ? 'Screens' : 'Transitions' });
+                });
+            } catch (e) {}
+            return out;
+        };
+        window.__sbToggleExpand = (slot) => {
+            (window.__sbRenderedSlots || []).forEach(s => { try { window.__sbSyncTrimInputs(s); } catch (e) {} });
+            window.__sbExpanded = (window.__sbExpanded === slot) ? null : slot;
+            window.__sbRenderPanel();
+        };
+        // Rows only (search typing must not lose input focus).
+        window.__sbRenderAllRows = () => {
+            const rowsHost = document.getElementById('sbAllRows');
+            if (!rowsHost) return;
+            (window.__sbRenderedSlots || []).forEach(s => { try { window.__sbSyncTrimInputs(s); } catch (e) {} });
+            const q = (window.__sbAllQ || '').toLowerCase();
+            const items = window.__sbAllList().filter(o => {
+                if (!q) return true;
+                const meta = window.__sbSlotMeta(o.slot);
+                return (meta.name + ' ' + window.__sbLabel(window.__sbCommitted(o.slot))).toLowerCase().indexOf(q) >= 0;
+            });
+            let html = '';
+            ['Screens', 'Transitions'].forEach(g => {
+                const rows = items.filter(o => o.group === g);
+                if (!rows.length) return;
+                html += `<div style="color:rgba(255,255,255,0.6);font-size:11px;font-weight:800;letter-spacing:1px;margin:8px 0 4px;">${g.toUpperCase()} (${rows.length})</div>`;
+                rows.forEach(o => {
+                    const meta = window.__sbSlotMeta(o.slot);
+                    const st = window.__sbCommitted(o.slot);
+                    const qq = window.__sbQ(o.slot);
+                    const open = window.__sbExpanded === o.slot;
+                    html += `<button onclick="window.__sbToggleExpand('${qq}')" style="width:100%;text-align:left;background:rgba(255,255,255,${open ? '0.14' : '0.07'});border:1px solid rgba(255,255,255,0.16);border-radius:8px;padding:9px 10px;margin-bottom:6px;cursor:pointer;display:block;">`
+                        + `<div style="color:white;font-weight:700;font-size:12px;">${window.__sbEsc(meta.name)}</div>`
+                        + `<div style="color:rgba(255,255,255,0.6);font-size:11px;margin-top:2px;">${window.__sbEsc(window.__sbLabel(st))}${open ? ' · ▲' : ''}</div></button>`;
+                    if (open) html += window.__sbSlotCard(o.slot, false);
+                });
+            });
+            if (!html) html = '<div style="color:rgba(255,255,255,0.5);font-size:12px;">No screens match.</div>';
+            rowsHost.innerHTML = html;
+            // Track the expanded card's trim inputs + duration like the main panel.
+            if (window.__sbExpanded && !window.__sbRenderedSlots.includes(window.__sbExpanded))
+                window.__sbRenderedSlots.push(window.__sbExpanded);
+            if (window.__sbExpanded) {
+                const st = window.__sbStagedFor(window.__sbExpanded);
+                if ((st.kind === 'file' || st.kind === 'url') && st.value)
+                    window.__sbLoadDuration(st.value, String(window.__sbExpanded).replace(/[^a-zA-Z0-9]/g, '_'));
+            }
+        };
+        window.__sbRenderAllList = () => {
+            const host = document.getElementById('sbAllSlots');
+            if (!host) return;
+            let active = false;
+            try { active = typeof presentationState !== 'undefined' && !!presentationState.active; } catch (e) {}
+            if (!active) { host.innerHTML = ''; window.__sbExpanded = null; return; }
+            host.innerHTML = '<div style="color:white;font-weight:800;font-size:13px;margin:2px 0 8px;">🗂 All screens &amp; transitions</div>'
+                + `<input id="sbAllQ" placeholder="Search screens…" value="${window.__sbEsc(window.__sbAllQ || '')}" oninput="window.__sbAllQ=this.value;window.__sbRenderAllRows();" style="width:100%;padding:9px;margin-bottom:8px;border:1px solid rgba(255,255,255,0.25);border-radius:8px;font-size:13px;background:rgba(255,255,255,0.12);color:white;box-sizing:border-box;">`
+                + '<div id="sbAllRows"></div>';
+            window.__sbRenderAllRows();
             if (!(window.__soundLibrary || []).length && !window.__sbLibLoading) {
                 window.__sbLibLoading = true;
                 window.loadSoundLibrary(null, () => { window.__sbLibLoading = false; window.__sbRenderPanel(); });
