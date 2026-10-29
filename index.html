@@ -726,7 +726,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = '2026.10.13.13';
+        const APP_VERSION = '2026.10.29.1';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -1913,6 +1913,82 @@
                 document.querySelectorAll('[id^="' + prefix + 'Move-"]').forEach(e => { e.style.transform = 'translateY(0)'; });
             } catch (e) {}
         };
+
+        // 🎬 The dramatic settle (State of the Cup + Individual Race finales):
+        // rows are released ONE AT A TIME, biggest movers LAST. Each moving row is
+        // "picked up" (lifts, grows, glows), carried most of the way while
+        // hovering, then set down in its new slot — slow enough to follow.
+        window.dramatizeLadder = (prefix) => {
+            try {
+                const els = Array.from(document.querySelectorAll('[id^="' + prefix + 'Move-"]'));
+                const offOf = (e) => {
+                    const mm = /translateY\((-?[\d.]+)px\)/.exec(e.style.transform || '');
+                    return mm ? parseFloat(mm[1]) : 0;
+                };
+                els.sort((a, b) => Math.abs(offOf(a)) - Math.abs(offOf(b)));
+                els.forEach((e, i) => {
+                    const off = offOf(e);
+                    const t0 = 250 + i * 450;
+                    setTimeout(() => {
+                        e.style.transition = 'transform 0.45s ease-out, box-shadow 0.45s ease-out';
+                        e.style.transform = 'translateY(' + off + 'px) scale(1.05)';
+                        e.style.boxShadow = '0 18px 44px rgba(0,0,0,0.65)';
+                        e.style.position = 'relative';
+                        e.style.zIndex = '8';
+                    }, t0);
+                    setTimeout(() => {
+                        e.style.transition = 'transform 0.85s cubic-bezier(0.45,0,0.55,1)';
+                        e.style.transform = 'translateY(' + (off * 0.22) + 'px) scale(1.03)';
+                    }, t0 + 480);
+                    setTimeout(() => {
+                        e.style.transition = 'transform 0.9s cubic-bezier(0.3,1.25,0.45,1), box-shadow 0.9s ease-out';
+                        e.style.transform = 'translateY(0) scale(1)';
+                    }, t0 + 1400);
+                    setTimeout(() => { e.style.boxShadow = ''; e.style.zIndex = ''; }, t0 + 2450);
+                });
+            } catch (e) {}
+        };
+
+        // ─── Extra 9 dramatic reveal helpers ───
+        // Flat pick order across the drafted teams: each team's CAPTAIN (first
+        // pick = their best score) is revealed first, then the remaining picks
+        // roll in one at a time in draft order.
+        window.__extra9Order = (teams) => {
+            const out = [];
+            const T = teams || [];
+            const maxLen = Math.max(0, ...T.map(t => (t.players || []).length));
+            for (let i = 0; i < maxLen; i++) {
+                T.forEach((t, ti) => {
+                    const p = (t.players || [])[i];
+                    if (p) out.push({ teamIdx: ti, playerIdx: i, player: p, captain: i === 0 });
+                });
+            }
+            return out;
+        };
+        window.__extra9MaxStep = () => {
+            try {
+                const teams = (presentationState.analytics || {}).extra9Teams || [];
+                return window.__extra9Order(teams).filter(e => !e.captain).length;
+            } catch (e) { return 0; }
+        };
+        // The next pick the reveal will roll in (drives the soundboard theme slot).
+        window.__extra9NextPick = () => {
+            try {
+                const teams = (presentationState.analytics || {}).extra9Teams || [];
+                const rest = window.__extra9Order(teams).filter(e => !e.captain);
+                return rest[presentationState.extra9RevealStep || 0] || null;
+            } catch (e) { return null; }
+        };
+        // A player's personal theme: their 'PLAYER THEME:<id>' slot when one is
+        // assigned; otherwise a soft synth pop so the moment still lands.
+        window.__playPlayerTheme = (playerId) => {
+            try {
+                const slot = window.playerThemeSlot(playerId);
+                const r = window.resolveSound(slot, null);
+                if (r && r.kind !== 'none' && r.value) { playSfx(slot, null, 0.9, { maxSecs: 600 }); return; }
+                window.playSynth('pop', 0.45);
+            } catch (e) {}
+        };
         
         // ═══ Team intro title slide — shown before each team's block ═══
         // Name + logo + where they stand ENTERING tonight (points, position, odds).
@@ -2066,7 +2142,7 @@
                 }).join('');
             
             const fairwayHTML = stage === 1 ? `
-                <div style="width:98vw;margin-left:calc(-49vw + 50%);margin-top:10px;animation:rrCardIn 0.5s ease-out both;">
+                <div id="fwStage-${tid}" style="width:98vw;margin-left:calc(-49vw + 50%);margin-top:10px;animation:rrCardIn 0.5s ease-out both;transition:transform 1.3s cubic-bezier(0.3,0.9,0.3,1);">
                     <div style="position:relative;height:170px;border-radius:18px;overflow:hidden;background:linear-gradient(180deg,#0b3d1f 0%,#166534 30%,#15803d 62%,#166534 100%);border:2px solid rgba(255,255,255,0.14);box-shadow:inset 0 6px 30px rgba(0,0,0,0.45);">
                         <!-- mown stripes -->
                         <div style="position:absolute;inset:0;background:repeating-linear-gradient(90deg, rgba(255,255,255,0.05) 0 34px, transparent 34px 68px);"></div>
@@ -2222,8 +2298,23 @@
                         col.style.background = 'rgba(255,255,255,0.08)';
                         col.style.transform = 'scale(1)';
                     });
+                    // 🔍 Zoom in on where the ball finished, so the room can SEE
+                    // whether this team passed the team that was leading (item 9).
+                    const _stageEl = byId('fwStage-' + d.tid);
+                    if (_stageEl) {
+                        _stageEl.style.animation = 'none'; void _stageEl.offsetHeight;
+                        _stageEl.style.transformOrigin = endPct + '% 55%';
+                        _stageEl.style.transform = 'scale(1.24)';
+                    }
+                    const _leadRival = (d.rivals || []).slice().sort((a, b) => b.pts - a.pts)[0];
+                    let _verdict = '';
+                    if (_leadRival) {
+                        if (d.after > _leadRival.pts) _verdict = `<div style="color:#4ade80;font-size:30px;font-weight:900;margin-top:6px;animation:fwScorePop 1s 0.25s cubic-bezier(0.34,1.6,0.64,1) both;">🏆 PAST ${_leadRival.name.toUpperCase()} — NEW LEADER!</div>`;
+                        else if (d.after === _leadRival.pts) _verdict = `<div style="color:#fbbf24;font-size:27px;font-weight:900;margin-top:6px;">🤝 Level with ${_leadRival.name} at the top</div>`;
+                        else _verdict = `<div style="color:rgba(255,255,255,0.8);font-size:23px;font-weight:800;margin-top:6px;">${_leadRival.name} still leads by ${_leadRival.pts - d.after}</div>`;
+                    }
                     const feed = byId('dialFeed-' + d.tid);
-                    if (feed) feed.innerHTML = `<div style="color:#fbbf24;font-size:38px;font-weight:900;letter-spacing:1px;animation:fwScorePop 0.9s cubic-bezier(0.34,1.6,0.64,1);text-shadow:0 4px 30px rgba(251,191,36,0.5);">🏁 ${d.teamName} — ${d.after} POINTS</div>`;
+                    if (feed) feed.innerHTML = `<div style="text-align:center;"><div style="color:#fbbf24;font-size:38px;font-weight:900;letter-spacing:1px;animation:fwScorePop 0.9s cubic-bezier(0.34,1.6,0.64,1);text-shadow:0 4px 30px rgba(251,191,36,0.5);">🏁 ${d.teamName} — ${d.after} POINTS</div>${_verdict}</div>`;
                     try { playSfx('TEAM TOTAL', 'Sounds/nsmb-new-high-score.mp3', 0.8); } catch (e) {}
                     const num = byId('dialNum-' + d.tid);
                     if (num) { num.textContent = d.after; num.style.animation = 'scaleIn 0.5s ease-out'; }
@@ -2378,20 +2469,27 @@
                 return {
                     id: s.id, name: s.name, color: s.color,
                     points: s.after,
+                    posBefore: (s.posBefore != null) ? s.posBefore : null,
                     tonight: (s.tonight != null) ? s.tonight : null,
                     avatarOf: sp || { id: s.id, name: s.name }
                 };
             });
             const leader = rows.length ? rows.slice().sort((a, b) => b.points - a.points)[0] : null;
-            const cascadeTime = (rows.length * 0.28 + 0.6).toFixed(1);
+            // With history, the race is a before→after MOVE (rows start in their
+            // old slots and get carried to the new ones); without it, the old
+            // bottom-up cascade reveal stands.
+            const _hasMoves = rows.some(r => r.posBefore != null);
+            const cascadeTime = (_hasMoves ? (rows.length * 0.45 + 2.9) : (rows.length * 0.28 + 0.6)).toFixed(1);
             return `
                 <div style="animation:fadeIn 0.5s ease-out;max-width:820px;width:100%;">
                     <div style="text-align:center;margin-bottom:18px;">
                         <div style="font-size:44px;line-height:1;margin-bottom:6px;">🎯</div>
                         <h1 style="color:white;font-size:clamp(30px,4vw,46px);font-weight:900;margin:0;text-shadow:0 4px 20px rgba(0,0,0,0.5);">The Individual Race</h1>
-                        <p style="color:#a5b4fc;font-size:14px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin:6px 0 0;">Every player, after tonight</p>
+                        <p style="color:#a5b4fc;font-size:14px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin:6px 0 0;">${_hasMoves ? 'Where they stood — watch them move' : 'Every player, after tonight'}</p>
                     </div>
-                    ${renderStandingsLadder(rows, { showFaces: true, compact: true, rowH: 44, idPrefix: 'indfin', cascade: true })}
+                    ${renderStandingsLadder(rows, _hasMoves
+                        ? { showFaces: true, compact: true, rowH: 44, idPrefix: 'indfin', animateMove: true }
+                        : { showFaces: true, compact: true, rowH: 44, idPrefix: 'indfin', cascade: true })}
                     ${leader ? `
                         <div style="text-align:center;margin-top:18px;opacity:0;animation:fadeIn 0.8s ${cascadeTime}s ease-out forwards;">
                             <div style="display:inline-flex;align-items:center;gap:12px;padding:10px 22px;border-radius:999px;background:rgba(251,191,36,0.14);border:2px solid #fbbf24;">
@@ -7922,6 +8020,20 @@
             { group: 'Match play', slot: 'MATCH FINISH', name: 'Match won',        def: 'Sounds/you-win.mp3',    suggest: 'triumph' },
             { group: 'Finale', slot: 'CHAMPION SONG', name: 'Champion Golfer',     def: 'Sounds/All-I-do-is-win.mp3' },
             { group: 'Finale', slot: 'closing',       name: 'Closing slideshow',   def: 'Sounds/long-and-winding-road.mp3' },
+            // Story types — one music slot per storyline kind (see detectStories).
+            // All default SILENT until assigned; e.g. give 'STORY:Mover' a
+            // "movin' on up" style track and every big-move story gets its own music.
+            { group: 'Stories', slot: 'STORY:Lead change',              name: 'Story · Lead change',              def: null },
+            { group: 'Stories', slot: 'STORY:Tight at the top',         name: 'Story · Tight at the top',         def: null },
+            { group: 'Stories', slot: 'STORY:Mover',                    name: 'Story · Mover (big climb)',        def: null },
+            { group: 'Stories', slot: 'STORY:Career night',             name: 'Story · Career night',             def: null },
+            { group: 'Stories', slot: 'STORY:What if',                  name: 'Story · What if',                  def: null },
+            { group: 'Stories', slot: 'STORY:A game of two halves',     name: 'Story · A game of two halves',     def: null },
+            { group: 'Stories', slot: 'STORY:Shot of the night',        name: 'Story · Shot of the night',        def: null },
+            { group: 'Stories', slot: 'STORY:The Bubble',               name: 'Story · The Bubble',               def: null },
+            { group: 'Stories', slot: 'STORY:Playing above themselves', name: 'Story · Playing above themselves', def: null },
+            { group: 'Stories', slot: 'STORY:Team of the night',        name: 'Story · Team of the night',        def: null },
+            { group: 'Stories', slot: 'STORY:The duel',                 name: 'Story · The duel',                 def: null },
             // Show moments — these play custom built-in synths by default; assigning
             // a file/synth/silence here takes control through the slot system.
             { group: 'Show moments', slot: 'TEAM INTRO FANFARE',   name: 'Team intro fanfare',   def: null, defNote: 'Built-in synth (default)' },
@@ -8415,6 +8527,8 @@
             return out;
         };
         window.milestoneSlot = (key) => 'MILESTONE:' + key;
+        window.storySlot = (kind) => 'STORY:' + kind;
+        window.playerThemeSlot = (playerId) => 'PLAYER THEME:' + playerId;
 
         // Work out what each player crossed in THIS round.
         window.detectMilestones = (round, eventRounds) => {
@@ -11181,7 +11295,9 @@
             byNumbersRevealStep: 0,
             holePerfRevealStep: 0,
             oddsFinaleStep: 0,
-            beatCompRevealStep: 0
+            beatCompRevealStep: 0,
+            extra9RevealStep: 0,
+            skinsRevealStep: 0
         });
         
         let presentationState = {
@@ -12028,7 +12144,9 @@
                     
                     const seq = [];
                     blocks.forEach((b, bi) => {
-                        seq.push({ k: 'ti', b: bi });   // team intro title slide
+                        // Team intro splash slide REMOVED (Ron, Oct 29): it was a
+                        // redundant stopping place before the scoring graphics.
+                        // The block now goes straight to the players, then the dial.
                         b.players.forEach(p => seq.push({ k: 'p', i: flat.indexOf(p) }));
                         seq.push({ k: 't', b: bi });
                     });
@@ -15584,11 +15702,11 @@
                     <h1 style="color:white;font-size:clamp(34px, 4.5vw, 46px);margin:0 0 12px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
                         ${titleEmoji} ${titleText}
                     </h1>
-                    <p style="color:#a5b4fc;font-size:16px;margin:0 0 ${subtitleLine2 ? '8' : '20'}px;">
+                    <p style="color:#c7d2fe;font-size:22px;font-weight:600;line-height:1.35;margin:0 0 ${subtitleLine2 ? '10' : '22'}px;">
                         ${subtitleLine1}
                     </p>
                     ${subtitleLine2 ? `
-                        <p style="color:#818cf8;font-size:14px;margin:0 0 20px;font-style:italic;">
+                        <p style="color:#a5b4fc;font-size:18px;line-height:1.4;margin:0 0 22px;font-style:italic;">
                             ${subtitleLine2}
                         </p>
                     ` : ''}
@@ -15778,6 +15896,9 @@
         
         window.renderPresentation = () => {
             try {
+                // Bumped on every render; delayed audio starts capture it so a
+                // start scheduled by a slide we've already left can be dropped.
+                window.__renderEpoch = (window.__renderEpoch || 0) + 1;
                 let { 
                     currentSlide, 
                     individualPlayerSlides,
@@ -15843,8 +15964,10 @@
             // Closing beat: champion (bracket) or low-net crown
             if (_tbMatches.some(s => s.championshipWinner)) {
                 _teaserBeats.push({ icon: '👑', text: 'And one golfer left as Champion.' });
-            } else if (presentationState.netWinner) {
-                _teaserBeats.push({ icon: '🏆', text: 'And one golfer was crowned tonight.' });
+            } else if (presentationState.netWinner && !(scheduledRoundsCount > 0)) {
+                // Ron's rule: the crown beat belongs to the LAST day only — and
+                // what's crowned is the winning TEAM, not an individual golfer.
+                _teaserBeats.push({ icon: '🏆', text: 'And one team was crowned tonight.' });
             }
             const _teaserShow = _teaserBeats.slice(0, 3);
             const hasTeaserSlide = _teaserShow.length >= 2;
@@ -15873,6 +15996,14 @@
             presentationState._bbbLeadersSlideIndex = bbbLeadersSlideIndex;
             presentationState._bbbLeadersCount = (presentationState.bbbLeadersTop5 || []).length;
             const weeklyAchievementsSlideIndex = hasWeeklyAchievementsSlide ? slideIndex++ : -1;
+            // 🃏 SKINS MOVED UP (Ron, Oct 29): the hole-by-hole skins reveal now
+            // plays BEFORE the overall score reveals (net countdown, team dials).
+            const skinsSlideIndex = hasSkinsSlide ? slideIndex++ : -1;
+            presentationState._skinsSlideIndex = skinsSlideIndex;
+            presentationState._skinsMaxStep = (() => {
+                const holes = (analytics && analytics.skins && analytics.skins.holes) || [];
+                return holes.filter(h => h.status && h.status !== 'pending').length + 1;
+            })();
             
             // ── Act 2: individual honors (divider → low net crown → players, champion last) ──
             const _hasPhotos = Array.isArray(roundPhotos) && roundPhotos.length > 0;
@@ -15953,7 +16084,7 @@
             const milestonesSlideIndex = hasMilestonesSlide ? slideIndex++ : -1;
             const handicapSlideIndex = hasHandicapSlide ? slideIndex++ : -1;
             const extra9TeamsSlideIndex = hasExtra9TeamsSlide ? slideIndex++ : -1;
-            const skinsSlideIndex = hasSkinsSlide ? slideIndex++ : -1;
+            presentationState._extra9SlideIndex = extra9TeamsSlideIndex;
             const photosSlideIndex = -1; // retired — the closing slideshow IS the photo moment
             const nextRoundSlideIndex = hasNextRoundSlide ? slideIndex++ : -1;
             // Closing collage: photo mosaic + sign-off message. Only shown when there are photos.
@@ -15996,6 +16127,7 @@
                 for (let i = 0; i < _miles.length; i++) nm(milestoneSlideStart + i, 'MILESTONE');
                 for (let i = 0; i < _stories.length; i++) nm(storySlideStart + i, 'STORYLINE');
                 presentationState._milestoneSlideStart = milestoneSlideStart;
+                presentationState._storySlideStart = storySlideStart;
                 nm(oddsFinaleSlideIndex, 'STANDINGS & ODDS');
                 nm(eventNetSlideIndex, 'EVENT NET');
                 nm(milestonesSlideIndex, 'MILESTONES');
@@ -16397,7 +16529,8 @@
                 `;
                 // Het Wilhelmus — Ron's F1-podium version. encodeURI in playSlideTrack
                 // handles the space in the filename.
-                setTimeout(() => { try { playSlideTrack('anthem', 'Sounds/dutch-anthem-f1-podium (1).mp3', { vol: 0.85 }); } catch (e) {} }, 100);
+                { const _epA = window.__renderEpoch;
+                  setTimeout(() => { try { playSlideTrack('anthem', 'Sounds/dutch-anthem-f1-podium (1).mp3', { vol: 0.85, epoch: _epA }); } catch (e) {} }, 100); }
             } else if (currentSlide === titleContentSlideIndex) {
                 // TITLE SLIDE
                 // Optional backdrop: first round photo (if any), heavily darkened
@@ -16508,7 +16641,8 @@
                             trackKey: 'divMatches', trackSrc: 'Sounds/nfl-theme-song-hq-mp3cutnet.mp3' }
                         : { photo: roundPhotos[2 % _len], caption: 'And now — the team battle…' };
                 if (_div.trackKey) {
-                    setTimeout(() => { try { playSlideTrack(_div.trackKey, _div.trackSrc, { vol: 0.8 }); } catch (e) {} }, 150);
+                    const _epD = window.__renderEpoch;
+                    setTimeout(() => { try { playSlideTrack(_div.trackKey, _div.trackSrc, { vol: 0.8, epoch: _epD }); } catch (e) {} }, 150);
                 }
                 html += `
                     <div style="position:fixed;inset:0;background:#000;overflow:hidden;">
@@ -16522,7 +16656,8 @@
                 `;
             } else if (currentSlide === fieldSlideIndex) {
                 // Warm-up music while the field is on screen (stops on slide change).
-                setTimeout(() => { try { playSlideTrack('field', 'Sounds/10-walking-on-sunshine.mp3', { loop: true, vol: 0.55 }); } catch (e) {} }, 100);
+                { const _epF = window.__renderEpoch;
+                  setTimeout(() => { try { playSlideTrack('field', 'Sounds/10-walking-on-sunshine.mp3', { vol: 0.55, epoch: _epF }); } catch (e) {} }, 100); }
                 // TODAY'S FIELD — grid of player avatars to set the human tone
                 // Look up state-side player records to get photoUrl + canonical name
                 const fieldEntries = playersWhoPlayed.map(p => {
@@ -17592,13 +17727,13 @@
                             <!-- Award label -->
                             <div style="background:linear-gradient(135deg, ${displayColor}, ${displayColor}dd);color:white;padding:10px 30px;border-radius:12px;box-shadow:0 12px 40px ${displayColor}66;animation:awardLabelSlideUp 0.5s 0.4s ease-out backwards;position:relative;z-index:2;">
                                 <div style="font-size:${(displayMode === 'fullScorecard') ? '26' : '32'}px;font-weight:900;letter-spacing:3px;line-height:1;">${award.label}</div>
-                                ${award.tagline ? `<div style="font-size:14px;margin-top:5px;font-weight:600;opacity:0.95;">${award.tagline}</div>` : ''}
-                                ${award.detail ? `<div style="font-size:12px;margin-top:4px;font-weight:500;opacity:0.85;">${award.detail}</div>` : ''}
+                                ${award.tagline ? `<div style="font-size:17px;margin-top:6px;font-weight:600;opacity:0.95;">${award.tagline}</div>` : ''}
+                                ${award.detail ? `<div style="font-size:14px;margin-top:5px;font-weight:500;opacity:0.9;">${award.detail}</div>` : ''}
                             </div>
                             
                             <!-- Award description -->
                             ${award.description ? `
-                                <div style="margin-top:12px;max-width:680px;color:rgba(255,255,255,0.78);font-size:13px;font-style:italic;line-height:1.45;animation:fadeIn 0.6s 0.55s ease-out backwards;position:relative;z-index:2;">
+                                <div style="margin-top:20px;max-width:900px;color:rgba(255,255,255,0.95);font-size:20px;font-style:italic;line-height:1.5;animation:fadeIn 0.6s 0.55s ease-out backwards;position:relative;z-index:2;">
                                     ${award.description}
                                 </div>
                             ` : ''}
@@ -17962,7 +18097,8 @@
                         // DOM-driven animation (no re-renders) via startCartRace; self-cleans on leave.
                         const raceHoles = segHoles.map(h => ({
                             i: h.holeIndex, r: h.result || 'halved',
-                            n1: (h.net1 != null ? h.net1 : ''), n2: (h.net2 != null ? h.net2 : '')
+                            n1: (h.net1 != null ? h.net1 : ''), n2: (h.net2 != null ? h.net2 : ''),
+                            g1: (h.gross1 != null ? h.gross1 : ''), g2: (h.gross2 != null ? h.gross2 : '')
                         }));
                         presentationState._cartRaceData = {
                             matchIdx,
@@ -17993,6 +18129,9 @@
                                     <div style="position:absolute;right:calc(6% - 8px);top:6px;font-size:26px;z-index:4;">🏁</div>
                                     ${laneRow('slot1', sp1.name, renderAvatar(sp1, 44), 30)}
                                     ${laneRow('slot2', sp2.name, renderAvatar(sp2, 44), 70)}
+                                    <!-- On-track score popups: GROSS first, then NET, right at the carts (item 10) -->
+                                    <div id="racePop-${matchIdx}-slot1" style="position:absolute;left:5%;top:4px;transform:translateX(-50%);z-index:5;pointer-events:none;opacity:0;text-align:center;min-width:86px;"></div>
+                                    <div id="racePop-${matchIdx}-slot2" style="position:absolute;left:5%;bottom:4px;transform:translateX(-50%);z-index:5;pointer-events:none;opacity:0;text-align:center;min-width:86px;"></div>
                                     <!-- Lane name tags -->
                                     <div style="position:absolute;left:10px;top:8px;color:#93c5fd;font-size:13px;font-weight:800;text-shadow:0 2px 6px rgba(0,0,0,0.7);z-index:2;">${sp1.name}</div>
                                     <div style="position:absolute;left:10px;bottom:8px;color:#fca5a5;font-size:13px;font-weight:800;text-shadow:0 2px 6px rgba(0,0,0,0.7);z-index:2;">${sp2.name}</div>
@@ -18690,14 +18829,14 @@
                     const accentBg = isEasy ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)';
                     const avg = holeStat.toPar;
                     return `
-                        <div style="background:linear-gradient(135deg, ${accentBg}, rgba(0,0,0,0.3));border:3px solid ${accent};border-radius:20px;padding:30px 40px;max-width:560px;margin:0 auto;box-shadow:0 12px 40px ${accent}40;animation:scaleIn 0.6s ease-out;">
+                        <div style="background:linear-gradient(135deg, ${accentBg}, rgba(0,0,0,0.3));border:3px solid ${accent};border-radius:20px;padding:16px 26px;max-width:520px;margin:0 auto;box-shadow:0 12px 40px ${accent}40;animation:scaleIn 0.6s ease-out;">
                             <div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:10px;">
-                                <div style="font-size:36px;">${isEasy ? '✅' : '\u26a0\ufe0f'}</div>
-                                <h2 style="color:${accent};font-size:30px;font-weight:800;margin:0;">${isEasy ? 'Easiest Hole' : 'Toughest Hole'}</h2>
+                                <div style="font-size:27px;">${isEasy ? '✅' : '\u26a0\ufe0f'}</div>
+                                <h2 style="color:${accent};font-size:23px;font-weight:800;margin:0;">${isEasy ? 'Easiest Hole' : 'Toughest Hole'}</h2>
                             </div>
-                            <div style="color:white;font-size:96px;font-weight:900;line-height:1;margin:10px 0;">#${holeStat.hole}</div>
+                            <div style="color:white;font-size:56px;font-weight:900;line-height:1;margin:5px 0;">#${holeStat.hole}</div>
                             <div style="color:#a5b4fc;font-size:20px;margin-bottom:6px;">Par ${holeStat.par}</div>
-                            <div style="color:${accent};font-size:40px;font-weight:900;">${avg > 0 ? '+' : ''}${avg.toFixed(1)} avg</div>
+                            <div style="color:${accent};font-size:29px;font-weight:900;">${avg > 0 ? '+' : ''}${avg.toFixed(1)} avg</div>
                             <div style="color:rgba(255,255,255,0.55);font-size:14px;margin-top:6px;">group average vs par</div>
                         </div>
                     `;
@@ -18708,20 +18847,20 @@
                     const rows = _scoresOnHole(holeNum1);
                     if (rows.length === 0) return '';
                     return `
-                        <div style="max-width:1000px;margin:26px auto 0;animation:slideUp 0.5s ease-out;">
-                            <div style="color:${accent};font-size:14px;font-weight:800;letter-spacing:2px;text-transform:uppercase;text-align:center;margin-bottom:16px;">
+                        <div style="max-width:1000px;margin:12px auto 0;animation:slideUp 0.5s ease-out;">
+                            <div style="color:${accent};font-size:14px;font-weight:800;letter-spacing:2px;text-transform:uppercase;text-align:center;margin-bottom:9px;">
                                 \ud83d\udccb Everyone on Hole ${holeNum1}
                             </div>
-                            <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(150px, 1fr));gap:12px;">
+                            <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(128px, 1fr));gap:9px;">
                                 ${rows.map(r => {
                                     const c = _ntpColor(r.netToPar);
                                     const sp = state.players.find(p => p.id === r.playerId);
                                     return `
-                                        <div style="background:rgba(255,255,255,0.06);border:1px solid ${c}88;border-radius:12px;padding:12px;display:flex;flex-direction:column;align-items:center;gap:8px;">
-                                            ${sp ? `<div>${renderAvatar(sp, 52)}</div>` : ''}
+                                        <div style="background:rgba(255,255,255,0.06);border:1px solid ${c}88;border-radius:12px;padding:7px;display:flex;flex-direction:column;align-items:center;gap:4px;">
+                                            ${sp ? `<div>${renderAvatar(sp, 36)}</div>` : ''}
                                             <div style="color:white;font-size:14px;font-weight:600;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;">${r.playerName.split(' ')[0]}</div>
                                             <div style="display:flex;align-items:baseline;gap:6px;">
-                                                <span style="color:${c};font-size:30px;font-weight:900;line-height:1;">${r.net}</span>
+                                                <span style="color:${c};font-size:21px;font-weight:900;line-height:1;">${r.net}</span>
                                                 <span style="color:rgba(255,255,255,0.5);font-size:12px;">gross ${r.gross}</span>
                                             </div>
                                         </div>
@@ -18745,8 +18884,8 @@
 
                 // Difficulty strip — always visible at the bottom as a reference
                 const _diffStrip = `
-                    <div style="background:rgba(255,255,255,0.05);border:2px solid rgba(255,255,255,0.1);border-radius:12px;padding:14px 12px;margin-top:30px;max-width:1500px;">
-                        <h3 style="color:#a5b4fc;font-size:16px;margin:0 0 12px;text-align:center;">All Holes (sorted by difficulty)</h3>
+                    <div style="background:rgba(255,255,255,0.05);border:2px solid rgba(255,255,255,0.1);border-radius:12px;padding:9px 12px;margin-top:12px;max-width:1500px;">
+                        <h3 style="color:#a5b4fc;font-size:14px;margin:0 0 7px;text-align:center;">All Holes (sorted by difficulty)</h3>
                         <div style="display:grid;grid-template-columns:repeat(18,1fr);gap:4px;">
                             ${analytics.allHoles.map(hole => {
                                 const d = hole.toPar;
@@ -18772,11 +18911,11 @@
                 html += `
                     <div style="animation:fadeIn 0.6s ease-out;max-width:1500px;width:100%;position:relative;">
                         ${dataDrawerButton('holeAnalysis')}
-                        <h1 style="color:white;font-size:clamp(34px, 4.5vw, 46px);margin:0 0 24px;text-shadow:0 4px 20px rgba(0,0,0,0.5);text-align:center;">
+                        <h1 style="color:white;font-size:clamp(30px, 4vw, 40px);margin:0 0 8px;text-shadow:0 4px 20px rgba(0,0,0,0.5);text-align:center;">
                             \u26f3 Hole Performance
                         </h1>
                         ${_haBody}
-                        <p style="color:#818cf8;font-size:16px;margin-top:24px;font-style:italic;text-align:center;min-height:22px;">${_haHint}</p>
+                        <p style="color:#818cf8;font-size:15px;margin-top:8px;font-style:italic;text-align:center;min-height:20px;">${_haHint}</p>
                         ${_diffStrip}
                     </div>
                 `;
@@ -19251,6 +19390,9 @@
             } else if (_stories.length > 0 && currentSlide >= storySlideStart && currentSlide < storySlideStart + _stories.length) {
                 // ═══ THE PAYOFF — one storyline per slide ═══
                 const st = _stories[currentSlide - storySlideStart];
+                // This story TYPE's own music (slot 'STORY:<kind>') — silent until assigned.
+                { const _epS = window.__renderEpoch;
+                  setTimeout(() => { try { playSlideTrack(window.storySlot(st.kind), null, { vol: 0.7, epoch: _epS }); } catch (e) {} }, 120); }
                 const n = currentSlide - storySlideStart + 1;
                 const heat = st.drama >= 85 ? '#f87171' : st.drama >= 70 ? '#fbbf24' : '#4ade80';
                 html += `
@@ -19282,7 +19424,8 @@
                 // ═══ THE STATE OF THE CUP (finale) ═══
                 const _cupStep = presentationState.oddsFinaleStep || 0;
                 html += renderOddsFinale(presentationState.teamStandings || [], _cupStep);
-                if (_cupStep >= 1) setTimeout(() => { try { settleLadder('cup'); } catch (e) {} }, 160);
+                if (_cupStep === 1) setTimeout(() => { try { dramatizeLadder('cup'); } catch (e) {} }, 200);
+                if (_cupStep >= 2) setTimeout(() => { try { dramatizeLadder('indfin'); } catch (e) {} }, 200);
             } else if (currentSlide === teamIntroSlideIndex) {
                 // ═══════════════════════════════════════════════════════
                 // TEAM STANDINGS INTRO — cinematic anticipation moment
@@ -20159,67 +20302,173 @@
                     </div>
                 `;
             } else if (currentSlide === extra9TeamsSlideIndex) {
-                // EXTRA 9 TEAMS SLIDE - Snake draft based on gross scores
+                // EXTRA 9 TEAMS — DRAMATIC DRAFT REVEAL (Ron, Oct 29)
+                // Step 0: the CAPTAINS only — each team's first pick, i.e. its
+                // best score — spotlit. Every Next tap then rolls in ONE more
+                // pick, in draft order, avatar + personal theme music and all.
+                const _xTeams = analytics.extra9Teams || [];
+                const _xOrder = window.__extra9Order(_xTeams);
+                const _xRest = _xOrder.filter(e => !e.captain);
+                const _xMax = _xRest.length;
+                const _xStep = Math.min(presentationState.extra9RevealStep || 0, _xMax);
+                const _xShown = {};
+                _xOrder.forEach(e => { if (e.captain) _xShown[e.teamIdx + ':' + e.playerIdx] = 1; });
+                _xRest.slice(0, _xStep).forEach(e => { _xShown[e.teamIdx + ':' + e.playerIdx] = 1; });
+                const _xLatest = _xStep > 0 ? _xRest[_xStep - 1] : null;
+                // The pick that just landed gets its theme (forward steps only).
+                const _xStamp = presentationState.__extra9ThemeStamp;
+                if (_xLatest && _xStamp != null && _xStep === _xStamp + 1) {
+                    const _nxP = _xLatest.player;
+                    setTimeout(() => { try { window.__playPlayerTheme(_nxP.id); } catch (e) {} }, 250);
+                }
+                presentationState.__extra9ThemeStamp = _xStep;
                 try {
                     if (presentationState.__lastStungSlide !== 'extra9') {
                         presentationState.__lastStungSlide = 'extra9';
                         setTimeout(() => { try { playSfx('EXTRA9 WINNER', null, 0.9); } catch (e) {} }, 400);
                     }
                 } catch (e) {}
+                const _xPlayerRow = (team, teamIdx, player, idx) => {
+                    const shown = !!_xShown[teamIdx + ':' + idx];
+                    const sp = state.players.find(x => String(x.id) === String(player.id)) || { id: player.id, name: player.name };
+                    if (!shown) {
+                        return `
+                            <div style="background:rgba(255,255,255,0.04);border:2px dashed rgba(255,255,255,0.18);border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:10px;opacity:0.55;">
+                                <div style="width:42px;height:42px;border-radius:50%;background:rgba(255,255,255,0.10);color:rgba(255,255,255,0.5);display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:900;flex-shrink:0;">?</div>
+                                <div style="color:rgba(255,255,255,0.45);font-size:15px;font-weight:700;letter-spacing:3px;">· · ·</div>
+                                <div style="margin-left:auto;background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.4);font-size:11px;font-weight:700;padding:3px 8px;border-radius:6px;">#${idx + 1}</div>
+                            </div>`;
+                    }
+                    const isCap = idx === 0;
+                    const isLatest = !!(_xLatest && _xLatest.teamIdx === teamIdx && _xLatest.playerIdx === idx);
+                    return `
+                        <div style="background:${isCap ? 'linear-gradient(135deg, rgba(251,191,36,0.25), rgba(251,191,36,0.08))' : 'rgba(255,255,255,0.1)'};border:2px solid ${isCap ? '#fbbf24' : (isLatest ? '#4ade80' : 'rgba(255,255,255,0.2)')};border-radius:10px;padding:10px 12px;${isLatest ? 'animation:rrRowIn 0.55s cubic-bezier(0.34,1.4,0.64,1) both;' : (isCap ? 'animation:scaleIn 0.6s ' + (0.25 + teamIdx * 0.22).toFixed(2) + 's ease-out both;' : '')}">
+                            <div style="display:flex;align-items:center;gap:10px;">
+                                <div style="border:2px solid ${isCap ? '#fbbf24' : team.color};border-radius:50%;padding:2px;flex-shrink:0;">${renderAvatar(sp, isCap ? 52 : 42)}</div>
+                                <div style="flex:1;min-width:0;">
+                                    <div style="color:white;font-size:${isCap ? 19 : 16}px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${player.name}</div>
+                                    <div style="color:#a5b4fc;font-size:12px;">Gross ${player.grossScore} · Net ${player.netScore} · HCP ${player.handicap}</div>
+                                    <div style="color:#64748b;font-size:11px;">From ${player.teamName}</div>
+                                </div>
+                                ${isCap ? `<div style="background:linear-gradient(135deg,#fbbf24,#f59e0b);color:#1f2937;font-size:11px;font-weight:900;letter-spacing:1px;padding:5px 9px;border-radius:6px;white-space:nowrap;">👑 CAPTAIN</div>` : `<div style="background:${team.color};color:white;font-size:12px;font-weight:700;padding:4px 8px;border-radius:6px;">#${idx + 1}</div>`}
+                            </div>
+                        </div>`;
+                };
                 html += `
                     <div style="animation:slideUp 0.8s ease-out;max-width:1100px;width:100%;">
-                        <h1 style="color:white;font-size:clamp(34px, 4.5vw, 46px);margin:0 0 16px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
+                        <h1 style="color:white;font-size:clamp(34px, 4.5vw, 46px);margin:0 0 12px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
                             🎯 Extra 9 Teams
                         </h1>
-                        <p style="color:#a5b4fc;font-size:20px;margin:0 0 12px;">
+                        <p style="color:#a5b4fc;font-size:20px;margin:0 0 8px;">
                             Snake draft based on today's gross scores
                         </p>
-                        <p style="color:#818cf8;font-size:16px;margin:0 0 30px;font-style:italic;">
-                            Low gross picks first • Net score breaks ties
+                        <p style="color:#fbbf24;font-size:18px;font-weight:800;margin:0 0 26px;">
+                            ${_xStep === 0
+                                ? '👑 First — the captains: the best score on each team'
+                                : (_xStep >= _xMax
+                                    ? '✅ The teams are set!'
+                                    : `Pick ${_xOrder.length - _xRest.length + _xStep} of ${_xOrder.length} rolls in…`)}
                         </p>
-                        
                         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:24px;">
-                            ${analytics.extra9Teams.map((team, teamIdx) => `
-                                <div style="background:linear-gradient(135deg, ${team.color}30 0%, ${team.color}10 100%);border:4px solid ${team.color};border-radius:20px;padding:24px;box-shadow:0 12px 32px rgba(0,0,0,0.3);">
-                                    <div style="text-align:center;margin-bottom:20px;">
-                                        <div style="background:${team.color};color:white;font-size:24px;font-weight:700;padding:12px;border-radius:12px;margin-bottom:8px;">
+                            ${_xTeams.map((team, teamIdx) => `
+                                <div style="background:linear-gradient(135deg, ${team.color}30 0%, ${team.color}10 100%);border:4px solid ${team.color};border-radius:20px;padding:22px;box-shadow:0 12px 32px rgba(0,0,0,0.3);">
+                                    <div style="text-align:center;margin-bottom:18px;">
+                                        <div style="background:${team.color};color:white;font-size:23px;font-weight:800;padding:11px;border-radius:12px;">
                                             ${team.name}
                                         </div>
                                     </div>
-                                    
-                                    <div style="display:grid;gap:12px;">
-                                        ${team.players.map((player, idx) => `
-                                            <div style="background:rgba(255,255,255,0.1);border:2px solid rgba(255,255,255,0.2);border-radius:10px;padding:12px;">
-                                                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-                                                    <div style="color:white;font-size:16px;font-weight:700;">${player.name}</div>
-                                                    <div style="background:${team.color};color:white;font-size:12px;font-weight:600;padding:4px 8px;border-radius:6px;">
-                                                        #${idx + 1}
-                                                    </div>
-                                                </div>
-                                                <div style="display:flex;justify-content:space-between;align-items:center;">
-                                                    <div style="color:#a5b4fc;font-size:13px;">
-                                                        <span style="color:#818cf8;">HCP:</span> ${player.handicap}
-                                                    </div>
-                                                    <div style="color:#a5b4fc;font-size:13px;">
-                                                        <span style="color:#818cf8;">Gross:</span> ${player.grossScore}
-                                                    </div>
-                                                    <div style="color:#a5b4fc;font-size:13px;">
-                                                        <span style="color:#818cf8;">Net:</span> ${player.netScore}
-                                                    </div>
-                                                </div>
-                                                <div style="color:#64748b;font-size:11px;margin-top:4px;">
-                                                    From ${player.teamName}
-                                                </div>
-                                            </div>
-                                        `).join('')}
+                                    <div style="display:grid;gap:11px;">
+                                        ${team.players.map((player, idx) => _xPlayerRow(team, teamIdx, player, idx)).join('')}
                                     </div>
-                                </div>
-                            `).join('')}
+                                </div>`).join('')}
                         </div>
+                        <p style="color:rgba(255,255,255,0.5);font-size:15px;font-style:italic;text-align:center;margin:24px 0 0;min-height:20px;">
+                            ${_xStep < _xMax ? 'Tap "Next →" to roll in the next pick — with their theme music 🎵' : ''}
+                        </p>
                     </div>
                 `;
             } else if (currentSlide === skinsSlideIndex) {
-                // SKINS GAME SLIDE — winners podium from the most recent round
+                // SKINS GAME — HOLE-BY-HOLE REVEAL (Ron, Oct 29; the slide also
+                // moved ahead of the overall score reveals). Steps: 0 = intro,
+                // 1..B = one beat per decided/tied hole, B+1 = the podium below.
+                const _skHoles = (analytics.skins && analytics.skins.holes) || [];
+                const _skBeats = _skHoles.filter(h => h.status && h.status !== 'pending');
+                const _skMaxB = _skBeats.length + 1;
+                const _skStep = Math.min(presentationState.skinsRevealStep || 0, _skMaxB);
+                presentationState.__skinsDetail = analytics.skins || null;
+                if (_skStep < _skMaxB) {
+                    const _skPps = (analytics.skins || {}).pointsPerSkin || 0.5;
+                    const _fmtSk = (n) => String(Math.round(n * 100) / 100);
+                    const _curB = _skStep >= 1 ? _skBeats[_skStep - 1] : null;
+                    const _runSk = {};
+                    _skBeats.slice(0, _skStep).forEach(h => {
+                        if (h.winnerId) _runSk[h.winnerId] = (_runSk[h.winnerId] || 0) + (h.skinsValue || 0);
+                        if (h.status === 'split-final' && h.finalShares) Object.keys(h.finalShares).forEach(id => { _runSk[id] = (_runSk[id] || 0) + h.finalShares[id]; });
+                    });
+                    const _runSkL = Object.keys(_runSk).map(id => {
+                        const t = ((analytics.skins || {}).allTotals || []).find(x => String(x.id) === String(id));
+                        return { id, name: t ? t.name : 'Player', skins: _runSk[id] };
+                    }).sort((a, b) => b.skins - a.skins).slice(0, 3);
+                    const _heroSk = (() => {
+                        if (!_curB) return `
+                            <div style="text-align:center;padding:26px 10px;">
+                                <div style="font-size:64px;margin-bottom:8px;">🃏</div>
+                                <div style="color:white;font-size:30px;font-weight:800;line-height:1.35;">${_skBeats.length} holes had something on them —<br>let's settle them one at a time.</div>
+                                <div style="color:#a5b4fc;font-size:19px;margin-top:14px;">Lowest net takes the hole — ties carry the pot 🔥</div>
+                            </div>`;
+                        const _par = (mostRecentRound.pars || [])[_curB.hole - 1];
+                        if (_curB.winnerId) {
+                            const _wSp = state.players.find(x => String(x.id) === String(_curB.winnerId)) || { id: _curB.winnerId, name: _curB.winnerName };
+                            return `
+                            <div style="text-align:center;animation:rrCardIn 0.55s cubic-bezier(0.34,1.3,0.64,1) both;">
+                                <div style="color:#fbbf24;font-size:21px;font-weight:900;letter-spacing:4px;">HOLE ${_curB.hole}${_par ? ' · PAR ' + _par : ''}</div>
+                                <div style="display:flex;justify-content:center;margin:18px 0 10px;">
+                                    <div style="border:5px solid #f59e0b;border-radius:50%;padding:4px;box-shadow:0 0 44px rgba(245,158,11,0.45);">${renderAvatar(_wSp, 118)}</div>
+                                </div>
+                                <div style="color:white;font-size:42px;font-weight:900;">${_curB.winnerName}</div>
+                                <div style="color:#fcd34d;font-size:27px;font-weight:900;margin-top:6px;">takes ${_fmtSk(_curB.skinsValue)} skin${_curB.skinsValue === 1 ? '' : 's'} · +${_fmtSk(_curB.skinsValue * _skPps)} pts</div>
+                                ${_curB.carriedIn > 0 ? `<div style="color:#fb923c;font-size:19px;font-weight:800;margin-top:8px;">🔁 ${_fmtSk(_curB.carriedIn)} carried in — the pot was riding on it</div>` : ''}
+                            </div>`;
+                        }
+                        if (_curB.status === 'split-final') {
+                            return `
+                            <div style="text-align:center;animation:rrCardIn 0.55s cubic-bezier(0.34,1.3,0.64,1) both;">
+                                <div style="color:#fbbf24;font-size:21px;font-weight:900;letter-spacing:4px;">HOLE ${_curB.hole}${_par ? ' · PAR ' + _par : ''} — THE LAST WORD</div>
+                                <div style="font-size:64px;margin:14px 0 6px;">👑</div>
+                                <div style="color:white;font-size:32px;font-weight:900;">No outright winner — the King of Ties splits the pot</div>
+                                <div style="color:#fcd34d;font-size:22px;font-weight:800;margin-top:10px;">${(_curB.kingOfTies || []).map(k => k.name).join(' · ')}</div>
+                            </div>`;
+                        }
+                        return `
+                            <div style="text-align:center;animation:rrCardIn 0.55s cubic-bezier(0.34,1.3,0.64,1) both;">
+                                <div style="color:#fbbf24;font-size:21px;font-weight:900;letter-spacing:4px;">HOLE ${_curB.hole}${_par ? ' · PAR ' + _par : ''}</div>
+                                <div style="font-size:64px;margin:14px 0 6px;">🤝</div>
+                                <div style="color:white;font-size:34px;font-weight:900;">Tied — ${(_curB.tiedNames || []).join(' & ')}</div>
+                                <div style="color:#fb923c;font-size:23px;font-weight:900;margin-top:10px;">${_curB.status === 'tie-carry' ? `🔥 The pot grows to ${_fmtSk(_curB.carriedOut)} — winner takes it all later` : 'No carry — this skin dies here'}</div>
+                            </div>`;
+                    })();
+                    html += `
+                    <div style="animation:slideUp 0.7s ease-out;max-width:1000px;width:100%;">
+                        <h1 style="color:white;font-size:clamp(34px, 4.5vw, 46px);margin:0 0 6px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">🃏 Skins Game</h1>
+                        <p style="color:#a5b4fc;font-size:19px;margin:0 0 22px;">Hole by hole · ${_fmtSk(_skPps)} pts per skin · beat ${_skStep} of ${_skBeats.length}</p>
+                        <div style="background:linear-gradient(135deg, rgba(245,158,11,0.16), rgba(0,0,0,0.25));border:3px solid rgba(245,158,11,0.55);border-radius:20px;padding:28px;min-height:300px;display:flex;flex-direction:column;justify-content:center;box-shadow:0 12px 32px rgba(0,0,0,0.3);">
+                            ${_heroSk}
+                        </div>
+                        ${_skStep > 1 ? `
+                        <div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:18px;">
+                            ${_skBeats.slice(0, _skStep - 1).map(h => `<span style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);color:rgba(255,255,255,0.75);font-size:13px;font-weight:700;border-radius:999px;padding:5px 12px;">H${h.hole} · ${h.winnerName ? h.winnerName.split(' ')[0] : 'tied'}</span>`).join('')}
+                        </div>` : ''}
+                        ${_runSkL.length ? `
+                        <div style="display:flex;gap:10px;justify-content:center;margin-top:16px;flex-wrap:wrap;">
+                            ${_runSkL.map((l, i) => `<span style="background:rgba(245,158,11,0.14);border:2px solid ${i === 0 ? '#fbbf24' : 'rgba(255,255,255,0.2)'};color:white;font-size:15px;font-weight:800;border-radius:10px;padding:7px 14px;">${i === 0 ? '👑 ' : ''}${l.name} · ${_fmtSk(l.skins)}</span>`).join('')}
+                        </div>` : ''}
+                        <p style="color:rgba(255,255,255,0.5);font-size:15px;font-style:italic;text-align:center;margin:20px 0 0;">
+                            ${_skStep < _skBeats.length ? 'Tap "Next →" for the next hole' : 'Tap "Next →" for the final standings'} · <span onclick="event.stopPropagation();window.openSkinsScorecard();" style="cursor:pointer;text-decoration:underline;">full scorecard 👆</span>
+                        </p>
+                    </div>
+                    `;
+                } else {
+                // ── The podium (final step of the reveal) ──
                 try {
                     if (presentationState.__lastStungSlide !== 'skins') {
                         presentationState.__lastStungSlide = 'skins';
@@ -20273,6 +20522,7 @@
                         </p>
                     </div>
                 `;
+                }
             } else if (currentSlide === nextRoundSlideIndex) {
                 // NEXT ROUND DETAILS SLIDE — single-page no-scroll layout
                 const roundDate = new Date(nextRound.timestamp);
@@ -20484,11 +20734,12 @@
                 `;
                 
                 // Kick the loop (idempotent — the tick self-cleans when we leave this slide)
-                setTimeout(() => {
+                { const _epC = window.__renderEpoch;
+                  setTimeout(() => {
                     try { startClosingSlideshow(photos.length); } catch (e) {}
                     // "Straight Down the Middle" — the end-of-night record player.
-                    try { playSlideTrack('closing', 'Sounds/Straight-down-the-middle-full.mp3', { loop: true, vol: 0.6 }); } catch (e) {}
-                }, 50);
+                    try { playSlideTrack('closing', 'Sounds/Straight-down-the-middle-full.mp3', { vol: 0.6, epoch: _epC }); } catch (e) {}
+                  }, 50); }
             }
             
             html += `
@@ -20682,6 +20933,31 @@
                 }
             }
             
+            // Extra 9 dramatic reveal: one more pick rolls in per tap.
+            if (!_navOnPhoto && presentationState._extra9SlideIndex >= 0 && _navContentIdx === presentationState._extra9SlideIndex
+                && (presentationState.extra9RevealStep || 0) < window.__extra9MaxStep()) {
+                presentationState.extra9RevealStep = (presentationState.extra9RevealStep || 0) + 1;
+                renderPresentation();
+                return;
+            }
+
+            // Skins hole-by-hole reveal: one beat per tap; a won hole lands with
+            // the SKINS WINNER sting, and so does the podium.
+            if (!_navOnPhoto && presentationState._skinsSlideIndex >= 0 && _navContentIdx === presentationState._skinsSlideIndex
+                && (presentationState.skinsRevealStep || 0) < (presentationState._skinsMaxStep || 0)) {
+                presentationState.skinsRevealStep = (presentationState.skinsRevealStep || 0) + 1;
+                try {
+                    const _skA = presentationState.analytics && presentationState.analytics.skins;
+                    const _beats = _skA ? (_skA.holes || []).filter(h => h.status && h.status !== 'pending') : [];
+                    const _beat = _beats[presentationState.skinsRevealStep - 1];
+                    if ((_beat && _beat.winnerId) || presentationState.skinsRevealStep >= (presentationState._skinsMaxStep || 0)) {
+                        setTimeout(() => { try { playSfx('SKINS WINNER', null, 0.9); } catch (e) {} }, 350);
+                    }
+                } catch (e) {}
+                renderPresentation();
+                return;
+            }
+
             // Bracket combined slide: 3 sub-steps (0=matchup, 1=result, 2=details). Advance sub-step until exhausted.
             const bcStart = presentationState._bracketCombinedStart;
             const bcCount = presentationState._bracketMatchCount || 0;
@@ -20732,6 +21008,10 @@
             
             const previousSlide = presentationState.currentSlide;
             presentationState.currentSlide++;
+            // Leaving the page: kill its music outright — even when the next
+            // page is silent and owns no track of its own. syncPresentationMusic
+            // then starts whatever the NEW page owns (item 4).
+            try { window.__leaveSlide(); } catch (e) {}
             // Reset sub-step states when we leave their slides
             // Music follows the slide: anthem only on the flag page, outro only on the closing loop.
             try { syncPresentationMusic(); } catch (e) {}
@@ -20766,6 +21046,9 @@
             // In Quick Recap mode, land slides FULLY revealed instead of starting hidden.
             for (const r of UNIFORM_REVEALS) presentationState[r.stepKey] = window.__quickRecapMode ? uniformRevealMax(r) : 0;
             presentationState.bracketRevealStep = 0;
+            presentationState.extra9RevealStep = window.__quickRecapMode ? window.__extra9MaxStep() : 0;
+            presentationState.skinsRevealStep = window.__quickRecapMode ? (presentationState._skinsMaxStep || 0) : 0;
+            presentationState.__extra9ThemeStamp = null;
             presentationState.playerRevealStep = 0;
             presentationState.teamRevealStep = 0;
             presentationState._byNumbersRecordSoundPlayed = false;
@@ -20820,6 +21103,18 @@
                 return;
             }
             
+            // Extra 9 / Skins staged reveals: rewind one beat before changing slide.
+            if (!_onPhotoPre && presentationState._extra9SlideIndex >= 0 && _contentIdxPre === presentationState._extra9SlideIndex && (presentationState.extra9RevealStep || 0) > 0) {
+                presentationState.extra9RevealStep = (presentationState.extra9RevealStep || 0) - 1;
+                renderPresentation();
+                return;
+            }
+            if (!_onPhotoPre && presentationState._skinsSlideIndex >= 0 && _contentIdxPre === presentationState._skinsSlideIndex && (presentationState.skinsRevealStep || 0) > 0) {
+                presentationState.skinsRevealStep = (presentationState.skinsRevealStep || 0) - 1;
+                renderPresentation();
+                return;
+            }
+
             // Bracket combined slide: rewind sub-step before changing slide
             // Translate presentation-space → content-space for index comparisons
             const _navMap = presentationState._presentationMap || [];
@@ -20856,6 +21151,8 @@
             if (presentationState.currentSlide > 0) {
                 const previousSlide = presentationState.currentSlide;
                 presentationState.currentSlide--;
+                // Same rule going backwards: the page we leave goes silent.
+                try { window.__leaveSlide(); } catch (e) {}
                 // Translate the NEW current slide's content index for back-jump-to-fully-revealed logic
                 const _newEntry = _navMap[presentationState.currentSlide];
                 const _newContentIdx = (_newEntry && _newEntry.kind === 'content') ? _newEntry.value : -1;
@@ -20894,6 +21191,13 @@
                 Object.keys(presentationState).forEach(k => {
                     if (k.startsWith('_badgeSoundPlayed_match')) delete presentationState[k];
                 });
+                // Extra 9 / Skins via Back land fully revealed, like the others.
+                if (!_newOnPhoto && presentationState._extra9SlideIndex >= 0 && _newContentIdx === presentationState._extra9SlideIndex) {
+                    presentationState.extra9RevealStep = window.__extra9MaxStep();
+                }
+                if (!_newOnPhoto && presentationState._skinsSlideIndex >= 0 && _newContentIdx === presentationState._skinsSlideIndex) {
+                    presentationState.skinsRevealStep = (presentationState._skinsMaxStep || 0);
+                }
                 // When entering a bracket combined slide via Back, jump to fully-revealed (step 2)
                 if (!_newOnPhoto && bcStart >= 0 && _newContentIdx >= bcStart && _newContentIdx < bcStart + bcCount) {
                     presentationState.bracketRevealStep = 2; // land fully revealed (detail)
@@ -21536,7 +21840,15 @@
         // → { kind: 'file'|'url'|'synth'|'none', value }
         window.resolveSound = (slot, defaultSrc) => {
             const o = window.__soundOverrides[slot];
-            if (o && o.kind) return o;
+            if (o && o.kind) {
+                // Multi-sound slot (soundboard): several files attached → one is
+                // picked AT RANDOM on every trigger, for variety.
+                if ((o.kind === 'file' || o.kind === 'url') && Array.isArray(o.values) && o.values.length > 1) {
+                    const pick = o.values[Math.floor(Math.random() * o.values.length)];
+                    return Object.assign({}, o, { value: pick });
+                }
+                return o;
+            }
             // Slot defaults may name a synth sting ('synth:coin') instead of a file.
             if (typeof defaultSrc === 'string' && defaultSrc.indexOf('synth:') === 0)
                 return { kind: 'synth', value: defaultSrc.slice(6) };
@@ -21770,14 +22082,24 @@
         window.playSlideTrack = (key, src, opts) => {
             opts = opts || {};
             if (window.__presentationMuted) return;
-            if (window.__slideTrack && window.__slideTrack.key === key) return; // already playing
+            // Stale-start guard: render branches schedule track starts with a
+            // short setTimeout. If the show has already moved on (a newer render
+            // happened), this start belongs to a slide we've left — drop it, so
+            // a page's music can never start up on the NEXT page (item 4).
+            if (opts.epoch != null && window.__renderEpoch != null && opts.epoch !== window.__renderEpoch) return;
+            if (window.__slideTrack && window.__slideTrack.key === key) {
+                const _a = window.__slideTrack.audio;
+                if (_a && !_a.paused && !_a.ended) return; // already playing
+            }
             window.stopSlideTrack();
             const r = window.resolveSound(key, src);
             if (r.kind === 'none') return;
             if (r.kind === 'synth') { window.playSynth(r.value, opts.vol); return; }
             const resolved = r.value;
             if (!resolved) return;
-            const el = window.playMusic(resolved, (opts.vol != null) ? opts.vol : 0.75, !!opts.loop,
+            // Ron's rule (Oct 29): a triggered sound plays ONE time — never on a
+            // loop. Tracks play through once and stop, whatever the caller asked.
+            const el = window.playMusic(resolved, (opts.vol != null) ? opts.vol : 0.75, false,
                                         { start: r.start, end: r.end });
             window.__slideTrack = el ? { key, audio: el } : null;
         };
@@ -21815,9 +22137,11 @@
                 if (o && o.kind) {
                     if (o.kind === 'none') return true;
                     if (o.kind === 'synth') { window.playSynth(o.value, vol); return true; }
-                    if ((o.kind === 'file' || o.kind === 'url') && o.value) {
+                    if ((o.kind === 'file' || o.kind === 'url') && (o.value || (o.values && o.values.length))) {
                         if (window.__presentationMuted) return true;
-                        window.playFile(o.value, vol, { start: o.start, end: o.end });
+                        const _pv = (Array.isArray(o.values) && o.values.length > 1)
+                            ? o.values[Math.floor(Math.random() * o.values.length)] : o.value;
+                        window.playFile(_pv, vol, { start: o.start, end: o.end });
                         return true;
                     }
                     return true;
@@ -21864,7 +22188,7 @@
             const start = presentationState._revealSeqStart;
             if (start != null && cur >= start && cur < start + seq.length) {
                 const e = seq[cur - start];
-                if (e && e.k === 'ti') {
+                if (e && e.k === 't') {
                     const blk = (presentationState._revealBlocks || [])[e.b];
                     if (blk) return window.teamWalkupSlot(blk.teamId);
                 }
@@ -22011,6 +22335,24 @@
                     ? presentationState._slideNameOf(presentationState.currentSlide) : null;
                 if (nm === 'SKINS' && !out.some(s => s.slot === 'SKINS WINNER'))
                     out.push({ slot: 'SKINS WINNER', music: false });
+                if (nm === 'TEAM SLIDES') {
+                    // The scoring dial's two sounds (item 7): the club strike for
+                    // the big scores, the putt for the smaller ones.
+                    out.push({ slot: 'FAIRWAY SHOT', music: false });
+                    out.push({ slot: 'FAIRWAY PUTT', music: false });
+                }
+                if (nm === 'STORYLINE') {
+                    const _ss = presentationState._storySlideStart, _st2 = presentationState._stories || [];
+                    if (_ss != null && presentationState.currentSlide >= _ss && presentationState.currentSlide < _ss + _st2.length) {
+                        const _kind = _st2[presentationState.currentSlide - _ss].kind;
+                        if (_kind) out.push({ slot: window.storySlot(_kind), music: true });
+                    }
+                }
+                if (nm === 'EXTRA 9') {
+                    out.push({ slot: 'EXTRA9 WINNER', music: false });
+                    const _nx = window.__extra9NextPick ? window.__extra9NextPick() : null;
+                    if (_nx && _nx.player) out.push({ slot: window.playerThemeSlot(_nx.player.id), music: false });
+                }
             } catch (e) {}
             return out;
         };
@@ -22029,6 +22371,12 @@
                 const t = String(slot).slice(6);
                 return { name: 'Award · ' + window.__awardSlotLabel(t), def: window.__awardSlotDef(t) };
             }
+            if (String(slot).indexOf('PLAYER THEME:') === 0) {
+                const pid = String(slot).slice('PLAYER THEME:'.length);
+                const sp = (typeof state !== 'undefined' && state.players || []).find(x => String(x.id) === pid);
+                return { name: 'Player theme · ' + (sp ? sp.name : 'Player'), def: null };
+            }
+            if (String(slot).indexOf('STORY:') === 0) return { name: 'Story · ' + String(slot).slice(6), def: null };
             return { name: String(slot), def: null };
         };
 
@@ -22041,14 +22389,19 @@
 
         window.__sbCommitted = (slot) => {
             const o = window.__soundOverrides[slot];
-            if (o && o.kind) return { kind: o.kind, value: o.value, start: o.start, end: o.end, music: o.music };
-            return window.__sbDefaultStaged(slot);
+            if (o && o.kind) return { kind: o.kind, value: o.value, start: o.start, end: o.end, music: o.music,
+                values: (o.values && o.values.length) ? o.values.slice()
+                    : (((o.kind === 'file' || o.kind === 'url') && o.value) ? [o.value] : []) };
+            const d = window.__sbDefaultStaged(slot);
+            return { kind: d.kind, value: d.value, start: d.start, end: d.end,
+                values: (((d.kind === 'file' || d.kind === 'url') && d.value) ? [d.value] : []) };
         };
 
         window.__sbStagedFor = (slot, musicDefault) => {
             if (!window.__sbStaged[slot]) {
                 const c = window.__sbCommitted(slot);
                 window.__sbStaged[slot] = { kind: c.kind, value: c.value, start: c.start, end: c.end,
+                    values: (c.values || []).slice(),
                     music: (c.music != null ? !!c.music : !!musicDefault) };
             }
             return window.__sbStaged[slot];
@@ -22063,6 +22416,7 @@
             const nz = (v) => (v == null ? null : v);
             return a.kind !== b.kind || a.value !== b.value ||
                 nz(a.start) !== nz(b.start) || nz(a.end) !== nz(b.end) ||
+                (a.values || []).join('|') !== (b.values || []).join('|') ||
                 (window.__sbHasMusicToggle(slot) && !!a.music !== !!b.music);
         };
 
@@ -22070,6 +22424,7 @@
             if (!st || st.kind === 'none' || !st.value) return 'Silent';
             const mus = st.music ? ' · 🎵 music' : '';
             if (st.kind === 'synth') return 'Synth · ' + ((window.SYNTH_STINGS[st.value] || {}).label || st.value) + mus;
+            if (Array.isArray(st.values) && st.values.length > 1) return '🎲 ' + st.values.length + ' sounds · one plays at random' + mus;
             return 'File · ' + String(st.value).replace(/^Sounds\//, '') + mus;
         };
 
@@ -22106,9 +22461,11 @@
             window.__presentationMuted = false;   // a test should always be audible
             try {
                 if (st.kind === 'synth') { window.playSynth(st.value, 0.9); }
-                else if ((st.kind === 'file' || st.kind === 'url') && st.value) {
-                    if (st.music) window.playMusic(st.value, 0.75, false, { start: st.start, end: st.end });
-                    else window.playFile(st.value, 0.9, { start: st.start, end: st.end });
+                else if ((st.kind === 'file' || st.kind === 'url') && (st.value || (st.values && st.values.length))) {
+                    const _tv = (Array.isArray(st.values) && st.values.length > 1)
+                        ? st.values[Math.floor(Math.random() * st.values.length)] : st.value;
+                    if (st.music) window.playMusic(_tv, 0.75, false, { start: st.start, end: st.end });
+                    else window.playFile(_tv, 0.9, { start: st.start, end: st.end });
                 }
             } finally { window.__presentationMuted = wasMuted; }
         };
@@ -22123,9 +22480,27 @@
         window.__sbPickFile = (slot, fileName) => {
             window.__sbSyncTrimInputs(slot);
             const st = window.__sbStagedFor(slot);
-            if (!fileName) { const d = window.__sbDefaultStaged(slot); st.kind = d.kind; st.value = d.value; }
-            else if (fileName === '__none__') { st.kind = 'none'; delete st.value; }
-            else { st.kind = 'file'; st.value = 'Sounds/' + fileName; }
+            if (!fileName) { const d = window.__sbDefaultStaged(slot); st.kind = d.kind; st.value = d.value; st.values = d.value ? [d.value] : []; }
+            else if (fileName === '__none__') { st.kind = 'none'; delete st.value; st.values = []; }
+            else if (fileName === '__keep__' || fileName === '__add__') { /* display-only options */ }
+            else {
+                // ADD to the slot's list: attach several sounds to one item and
+                // one plays at random each time it triggers (variety, item 8).
+                st.kind = 'file';
+                if (!Array.isArray(st.values) || !st.values.length) st.values = st.value ? [st.value] : [];
+                const full = 'Sounds/' + fileName;
+                if (!st.values.includes(full)) st.values.push(full);
+                st.value = st.values[0];
+            }
+            window.__sbRenderPanel();
+        };
+
+        window.__sbRemoveFile = (slot, idx) => {
+            const st = window.__sbStagedFor(slot);
+            if (!Array.isArray(st.values)) return;
+            st.values.splice(idx, 1);
+            if (!st.values.length) { st.kind = 'none'; delete st.value; }
+            else st.value = st.values[0];
             window.__sbRenderPanel();
         };
 
@@ -22142,8 +22517,10 @@
             const st = window.__sbStagedFor(slot, music);
             const def = window.__sbDefaultStaged(slot);
             const nz = (v) => (v == null ? null : v);
+            const _defVals = ((def.kind === 'file' || def.kind === 'url') && def.value) ? [def.value] : [];
             const sameAsDefault = st.kind === def.kind && st.value === def.value &&
                 nz(st.start) === nz(def.start) && nz(st.end) === nz(def.end) &&
+                (st.values || []).join('|') === _defVals.join('|') &&
                 (!window.__sbHasMusicToggle(slot) || !!st.music === !!def.music);
             if (sameAsDefault) { delete window.__soundOverrides[slot]; }
             else if (st.kind === 'none' || !st.value) { window.__soundOverrides[slot] = { kind: 'none' }; }
@@ -22152,6 +22529,7 @@
                 if (st.kind === 'file' || st.kind === 'url') {
                     if (st.start != null) rec.start = st.start;
                     if (st.end != null) rec.end = st.end;
+                    if (Array.isArray(st.values) && st.values.length > 1) rec.values = st.values.slice();
                 }
                 if (st.music && window.__sbHasMusicToggle(slot)) rec.music = true;
                 window.__soundOverrides[slot] = rec;
@@ -22217,7 +22595,7 @@
             let selVal;
             if (st.kind === 'none') selVal = '__none__';
             else if (!dirty) selVal = '';
-            else if (st.kind === 'file' && st.value && st.value.indexOf('Sounds/') === 0) selVal = st.value.slice(7);
+            else if (st.kind === 'file' && st.value && st.value.indexOf('Sounds/') === 0) selVal = (Array.isArray(st.values) && st.values.length > 1) ? '__add__' : st.value.slice(7);
             else selVal = '__keep__';
             const trimNote = (st.start != null || st.end != null)
                 ? ` · ✂️ ${st.start != null ? st.start + 's' : '0s'}–${st.end != null ? st.end + 's' : 'end'}` : '';
@@ -22233,9 +22611,11 @@
                 + `<select onchange="window.__sbPickFile('${q}', this.value)" style="width:100%;margin-top:8px;padding:9px;border:1px solid rgba(255,255,255,0.25);border-radius:8px;font-size:13px;background:rgba(255,255,255,0.12);color:white;">`
                 + `<option value="" ${selVal === '' ? 'selected' : ''} style="color:black;">${defLabel}</option>`
                 + (selVal === '__keep__' ? `<option value="__keep__" selected disabled style="color:black;">Keep · ${esc(window.__sbLabel(st))}</option>` : '')
+                + (selVal === '__add__' ? `<option value="__add__" selected disabled style="color:black;">＋ Add another sound…</option>` : '')
                 + lib.map(f => `<option value="${esc(f)}" ${f === selVal ? 'selected' : ''} style="color:black;">${esc(f)}</option>`).join('')
                 + `<option value="__none__" ${selVal === '__none__' ? 'selected' : ''} style="color:black;">🔇 Silent</option>`
                 + `</select>`
+                + ((st.kind === 'file' && Array.isArray(st.values) && st.values.length) ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">${st.values.map((v, vi) => `<span style="background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);color:white;font-size:11px;font-weight:700;border-radius:999px;padding:4px 6px 4px 10px;display:inline-flex;align-items:center;gap:6px;">${esc(String(v).split('/').pop())}<button onclick="window.__sbRemoveFile('${q}', ${vi})" style="background:rgba(239,68,68,0.85);color:white;border:none;border-radius:50%;width:18px;height:18px;font-size:11px;line-height:1;cursor:pointer;padding:0;">✕</button></span>`).join('')}</div><div style="color:rgba(255,255,255,0.55);font-size:11px;margin-top:5px;">Pick another file above to ADD it — with 2 or more attached, one plays at random each time.</div>` : '')
                 + `<div style="display:flex;gap:6px;align-items:center;margin-top:8px;flex-wrap:wrap;${canTrim ? '' : 'opacity:0.45;'}">`
                 + `<span style="color:rgba(255,255,255,0.7);font-size:11px;font-weight:700;">Play only</span>`
                 + `<input id="sb_st_${id}" type="number" step="0.5" min="0" inputmode="decimal" placeholder="from" value="${st.start != null ? st.start : ''}" ${canTrim ? '' : 'disabled'} style="width:64px;padding:8px;border:1px solid rgba(255,255,255,0.25);border-radius:6px;font-size:13px;background:rgba(255,255,255,0.12);color:white;">`
@@ -22928,6 +23308,22 @@
             // Optional soundtrack for the race (assign via the sound pill; silent until then)
             try { playSfx('CART RACE', null, 0.8); } catch (e) {}
             const byId = (id) => document.getElementById(id);
+            // 🎯 Score popup that rides WITH the cart on the track: big, graphic,
+            // impossible to miss — GROSS pops first, then it flips to NET.
+            let raceTick = 0;
+            const popScore = (slot, label, val, color, strong) => {
+                const pop = byId(`racePop-${m}-${slot}`);
+                if (!pop || val === '' || val == null) return;
+                const cart = byId(`cart-${m}-${slot}`);
+                if (cart && cart.style.left) pop.style.left = cart.style.left;
+                pop.innerHTML = `<div style="display:inline-block;background:rgba(2,20,10,0.9);border:2px solid ${color};border-radius:12px;padding:4px 14px 6px;box-shadow:0 8px 24px rgba(0,0,0,0.55);">`
+                    + `<div style="color:${color};font-size:10px;font-weight:900;letter-spacing:2px;">${label}</div>`
+                    + `<div style="color:white;font-size:${strong ? 31 : 24}px;font-weight:900;line-height:1;">${val}</div></div>`;
+                pop.style.transition = 'none'; pop.style.opacity = '1'; pop.style.scale = '0.7';
+                void pop.offsetHeight;
+                pop.style.transition = 'scale 0.22s cubic-bezier(0.34,1.56,0.64,1), opacity 0.2s';
+                pop.style.scale = '1';
+            };
             const setPos = () => {
                 const base = 5 + (t / total) * 74;
                 const lead = Math.max(-9, Math.min(9, up1 * 2.4));
@@ -22951,6 +23347,7 @@
                     const loseSlot = data.winnerSlot === 'slot1' ? 'slot2' : 'slot1';
                     const w = byId(`cart-${m}-${data.winnerSlot}`);
                     if (w) w.style.left = '85%';
+                    ['slot1', 'slot2'].forEach(s2 => { const pp = byId(`racePop-${m}-${s2}`); if (pp) pp.style.opacity = '0'; });
                     const st = byId(`raceStatus-${m}`);
                     if (st) st.innerHTML = `🏁 <b>${winName}</b> takes it! <span style="opacity:0.6;font-size:14px;">— tap Next for the details</span>`;
                     try { playSfx('MATCH FINISH', 'Sounds/you-win.mp3', 0.9); } catch (e) {}
@@ -22972,6 +23369,17 @@
                 else if (h.r === 'slot2') up1--;
                 t++;
                 setPos();
+                // Scores pop ON the track at each cart: GROSS, then NET.
+                raceTick++;
+                const _tk = raceTick;
+                const _w1 = h.r === 'slot1', _w2 = h.r === 'slot2';
+                popScore('slot1', 'GROSS', h.g1, '#93c5fd', false);
+                popScore('slot2', 'GROSS', h.g2, '#fca5a5', false);
+                setTimeout(() => {
+                    if (_tk !== raceTick || !window.__cartRaceTimer) return;
+                    popScore('slot1', 'NET', h.n1, _w1 ? '#4ade80' : '#93c5fd', _w1);
+                    popScore('slot2', 'NET', h.n2, _w2 ? '#4ade80' : '#fca5a5', _w2);
+                }, 430);
                 // 🐸 hop on every hole step (swap via the CART HOP sound pill)
                 try { playSfx('CART HOP', 'Sounds/sound-frogger-hop.wav', 0.55); } catch (e) {}
                 // ⚡ flash the hole's net scores, winner's number highlighted
