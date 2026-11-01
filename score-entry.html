@@ -346,6 +346,10 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
 .foot-btn.prev { flex: 1; background: var(--sky); color: var(--ink-soft); font-size: 15px; border: 2px solid var(--sand); }
 .foot-btn.next { flex: 2.2; background: var(--fairway); color: white; font-size: 18px; box-shadow: 0 3px 12px rgba(46,125,79,0.4); }
 .foot-btn.next:active { background: var(--fairway-dk); }
+.foot-btn.next.incomplete { background: #FFD95E; color: #3d2c00; box-shadow: 0 3px 12px rgba(227,169,62,0.45); }
+.foot-btn.next.incomplete:active { background: #E3B93E; }
+.foot-btn.finish.done { background: var(--fairway); color: white; box-shadow: 0 3px 12px rgba(46,125,79,0.4); animation: nextPulse 1.2s ease-in-out infinite; }
+.foot-btn.finish.done:active { background: var(--fairway-dk); }
 .foot-btn.finish { flex: 2.2; background: #E3A93E; color: #3d2c00; font-size: 18px; box-shadow: 0 3px 12px rgba(227,169,62,0.45); }
 .foot-btn.finish:active { background: #C98F27; }
 .foot-btn.finish.pulse { animation: finishPulse 1.2s ease-in-out infinite; }
@@ -619,7 +623,7 @@ document.addEventListener('visibilitychange', () => {
     try { if (document.visibilityState === 'hidden' && hasPendingEdits()) flushPendingEdits(); } catch (e) {}
 });
 
-const SE_VERSION = '2.31.0'; // header camera+gallery icons replace the bottom photo card; badges beside the photo; honey pot for all three BBB; points help text
+const SE_VERSION = '2.32.0'; // Next hole button is yellow while the hole is incomplete, green when scores + all BBB are in
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
@@ -2251,7 +2255,11 @@ function renderLeaderboard() {
 
 function buildFooterNav() {
     const wrap = el('div', { class: 'foot-nav' });
-    // Pulse the Next button once every score on this hole is in — the obvious next step.
+    // The move-on button tells the hole's state at a glance (Ron, 2026-11-01):
+    // YELLOW while anything is missing (a score, or any of the three Bs),
+    // GREEN (and pulsing) only when the hole is fully complete. The button
+    // still works either way — the colour is a signal, not a lock. Text is
+    // unchanged: "Next hole" / "Hole done — next" / "Finish round".
     const round = getRoundById(state.selectedRoundId);
     const gp = getGroupPlayers(round, state.groupNumber);
     const holeDone = holeStatus(round, gp, state.currentHole) === 'complete';
@@ -2264,12 +2272,12 @@ function buildFooterNav() {
         // Hole 18: the round ends HERE — a distinct Finish button (also the save moment,
         // since there is no next hole to trigger the usual save-on-hole-change).
         wrap.appendChild(el('button', {
-            class: 'foot-btn finish' + (holeDone ? ' pulse' : ''),
+            class: 'foot-btn finish' + (holeDone ? ' done' : ''),
             onclick: () => finishRound()
         }, el('span', null, '🏁'), el('span', null, 'Finish round')));
     } else {
         wrap.appendChild(el('button', {
-            class: 'foot-btn next' + (holeDone ? ' pulse' : ''),
+            class: 'foot-btn next' + (holeDone ? ' pulse' : ' incomplete'),
             onclick: () => goToHole(state.currentHole + 1)
         }, el('span', null, holeDone ? 'Hole done — next' : 'Next hole'), el('span', null, '→')));
     }
