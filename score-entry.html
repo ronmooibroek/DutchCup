@@ -189,7 +189,7 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
 }
 .score-row.is-me { border-left-color: var(--fairway); }
 .score-row-top { display: flex; align-items: center; gap: 8px; }
-/* ── One-tap score chips: the 5 common scores sit right under the name ── */
+/* ── One-tap score chips: the 4 common scores (par..triple) sit right under the name ── */
 .score-chips { display: flex; gap: 6px; margin-top: 6px; }
 .score-chip {
     flex: 1 1 0; min-height: 46px; border: 2px solid var(--sand); background: white;
@@ -616,7 +616,7 @@ document.addEventListener('visibilitychange', () => {
     try { if (document.visibilityState === 'hidden' && hasPendingEdits()) flushPendingEdits(); } catch (e) {}
 });
 
-const SE_VERSION = '2.22.0'; // subtexts removed, bigger numbers + labels
+const SE_VERSION = '2.23.0'; // chips = par..triple only; birdie+ via the pad
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
@@ -1381,7 +1381,7 @@ function buildScoresList(round, groupPlayers) {
 
         row.appendChild(top);
 
-        // ── One-tap score chips: the 5 common scores for this hole's par,
+        // ── One-tap score chips: par, bogey, double, triple for this hole,
         // right under the name. One tap sets the score — no sheet to open.
         const chips = el('div', { class: 'score-chips' });
         const curN = currentScore === '' || currentScore == null ? null : parseInt(currentScore, 10);
@@ -1484,13 +1484,14 @@ const BBB_SLOTS = [
     { key: 'bongo', name: 'Bongo', desc: 'First in',  icon: '\u{1F573}\u{FE0F}', onCls: 'on-bongo' }
 ];
 
-// The 5 one-tap scores shown under each name: par−1 … par+3 covers nearly
-// every hole (par 4 → 3,4,5,6,7). Anything else goes through the full pad.
+// The 4 one-tap scores shown under each name: PAR first (leftmost), then
+// bogey, double, triple (par 4 → 4,5,6,7). Birdie or better — and anything
+// worse than a triple — goes through the "···" full pad instead.
 function scoreChipValues(par) {
     const p = parseInt(par, 10);
-    if (isNaN(p)) return [3, 4, 5, 6, 7];
+    if (isNaN(p)) return [4, 5, 6, 7];
     const out = [];
-    for (let v = p - 1; v <= p + 3; v++) if (v >= 1) out.push(v);
+    for (let v = p; v <= p + 3; v++) if (v >= 1) out.push(v);
     return out;
 }
 
