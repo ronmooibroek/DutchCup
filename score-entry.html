@@ -169,21 +169,6 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
     background: #FFD95E; color: #6b4e00; font-size: 11px; font-weight: 900;
     padding: 2px 8px; border-radius: 999px; margin-left: 8px; letter-spacing: 0.5px;
 }
-/* progress track along the sign's base */
-.dots-strip {
-    display: grid; grid-template-columns: repeat(18, 1fr); gap: 2px;
-    margin-top: 6px;
-}
-.dot {
-    height: 22px; border: none; border-radius: 6px; cursor: pointer;
-    background: rgba(255,255,255,0.16); color: rgba(255,255,255,0.85);
-    font-size: 11px; font-weight: 800; padding: 0;
-    font-variant-numeric: tabular-nums;
-}
-.dot.partial  { background: #FFD95E; color: #6b4e00; }
-.dot.complete { background: white; color: var(--fairway-dk); }
-.dot.current  { outline: 3px solid white; outline-offset: 1px; }
-
 /* ─── Score rows ─── */
 .score-list { margin-bottom: 6px; }
 .score-row {
@@ -221,7 +206,6 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
     background: white; border: 2px dashed var(--fairway); border-radius: 12px;
     padding: 8px 10px; margin-bottom: 8px;
 }
-.tray-label { font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.8px; color: var(--ink-soft); }
 .point-token {
     width: 48px; height: 48px; border-radius: 12px; border: 2px solid var(--sand);
     background: var(--card); padding: 0; flex-shrink: 0; cursor: grab;
@@ -231,7 +215,6 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
 .point-token .ic { font-size: 24px; line-height: 1; }
 .point-token.selected { border-color: var(--fairway); box-shadow: 0 0 0 3px rgba(46,125,79,0.35); }
 .point-token.used { opacity: 0.28; }
-.tray-hint { flex: 1 1 150px; font-size: 11px; color: var(--ink-soft); line-height: 1.35; }
 .drag-ghost {
     position: fixed; z-index: 400; width: 52px; height: 52px; border-radius: 12px;
     pointer-events: none; display: flex; align-items: center; justify-content: center;
@@ -633,7 +616,7 @@ document.addEventListener('visibilitychange', () => {
     try { if (document.visibilityState === 'hidden' && hasPendingEdits()) flushPendingEdits(); } catch (e) {}
 });
 
-const SE_VERSION = '2.24.1'; // header clears the iOS status bar in standalone mode
+const SE_VERSION = '2.25.0'; // tray is icons-only; hole-number strip removed (Prev/Next only)
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
@@ -1315,17 +1298,6 @@ function renderScoreEntry() {
 function buildHoleNav(round, groupPlayers) {
     const wrap = el('div', { class: 'hole-nav', id: 'hole-nav' });
 
-    const dots = el('div', { class: 'dots-strip', id: 'dots-strip' });
-    for (let h = 0; h < 18; h++) {
-        const status = holeStatus(round, groupPlayers, h);
-        dots.appendChild(el('button', {
-            class: 'dot ' + status + (h === state.currentHole ? ' current' : ''),
-            onclick: () => goToHole(h),
-            'aria-label': `Hole ${h+1}`
-        }, String(h + 1)));
-    }
-    wrap.appendChild(dots);
-
     const bar = el('div', { class: 'hole-bar' });
     const par = (round.pars || [])[state.currentHole];
     const si = (round.handicaps || [])[state.currentHole];
@@ -1451,7 +1423,6 @@ function buildScoresList(round, groupPlayers) {
     // dims once its point is awarded; awarded points ride as badges beside
     // the holder's name (built per player below).
     const tray = el('div', { class: 'points-tray' });
-    tray.appendChild(el('div', { class: 'tray-label' }, 'Points'));
     const traySlots = BBB_SLOTS.map(s => ({ key: s.key, icon: s.icon, name: s.name, used: !!bbbSlots[s.key] }));
     if (isPar3) traySlots.push({ key: 'ctp', icon: '\u{1F4CD}', name: 'Closest to the pin', used: !!ctpWinnerId });
     traySlots.forEach(s => {
@@ -1465,7 +1436,6 @@ function buildScoresList(round, groupPlayers) {
         tok.addEventListener('pointerdown', e => onTokenPointerDown(e, s.key, s.icon));
         tray.appendChild(tok);
     });
-    tray.appendChild(el('div', { class: 'tray-hint' }, 'Drag onto a name — or tap a token, then tap a name. Tap a badge to take a point back.'));
     list.appendChild(tray);
 
     groupPlayers.forEach(p => {
@@ -2512,7 +2482,6 @@ function onScoreInput(e) {
 
     updateCellLiveColor(playerId, val);
     updatePlayerTotalsLive();
-    updateDotsLive();
 
     markUnsaved();
 
@@ -3012,16 +2981,6 @@ function updatePlayerTotalsLive() {
     });
 }
 
-function updateDotsLive() {
-    const round = getRoundById(state.selectedRoundId);
-    if (!round) return;
-    const groupPlayers = getGroupPlayers(round, state.groupNumber);
-    document.querySelectorAll('#dots-strip .dot').forEach((dot, h) => {
-        const status = holeStatus(round, groupPlayers, h);
-        dot.classList.remove('complete', 'partial');
-        if (status) dot.classList.add(status);
-    });
-}
 
 function refreshScoreEntryFromServer() {
     const round = getRoundById(state.selectedRoundId);
@@ -3053,7 +3012,6 @@ function refreshScoreEntryFromServer() {
     }
 
     updatePlayerTotalsLive();
-    updateDotsLive();
 }
 
 // ─── Photo upload & remove (transactional Firestore updates) ────────────
