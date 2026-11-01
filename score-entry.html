@@ -54,12 +54,14 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
     display: flex; align-items: center; justify-content: space-between; gap: 8px;
 }
 .header-text { min-width: 0; }
-#header-title { font-size: 19px; font-weight: 800; margin: 0; letter-spacing: -0.2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#header-title { font-size: 17px; font-weight: 800; margin: 0; letter-spacing: -0.2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #header-subtitle { font-size: 13px; color: var(--ink-soft); margin: 1px 0 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .header-actions { display: flex; gap: 6px; flex-shrink: 0; align-items: center; }
 .hdr-btn {
     background: none; border: 1.5px solid var(--sand); color: var(--ink-soft);
-    font-size: 13px; font-weight: 700; padding: 7px 11px; border-radius: 999px; cursor: pointer;
+    font-size: 13px; font-weight: 700; padding: 6px 9px; border-radius: 999px; cursor: pointer;
+}
+.hdr-icon { font-size: 17px; padding: 5px 8px; line-height: 1.1;
 }
 .save-status {
     display: none; font-size: 12px; font-weight: 700; padding: 5px 10px; border-radius: 999px;
@@ -183,7 +185,7 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
 .avatar-panel { width: 72px; height: 72px; border-radius: 12px; overflow: hidden; flex-shrink: 0; position: relative; }
 .avatar-panel .player-avatar { width: 100%; height: 100%; border-radius: 0; font-size: 30px; }
 .avatar-panel .avatar-wrap img.player-avatar-img { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 0; object-fit: cover; background: #e5e7eb; }
-.panel-badges { position: absolute; left: 6px; bottom: 6px; display: flex; gap: 4px; z-index: 2; }
+.card-badges { display: flex; gap: 4px; margin-top: 6px; }
 .stroke-pips {
     position: absolute; top: 6px; right: 6px; z-index: 2;
     background: rgba(30,42,32,0.55); color: white; font-size: 10px;
@@ -214,10 +216,12 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
       Drag a token onto a player's card, or tap a token then tap a card.
       Awarded points show as badges beside the player's name. ── */
 .points-bar {
-    display: flex; flex-direction: row; justify-content: center; gap: 10px;
+    display: flex; flex-direction: column; align-items: center; gap: 5px;
     background: white; border: 2px dashed var(--fairway); border-radius: 12px;
     padding: 8px 10px; margin-bottom: 8px;
 }
+.points-row { display: flex; flex-direction: row; justify-content: center; gap: 10px; }
+.points-help { font-size: 11.5px; font-weight: 600; color: var(--ink-soft); letter-spacing: 0.2px; }
 .point-token {
     width: 48px; height: 48px; border-radius: 12px; border: 2px solid var(--sand);
     background: var(--card); padding: 0; flex-shrink: 0; cursor: grab;
@@ -241,6 +245,7 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
 .bbb-badge.b-bango { background: #2B6CB0; border-color: #215685; }
 .bbb-badge.b-bongo { background: #FFD95E; border-color: #E3B93E; }
 .bbb-badge.b-ctp { background: var(--flag); border-color: #b03330; }
+.bbb-badge.b-honey { background: #FFDF6B; border-color: #D9A404; font-size: 16px; padding: 0 9px; }
 .score-cell {
     width: 54px; height: 54px; border-radius: 12px; flex-shrink: 0; cursor: pointer;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -311,12 +316,7 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
 .balls-count.has { color: var(--fairway-dk); }
 
 /* ─── Photos ─── */
-.photo-card-header {
-    display: flex; justify-content: space-between; align-items: center; cursor: pointer;
-    font-size: 15px; font-weight: 800; padding: 2px 0;
-}
-.photo-card-caret { color: var(--ink-soft); }
-.photo-card-body { padding-top: 10px; }
+.photo-view-title { font-size: 16px; font-weight: 800; margin: 2px 0 10px; }
 .photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-bottom: 10px; }
 .photo-tile { position: relative; border-radius: 10px; overflow: hidden; background: var(--sand); }
 .photo-tile img { width: 100%; height: 100px; object-fit: cover; display: block; }
@@ -324,12 +324,6 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
     position: absolute; top: 6px; right: 6px; width: 30px; height: 30px; border-radius: 50%;
     border: none; background: rgba(30,42,32,0.75); color: white; font-size: 14px; cursor: pointer;
 }
-.photo-add-row { display: flex; }
-.photo-add-btn {
-    flex: 1; border: 2px dashed var(--fairway); background: #F4FAF6; color: var(--fairway-dk);
-    border-radius: 12px; padding: 10px; font-size: 15px; font-weight: 800; cursor: pointer; min-height: 46px;
-}
-.photo-card .photo-add-row { margin-bottom: 8px; }
 .photo-warning, .photo-hint { font-size: 12.5px; color: var(--ink-soft); margin-top: 8px; }
 .photo-tag-row { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 4px 4px; }
 .photo-tag-chip {
@@ -415,9 +409,13 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
     </div>
     <div class="header-actions">
         <span class="save-status" id="save-status" style="display:none;"></span>
+        <button class="hdr-btn hdr-icon" id="camera-btn" style="display:none;" onclick="document.getElementById('photo-file-input').click()" aria-label="Take or add a photo">📷</button>
+        <button class="hdr-btn hdr-icon" id="gallery-btn" style="display:none;" onclick="window.__openPhotos && window.__openPhotos()" aria-label="View round photos">🖼️</button>
         <button class="hdr-btn" id="switch-btn" style="display:none;" onclick="window.__switchPlayer && window.__switchPlayer()">Switch player</button>
     </div>
 </header>
+
+<input type="file" accept="image/*" multiple capture="environment" id="photo-file-input" style="display:none;" onchange="onPhotoFileSelected(event)">
 
 <div class="container" id="app">
     <div class="center-state">
@@ -621,7 +619,7 @@ document.addEventListener('visibilitychange', () => {
     try { if (document.visibilityState === 'hidden' && hasPendingEdits()) flushPendingEdits(); } catch (e) {}
 });
 
-const SE_VERSION = '2.30.0'; // points bar sits in-flow below the last player, above the photo card
+const SE_VERSION = '2.31.0'; // header camera+gallery icons replace the bottom photo card; badges beside the photo; honey pot for all three BBB; points help text
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
@@ -636,6 +634,7 @@ const state = {
     autoAdvanceTimer: null,
     finished: false,           // showing the end-of-round summary screen
     board: null,               // 'teams' | 'players' | 'match' when the leaderboard is open
+    photos: false,             // round-photos view open (header gallery icon)
     auditPlayerId: null,       // when set, the leaderboard shows that player's score audit
     events: [],                // league events (carry the match-play bracket)
     leaguePlayers: [],         // player records (carry handicapIndex for USGA mode)
@@ -1141,6 +1140,9 @@ function firstUnscoredHole(round, groupNumber) {
 // ─── Round picker ───────────────────────────────────────────────────────
 function renderRoundPicker(rounds) {
     setHeader('Dutch Cup', 'Choose a round');
+    $('#switch-btn').style.display = 'none';
+    $('#camera-btn').style.display = 'none';
+    $('#gallery-btn').style.display = 'none';
 
     // Bucket-sort: in-progress first (most likely the round being played right now),
     // then today's scheduled, then upcoming (closest first), then past (most recent first).
@@ -1190,6 +1192,8 @@ function renderPlayerPicker() {
 
     setHeader(round.courseName || 'Round', formatRoundDate(round));
     $('#switch-btn').style.display = 'none';
+    $('#camera-btn').style.display = 'none';
+    $('#gallery-btn').style.display = 'none';
     setStatus('', '');
 
     const appEl = $('#app'); appEl.innerHTML = '';
@@ -1249,10 +1253,16 @@ window.__switchPlayer = function() {
     if (hasPendingEdits()) flushPendingEdits();
     try { localStorage.removeItem('dcScoreMe'); } catch (e) {}
     state.currentPlayerId = null; state.groupNumber = null;
-    state.sheetPlayerId = null; state.padExpanded = false;
+    state.sheetPlayerId = null; state.padExpanded = false; state.photos = false;
     state.pendingEdits = { scores: {}, ctpWinners: {}, balls: {}, bbb: {} };
     setStatus('', '');
     renderPlayerPicker();
+};
+
+window.__openPhotos = function() {
+    state.board = null;
+    state.photos = true;
+    renderScoreEntry();
 };
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -1269,6 +1279,9 @@ function renderScoreEntry() {
 
     setHeader(round.courseName || 'Round', `Group ${state.groupNumber}${me ? ' · ' + me.name : ''}`);
     $('#switch-btn').style.display = 'inline-block';
+    $('#camera-btn').style.display = 'inline-block';
+    $('#gallery-btn').style.display = 'inline-block';
+    if (state.photos) { renderPhotosView(round); return; }
 
     const appEl = $('#app');
     appEl.innerHTML = '';
@@ -1281,8 +1294,7 @@ function renderScoreEntry() {
 
     if (state.currentHole === 17) appEl.appendChild(buildBallsCard(round, groupPlayers));
 
-    // Photo card — collapsible, always available during scoring
-    appEl.appendChild(buildPhotoCard(round));
+    // Photos live in the header now (camera adds, gallery views) — no bottom card.
 
     // Live leaderboard entry point
     appEl.appendChild(el('button', {
@@ -1452,6 +1464,7 @@ function buildScoresList(round, groupPlayers) {
     // dims once its point is awarded; awarded points ride as badges beside
     // the holder's name (built per player below).
     const tray = el('div', { class: 'points-bar' });
+    const trayRow = el('div', { class: 'points-row' });
     const traySlots = BBB_SLOTS.map(s => ({ key: s.key, icon: s.icon, name: s.name, used: !!bbbSlots[s.key] }));
     if (isPar3) traySlots.push({ key: 'ctp', icon: '\u{1F4CD}', name: 'Closest to the pin', used: !!ctpWinnerId });
     traySlots.forEach(s => {
@@ -1463,8 +1476,10 @@ function buildScoresList(round, groupPlayers) {
         tok.dataset.slot = s.key;
         tok.addEventListener('click', () => onTokenTap(s.key));
         tok.addEventListener('pointerdown', e => onTokenPointerDown(e, s.key, s.icon));
-        tray.appendChild(tok);
+        trayRow.appendChild(tok);
     });
+    tray.appendChild(trayRow);
+    tray.appendChild(el('span', { class: 'points-help' }, 'Drag to award or change'));
 
     groupPlayers.forEach(p => {
         const pid = idStr(p.id);
@@ -1490,16 +1505,22 @@ function buildScoresList(round, groupPlayers) {
                 'aria-label': `${strokes} stroke${strokes > 1 ? 's' : ''} on this hole`
             }, '\u25cf'.repeat(strokes)));
         }
-        // Points this player holds ride as badges on the photo panel.
-        // Tapping a badge takes that point back.
-        const heldSlots = BBB_SLOTS
+        // Points this player holds ride as badges BESIDE the photo, in the
+        // score column — never over the picture (Ron, 2026-11-01). Tapping a
+        // badge takes that point back. All three BBB at once collapse into a
+        // single honey pot; tapping it takes all three back.
+        const bbbHeld = BBB_SLOTS
             .filter(s2 => pid !== '' && idStr(bbbSlots[s2.key]) === pid)
             .map(s2 => ({ key: s2.key, icon: s2.icon, name: s2.name }));
+        const heldSlots = [];
+        if (bbbHeld.length === 3) heldSlots.push({ key: 'honey', icon: '\u{1F36F}', name: 'Bingo, Bango and Bongo' });
+        else heldSlots.push(...bbbHeld);
         if (isPar3 && pid !== '' && ctpWinnerId === pid) {
             heldSlots.push({ key: 'ctp', icon: '\u{1F4CD}', name: 'Closest to the pin' });
         }
+        let badgesEl = null;
         if (heldSlots.length) {
-            const badges = el('span', { class: 'panel-badges' });
+            badgesEl = el('span', { class: 'card-badges' });
             heldSlots.forEach(h => {
                 const b = el('button', {
                     class: 'bbb-badge b-' + h.key, type: 'button',
@@ -1507,11 +1528,11 @@ function buildScoresList(round, groupPlayers) {
                 }, h.icon);
                 b.addEventListener('click', e => {
                     if (e && e.stopPropagation) e.stopPropagation();
-                    assignPoint(pid, h.key);
+                    if (h.key === 'honey') clearBBBForPlayer(pid);
+                    else assignPoint(pid, h.key);
                 });
-                badges.appendChild(b);
+                badgesEl.appendChild(b);
             });
-            panel.appendChild(badges);
         }
         row.appendChild(panel);
 
@@ -1550,6 +1571,7 @@ function buildScoresList(round, groupPlayers) {
             el('span', { class: 'n' }, '\u00b7\u00b7\u00b7')
         ));
         main.appendChild(chips);
+        if (badgesEl) main.appendChild(badgesEl);
         row.appendChild(main);
 
         list.appendChild(row);
@@ -1639,6 +1661,21 @@ function tapBBBSlot(playerId, slotKey) {
 
     renderScoreEntry();
     maybeCelebrateHoleComplete();
+}
+
+// The honey pot's tap: take all three BBB points back from this player in
+// one write (the pot only exists when they hold all three).
+function clearBBBForPlayer(playerId) {
+    const round = getRoundById(state.selectedRoundId);
+    if (!round) return;
+    const pid = idStr(playerId);
+    const slots = { ...effectiveBBB(round, state.currentHole) };
+    ['bingo', 'bango', 'bongo'].forEach(k => { if (idStr(slots[k]) === pid) slots[k] = ''; });
+    state.pendingEdits.bbb[String(state.currentHole)] = {
+        bingo: idStr(slots.bingo) || '', bango: idStr(slots.bango) || '', bongo: idStr(slots.bongo) || ''
+    };
+    markUnsaved();
+    renderScoreEntry();
 }
 
 // Tap the CTP chip on a par-3 card: give Closest to the Pin to this player,
@@ -1802,34 +1839,24 @@ function buildBallsCard(round, groupPlayers) {
     return wrap;
 }
 
-function buildPhotoCard(round) {
+// ─── Round photos view (header gallery icon) ───────────────────────────
+// The photo card used to sit at the bottom of the scoring screen and ate
+// the space; now the header carries a camera (add) and a gallery icon
+// (view), and the gallery is its own view with a way back to scoring.
+function renderPhotosView(round) {
     const photos = Array.isArray(round.photos) ? round.photos : [];
-    const wrap = el('div', { class: 'pick-card photo-card' });
-    
-    // Camera button — ALWAYS visible, above the accordion, never buried.
-    // (The hidden file input lives here too so the button works with the body collapsed.)
-    const camRow = el('div', { class: 'photo-add-row' });
-    camRow.appendChild(el('input', {
-        type: 'file', accept: 'image/*', multiple: '', capture: 'environment',
-        id: 'photo-file-input', style: 'display:none;', onchange: 'onPhotoFileSelected(event)'
-    }));
-    camRow.appendChild(el('button', {
-        class: 'photo-add-btn', type: 'button',
-        onclick: "document.getElementById('photo-file-input').click()"
-    }, '📷 Add photo'));
-    wrap.appendChild(camRow);
-    
-    // Collapsible header
-    const header = el('div', { class: 'photo-card-header', onclick: 'togglePhotoCard()' });
-    header.appendChild(el('span', null, `📸 Round Photos${photos.length > 0 ? ` (${photos.length})` : ''}`));
-    header.appendChild(el('span', { id: 'photo-card-caret', class: 'photo-card-caret' }, photos.length > 0 ? '▼' : '▶'));
-    wrap.appendChild(header);
-    
-    const body = el('div', { id: 'photo-card-body', class: 'photo-card-body' });
-    // Collapsed by default to keep the hole screen to one viewport — the header
-    // shows the count, one tap opens it.
-    body.style.display = 'none';
-    
+    setHeader(round.courseName || 'Round', `Group ${state.groupNumber} \u00B7 Round Photos`);
+    const appEl = $('#app');
+    appEl.innerHTML = '';
+
+    appEl.appendChild(el('button', {
+        class: 'foot-btn prev', type: 'button',
+        style: 'width:100%;margin-bottom:8px;min-height:44px;',
+        onclick: () => { state.photos = false; renderScoreEntry(); }
+    }, '\u2190 Back to scoring'));
+    appEl.appendChild(el('div', { class: 'photo-view-title' },
+        `\u{1F4F8} Round Photos${photos.length > 0 ? ` (${photos.length})` : ''}`));
+
     if (photos.length > 0) {
         const grid = el('div', { class: 'photo-grid' });
         photos.forEach((photo, idx) => {
@@ -1838,7 +1865,7 @@ function buildPhotoCard(round) {
             if (!url) return;
             const tile = el('div', { class: 'photo-tile' });
             const img = el('img', { src: url, alt: `Photo ${idx + 1}`, loading: 'lazy' });
-            const btn = el('button', { class: 'photo-remove', onclick: `removeRoundPhoto(${idx})`, type: 'button' }, '✕');
+            const btn = el('button', { class: 'photo-remove', onclick: `removeRoundPhoto(${idx})`, type: 'button' }, '\u2715');
             tile.appendChild(img);
             tile.appendChild(btn);
             // ── Player tag chips: tap a name to tag/untag this photo with a player.
@@ -1858,19 +1885,19 @@ function buildPhotoCard(round) {
             tile.appendChild(tagRow);
             grid.appendChild(tile);
         });
-        body.appendChild(grid);
-    }
-    
-    if (!firebaseStorage) {
-        body.appendChild(el('div', { class: 'photo-warning' },
-            '⚠️ Photo upload unavailable (Firebase Storage not configured)'));
+        appEl.appendChild(grid);
     } else {
-        body.appendChild(el('div', { class: 'photo-hint' },
-            'Tap a name under a photo to tag players — tagged photos feature on their slide in the presentation'));
+        appEl.appendChild(el('div', { class: 'photo-hint' },
+            'No photos yet \u2014 tap the \u{1F4F7} up top to add the first one.'));
     }
-    
-    wrap.appendChild(body);
-    return wrap;
+
+    if (!firebaseStorage) {
+        appEl.appendChild(el('div', { class: 'photo-warning' },
+            '\u26A0\uFE0F Photo upload unavailable (Firebase Storage not configured)'));
+    } else if (photos.length > 0) {
+        appEl.appendChild(el('div', { class: 'photo-hint' },
+            'Tap a name under a photo to tag players \u2014 tagged photos feature on their slide in the presentation'));
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -2265,6 +2292,8 @@ function renderRoundFinished() {
 
     setHeader(round.courseName || 'Round', `Group ${state.groupNumber} · Finished`);
     $('#switch-btn').style.display = 'inline-block';
+    $('#camera-btn').style.display = 'inline-block';
+    $('#gallery-btn').style.display = 'inline-block';
 
     // Any holes still incomplete? (missing scores or missing BBB points)
     const incomplete = [];
@@ -3175,15 +3204,6 @@ function onPhotoFileSelected(ev) {
         uploadRoundPhotos(input.files);
     }
     input.value = ''; // reset so same file can be picked again
-}
-
-function togglePhotoCard() {
-    const body = document.getElementById('photo-card-body');
-    const caret = document.getElementById('photo-card-caret');
-    if (!body) return;
-    const isOpen = body.style.display !== 'none';
-    body.style.display = isOpen ? 'none' : 'block';
-    if (caret) caret.textContent = isOpen ? '▶' : '▼';
 }
 
 window.addEventListener('beforeunload', (e) => {
