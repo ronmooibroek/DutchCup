@@ -778,7 +778,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = 'v2026.11.01.32';
+        const APP_VERSION = 'v2026.11.01.33';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -2364,13 +2364,13 @@
                         _stageEl.style.transformOrigin = endPct + '% 55%';
                         _stageEl.style.transform = 'scale(1.24)';
                     }
-                    const _leadRival = (d.rivals || []).slice().sort((a, b) => b.pts - a.pts)[0];
-                    let _verdict = '';
-                    if (_leadRival) {
-                        if (d.after > _leadRival.pts) _verdict = `<div style="color:#4ade80;font-size:30px;font-weight:900;margin-top:6px;animation:fwScorePop 1s 0.25s cubic-bezier(0.34,1.6,0.64,1) both;">🏆 PAST ${_leadRival.name.toUpperCase()} — NEW LEADER!</div>`;
-                        else if (d.after === _leadRival.pts) _verdict = `<div style="color:#fbbf24;font-size:27px;font-weight:900;margin-top:6px;">🤝 Level with ${_leadRival.name} at the top</div>`;
-                        else _verdict = `<div style="color:rgba(255,255,255,0.8);font-size:23px;font-weight:800;margin-top:6px;">${_leadRival.name} still leads by ${_leadRival.pts - d.after}</div>`;
-                    }
+                    // One crowning only (.33): the dial celebrates THIS team's night —
+                    // no cross-team verdicts. The Act 4 ladder is the first and only
+                    // place the show names a leader.
+                    const _gain = Math.round((d.after - d.before) * 100) / 100;
+                    const _verdict = _gain > 0
+                        ? `<div style="color:#4ade80;font-size:26px;font-weight:900;margin-top:6px;animation:fwScorePop 1s 0.25s cubic-bezier(0.34,1.6,0.64,1) both;">+${_gain} ON THE NIGHT</div>`
+                        : `<div style="color:rgba(255,255,255,0.8);font-size:22px;font-weight:800;margin-top:6px;">Held their ground tonight</div>`;
                     const feed = byId('dialFeed-' + d.tid);
                     if (feed) feed.innerHTML = `<div style="text-align:center;"><div style="color:#fbbf24;font-size:38px;font-weight:900;letter-spacing:1px;animation:fwScorePop 0.9s cubic-bezier(0.34,1.6,0.64,1);text-shadow:0 4px 30px rgba(251,191,36,0.5);">🏁 ${d.teamName} — ${d.after} POINTS</div>${_verdict}</div>`;
                     try { playSfx('TEAM TOTAL', 'Sounds/nsmb-new-high-score.mp3', 0.8); } catch (e) {}
@@ -14939,7 +14939,7 @@ ${(() => {
                             taglineSubtext: taglineSubtext,
                             dramatic: dramatic,
                             finalMargin: finalMargin,
-                            roundLabel: m.bracket === 'GF' ? 'Grand Final' : (m.bracket === 'W' ? "Winner's Bracket" : "Loser's Bracket"),
+                            roundLabel: m.bracket === 'GF' ? 'Grand Final' : (m.bracket === 'W' ? "Winner's Bracket" : "Redemption Bracket"),
                             segmentLabel: m.holeSegment === 'front9' ? 'Front 9' : (m.holeSegment === 'back9' ? 'Back 9' : '18 Holes'),
                             // New fields for delayed reveal + next matches + elimination
                             loserEliminated: loserEliminated,
@@ -15660,6 +15660,15 @@ ${(() => {
             // Calculate slide indices - NEW ORDER
             let slideIndex = 1; // Slide 0 is the Dutch-flag anthem page
             // The original title/standings page follows the flag as its own slide.
+            // 🆕 COLD OPEN — THE DAY IN PICTURES (producer rundown, Nov 1): the show
+            // opens on the day itself — a full-bleed photo montage, no results.
+            const photoMontageSlideIndex = (roundPhotos && roundPhotos.length > 0) ? slideIndex++ : -1;
+            presentationState._montageSlideIndex = photoMontageSlideIndex;
+            // Photo wiring: the slideshow drivers read these off presentationState
+            // (they were never populated — the closing loop and the champion
+            // strip's tagged-photo preference silently fell back until now).
+            presentationState.roundPhotos = roundPhotos;
+            presentationState.photoTags = analytics.photoTags || {};
             const titleContentSlideIndex = slideIndex++;
             // The cold open: pose tonight's question without answering it.
             const _stories = presentationState._stories || [];
@@ -15705,19 +15714,18 @@ ${(() => {
             presentationState._fieldSlideIndex = fieldSlideIndex;
             const byNumbersSlideIndex = -1; // retired
             presentationState._byNumbersSlideIndex = byNumbersSlideIndex;
-            const biggestMomentsSlideIndex = hasBiggestMomentsSlide ? slideIndex++ : -1;
             // Easiest + toughest hole are now two REAL slides (separate sound slots).
             // Today's Overall Performance sets the scene BEFORE the hole-by-hole detail.
-            const scoringDistSlideIndex = hasScoringDistSlide ? slideIndex++ : -1;
+            const scoringDistSlideIndex = -1; // retired (.33): the round-difficulty verdict now rides on Today's Field
             const holeAnalysisSlideIndex = hasHoleAnalysisSlide ? slideIndex++ : -1; // easiest
-            const hardestHoleSlideIndex = hasHoleAnalysisSlide ? slideIndex++ : -1;  // toughest
+            const hardestHoleSlideIndex = -1;  // retired (.33): merged into A Tale of Two Holes
+            const biggestMomentsSlideIndex = hasBiggestMomentsSlide ? slideIndex++ : -1;
             const ctpLeadersSlideIndex = hasCTPLeadersSlide ? slideIndex++ : -1;
             const bbbLeadersSlideIndex = hasBBBLeadersSlide ? slideIndex++ : -1;
             presentationState._ctpLeadersSlideIndex = ctpLeadersSlideIndex;
             presentationState._ctpLeadersCount = (presentationState.ctpLeadersTop5 || []).length;
             presentationState._bbbLeadersSlideIndex = bbbLeadersSlideIndex;
             presentationState._bbbLeadersCount = (presentationState.bbbLeadersTop5 || []).length;
-            const weeklyAchievementsSlideIndex = hasWeeklyAchievementsSlide ? slideIndex++ : -1;
             // 🃏 SKINS MOVED UP (Ron, Oct 29): the hole-by-hole skins reveal now
             // plays BEFORE the overall score reveals (net countdown, team dials).
             const skinsSlideIndex = hasSkinsSlide ? slideIndex++ : -1;
@@ -15730,8 +15738,12 @@ ${(() => {
             // ── Act 2: individual honors (divider → low net crown → players, champion last) ──
             const _hasPhotos = Array.isArray(roundPhotos) && roundPhotos.length > 0;
             const hasDividerAwards = _hasPhotos && individualPlayerSlides.length > 0;
-            const dividerAwardsSlideIndex = -1; // retired
+            const dividerAwardsSlideIndex = hasDividerAwards ? slideIndex++ : -1; // revived (.33): photo divider opens the honours
             presentationState._dividerAwardsSlideIndex = dividerAwardsSlideIndex;
+            // Storylines pay off HERE (producer rundown, .33): the stories the
+            // Cold Open teased land with names, just before the Net Countdown.
+            const storySlideStart = slideIndex;
+            slideIndex += _stories.length;
             const netSlideIndex = hasNetSlide ? slideIndex++ : -1;
             presentationState._netSlideIndex = netSlideIndex;
             presentationState._netTopCount = (presentationState.netTop5 || []).length
@@ -15763,8 +15775,13 @@ ${(() => {
             const individualPlayerSlidesStart = revealSeqStart; // legacy name; seq-driven now
             // "Who beat <target>?" plays right AFTER everyone's individual scores are known —
             // a fun capstone before the matches begin.
+            // 🏆 EXTRA 9 promoted into the honours (.33): an honour with theatre
+            // plays in the honours act, not the wrap-up.
+            const extra9TeamsSlideIndex = hasExtra9TeamsSlide ? slideIndex++ : -1;
+            presentationState._extra9SlideIndex = extra9TeamsSlideIndex;
             const beatComparisonSlideIndex = hasBeatComparisonSlide ? slideIndex++ : -1;
             presentationState._beatComparisonSlideIndex = beatComparisonSlideIndex;
+            const weeklyAchievementsSlideIndex = hasWeeklyAchievementsSlide ? slideIndex++ : -1;
             
             // ── Act 3: match-play drama ──
             const hasDividerMatches = _hasPhotos && (hasBracketIntroSlide || bracketCombinedSlideCount > 0);
@@ -15784,15 +15801,11 @@ ${(() => {
             const hasOddsFinaleSlide = teamStandings.length > 0;
             const hasDividerTeams = _hasPhotos && hasOddsFinaleSlide;
             const dividerTeamsSlideIndex = -1; // retired
-            presentationState._dividerTeamsSlideIndex = dividerTeamsSlideIndex;
-            // The payoff: the storylines you chose, in the order you chose, just before
-            // the standings land.
+            // (Storylines now pay off in Act 2 and milestones land in the curtain — .33.)
             // One slide per milestone — they land individually rather than as a list.
-            const _miles = presentationState._milestones || [];
-            const milestoneSlideStart = slideIndex;
-            slideIndex += _miles.length;
-            const storySlideStart = slideIndex;
-            slideIndex += _stories.length;
+            // Event Net opens the finale (.33): where the season stood BEFORE
+            // today — thirty seconds of context that makes the ladder matter.
+            const eventNetSlideIndex = hasEventNetSlide ? slideIndex++ : -1;
             const oddsFinaleSlideIndex = hasOddsFinaleSlide ? slideIndex++ : -1;
             presentationState._oddsFinaleSlideIndex = oddsFinaleSlideIndex;
             const teamIntroSlideIndex = -1;      // retired
@@ -15802,11 +15815,12 @@ ${(() => {
             presentationState._winningTeamSlideIndex = -1; // confetti hook disabled with the range
             
             // ── Act 5: wrap-up (season context → photo gallery as the credits roll → closing) ──
-            const eventNetSlideIndex = hasEventNetSlide ? slideIndex++ : -1;
+            // One slide per milestone — they land individually in the curtain (.33).
+            const _miles = presentationState._milestones || [];
+            const milestoneSlideStart = slideIndex;
+            slideIndex += _miles.length;
             const milestonesSlideIndex = hasMilestonesSlide ? slideIndex++ : -1;
             const handicapSlideIndex = hasHandicapSlide ? slideIndex++ : -1;
-            const extra9TeamsSlideIndex = hasExtra9TeamsSlide ? slideIndex++ : -1;
-            presentationState._extra9SlideIndex = extra9TeamsSlideIndex;
             const photosSlideIndex = -1; // retired — the closing slideshow IS the photo moment
             const nextRoundSlideIndex = hasNextRoundSlide ? slideIndex++ : -1;
             // Closing collage: photo mosaic + sign-off message. Only shown when there are photos.
@@ -15825,26 +15839,26 @@ ${(() => {
                 const _seenNm = {};
                 const nm = (i, name) => { if (i >= 0) { _sn[i] = name; if (!_seenNm[name]) { _seenNm[name] = 1; presentationState._slideNameList.push({ index: i, name }); } } };
                 nm(0, 'OPENING FLAG');
+                nm(photoMontageSlideIndex, 'THE DAY IN PICTURES');
                 nm(titleContentSlideIndex, 'TITLE PAGE');
                 nm(teaserSlideIndex, 'COLD OPEN');
                 nm(fieldSlideIndex, "TODAY'S FIELD");
                 nm(biggestMomentsSlideIndex, 'BIGGEST MOMENTS');
-                nm(holeAnalysisSlideIndex, 'EASIEST HOLE');
-                nm(hardestHoleSlideIndex, 'TOUGHEST HOLE');
+                nm(holeAnalysisSlideIndex, 'A TALE OF TWO HOLES');
                 presentationState._easiestHoleSlideIndex = holeAnalysisSlideIndex;
                 presentationState._hardestHoleSlideIndex = hardestHoleSlideIndex;
                 nm(beatComparisonSlideIndex, 'BEAT COMPARISON');
-                nm(scoringDistSlideIndex, "TODAY'S OVERALL PERFORMANCE");
                 nm(ctpLeadersSlideIndex, 'CTP LEADERS');
                 nm(bbbLeadersSlideIndex, 'BBB LEADERS');
                 nm(weeklyAchievementsSlideIndex, 'WEEKLY ACHIEVEMENTS');
                 nm(netSlideIndex, 'NET COUNTDOWN');
                 nm(perfIntroSlideIndex, 'PERFORMANCES INTRO');
+                nm(dividerAwardsSlideIndex, 'DIVIDER: AWARDS');
                 nm(dividerMatchesSlideIndex, 'DIVIDER: MATCHES');
                 nm(bracketIntroSlideIndex, 'BRACKET INTRO');
                 nm(bracketFallbackSlideIndex, 'BRACKET RECAP');
                 nm(bracketWOverviewSlideIndex, "WINNER'S BRACKET");
-                nm(bracketLOverviewSlideIndex, "LOSER'S BRACKET");
+                nm(bracketLOverviewSlideIndex, "REDEMPTION BRACKET");
                 nm(storyTeaseSlideIndex, 'COLD OPEN');
                 for (let i = 0; i < _miles.length; i++) nm(milestoneSlideStart + i, 'MILESTONE');
                 for (let i = 0; i < _stories.length; i++) nm(storySlideStart + i, 'STORYLINE');
@@ -16376,6 +16390,33 @@ ${(() => {
                         <div style="position:absolute;right:5%;bottom:6%;color:rgba(255,255,255,0.55);font-size:22px;animation:fadeIn 1s 2s ease-out both;">→</div>
                     </div>
                 `;
+            } else if (currentSlide === photoMontageSlideIndex) {
+                // ─── COLD OPEN — THE DAY IN PICTURES (.33) ───
+                // Full-bleed montage of the round's photos before a single result:
+                // no scores, no spoilers — just the day. Crossfades on a 5s loop
+                // (window.startPhotoMontage) until the presenter advances.
+                const photos = (roundPhotos || []).filter(Boolean);
+                const startIdx = presentationState._montagePhotoIdx || 0;
+                const first = photos[startIdx % photos.length];
+                const second = photos[(startIdx + 1) % photos.length];
+                html += `
+                    <style>
+                        @keyframes montageDrift { 0% { transform: scale(1.06) translate(0.8%, 0.5%); } 100% { transform: scale(1.14) translate(-0.8%, -0.7%); } }
+                    </style>
+                    <div id="montageShow" style="position:fixed;inset:0;background:#000;overflow:hidden;">
+                        <div id="montageA" style="position:absolute;inset:-3%;background-image:url('${first}');background-size:cover;background-position:center;opacity:1;transition:opacity 1.4s ease-in-out;animation:montageDrift 9s ease-in-out infinite alternate;"></div>
+                        <div id="montageB" style="position:absolute;inset:-3%;background-image:url('${second || first}');background-size:cover;background-position:center;opacity:0;transition:opacity 1.4s ease-in-out;animation:montageDrift 9s ease-in-out -4.5s infinite alternate-reverse;"></div>
+                        <div style="position:absolute;inset:0;background:linear-gradient(180deg, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.05) 40%, rgba(0,0,0,0.7) 100%);pointer-events:none;"></div>
+                        <div style="position:absolute;left:6%;bottom:9%;animation:slideUp 1s 0.4s ease-out both;pointer-events:none;">
+                            <div style="color:#fbbf24;font-size:15px;font-weight:800;letter-spacing:4px;text-transform:uppercase;margin-bottom:8px;">The Dutch Cup · ${mostRecentRound.courseName || ''}</div>
+                            <div style="color:white;font-size:clamp(34px, 5vw, 58px);font-weight:900;font-style:italic;text-shadow:0 6px 30px rgba(0,0,0,0.9);">The Day in Pictures</div>
+                            <div style="color:rgba(255,255,255,0.8);font-size:17px;font-weight:600;margin-top:8px;text-shadow:0 2px 12px rgba(0,0,0,0.9);">No results. No spoilers. Just the day.</div>
+                        </div>
+                        <div style="position:absolute;right:5%;bottom:6%;color:rgba(255,255,255,0.55);font-size:22px;animation:fadeIn 1s 2s ease-out both;">→</div>
+                    </div>
+                `;
+                setTimeout(() => { try { startPhotoMontage(photos.length); } catch (e) {} }, 50);
+
             } else if (currentSlide === fieldSlideIndex) {
                 // Warm-up music while the field is on screen (stops on slide change).
                 { const _epF = window.__renderEpoch;
@@ -16404,6 +16445,7 @@ ${(() => {
                         <p style="color:#a5b4fc;font-size:20px;margin:0 0 28px;">
                             ${fieldEntries.length} player${fieldEntries.length === 1 ? '' : 's'} · ${mostRecentRound.courseName}
                         </p>
+                        ${(() => { const rd = presentationState._roundDifficulty || {}; if (rd.tonightToPar == null || rd.eventToPar == null) return ''; const d = rd.tonightToPar - rd.eventToPar; const f = (v) => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(1); const word = d <= -0.5 ? '☀️ A scoring night' : d >= 0.5 ? '🌧️ A grind' : '⚖️ Right on trend'; return `<p style="color:#fbbf24;font-size:16px;font-weight:700;margin:-16px 0 24px;">${word} — tonight ${f(rd.tonightToPar)} vs the event's ${f(rd.eventToPar)} average net to par</p>`; })()}
                         
                         ${(() => {
                             // Group fieldEntries by groupNumber. Each entry came from { ...p } so groupNumber is on it.
@@ -17480,8 +17522,8 @@ ${(() => {
                     // (Photo backdrops removed from player pages — they competed with the data.
                     //  Photos live in the chapter dividers and the closing slideshow instead.)
                     html += `
-                    <div style="animation:slideUp 0.8s ease-out;width:100%;height:100%;padding:16px;box-sizing:border-box;overflow:hidden;position:relative;" data-player-stage="${playerStage}">
-                        <div style="display:grid;grid-template-columns:300px 1fr;gap:16px;height:100%;position:relative;z-index:1;">
+                    <div style="animation:slideUp 0.8s ease-out;width:100%;height:100%;padding:16px;box-sizing:border-box;overflow:hidden;position:relative;display:flex;flex-direction:column;" data-player-stage="${playerStage}">
+                        <div style="display:grid;grid-template-columns:300px 1fr;gap:16px;flex:1;min-height:0;position:relative;z-index:1;">
                             
                             <!-- LEFT COLUMN -->
                             <div style="display:flex;flex-direction:column;gap:12px;">
@@ -17662,6 +17704,7 @@ ${(() => {
                                 })()}
                             </div>
                         </div>
+                        ${(() => { const t = presentationState.photoTags || {}; const all = (roundPhotos || []).filter(Boolean); let mine = all.filter(u => Array.isArray(t[u]) && t[u].some(id => id == player.playerId)); let cap = '📸 ' + (player.playerName || '').split(' ')[0] + ' today'; if (!mine.length && all.length) { const h = Math.abs(parseInt(player.playerId, 10) || 0) % all.length; mine = [all[h]]; cap = '📸 From the day'; } if (!mine.length) return ''; return `<div style="display:flex;gap:14px;justify-content:center;align-items:flex-end;padding-top:12px;">${mine.slice(0, 4).map((ph, i) => `<div style="background:white;padding:5px 5px 14px;border-radius:4px;box-shadow:0 10px 26px rgba(0,0,0,0.5);transform:rotate(${[-3, 2, -2, 3][i % 4]}deg);"><img src="${ph}" style="width:118px;height:84px;object-fit:cover;display:block;border-radius:2px;" alt=""></div>`).join('')}<div style="color:rgba(255,255,255,0.65);font-size:13px;font-weight:700;letter-spacing:1px;padding-bottom:16px;">${cap}</div></div>`; })()}
                     </div>
                 `;
                 }
@@ -18390,7 +18433,7 @@ ${(() => {
                             </div>
                         `;
                     } else {
-                        // ── Loser's Bracket + Grand Final Slide ──
+                        // ── Redemption Bracket + Grand Final Slide ──
                         const l1 = ['L1-M1','L1-M2','L1-M3','L1-M4'].filter(id => allM[id]);
                         const l2 = ['L2-M1','L2-M2','L2-M3','L2-M4'].filter(id => allM[id]);
                         const l3 = ['L3-M1','L3-M2'].filter(id => allM[id]);
@@ -18467,7 +18510,7 @@ ${(() => {
                             <div style="animation:slideUp 0.7s ease-out;width:100%;height:100%;padding:20px 24px;box-sizing:border-box;display:flex;flex-direction:column;">
                                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
                                     <h1 style="color:white;font-size:clamp(34px, 4.5vw, 46px);margin:0;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
-                                        💔 Loser's Bracket
+                                        💝 Redemption Bracket
                                     </h1>
                                     <div style="background:rgba(239,68,68,0.18);border:1px solid #ef4444;color:white;padding:6px 14px;border-radius:8px;font-size:13px;font-weight:700;">
                                         ${lDecided} of ${lTotal} decided
@@ -18596,12 +18639,22 @@ ${(() => {
                 let _haBody = '';
                 if (!_easiest || !_hardest) {
                     _haBody = `<div style="background:rgba(255,255,255,0.05);border:2px solid rgba(255,255,255,0.1);border-radius:16px;padding:40px;text-align:center;"><p style="color:#818cf8;font-size:20px;margin:0;">No hole data yet.</p></div>`;
-                } else if (_haStep === 0) {
-                    // Straight to the money: easiest hole WITH everyone's score on it.
-                    _haBody = _holeHero(_easiest, true) + _allOnHole(_easiest.hole, '#10b981');
                 } else {
-                    // Toughest hole WITH everyone's score on it.
-                    _haBody = _holeHero(_hardest, false) + _allOnHole(_hardest.hole, '#ef4444');
+                    // A TALE OF TWO HOLES (.33): both heroes on ONE slide — the
+                    // easiest with its best scores, the toughest framed by the men
+                    // who tamed it. Full per-hole tables live in the data drawer.
+                    const _topRows = (holeNum1, accent) => _scoresOnHole(holeNum1).slice(0, 4).map(r => `
+                        <div style="display:flex;align-items:center;gap:10px;background:rgba(255,255,255,0.05);border-radius:10px;padding:6px 12px;margin-top:8px;">
+                            ${renderAvatar(state.players.find(sp => sp.id == r.playerId) || { id: r.playerId, name: r.playerName }, 34)}
+                            <div style="color:white;font-size:15px;font-weight:700;flex:1;text-align:left;">${r.playerName}</div>
+                            <div style="color:#9ca3af;font-size:13px;">gross ${r.gross}</div>
+                            <div style="color:${accent};font-size:17px;font-weight:900;">net ${r.net}</div>
+                        </div>`).join('');
+                    _haBody = `
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:22px;max-width:1500px;margin:0 auto;align-items:start;">
+                        <div>${_holeHero(_easiest, true)}<div style="max-width:520px;margin:10px auto 0;"><div style="color:#10b981;font-size:13px;font-weight:800;letter-spacing:2px;text-align:center;">BEST ON IT</div>${_topRows(_easiest.hole, '#10b981')}</div></div>
+                        <div>${_holeHero(_hardest, false)}<div style="max-width:520px;margin:10px auto 0;"><div style="color:#f59e0b;font-size:13px;font-weight:800;letter-spacing:2px;text-align:center;">…AND WHO TAMED IT</div>${_topRows(_hardest.hole, '#f59e0b')}</div></div>
+                    </div>`;
                 }
 
                 // Difficulty strip — always visible at the bottom as a reference
@@ -18624,17 +18677,13 @@ ${(() => {
                     </div>
                 `;
 
-                const _haHint = (() => {
-                    if (!_easiest || !_hardest) return '';
-                    if (_haStep === 0) return `Tap "Next \u2192" for the toughest hole`;
-                    return '';
-                })();
+                const _haHint = '';
 
                 html += `
                     <div style="animation:fadeIn 0.6s ease-out;max-width:1500px;width:100%;position:relative;">
                         ${dataDrawerButton('holeAnalysis')}
                         <h1 style="color:white;font-size:clamp(30px, 4vw, 40px);margin:0 0 8px;text-shadow:0 4px 20px rgba(0,0,0,0.5);text-align:center;">
-                            \u26f3 Hole Performance
+                            \u26f3 A Tale of Two Holes
                         </h1>
                         ${_haBody}
                         <p style="color:#818cf8;font-size:15px;margin-top:8px;font-style:italic;text-align:center;min-height:20px;">${_haHint}</p>
@@ -20379,7 +20428,16 @@ ${(() => {
                 // Crossfades every few seconds with a slow Ken Burns drift, cycling until
                 // the presentation is exited. The sign-off message shows big, then tucks
                 // into the corner as a caption while the photos roll.
-                const photos = (roundPhotos || []).filter(Boolean);
+                // 🎭 CURTAIN CALL (.33): the best of the day, not every frame —
+                // photos with players tagged in them lead, capped at 8, and each
+                // photo is captioned with the names in it (driver updates it).
+                const _allPhotos = (roundPhotos || []).filter(Boolean);
+                const _tagMap = presentationState.photoTags || {};
+                const photos = _allPhotos.filter(u => Array.isArray(_tagMap[u]) && _tagMap[u].length > 0)
+                    .concat(_allPhotos.filter(u => !Array.isArray(_tagMap[u]) || _tagMap[u].length === 0))
+                    .slice(0, 8);
+                presentationState._curtainPhotos = photos;
+                const _captionFor = (u) => { const ids = _tagMap[u] || []; if (!ids.length) return ''; const names = ids.map(id => { const sp = state.players.find(x => x.id == id); return sp ? sp.name.split(' ')[0] : ''; }).filter(Boolean); return names.length ? '📸 ' + names.join(' · ') : ''; };
                 const sayings = [
                     'Until next time, golfers.',
                     'Same time next round?',
@@ -20425,6 +20483,7 @@ ${(() => {
                             <div style="color:white;font-size:22px;font-weight:800;text-shadow:0 3px 16px rgba(0,0,0,0.9);">${closingSaying}</div>
                             <div style="color:rgba(255,255,255,0.75);font-size:13px;font-weight:600;letter-spacing:2px;text-transform:uppercase;margin-top:4px;text-shadow:0 2px 10px rgba(0,0,0,0.9);">
                                 ${mostRecentRound.courseName || 'The Dutch Cup'} · ${photos.length} picture${photos.length === 1 ? '' : 's'} · tap Exit to finish
+                            <div id="closingCaption" style="color:#fcd34d;font-size:16px;font-weight:800;text-shadow:0 2px 10px rgba(0,0,0,0.9);margin-top:6px;min-height:20px;">${_captionFor(first)}</div>
                             </div>
                         </div>
                     </div>
@@ -22952,6 +23011,39 @@ ${(() => {
         // night's photos until the presentation exits or the slide changes. DOM-only swaps
         // (no re-render), and the tick self-cleans when it no longer belongs on screen.
         window.__closingLoopTimer = null;
+        // ─── 📸 Cold-open montage driver (.33): the closing slideshow's crossfade
+        // loop over the full photo set; self-cleans when the slide changes. ───
+        window.startPhotoMontage = (photoCount) => {
+            if (window.__montageLoopTimer) return;
+            if (!photoCount || photoCount < 2) return;
+            let showingA = true;
+            window.__montageLoopTimer = setInterval(() => {
+                const a = document.getElementById('montageA');
+                const b = document.getElementById('montageB');
+                const stillHere = presentationState.active
+                    && presentationState.currentSlide === presentationState._montageSlideIndex
+                    && a && b;
+                if (!stillHere) {
+                    clearInterval(window.__montageLoopTimer);
+                    window.__montageLoopTimer = null;
+                    return;
+                }
+                const photos = (presentationState._curtainPhotos || presentationState.roundPhotos || []).filter(Boolean);
+                if (photos.length < 2) return;
+                const idx = ((presentationState._montagePhotoIdx || 0) + 1) % photos.length;
+                presentationState._montagePhotoIdx = idx;
+                const hidden = showingA ? b : a;
+                const visible = showingA ? a : b;
+                hidden.style.backgroundImage = `url('${photos[idx]}')`;
+                setTimeout(() => {
+                    hidden.style.opacity = '1';
+                    visible.style.opacity = '0';
+                }, 120);
+                showingA = !showingA;
+            }, 5000);
+        };
+
+
         window.startClosingSlideshow = (photoCount) => {
             if (window.__closingLoopTimer) return; // already running
             if (!photoCount || photoCount < 2) return; // one photo: nothing to cycle
@@ -22972,6 +23064,12 @@ ${(() => {
                 // Advance the cycle; preload the NEXT image into the hidden layer, then fade.
                 const idx = ((presentationState._closingPhotoIdx || 0) + 1) % photos.length;
                 presentationState._closingPhotoIdx = idx;
+                const capEl = document.getElementById('closingCaption');
+                if (capEl) {
+                    const tm = presentationState.photoTags || {};
+                    const ids = tm[photos[idx]] || [];
+                    capEl.textContent = ids.length ? '📸 ' + ids.map(id => { const sp = state.players.find(x => x.id == id); return sp ? sp.name.split(' ')[0] : ''; }).filter(Boolean).join(' · ') : '';
+                }
                 const hidden = showingA ? b : a;
                 const visible = showingA ? a : b;
                 hidden.style.backgroundImage = `url('${photos[idx]}')`;
@@ -26662,7 +26760,7 @@ ${(() => {
             }
             
             // ═══════════════════════════════════════════════
-            // LOSER'S BRACKET
+            // REDEMPTION BRACKET
             // ═══════════════════════════════════════════════
             // L-round convention:
             //   L1 (odd): absorbs W1 losers directly
@@ -27465,7 +27563,7 @@ ${(() => {
                         </button>
                     </div>
                     <div style="font-size:12px;color:#6b7280;margin-bottom:12px;">
-                        ${match.bracket === 'GF' ? 'Grand Final' : (match.bracket === 'W' ? "Winner's Bracket" : "Loser's Bracket")}
+                        ${match.bracket === 'GF' ? 'Grand Final' : (match.bracket === 'W' ? "Winner's Bracket" : "Redemption Bracket")}
                         ${match.roundNumber ? ` · Event Round ${match.roundNumber}` : ''}
                         ${targetRound ? ` · ${targetRound.courseName || ''} ${targetRound.date ? '· ' + targetRound.date : ''}` : ''}
                     </div>
@@ -28155,7 +28253,7 @@ ${(() => {
                     ${lColumns.length > 0 ? `
                         <!-- L-bracket row -->
                         <h3 style="margin:0 0 10px;font-size:14px;color:#374151;text-transform:uppercase;letter-spacing:1px;">
-                            💔 Loser's Bracket
+                            💝 Redemption Bracket
                         </h3>
                         <div style="overflow-x:auto;padding-bottom:8px;">
                             <div style="display:flex;gap:32px;padding:8px;align-items:flex-start;min-height:150px;">
