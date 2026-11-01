@@ -778,7 +778,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = 'v2026.11.01.34';
+        const APP_VERSION = 'v2026.11.01.35';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -2533,32 +2533,43 @@
                 };
             });
             const leader = rows.length ? rows.slice().sort((a, b) => b.points - a.points)[0] : null;
-            // With history, the race is a before→after MOVE (rows start in their
-            // old slots and get carried to the new ones); without it, the old
-            // bottom-up cascade reveal stands.
-            const _hasMoves = rows.some(r => r.posBefore != null);
-            const cascadeTime = (_hasMoves ? (rows.length * 0.45 + 2.9) : (rows.length * 0.28 + 0.6)).toFixed(1);
+            // ── Format A finale (Ron, Nov 1): the full individual ladder
+            // lives in the admin Leaderboard now; the show ends with the
+            // podium + the night's biggest climber.
+            const _top3 = rows.slice(0, 3);
+            let _climber = null;
+            rows.forEach((r, i) => {
+                if (i === 0 || r.posBefore == null) return;
+                const gain = r.posBefore - (i + 1);
+                if (gain >= 2 && (!_climber || gain > _climber.gain)) _climber = { r, gain, to: i + 1 };
+            });
+            const _medal = ['🥇', '🥈', '🥉'];
+            const _avOf = (row) => { const p = row.avatarOf || {}; return p.photoUrl || ('https://ui-avatars.com/api/?name=' + encodeURIComponent(row.name || 'P') + '&size=160&background=1e293b&color=fff&bold=true'); };
             return `
                 <div style="animation:fadeIn 0.5s ease-out;max-width:820px;width:100%;">
-                    <div style="text-align:center;margin-bottom:18px;">
-                        <div style="font-size:44px;line-height:1;margin-bottom:6px;">🎯</div>
-                        <h1 style="color:white;font-size:clamp(30px,4vw,46px);font-weight:900;margin:0;text-shadow:0 4px 20px rgba(0,0,0,0.5);">The Individual Race</h1>
-                        <p style="color:#a5b4fc;font-size:14px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin:6px 0 0;">${_hasMoves ? 'Where they stood — watch them move' : 'Every player, after tonight'}</p>
+                    <div style="text-align:center;margin-bottom:20px;">
+                        <div style="font-size:44px;line-height:1;margin-bottom:6px;">🏁</div>
+                        <h1 style="color:white;font-size:clamp(30px,4vw,46px);font-weight:900;margin:0;text-shadow:0 4px 20px rgba(0,0,0,0.5);">The Men Who Moved</h1>
+                        <p style="color:#a5b4fc;font-size:14px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin:6px 0 0;">The individual podium, after tonight</p>
                     </div>
-                    ${renderStandingsLadder(rows, _hasMoves
-                        ? { showFaces: true, compact: true, rowH: 44, idPrefix: 'indfin', animateMove: true }
-                        : { showFaces: true, compact: true, rowH: 44, idPrefix: 'indfin', cascade: true })}
-                    ${leader ? `
-                        <div style="text-align:center;margin-top:18px;opacity:0;animation:fadeIn 0.8s ${cascadeTime}s ease-out forwards;">
-                            <div style="display:inline-flex;align-items:center;gap:12px;padding:10px 22px;border-radius:999px;background:rgba(251,191,36,0.14);border:2px solid #fbbf24;">
-                                <span style="font-size:24px;">👑</span>
-                                <span style="color:#fbbf24;font-size:19px;font-weight:900;">${leader.name} leads the Cup with ${leader.points}</span>
-                            </div>
-                        </div>` : ''}
+                    ${_top3.map((r, i) => `
+                    <div style="display:flex;align-items:center;gap:16px;background:rgba(255,255,255,0.06);border:2px solid ${i === 0 ? '#fbbf24' : 'rgba(255,255,255,0.14)'};border-radius:16px;padding:12px 20px;margin-bottom:12px;">
+                        <span style="font-size:30px;">${_medal[i]}</span>
+                        <img src="${_avOf(r)}" style="width:54px;height:54px;border-radius:50%;object-fit:cover;border:3px solid ${r.color || '#666'};">
+                        <div style="color:white;font-size:21px;font-weight:800;">${r.name}${r.posBefore != null && r.posBefore !== i + 1 ? ` <span style="color:#94a3b8;font-size:14px;font-weight:700;">(${r.posBefore > i + 1 ? '▲' : '▼'} from #${r.posBefore})</span>` : ''}</div>
+                        <div style="margin-left:auto;text-align:right;"><div style="color:#fcd34d;font-size:20px;font-weight:900;">${r.points} pts</div><div style="color:#6ee7b7;font-size:13.5px;font-weight:700;">${r.tonight != null ? '+' + r.tonight + ' tonight' : ''}</div></div>
+                    </div>`).join('')}
+                    ${_climber ? `
+                    <div style="display:flex;align-items:center;gap:16px;background:rgba(34,197,94,0.12);border:2px solid rgba(34,197,94,0.55);border-radius:16px;padding:12px 20px;margin-top:6px;">
+                        <span style="font-size:30px;">🚀</span>
+                        <img src="${_avOf(_climber.r)}" style="width:54px;height:54px;border-radius:50%;object-fit:cover;border:3px solid ${_climber.r.color || '#22c55e'};">
+                        <div style="color:white;font-size:20px;font-weight:800;">${_climber.r.name} <span style="color:#86efac;font-size:15px;font-weight:800;">— biggest climb</span></div>
+                        <div style="margin-left:auto;color:#86efac;font-size:19px;font-weight:900;">#${_climber.r.posBefore} → #${_climber.to}</div>
+                    </div>` : ''}
                 </div>
             `;
         };
-        
+
         // ═══ THE STATE OF THE CUP — before → after, with the odds swinging ═══
         // step 0: where things stood BEFORE tonight (with the old odds)
         // step 1: tonight applied — rows slide to their new slots, odds update
@@ -11925,7 +11936,18 @@ ${(() => {
                         };
                     }).sort((a, b) => b.after - a.after);
                     
-                    return { blocks, seq, championIndex: ci, roundDifficulty, individualStandings };
+                    // Previous round's champion (for the crowning handover line)
+                    let prevChampionName = null;
+                    if (previousRounds.length) {
+                        const _prev = previousRounds.slice().sort((a, b) => ((a.timestamp || a.id) - (b.timestamp || b.id))).pop();
+                        let _pb = null;
+                        (_prev.teams || []).forEach((t, ti) => (t.players || []).forEach((pl, pi) => {
+                            const v = pointsInRound(_prev, ti, pi, pl);
+                            if (!_pb || v >= _pb.v) _pb = { v, name: pl.name };
+                        }));
+                        if (_pb) prevChampionName = _pb.name;
+                    }
+                    return { blocks, seq, championIndex: ci, roundDifficulty, individualStandings, prevChampionName };
                 })();
                 
                 // Calculate individual awards from today's round
@@ -12195,6 +12217,29 @@ ${(() => {
                     }
                 }
                 
+                // ── BBB SPLIT crowns (Ron, Nov 1): Bingo/Bango/Bongo counted
+                // separately from the round's bbbAwards — first-on, closest,
+                // first-in are three different skills and get three crowns.
+                const _bbbNameOf = {};
+                mostRecentRound.teams.forEach(t => (t.players || []).forEach(pl => { _bbbNameOf[String(pl.id)] = pl.name; }));
+                const bbbSplitCounts = {};
+                (mostRecentRound.bbbAwards || []).forEach(e => {
+                    ['bingo', 'bango', 'bongo'].forEach(k => {
+                        if (e[k] != null && e[k] !== '') {
+                            const id = String(e[k]);
+                            const o = bbbSplitCounts[id] || (bbbSplitCounts[id] = { bingo: 0, bango: 0, bongo: 0 });
+                            o[k]++;
+                        }
+                    });
+                });
+                const _splitWinners = (k) => {
+                    let mx = 0;
+                    Object.keys(bbbSplitCounts).forEach(id => { mx = Math.max(mx, bbbSplitCounts[id][k]); });
+                    if (mx < 3) return [];
+                    return Object.keys(bbbSplitCounts).filter(id => bbbSplitCounts[id][k] === mx)
+                        .map(id => ({ playerId: id, playerName: _bbbNameOf[id] || 'Player', count: mx }));
+                };
+                const bbbSplitWinners = { opener: _splitWinners('bingo'), pinSeeker: _splitWinners('bango'), finisher: _splitWinners('bongo') };
                 // Get previous BBB winners info for display
                 const previousBBBWinnersInfo = [];
                 const alreadyWonBBBSet = new Set();
@@ -13544,11 +13589,13 @@ ${(() => {
                         const clean = FUN.filter(f => f.holes.length >= 18
                             && f.holes.every(h => h.net - h.par <= 1));
                         if (clean.length === 0) return null;
-                        return clean.map(f => {
+                        const _seAll = clean.map(f => {
                             const overs = f.holes.filter(h => h.net > h.par).length;
                             return { player: f.player, team: f.team, teamColor: f.teamColor,
                                      bogeys: overs, holes: f.holes.map(h => h.idx) };
                         });
+                        _seAll.sort((a, b) => a.bogeys - b.bogeys);
+                        return _seAll.slice(0, 1); // ONE Steady Eddie a night (Ron, Nov 1)
                     })();
 
                     // ⚗️ JEKYLL & HYDE — biggest front/back gross split, either direction
@@ -13761,12 +13808,6 @@ ${(() => {
                           } },
                         
                         // ─── FUN AWARDS (the eleven) ───
-                        { key: 'faceplant', label: 'FACEPLANT', emoji: '📉',
-                          color: '#ef4444', flair: 'tumble',
-                          tagline: w => `Front ${w.front} → back ${w.back}`,
-                          description: 'Top-three front nine in the field... and then the wheels, the doors, and the bumper all came off on the back.',
-                          detail: w => `+${w.delta} strokes worse on the back nine`,
-                          holes: w => w.holes, highlightLabel: 'Where It Went Wrong' },
                         { key: 'sandbagger', label: 'SANDBAGGER ALERT', emoji: '🎭',
                           color: '#a3e635', flair: 'sneaky',
                           tagline: w => `${w.netToPar} net vs par`,
@@ -13859,12 +13900,6 @@ ${(() => {
                           description: "Collected the most BBB points on holes where they had the group's clearly WORST score. Swiper, no swiping… too late.",
                           detail: w => `${w.count} point${w.count === 1 ? '' : 's'} on ${w.holes.length} disaster hole${w.holes.length === 1 ? '' : 's'}`,
                           holes: w => w.holes, highlightLabel: 'Crime Scenes' },
-                        { key: 'robbed', label: "I'VE BEEN ROBBED", emoji: '🚨',
-                          color: '#60a5fa', flair: 'robbed',
-                          tagline: w => `Best score, zero B's — ${w.count} times`,
-                          description: "Had the group's clearly BEST score on the hole and walked away with NOTHING in B's. Somebody call the authorities.",
-                          detail: w => `Robbed on holes ${w.holes.map(h => h + 1).join(', ')}`,
-                          holes: w => w.holes, highlightLabel: 'The Robberies' },
                         { key: 'vulture', label: 'VULTURE', emoji: '🦅',
                           color: '#f59e0b', flair: 'vulture',
                           tagline: w => `${w.count} BBB points scavenged`,
@@ -13877,12 +13912,6 @@ ${(() => {
                           description: 'Two completely different golfers shared one scorecard tonight. One of them should not be allowed back.',
                           detail: w => `${w.gap}-stroke split · Dr. ${w.worseIsBack ? 'Front' : 'Back'} vs Mr. ${w.worseIsBack ? 'Back' : 'Front'}`,
                           holes: w => w.holes, highlightLabel: w => `Mr. ${w.worseIsBack ? 'Back' : 'Front'} Was Here` },
-                        { key: 'blowUp', label: 'BLOW-UP HOLE', emoji: '💥',
-                          color: '#f97316', flair: 'tumble',
-                          tagline: w => `Hole ${w.holeIdx + 1}: a ${w.gross} on a par ${w.par}`,
-                          description: 'One hole went full fireworks. The rest of the card was just trying to keep up.',
-                          detail: w => `+${w.over} on hole ${w.holeIdx + 1}`,
-                          holes: w => [w.holeIdx], highlightLabel: 'The Scene Of The Crime' },
                         { key: 'bounceBack', label: 'BOUNCE-BACK KING', emoji: '🔄',
                           color: '#22c55e', flair: 'loop',
                           tagline: w => `${w.count} bounce-back${w.count === 1 ? '' : 's'}`,
@@ -13911,8 +13940,8 @@ ${(() => {
                         if (presentationAnalytics.bbbWinner && _nameMatches(presentationAnalytics.bbbWinner.playerName, playerSlide.playerName)) {
                             awards.push({
                                 type: 'bbb',
-                                label: 'BBB WINNER',
-                                emoji: '🎯',
+                                label: 'BBB CHAMPION',
+                                emoji: '👑',
                                 color: '#a855f7',
                                 tagline: 'Bingo Bango Bongo champion',
                                 description: 'Most Bingo-Bango-Bongo points: first ball on the green, closest to the pin once all are on, and first ball in the hole. Three chances per hole.',
@@ -13921,6 +13950,16 @@ ${(() => {
                                     : ''
                             });
                         }
+                        // BBB split crowns (single-purpose pushes, like BBB itself)
+                        const _splitDefs = [
+                            { key: 'opener', label: 'THE OPENER', emoji: '🚩', color: '#f59e0b', tagline: 'First on the green, all night', description: 'Most Bingo points — the first ball on the green, hole after hole.', unit: 'first-on' },
+                            { key: 'pinSeeker', label: 'PIN SEEKER', emoji: '🎯', color: '#eab308', tagline: 'Closest to the pin, again and again', description: 'Most Bango points — once everyone is on, nobody was closer.', unit: 'closest' },
+                            { key: 'finisher', label: 'THE FINISHER', emoji: '🕳️', color: '#22c55e', tagline: 'First ball in the cup', description: 'Most Bongo points — the first ball in the hole, all night.', unit: 'first-in' }
+                        ];
+                        _splitDefs.forEach(sd => {
+                            const w = ((presentationAnalytics.bbbSplitWinners || {})[sd.key] || []).find(x => _nameMatches(x.playerName, playerSlide.playerName));
+                            if (w) awards.push({ type: sd.key, label: sd.label, emoji: sd.emoji, color: sd.color, tagline: sd.tagline, description: sd.description, detail: `${w.count} ${sd.unit}${w.count === 1 ? '' : 's'}` });
+                        });
                         
                         // CTP wins (one award per hole won)
                         _allCtpForPlayer(playerSlide.playerName).forEach((win, idx) => {
@@ -15114,6 +15153,7 @@ ${(() => {
                     // True remaining rounds = SCHEDULED future rounds (the Monte Carlo's source)
                     _scheduledRemaining: scheduledRounds.length,
                     _revealSeq: _rr.seq,
+                    prevChampionName: _rr.prevChampionName,
                     _championIndexData: _rr.championIndex,
                     previousStandings: previousStandings,
                     todaysScores: todaysScores,
@@ -15129,6 +15169,8 @@ ${(() => {
                     previousNetWinners: previousNetWinnersInfo,
                     bbbWinner: bbbWinner,
                     bbbTop3: bbbTop3,
+                    bbbSplitCounts: bbbSplitCounts,
+                    bbbSplitWinners: bbbSplitWinners,
                     previousBBBWinners: previousBBBWinnersInfo,
                     ctpChampion: ctpChampion,
                     ctpChampionTop3: ctpChampionTop3,
@@ -15759,12 +15801,15 @@ ${(() => {
                 ? presentationState._championIndexData : (individualPlayerSlides.length - 1);
             const _seqRaw = presentationState._revealSeq
                 || individualPlayerSlides.map((_, i) => ({ k: 'p', i }));
-            const _seq = _seqRaw.filter(e => {
-                if (e.k !== 'p') return true;
-                const rec = individualPlayerSlides[e.i];
-                const hasAwards = rec && Array.isArray(rec.playerAwards) && rec.playerAwards.length > 0;
-                return hasAwards || e.i === _champIdxAlloc;
-            });
+            const _hasCU35 = !!presentationState._revealSeq && individualPlayerSlides.length > 1;
+            const _seq = _hasCU35
+                ? _seqRaw.filter(e => e.k === 't') // Format A: dials only — players get the Count-Up
+                : _seqRaw.filter(e => {
+                    if (e.k !== 'p') return true;
+                    const rec = individualPlayerSlides[e.i];
+                    const hasAwards = rec && Array.isArray(rec.playerAwards) && rec.playerAwards.length > 0;
+                    return hasAwards || e.i === _champIdxAlloc;
+                });
             presentationState._revealSeq = _seq;
             const revealSeqStart = slideIndex;
             slideIndex += _seq.length;
@@ -15773,6 +15818,26 @@ ${(() => {
             presentationState._playerSlidesStart = revealSeqStart;
             presentationState._playerSlidesCount = _seq.length;
             const individualPlayerSlidesStart = revealSeqStart; // legacy name; seq-driven now
+            // ── FORMAT A (Ron, Nov 1): THE COUNT-UP + the two envelope crowns.
+            // Every player gets ONE moment screen, worst to first; the champion
+            // is excluded here — he is the final envelope, so he cannot leak early.
+            const _cuEntries = [];
+            if (_hasCU35) {
+                const _desc = individualPlayerSlides.map((p, i) => ({ p, i })).sort((a, b) => b.p.totalPoints - a.p.totalPoints);
+                let _rk = 0, _lastV = null;
+                const _rankOf2 = {};
+                _desc.forEach((en, ix) => { if (en.p.totalPoints !== _lastV) { _rk = ix + 1; _lastV = en.p.totalPoints; } _rankOf2[en.i] = _rk; });
+                _desc.slice().reverse().forEach(en => { if (en.i !== _champIdxAlloc) _cuEntries.push({ i: en.i, rank: _rankOf2[en.i] }); });
+            }
+            const countUpStart = _cuEntries.length ? slideIndex : -1;
+            slideIndex += _cuEntries.length;
+            presentationState._countUp = _cuEntries;
+            presentationState._countUpStart = countUpStart;
+            const hasBbbEnv = _hasCU35 && !!(analytics.bbbWinner && (analytics.bbbTop3 || []).length > 0);
+            const bbbEnvNomIndex = hasBbbEnv ? slideIndex++ : -1;
+            const bbbEnvWinIndex = hasBbbEnv ? slideIndex++ : -1;
+            const champEnvNomIndex = _hasCU35 ? slideIndex++ : -1;
+            const champEnvWinIndex = _hasCU35 ? slideIndex++ : -1;
             // "Who beat <target>?" plays right AFTER everyone's individual scores are known —
             // a fun capstone before the matches begin.
             // 🏆 EXTRA 9 promoted into the honours (.33): an honour with theatre
@@ -15853,6 +15918,10 @@ ${(() => {
                 nm(weeklyAchievementsSlideIndex, 'WEEKLY ACHIEVEMENTS');
                 nm(netSlideIndex, 'NET COUNTDOWN');
                 nm(perfIntroSlideIndex, 'PERFORMANCES INTRO');
+            (presentationState._countUp || []).forEach((en, ix) => { if (presentationState._countUpStart >= 0) nm(presentationState._countUpStart + ix, 'THE COUNT-UP'); });
+            if (bbbEnvNomIndex >= 0) nm(bbbEnvNomIndex, 'ENVELOPE: BBB CHAMPION');
+            if (bbbEnvWinIndex >= 0) nm(bbbEnvWinIndex, 'AWARD: BBB WINNER');
+            if (champEnvNomIndex >= 0) nm(champEnvNomIndex, 'ENVELOPE: GOLFER OF THE DAY');
                 nm(dividerAwardsSlideIndex, 'DIVIDER: AWARDS');
                 nm(dividerMatchesSlideIndex, 'DIVIDER: MATCHES');
                 nm(bracketIntroSlideIndex, 'BRACKET INTRO');
@@ -16631,7 +16700,7 @@ ${(() => {
                             ⛳ The Good, The Bad, The Bogeys
                         </h1>
                         <p style="color:#fbbf24;font-size:22px;margin:0 0 60px;font-style:italic;font-weight:600;">
-                            Coming up: every player's round, one by one
+                            Coming up: the teams, the count-up, and the crowns
                         </p>
                         
                         <!-- Animation playground -->
@@ -20074,6 +20143,126 @@ ${(() => {
                         ` : ''}
                     </div>
                 `;
+            } else if (presentationState._countUp && presentationState._countUpStart >= 0 && currentSlide >= presentationState._countUpStart && currentSlide < presentationState._countUpStart + presentationState._countUp.length) {
+                // ─── FORMAT A: THE COUNT-UP — one moment screen per player,
+                // worst to first. Points, his best moment as the headline,
+                // everything else as badges, and his photo from the day.
+                const _cu = presentationState._countUp[currentSlide - presentationState._countUpStart];
+                const player = individualPlayerSlides[_cu.i];
+                const _cuAll = Array.isArray(player.playerAwards) ? player.playerAwards : [];
+                const _cuHead = _cuAll[0] || null;
+                const _cuRest = _cuAll.slice(1);
+                const _cuCtpN = _cuRest.filter(a => a.type === 'ctp').length + (_cuHead && _cuHead.type === 'ctp' ? 1 : 0);
+                const _cuBadges = _cuRest.filter(a => a.type !== 'ctp');
+                const _cuSplit = (analytics.bbbSplitCounts || {})[String(player.playerId)] || null;
+                const _cuSp = state.players.find(x => String(x.id) === String(player.playerId));
+                const _cuAv = (_cuSp && _cuSp.photoUrl) || player.photoUrl || ('https://ui-avatars.com/api/?name=' + encodeURIComponent(player.playerName || 'P') + '&size=200&background=1e293b&color=fff&bold=true');
+                const _cuMove = (player.posBefore != null && player.posAfter != null)
+                    ? (player.posBefore - player.posAfter) : null;
+                html += `
+                    <div style="animation:slideUp 0.7s ease-out;max-width:920px;width:100%;text-align:center;">
+                        <div style="color:#fbbf24;font-size:15px;font-weight:800;letter-spacing:4px;">THE COUNT-UP</div>
+                        <div style="color:white;font-size:clamp(64px,9vw,110px);font-weight:900;line-height:1;margin:6px 0 0;">#${_cu.rank}</div>
+                        <img src="${_cuAv}" alt="${player.playerName}" style="width:128px;height:128px;border-radius:50%;object-fit:cover;border:4px solid ${player.teamColor || '#fbbf24'};box-shadow:0 14px 40px rgba(0,0,0,0.5);margin:14px auto 10px;display:block;">
+                        <h1 style="color:white;font-size:clamp(30px,4.4vw,44px);font-weight:900;margin:0;">${player.playerName}</h1>
+                        <div style="color:#a5b4fc;font-size:16px;font-weight:700;margin-top:4px;">${player.teamName || ''} · <span style="color:#6ee7b7;">${player.totalPoints} pts tonight</span> · Gross ${player.grossScore} · Net ${player.netScore}</div>
+                        <div style="color:#94a3b8;font-size:14px;font-weight:700;margin-top:4px;">Cup standing: #${player.posAfter != null ? player.posAfter : '—'}${_cuMove != null && _cuMove !== 0 ? ` · ${_cuMove > 0 ? '▲' : '▼'} ${_cuMove > 0 ? 'up' : 'down'} ${Math.abs(_cuMove)} tonight` : ''}</div>
+                        ${_cuHead ? `
+                        <div style="margin:22px auto 0;max-width:640px;background:rgba(255,255,255,0.06);border:2px solid rgba(251,191,36,0.45);border-radius:16px;padding:16px 20px;">
+                            <div style="font-size:30px;">${_cuHead.emoji || '🏅'}</div>
+                            <div style="color:#fcd34d;font-size:21px;font-weight:900;letter-spacing:1px;">${_cuHead.label || ''}</div>
+                            <div style="color:#e2e8f0;font-size:15.5px;margin-top:4px;">${_cuHead.tagline || ''}${_cuHead.detail ? ` · ${_cuHead.detail}` : ''}</div>
+                        </div>` : `
+                        <div style="color:#94a3b8;font-size:16px;margin-top:22px;">A steady night's work.</div>`}
+                        ${(_cuBadges.length || _cuCtpN > 0 || _cuSplit) ? `
+                        <div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:16px;">
+                            ${_cuBadges.map(a => `<span style="background:rgba(255,255,255,0.09);border:1px solid rgba(255,255,255,0.22);color:white;border-radius:999px;padding:5px 13px;font-size:13.5px;font-weight:700;">${a.emoji || '🏅'} ${a.label || ''}</span>`).join('')}
+                            ${_cuCtpN > 0 ? `<span style="background:rgba(255,255,255,0.09);border:1px solid rgba(255,255,255,0.22);color:white;border-radius:999px;padding:5px 13px;font-size:13.5px;font-weight:700;">📍 CTP ×${_cuCtpN}</span>` : ''}
+                            ${_cuSplit && _cuSplit.bingo ? `<span style="background:rgba(245,158,11,0.16);border:1px solid rgba(245,158,11,0.5);color:#fcd34d;border-radius:999px;padding:5px 13px;font-size:13.5px;font-weight:700;">🚩 ×${_cuSplit.bingo}</span>` : ''}
+                            ${_cuSplit && _cuSplit.bango ? `<span style="background:rgba(245,158,11,0.16);border:1px solid rgba(245,158,11,0.5);color:#fcd34d;border-radius:999px;padding:5px 13px;font-size:13.5px;font-weight:700;">🎯 ×${_cuSplit.bango}</span>` : ''}
+                            ${_cuSplit && _cuSplit.bongo ? `<span style="background:rgba(245,158,11,0.16);border:1px solid rgba(245,158,11,0.5);color:#fcd34d;border-radius:999px;padding:5px 13px;font-size:13.5px;font-weight:700;">🕳️ ×${_cuSplit.bongo}</span>` : ''}
+                        </div>` : ''}
+                        ${(() => { const t = presentationState.photoTags || {}; const all = (roundPhotos || []).filter(Boolean); let mine = all.filter(u => Array.isArray(t[u]) && t[u].some(id => id == player.playerId)); if (!mine.length && all.length) { const hh = Math.abs(parseInt(player.playerId, 10) || 0) % all.length; mine = [all[hh]]; } if (!mine.length) return ''; return `<div style="display:flex;gap:14px;justify-content:center;align-items:flex-end;margin-top:20px;">${mine.slice(0, 4).map((ph, i) => `<div style="background:white;padding:5px 5px 14px;border-radius:4px;box-shadow:0 10px 26px rgba(0,0,0,0.5);transform:rotate(${[-3, 2, -2, 3][i % 4]}deg);"><img src="${ph}" style="width:118px;height:84px;object-fit:cover;display:block;border-radius:2px;" alt=""></div>`).join('')}</div>`; })()}
+                    </div>
+                `;
+            } else if (currentSlide === bbbEnvNomIndex) {
+                // ─── ENVELOPE 1 of 2: BBB CHAMPION — the nominees ───
+                const _bn = (analytics.bbbTop3 || []).slice(0, 3);
+                html += `
+                    <div style="animation:slideUp 0.7s ease-out;max-width:820px;width:100%;text-align:center;">
+                        <div style="font-size:52px;">✉️</div>
+                        <div style="color:#fbbf24;font-size:15px;font-weight:800;letter-spacing:4px;margin-top:8px;">THE ENVELOPE, PLEASE</div>
+                        <h1 style="color:white;font-size:clamp(32px,4.6vw,46px);font-weight:900;margin:8px 0 4px;">👑 BBB Champion</h1>
+                        <p style="color:#a5b4fc;font-size:17px;margin:0 0 24px;">The nominees — most Bingo-Bango-Bongo points tonight…</p>
+                        ${_bn.map(n => { const sp = state.players.find(x => String(x.id) === String(n.playerId)); const av = (sp && sp.photoUrl) || ('https://ui-avatars.com/api/?name=' + encodeURIComponent(n.playerName || 'P') + '&size=160&background=1e293b&color=fff&bold=true'); return `
+                        <div style="display:flex;align-items:center;gap:16px;background:rgba(255,255,255,0.06);border:2px solid rgba(255,255,255,0.14);border-radius:16px;padding:12px 20px;margin:0 auto 12px;max-width:560px;text-align:left;">
+                            <img src="${av}" style="width:56px;height:56px;border-radius:50%;object-fit:cover;border:3px solid ${n.teamColor || '#666'};">
+                            <div style="color:white;font-size:21px;font-weight:800;">${n.playerName}</div>
+                            <div style="margin-left:auto;color:#fcd34d;font-size:19px;font-weight:900;">${n.bbbCount} BBB pts</div>
+                        </div>`; }).join('')}
+                        <div style="color:#94a3b8;font-size:15px;margin-top:18px;">And the BBB Champion is…</div>
+                    </div>
+                `;
+            } else if (currentSlide === bbbEnvWinIndex) {
+                // ─── ENVELOPE 1 of 2: BBB CHAMPION — the winner ───
+                const _bw = analytics.bbbWinner;
+                const _bwSp = _bw ? state.players.find(x => String(x.id) === String(_bw.playerId)) : null;
+                const _bwAv = (_bwSp && _bwSp.photoUrl) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent((_bw && _bw.playerName) || 'P') + '&size=200&background=1e293b&color=fff&bold=true';
+                const _bwSplit = _bw ? (analytics.bbbSplitCounts || {})[String(_bw.playerId)] : null;
+                html += `
+                    <div style="animation:slideUp 0.7s ease-out;max-width:820px;width:100%;text-align:center;">
+                        <div style="font-size:44px;letter-spacing:10px;">🎉 👑 🎉</div>
+                        <div style="color:#fbbf24;font-size:15px;font-weight:800;letter-spacing:4px;margin-top:10px;">BBB CHAMPION</div>
+                        <img src="${_bwAv}" alt="" style="width:140px;height:140px;border-radius:50%;object-fit:cover;border:5px solid #fbbf24;box-shadow:0 16px 44px rgba(0,0,0,0.55);margin:16px auto 10px;display:block;">
+                        <h1 style="color:white;font-size:clamp(34px,5vw,50px);font-weight:900;margin:0;">${_bw ? _bw.playerName : ''}</h1>
+                        <div style="color:#a5b4fc;font-size:17px;font-weight:700;margin-top:4px;">${_bw ? _bw.teamName : ''}</div>
+                        <div style="color:#fcd34d;font-size:24px;font-weight:900;margin-top:12px;">${_bw ? _bw.bbbCount : ''} BBB points</div>
+                        ${_bwSplit ? `<div style="color:#e2e8f0;font-size:16.5px;margin-top:8px;">🚩 ${_bwSplit.bingo} first-on · 🎯 ${_bwSplit.bango} closest · 🕳️ ${_bwSplit.bongo} first-in</div>` : ''}
+                    </div>
+                `;
+            } else if (currentSlide === champEnvNomIndex) {
+                // ─── ENVELOPE 2 of 2: GOLFER OF THE DAY — the final three ───
+                const _cn = individualPlayerSlides.slice().sort((a, b) => b.totalPoints - a.totalPoints).slice(0, 3);
+                html += `
+                    <div style="animation:slideUp 0.7s ease-out;max-width:820px;width:100%;text-align:center;">
+                        <div style="font-size:52px;">✉️</div>
+                        <div style="color:#fbbf24;font-size:15px;font-weight:800;letter-spacing:4px;margin-top:8px;">ONE ENVELOPE REMAINS</div>
+                        <h1 style="color:white;font-size:clamp(32px,4.6vw,46px);font-weight:900;margin:8px 0 4px;">🏆 Golfer of the Day</h1>
+                        <p style="color:#a5b4fc;font-size:17px;margin:0 0 24px;">The final three tonight…</p>
+                        ${_cn.map(n => { const sp = state.players.find(x => String(x.id) === String(n.playerId)); const av = (sp && sp.photoUrl) || n.photoUrl || ('https://ui-avatars.com/api/?name=' + encodeURIComponent(n.playerName || 'P') + '&size=160&background=1e293b&color=fff&bold=true'); return `
+                        <div style="display:flex;align-items:center;gap:16px;background:rgba(255,255,255,0.06);border:2px solid rgba(255,255,255,0.14);border-radius:16px;padding:12px 20px;margin:0 auto 12px;max-width:560px;text-align:left;">
+                            <img src="${av}" style="width:56px;height:56px;border-radius:50%;object-fit:cover;border:3px solid ${n.teamColor || '#666'};">
+                            <div style="color:white;font-size:21px;font-weight:800;">${n.playerName}</div>
+                            <div style="margin-left:auto;color:#6ee7b7;font-size:19px;font-weight:900;">${n.totalPoints} pts</div>
+                        </div>`; }).join('')}
+                        <div style="color:#94a3b8;font-size:15px;margin-top:18px;">And the Golfer of the Day is…</div>
+                    </div>
+                `;
+            } else if (currentSlide === champEnvWinIndex) {
+                // ─── THE CROWNING — champion last, by construction ───
+                const _cw = individualPlayerSlides[presentationState._championIndexData != null ? presentationState._championIndexData : (individualPlayerSlides.length - 1)];
+                try {
+                    if (_cw && presentationState.__lastStungSlide !== 'champEnv') {
+                        presentationState.__lastStungSlide = 'champEnv';
+                        setTimeout(() => { try { window.__playPlayerTheme && window.__playPlayerTheme(_cw.playerId); } catch (e) {} }, 350);
+                    }
+                } catch (e) {}
+                const _cwSp = _cw ? state.players.find(x => String(x.id) === String(_cw.playerId)) : null;
+                const _cwAv = (_cwSp && _cwSp.photoUrl) || (_cw && _cw.photoUrl) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent((_cw && _cw.playerName) || 'P') + '&size=220&background=1e293b&color=fff&bold=true';
+                const _cwBadges = _cw && Array.isArray(_cw.playerAwards) ? _cw.playerAwards : [];
+                const _prevChamp = analytics.prevChampionName;
+                html += `
+                    <div style="animation:slideUp 0.8s ease-out;max-width:880px;width:100%;text-align:center;">
+                        <div style="font-size:52px;letter-spacing:8px;">🎉 🏆 🎉</div>
+                        <div style="color:#fbbf24;font-size:17px;font-weight:800;letter-spacing:5px;margin-top:10px;">CHAMPION GOLFER OF THE DAY</div>
+                        <img src="${_cwAv}" alt="" style="width:156px;height:156px;border-radius:50%;object-fit:cover;border:6px solid #fbbf24;box-shadow:0 18px 50px rgba(0,0,0,0.6);margin:18px auto 12px;display:block;">
+                        <h1 style="color:white;font-size:clamp(38px,5.6vw,56px);font-weight:900;margin:0;">${_cw ? _cw.playerName : ''}</h1>
+                        <div style="color:#a5b4fc;font-size:18px;font-weight:700;margin-top:5px;">${_cw ? _cw.teamName : ''}</div>
+                        <div style="color:#fcd34d;font-size:26px;font-weight:900;margin-top:14px;">${_cw ? _cw.totalPoints : ''} points tonight · Net ${_cw ? _cw.netScore : ''}</div>
+                        ${_cwBadges.length ? `<div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:16px;">${_cwBadges.map(a => `<span style="background:rgba(251,191,36,0.14);border:1px solid rgba(251,191,36,0.55);color:#fde68a;border-radius:999px;padding:5px 13px;font-size:13.5px;font-weight:700;">${a.emoji || '🏅'} ${a.label || ''}</span>`).join('')}</div>` : ''}
+                        ${_prevChamp && _cw && _prevChamp !== _cw.playerName ? `<div style="color:#94a3b8;font-size:15.5px;margin-top:20px;">Presented by ${_prevChamp} — last round's champion 🤝</div>` : ''}
+                    </div>
+                `;
             } else if (currentSlide === extra9TeamsSlideIndex) {
                 // EXTRA 9 TEAMS — DRAMATIC DRAFT REVEAL (Ron, Oct 29)
                 // Step 0: the CAPTAINS only — each team's first pick, i.e. its
@@ -20231,42 +20420,29 @@ ${(() => {
                 presentationState.__skinsDetail = _sk;
                 html += `
                     <div style="animation:slideUp 0.8s ease-out;max-width:1000px;width:100%;">
-                        <h1 style="color:white;font-size:clamp(34px, 4.5vw, 46px);margin:0 0 16px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
-                            🃏 Skins Game
+                        <h1 style="color:white;font-size:clamp(34px, 4.5vw, 46px);margin:0 0 20px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">
+                            🃏 Skins — Final
                         </h1>
-                        <p style="color:#a5b4fc;font-size:20px;margin:0 0 12px;">
-                            Lowest net score takes the hole • ties carry the pot 🔥 • ${_skFmt(_sk.pointsPerSkin)} pts per skin
-                        </p>
-                        <p style="color:#818cf8;font-size:16px;margin:0 0 30px;font-style:italic;">
-                            ${_sk.holesDecided} skins decided
-                            ${_sk.liveCarry > 0 ? ` • ${_skFmt(_sk.liveCarry)} still live in the pot` : ''}
-                        </p>
+                        ${_sk.winners.length ? (() => { const w0 = _sk.winners[0]; return `
+                        <div onclick="event.stopPropagation();window.openSkinsScorecard();" role="button" tabindex="0" title="Tap for the full net scorecard" style="background:linear-gradient(135deg, rgba(245,158,11,0.28), rgba(245,158,11,0.08));border:4px solid #fbbf24;border-radius:20px;padding:26px;text-align:center;box-shadow:0 12px 32px rgba(0,0,0,0.3);cursor:pointer;margin-bottom:16px;">
+                            <div style="font-size:46px;margin-bottom:6px;">🥇</div>
+                            <div style="color:white;font-size:30px;font-weight:900;">${w0.name}</div>
+                            <div style="color:#fcd34d;font-size:22px;font-weight:900;margin-top:4px;">${_skFmt(w0.skins)} skin${w0.skins === 1 ? '' : 's'} · +${_skFmt(w0.points)} pts</div>
+                        </div>`; })() : ''}
+                        ${_sk.winners.slice(1).map((w, i) => `
+                        <div style="display:flex;align-items:center;gap:14px;background:rgba(255,255,255,0.06);border:2px solid rgba(255,255,255,0.14);border-radius:14px;padding:11px 20px;margin-bottom:10px;">
+                            <span style="font-size:24px;">${['🥈', '🥉'][i] || '🏅'}</span>
+                            <span style="color:white;font-size:19px;font-weight:800;">${w.name}</span>
+                            <span style="margin-left:auto;color:#fcd34d;font-size:17px;font-weight:900;">${_skFmt(w.skins)} skin${w.skins === 1 ? '' : 's'} · <span style="color:#6ee7b7;">+${_skFmt(w.points)} pts</span></span>
+                        </div>`).join('')}
                         ${_sk.kingOfTies && _sk.kingOfTies.length ? `
-                            <p style="color:#fcd34d;font-size:22px;margin:-18px 0 26px;font-weight:700;">
-                                👑 King of Ties: ${_sk.kingOfTies.map(k => k.name).join(', ')}
-                            </p>
-                        ` : ''}
-                        <div style="display:grid;grid-template-columns:repeat(${Math.min(3, _skTop.length)}, 1fr);gap:24px;">
-                            ${_skTop.map((w, i) => `
-                                <div onclick="event.stopPropagation();window.openSkinsScorecard();" role="button" tabindex="0" title="Tap for the full net scorecard" style="background:linear-gradient(135deg, #f59e0b30 0%, #f59e0b10 100%);border:4px solid ${i === 0 ? '#fbbf24' : '#a8a29e'};border-radius:20px;padding:28px;text-align:center;box-shadow:0 12px 32px rgba(0,0,0,0.3);cursor:pointer;${i === 0 ? 'transform:scale(1.06);' : ''}">
-                                    <div style="font-size:52px;margin-bottom:8px;">${_skMedal[i] || '🏅'}</div>
-                                    <div style="color:white;font-size:26px;font-weight:700;margin-bottom:6px;">${w.name}</div>
-                                    <div style="color:#fcd34d;font-size:20px;font-weight:700;">${_skFmt(w.skins)} skin${w.skins === 1 ? '' : 's'}</div>
-                                    <div style="color:#6ee7b7;font-size:18px;font-weight:700;margin-top:6px;">+${_skFmt(w.points)} pts</div>
-                                </div>
-                            `).join('')}
-                        </div>
-                        ${_sk.winners.length > 3 ? `
-                            <div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:24px;">
-                                ${_sk.winners.slice(3).map(w => `
-                                    <div onclick="event.stopPropagation();window.openSkinsScorecard();" role="button" tabindex="0" title="Tap for the full net scorecard" style="background:rgba(255,255,255,0.08);border:2px solid rgba(255,255,255,0.2);border-radius:10px;padding:8px 14px;color:white;font-size:14px;cursor:pointer;">
-                                        ${w.name} · <strong style="color:#fcd34d;">${_skFmt(w.skins)}</strong> · <strong style="color:#6ee7b7;">+${_skFmt(w.points)} pts</strong>
-                                    </div>
-                                `).join('')}
-                            </div>
-                        ` : ''}
-                        <p style="color:rgba(255,255,255,0.45);font-size:14px;margin:26px 0 0;font-style:italic;">
-                            Tap any card for the full net scorecard 👆
+                        <div style="background:linear-gradient(135deg, rgba(251,191,36,0.30), rgba(251,191,36,0.10));border:3px solid #fbbf24;border-radius:18px;padding:20px;text-align:center;margin-top:18px;">
+                            <div style="font-size:36px;">👑</div>
+                            <div style="color:#fde68a;font-size:23px;font-weight:900;letter-spacing:1px;margin-top:4px;">KING OF TIES — ${_sk.kingOfTies.map(k => k.name).join(' · ')}</div>
+                            <div style="color:#e2e8f0;font-size:15.5px;margin-top:4px;">The final pot would not break — so it split their way 🎉</div>
+                        </div>` : ''}
+                        <p style="color:rgba(255,255,255,0.45);font-size:14px;margin:22px 0 0;font-style:italic;text-align:center;">
+                            Tap the winner for the full net scorecard 👆
                         </p>
                     </div>
                 `;
@@ -21533,6 +21709,9 @@ ${(() => {
             { type: 'theWall',       label: 'THE WALL',          def: null },
             { type: 'birdieMachine', label: 'BIRDIE MACHINE',    def: null },
             { type: 'bbb',           label: 'BBB WINNER',        def: null },
+            { type: 'opener',       label: 'THE OPENER',       def: null },
+            { type: 'pinSeeker',    label: 'PIN SEEKER',       def: null },
+            { type: 'finisher',     label: 'THE FINISHER',     def: null },
             { type: 'ctp',           label: 'CLOSEST TO PIN',    def: null },
             { type: 'extra9',        label: 'EXTRA 9',           def: null },
             { type: 'clutch',        label: 'CLUTCH',            def: null }
@@ -23016,7 +23195,7 @@ ${(() => {
         // ─── 📸 Cold-open montage driver (.33): the closing slideshow's crossfade
         // loop over the full photo set; self-cleans when the slide changes. ───
         window.startPhotoMontage = (photoCount) => {
-            if (window.__montageLoopTimer) return;
+            if (window.__montageLoopTimer) { clearInterval(window.__montageLoopTimer); window.__montageLoopTimer = null; }
             if (!photoCount || photoCount < 2) return;
             let showingA = true;
             window.__montageLoopTimer = setInterval(() => {
@@ -23054,7 +23233,7 @@ ${(() => {
 
 
         window.startClosingSlideshow = (photoCount) => {
-            if (window.__closingLoopTimer) return; // already running
+            if (window.__closingLoopTimer) { clearInterval(window.__closingLoopTimer); window.__closingLoopTimer = null; }
             if (!photoCount || photoCount < 2) return; // one photo: nothing to cycle
             let showingA = true;
             window.__closingLoopTimer = setInterval(() => {
