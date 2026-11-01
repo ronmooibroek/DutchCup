@@ -778,7 +778,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = 'v2026.11.01.33';
+        const APP_VERSION = 'v2026.11.01.34';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -16412,6 +16412,7 @@ ${(() => {
                             <div style="color:white;font-size:clamp(34px, 5vw, 58px);font-weight:900;font-style:italic;text-shadow:0 6px 30px rgba(0,0,0,0.9);">The Day in Pictures</div>
                             <div style="color:rgba(255,255,255,0.8);font-size:17px;font-weight:600;margin-top:8px;text-shadow:0 2px 12px rgba(0,0,0,0.9);">No results. No spoilers. Just the day.</div>
                         </div>
+                        <div id="montageCount" style="position:absolute;top:18px;right:20px;background:rgba(0,0,0,0.5);color:#fff;font-size:13px;font-weight:800;border-radius:999px;padding:4px 12px;pointer-events:none;">${startIdx + 1} / ${photos.length}</div>
                         <div style="position:absolute;right:5%;bottom:6%;color:rgba(255,255,255,0.55);font-size:22px;animation:fadeIn 1s 2s ease-out both;">→</div>
                     </div>
                 `;
@@ -17506,6 +17507,7 @@ ${(() => {
                             ${awardScorecardHTML}
                             ${ctpHeroHTML}
                             ${extra9MoneyHTML}
+                            ${awardIdx === 0 ? (() => { const t = presentationState.photoTags || {}; const all = (roundPhotos || []).filter(Boolean); let mine = all.filter(u => Array.isArray(t[u]) && t[u].some(id => id == player.playerId)); let cap = '📸 ' + (player.playerName || '').split(' ')[0] + ' today'; if (!mine.length && all.length) { const hh = Math.abs(parseInt(player.playerId, 10) || 0) % all.length; mine = [all[hh]]; cap = '📸 From the day'; } if (!mine.length) return ''; return `<div style="display:flex;gap:14px;justify-content:center;align-items:flex-end;margin-top:20px;">${mine.slice(0, 4).map((ph, i) => `<div style="background:white;padding:5px 5px 14px;border-radius:4px;box-shadow:0 10px 26px rgba(0,0,0,0.5);transform:rotate(${[-3, 2, -2, 3][i % 4]}deg);"><img src="${ph}" style="width:118px;height:84px;object-fit:cover;display:block;border-radius:2px;" alt=""></div>`).join('')}<div style="color:rgba(255,255,255,0.65);font-size:13px;font-weight:700;letter-spacing:1px;padding-bottom:16px;">${cap}</div></div>`; })() : ''}
                             
                             <!-- Hint -->
                             ${awardIdx + 1 < totalAwards ? `
@@ -18428,7 +18430,7 @@ ${(() => {
                                 </div>
                                 
                                 <div style="text-align:center;color:rgba(255,255,255,0.5);font-size:12px;margin-top:12px;font-style:italic;">
-                                    Tap "Next →" for the loser's bracket
+                                    Tap "Next →" for the Redemption Bracket
                                 </div>
                             </div>
                         `;
@@ -20482,7 +20484,7 @@ ${(() => {
                         <div style="position:absolute;left:4%;bottom:5%;pointer-events:none;animation:closingCaptionIn 8s ease-out forwards;">
                             <div style="color:white;font-size:22px;font-weight:800;text-shadow:0 3px 16px rgba(0,0,0,0.9);">${closingSaying}</div>
                             <div style="color:rgba(255,255,255,0.75);font-size:13px;font-weight:600;letter-spacing:2px;text-transform:uppercase;margin-top:4px;text-shadow:0 2px 10px rgba(0,0,0,0.9);">
-                                ${mostRecentRound.courseName || 'The Dutch Cup'} · ${photos.length} picture${photos.length === 1 ? '' : 's'} · tap Exit to finish
+                                ${mostRecentRound.courseName || 'The Dutch Cup'} · ${photos.length} picture${photos.length === 1 ? '' : 's'} · tap Exit to finish · <span id="closingCount">photo ${startIdx + 1} of ${photos.length}</span>
                             <div id="closingCaption" style="color:#fcd34d;font-size:16px;font-weight:800;text-shadow:0 2px 10px rgba(0,0,0,0.9);margin-top:6px;min-height:20px;">${_captionFor(first)}</div>
                             </div>
                         </div>
@@ -23028,17 +23030,24 @@ ${(() => {
                     window.__montageLoopTimer = null;
                     return;
                 }
-                const photos = (presentationState._curtainPhotos || presentationState.roundPhotos || []).filter(Boolean);
+                const photos = (presentationState.roundPhotos || []).filter(Boolean);
                 if (photos.length < 2) return;
                 const idx = ((presentationState._montagePhotoIdx || 0) + 1) % photos.length;
                 presentationState._montagePhotoIdx = idx;
+                const mc = document.getElementById('montageCount');
+                if (mc) mc.textContent = (idx + 1) + ' / ' + photos.length;
                 const hidden = showingA ? b : a;
                 const visible = showingA ? a : b;
                 hidden.style.backgroundImage = `url('${photos[idx]}')`;
-                setTimeout(() => {
-                    hidden.style.opacity = '1';
-                    visible.style.opacity = '0';
-                }, 120);
+                // Fade only once the incoming photo has actually loaded (or after
+                // a 900ms grace) — a cold Firebase fetch can outlast a fixed delay,
+                // which left the swap invisible.
+                let faded = false;
+                const doFade = () => { if (faded) return; faded = true; hidden.style.opacity = '1'; visible.style.opacity = '0'; };
+                const pre = new Image();
+                pre.onload = doFade;
+                pre.src = photos[idx];
+                setTimeout(doFade, 900);
                 showingA = !showingA;
             }, 5000);
         };
@@ -23059,7 +23068,7 @@ ${(() => {
                     window.__closingLoopTimer = null;
                     return;
                 }
-                const photos = (presentationState.roundPhotos || []).filter(Boolean);
+                const photos = (presentationState._curtainPhotos || presentationState.roundPhotos || []).filter(Boolean);
                 if (photos.length < 2) return;
                 // Advance the cycle; preload the NEXT image into the hidden layer, then fade.
                 const idx = ((presentationState._closingPhotoIdx || 0) + 1) % photos.length;
@@ -23070,14 +23079,17 @@ ${(() => {
                     const ids = tm[photos[idx]] || [];
                     capEl.textContent = ids.length ? '📸 ' + ids.map(id => { const sp = state.players.find(x => x.id == id); return sp ? sp.name.split(' ')[0] : ''; }).filter(Boolean).join(' · ') : '';
                 }
+                const cc2 = document.getElementById('closingCount');
+                if (cc2) cc2.textContent = 'photo ' + (idx + 1) + ' of ' + photos.length;
                 const hidden = showingA ? b : a;
                 const visible = showingA ? a : b;
                 hidden.style.backgroundImage = `url('${photos[idx]}')`;
-                // Give the browser a beat to start loading before the fade
-                setTimeout(() => {
-                    hidden.style.opacity = '1';
-                    visible.style.opacity = '0';
-                }, 120);
+                let faded2 = false;
+                const doFade2 = () => { if (faded2) return; faded2 = true; hidden.style.opacity = '1'; visible.style.opacity = '0'; };
+                const pre2 = new Image();
+                pre2.onload = doFade2;
+                pre2.src = photos[idx];
+                setTimeout(doFade2, 900);
                 showingA = !showingA;
             }, 5000);
         };
