@@ -205,7 +205,7 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
 }
 .score-chip .n { font-size: 25px; font-weight: 900; line-height: 1.05; }
 .score-chip:active { transform: scale(0.95); }
-.score-chip.dimmed { opacity: 0.38; }
+.score-chip.dimmed { opacity: 0.30; }
 .score-chip.picked { border-style: solid; }
 .score-chip.picked.birdie { border-color: var(--birdie); color: white; background: var(--birdie); }
 .score-chip.picked.eagle, .score-chip.picked.albatross { border-color: var(--eagle); color: #3d2c00; background: var(--eagle); }
@@ -355,6 +355,34 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
 .foot-btn.finish.done { background: var(--fairway); color: white; box-shadow: 0 3px 12px rgba(46,125,79,0.4); animation: nextPulse 1.2s ease-in-out infinite; }
 .foot-btn.finish.done:active { background: var(--fairway-dk); }
 .foot-btn.finish { flex: 2.2; background: #E3A93E; color: #3d2c00; font-size: 18px; box-shadow: 0 3px 12px rgba(227,169,62,0.45); }
+/* Hole-jump dropdown in the footer nav */
+.foot-jump { flex: 0 0 auto; width: 96px; height: 52px; border-radius: 12px; border: 2px solid var(--line); background: #fff; font-size: 15px; font-weight: 800; color: var(--ink); padding: 0 6px; }
+/* Player scorecard / summary (photo tap, or a name on the finished page) */
+.sc-head { text-align: center; }
+.sc-head .sc-name { font-size: 22px; font-weight: 900; }
+.sc-head .sc-meta { color: var(--muted); font-weight: 700; font-size: 13px; }
+.sc-bigline { display: flex; justify-content: center; gap: 18px; font-size: 17px; font-weight: 900; font-variant-numeric: tabular-nums; margin-top: 6px; flex-wrap: wrap; }
+.sc-nines { display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
+.sc-nine { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 8px 6px; }
+.sc-nine h3 { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; margin: 0 2px 6px; }
+.sc-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.sc-table th, .sc-table td { text-align: center; padding: 4px 1px; font-size: 13px; }
+.sc-table td.rowlab { text-align: left; font-weight: 800; color: var(--muted); font-size: 11px; padding-left: 2px; white-space: nowrap; }
+.sc-table td.sc-gross { font-weight: 900; border-radius: 6px; }
+.sc-table td.birdie { background: var(--birdie); color: #fff; }
+.sc-table td.eagle, .sc-table td.albatross { background: var(--eagle); color: #3d2c00; }
+.sc-table td.bogey { color: var(--bogey); }
+.sc-table td.double { color: var(--double); }
+.sc-table td.tot { font-weight: 900; border-left: 2px solid var(--line); }
+.sc-table td.sc-awards { font-size: 12px; }
+.sc-sumrow { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 6px 2px; border-bottom: 1px solid var(--line); font-size: 15px; }
+.sc-sumrow:last-child { border-bottom: none; }
+.sc-sumrow .pts { font-weight: 900; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sc-sumrow.total { font-size: 18px; }
+@media (orientation: landscape) {
+    .sc-nines { flex-direction: row; }
+    .sc-nines > * { flex: 1; }
+}
 .foot-btn.finish:active { background: #C98F27; }
 .foot-btn.finish.pulse { animation: finishPulse 1.2s ease-in-out infinite; }
 @keyframes finishPulse {
@@ -432,6 +460,8 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
         <p class="muted" style="margin-top:14px;">Loading round…</p>
     </div>
 </div>
+
+<div id="foot-slot"></div>
 
 <div class="foot-note" id="foot-version">Dutch Cup Score Entry</div>
 
@@ -628,7 +658,7 @@ document.addEventListener('visibilitychange', () => {
     try { if (document.visibilityState === 'hidden' && hasPendingEdits()) flushPendingEdits(); } catch (e) {}
 });
 
-const SE_VERSION = '2.37.0'; // net shading made visible: under-par chips get solid fills (birdie green, eagle gold) so a net birdie no longer looks like a par
+const SE_VERSION = '2.38.0'; // persistent footer nav (Next double-tap fix) + hole-jump dropdown; player scorecard/summary on photo tap; unpicked chips dimmed further
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
@@ -648,6 +678,7 @@ const state = {
     groupDraft: null,          // { assignments: {pid: group# (0 = unassigned)}, groups: [..] }
     groupPick: null,           // player id picked up in the group editor
     auditPlayerId: null,       // when set, the leaderboard shows that player's score audit
+    cardPlayerId: null,        // player whose full scorecard/summary is open (photo tap)
     events: [],                // league events (carry the match-play bracket)
     leaguePlayers: [],         // player records (carry handicapIndex for USGA mode)
     useUSGA: false,            // mirrors settings.useUSGAHandicap
@@ -700,6 +731,9 @@ function setStatus(text, cls) {
 function setHeader(title, subtitle) {
     if (title) $('#header-title').textContent = title;
     if (subtitle !== undefined) $('#header-subtitle').textContent = subtitle;
+    // Every full-screen render starts by hiding the persistent footer nav;
+    // the scoring view re-mounts (shows) it at the end of its own render.
+    hideFooterNav();
 }
 
 function formatRoundDate(round) {
@@ -1500,6 +1534,7 @@ window.__switchPlayer = function() {
     state.currentPlayerId = null; state.groupNumber = null;
     state.sheetPlayerId = null; state.padExpanded = false; state.photos = false;
     state.editGroups = false; state.groupDraft = null; state.groupPick = null;
+    state.cardPlayerId = null;
     state.pendingEdits = { scores: {}, ctpWinners: {}, balls: {}, bbb: {} };
     setStatus('', '');
     renderPlayerPicker();
@@ -1527,6 +1562,7 @@ function renderScoreEntry() {
     $('#switch-btn').style.display = 'inline-block';
     $('#camera-btn').style.display = 'inline-block';
     $('#gallery-btn').style.display = 'inline-block';
+    if (state.cardPlayerId) { renderPlayerCard(); return; }
     if (state.editGroups) { renderGroupEditor(); return; }
     if (state.photos) { renderPhotosView(round); return; }
 
@@ -1550,7 +1586,7 @@ function renderScoreEntry() {
         onclick: () => { state.board = 'teams'; renderLeaderboard(); }
     }, '\u{1F4CA} Live leaderboard'));
 
-    appEl.appendChild(buildFooterNav());
+    mountFooterNav();
 
     // Score sheet (bottom sheet pad) if a player's score box is active
     if (state.sheetPlayerId != null) {
@@ -1746,6 +1782,16 @@ function buildScoresList(round, groupPlayers) {
         // its top corner; "you" is the green frame on the card.
         const panel = el('div', { class: 'avatar-panel' });
         panel.appendChild(buildPanelAvatar(p));
+        // Tap the photo → that player's full scorecard & scoring summary,
+        // available on any scoring screen for quick checks (Ron, 2026-11-01).
+        // While a points token is picked up the tap is a drop on the card
+        // instead, so the row handler takes it and no card opens.
+        panel.style.cursor = 'pointer';
+        panel.addEventListener('click', e => {
+            if (pointDrag.selected) return;
+            if (e && e.stopPropagation) e.stopPropagation();
+            openPlayerCard(p.id);
+        });
         if (strokes > 0) {
             panel.appendChild(el('span', {
                 class: 'stroke-pips',
@@ -2496,35 +2542,84 @@ function renderLeaderboard() {
     }, '\u2190 Back to scoring'));
 }
 
+// The footer nav is built ONCE and then only updated in place
+// (mountFooterNav / syncFooterNav below). Rebuilding it on every render —
+// the old way — swapped the button out from under the scorer's finger
+// between touch-down and touch-up whenever a re-render landed mid-tap,
+// which ate the first tap on Next (Ron, 2026-11-01). The handlers read
+// live state, so one build stays correct for the whole round.
+// The move-on button tells the hole's state at a glance: YELLOW while
+// anything is missing (a score, or any of the three Bs), GREEN (and
+// pulsing) only when the hole is fully complete. The button still works
+// either way — the colour is a signal, not a lock. Text unchanged:
+// "Next hole" / "Hole done — next" / "Finish round". Between Prev and
+// Next sits a compact hole-jump dropdown (Ron, 2026-11-01).
 function buildFooterNav() {
     const wrap = el('div', { class: 'foot-nav' });
-    // The move-on button tells the hole's state at a glance (Ron, 2026-11-01):
-    // YELLOW while anything is missing (a score, or any of the three Bs),
-    // GREEN (and pulsing) only when the hole is fully complete. The button
-    // still works either way — the colour is a signal, not a lock. Text is
-    // unchanged: "Next hole" / "Hole done — next" / "Finish round".
-    const round = getRoundById(state.selectedRoundId);
-    const gp = getGroupPlayers(round, state.groupNumber);
-    const holeDone = holeStatus(round, gp, state.currentHole) === 'complete';
-    wrap.appendChild(el('button', {
-        class: 'foot-btn prev',
-        onclick: () => goToHole(state.currentHole - 1),
-        disabled: state.currentHole === 0 ? '' : null
-    }, el('span', null, '←'), el('span', null, 'Prev hole')));
-    if (state.currentHole === 17) {
-        // Hole 18: the round ends HERE — a distinct Finish button (also the save moment,
-        // since there is no next hole to trigger the usual save-on-hole-change).
-        wrap.appendChild(el('button', {
-            class: 'foot-btn finish' + (holeDone ? ' done' : ''),
-            onclick: () => finishRound()
-        }, el('span', null, '🏁'), el('span', null, 'Finish round')));
-    } else {
-        wrap.appendChild(el('button', {
-            class: 'foot-btn next' + (holeDone ? ' pulse' : ' incomplete'),
-            onclick: () => goToHole(state.currentHole + 1)
-        }, el('span', null, holeDone ? 'Hole done — next' : 'Next hole'), el('span', null, '→')));
-    }
+    const prev = el('button', {
+        class: 'foot-btn prev', type: 'button',
+        onclick: () => goToHole(state.currentHole - 1)
+    }, el('span', null, '←'), el('span', null, 'Prev hole'));
+    const jump = el('select', {
+        class: 'foot-jump', 'aria-label': 'Jump to hole',
+        onchange: (e) => { const v = parseInt(e.target.value, 10); if (!isNaN(v)) goToHole(v); }
+    });
+    for (let h = 0; h < 18; h++) jump.appendChild(el('option', { value: String(h) }, `Hole ${h + 1}`));
+    const nextLabel = el('span', { class: 'next-label' }, 'Next hole');
+    const next = el('button', {
+        class: 'foot-btn next', type: 'button',
+        onclick: () => goToHole(state.currentHole + 1)
+    }, nextLabel, el('span', null, '→'));
+    next._label = nextLabel;
+    // Hole 18: the round ends HERE — a distinct Finish button (also the save
+    // moment, since there is no next hole to trigger save-on-hole-change).
+    const fin = el('button', {
+        class: 'foot-btn finish', type: 'button',
+        onclick: () => finishRound()
+    }, el('span', null, '🏁'), el('span', null, 'Finish round'));
+    wrap.appendChild(prev);
+    wrap.appendChild(jump);
+    wrap.appendChild(next);
+    wrap.appendChild(fin);
+    syncFooterNav(wrap);
     return wrap;
+}
+
+function syncFooterNav(wrap) {
+    if (!wrap) return;
+    const round = getRoundById(state.selectedRoundId);
+    const gp = round ? getGroupPlayers(round, state.groupNumber) : [];
+    const holeDone = round ? holeStatus(round, gp, state.currentHole) === 'complete' : false;
+    const prev = wrap.children[0], jump = wrap.children[1], next = wrap.children[2], fin = wrap.children[3];
+    if (prev) prev.disabled = state.currentHole === 0;
+    if (jump) jump.value = String(state.currentHole);
+    const isLast = state.currentHole === 17;
+    if (next) {
+        next.style.display = isLast ? 'none' : '';
+        next.className = 'foot-btn next' + (holeDone ? ' pulse' : ' incomplete');
+        if (next._label) next._label.textContent = holeDone ? 'Hole done — next' : 'Next hole';
+    }
+    if (fin) {
+        fin.style.display = isLast ? '' : 'none';
+        fin.className = 'foot-btn finish' + (holeDone ? ' done' : '');
+    }
+}
+
+function mountFooterNav() {
+    if (typeof document === 'undefined' || !document.getElementById) return;
+    const slot = document.getElementById('foot-slot');
+    if (!slot) return;
+    let nav = slot.querySelector ? slot.querySelector('.foot-nav') : null;
+    if (!nav) { nav = buildFooterNav(); slot.appendChild(nav); }
+    else syncFooterNav(nav);
+    slot.style.display = '';
+}
+
+function hideFooterNav() {
+    try {
+        const slot = document.getElementById('foot-slot');
+        if (slot) slot.style.display = 'none';
+    } catch (e) { /* no slot in this context — nothing to hide */ }
 }
 
 // ─── Finish round: save everything, then show the wrap-up screen ───
@@ -2539,6 +2634,7 @@ function finishRound() {
 function renderRoundFinished() {
     const round = getRoundById(state.selectedRoundId);
     if (!round) return;
+    if (state.cardPlayerId) { renderPlayerCard(); return; }
     const groupPlayers = getGroupPlayers(round, state.groupNumber);
 
     setHeader(round.courseName || 'Round', `Group ${state.groupNumber} · Finished`);
@@ -2582,10 +2678,14 @@ function renderRoundFinished() {
     sum.appendChild(el('h2', { style: 'font-size:16px;' }, "Your group's day"));
     groupPlayers.forEach(p => {
         const t = computePlayerTotals(round, p);
-        const r = el('div', { class: 'balls-row' });
+        // Tap a name → that player's full scorecard & scoring summary for
+        // the end-of-round checks (Ron, 2026-11-01).
+        const r = el('div', { class: 'balls-row', style: 'cursor:pointer;' });
+        r.addEventListener('click', () => openPlayerCard(p.id));
         r.appendChild(el('div', { class: 'balls-name' }, p.name || '?'));
         r.appendChild(el('div', { style: 'font-weight:900;font-size:17px;font-variant-numeric:tabular-nums;' },
             `${t.gross || '—'} gross · ${t.points} pts`));
+        r.appendChild(el('div', { class: 'muted', style: 'font-weight:900;' }, '›'));
         sum.appendChild(r);
     });
     appEl.appendChild(sum);
@@ -2596,6 +2696,153 @@ function renderRoundFinished() {
         onclick: () => { state.finished = false; renderScoreEntry(); }
     }, '← Back to scoring');
     appEl.appendChild(back);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// PLAYER SCORECARD / SUMMARY — one page per player for doing checks:
+// the full 18 (gross, net, points per hole), every Bingo/Bango/Bongo and
+// CTP they picked up, balls remaining, and the points breakdown that adds
+// up to their total. Opened by tapping a player's photo on any scoring
+// screen, or their name on the round-complete page (Ron, 2026-11-01).
+// Rotate the phone: in landscape the two nines sit side by side.
+// ═══════════════════════════════════════════════════════════════════════
+function openPlayerCard(playerId) {
+    state.cardPlayerId = playerId;
+    renderPlayerCard();
+}
+
+function buildPlayerCard(round, p) {
+    const pid = idStr(p.id);
+    const t = computePlayerTotals(round, p);
+    const hc = seHandicapForRound(round, p);
+    const pars = round.pars || [], sIs = round.handicaps || [];
+    const team = p.teamName || '';
+    const wrap = el('div', null);
+
+    // Headline: gross / net / points at a glance
+    const head = el('div', { class: 'card sc-head' });
+    head.appendChild(el('div', { class: 'sc-name' }, p.name || '?'));
+    head.appendChild(el('div', { class: 'sc-meta' }, `${team ? team + ' · ' : ''}Course handicap ${hc}`));
+    let netTotal = 0;
+    for (let h = 0; h < 18; h++) {
+        const s = effectiveScore(round, p.id, h);
+        if (s === '' || s == null) continue;
+        const n = parseInt(s, 10);
+        if (!isNaN(n)) netTotal += n - strokesOnHole(hc, sIs[h]);
+    }
+    const big = el('div', { class: 'sc-bigline' });
+    big.appendChild(el('span', null, `Gross ${t.thru ? t.gross : '—'}`));
+    big.appendChild(el('span', null, `Net ${t.thru ? netTotal : '—'}`));
+    big.appendChild(el('span', null, `${t.points} pts`));
+    head.appendChild(big);
+    if (t.thru < 18) head.appendChild(el('div', { class: 'sc-meta' }, `Thru ${t.thru} of 18`));
+    wrap.appendChild(head);
+
+    // The two nines
+    const mkRow = (label, cells, totVal) => {
+        const tr = el('tr', null);
+        tr.appendChild(el('td', { class: 'rowlab' }, label));
+        cells.forEach(c => tr.appendChild(c));
+        tr.appendChild(el('td', { class: 'tot' }, totVal));
+        return tr;
+    };
+    const nines = el('div', { class: 'sc-nines' });
+    [0, 9].forEach(start => {
+        const box = el('div', { class: 'sc-nine' });
+        box.appendChild(el('h3', null, start === 0 ? 'Front 9' : 'Back 9'));
+        const tbl = el('table', { class: 'sc-table' });
+        const holeCells = [], parCells = [], siCells = [], grossCells = [], netCells = [], ptsCells = [], awardCells = [];
+        let parSum = 0, grossSum = 0, netSum = 0, ptsSum = 0, anyGross = false;
+        for (let i = 0; i < 9; i++) {
+            const h = start + i;
+            const par = pars[h], si = sIs[h];
+            const strokes = strokesOnHole(hc, si);
+            const s = effectiveScore(round, p.id, h);
+            const n = (s === '' || s == null) ? NaN : parseInt(s, 10);
+            holeCells.push(el('td', { style: 'font-weight:800;' }, String(h + 1)));
+            parCells.push(el('td', null, par != null ? String(par) : '–'));
+            siCells.push(el('td', null, (si != null ? String(si) : '–') + (strokes > 0 ? ` +${strokes}` : '')));
+            parSum += par || 0;
+            if (!isNaN(n)) {
+                anyGross = true;
+                const net = n - strokes;
+                grossSum += n; netSum += net;
+                const pts = getPoints(net - par); ptsSum += pts;
+                grossCells.push(el('td', { class: 'sc-gross ' + classForScore(n, par, strokes) }, String(n)));
+                netCells.push(el('td', null, String(net)));
+                ptsCells.push(el('td', null, String(pts)));
+            } else {
+                grossCells.push(el('td', { class: 'sc-gross' }, '–'));
+                netCells.push(el('td', null, '–'));
+                ptsCells.push(el('td', null, '–'));
+            }
+            const bbb = effectiveBBB(round, h);
+            let aw = '';
+            BBB_SLOTS.forEach(sl => { if (pid !== '' && idStr(bbb[sl.key]) === pid) aw += sl.icon; });
+            if (pid !== '' && idStr(effectiveCTP(round, h)) === pid) aw += '\u{1F4CD}';
+            awardCells.push(el('td', { class: 'sc-awards' }, aw));
+        }
+        tbl.appendChild(mkRow('HOLE', holeCells, start === 0 ? 'OUT' : 'IN'));
+        tbl.appendChild(mkRow('PAR', parCells, String(parSum)));
+        tbl.appendChild(mkRow('SI', siCells, ''));
+        tbl.appendChild(mkRow('GROSS', grossCells, anyGross ? String(grossSum) : '–'));
+        tbl.appendChild(mkRow('NET', netCells, anyGross ? String(netSum) : '–'));
+        tbl.appendChild(mkRow('PTS', ptsCells, anyGross ? String(ptsSum) : '–'));
+        tbl.appendChild(mkRow('BBB', awardCells, ''));
+        box.appendChild(tbl);
+        nines.appendChild(box);
+    });
+    wrap.appendChild(nines);
+
+    // Points breakdown — must add up to the total above
+    const sum = el('div', { class: 'card' });
+    sum.appendChild(el('h2', { style: 'font-size:16px;' }, 'Scoring summary'));
+    const sumRow = (label, pts, note) => {
+        const r = el('div', { class: 'sc-sumrow' });
+        const left = el('span', null, label);
+        if (note) left.appendChild(el('span', { class: 'muted', style: 'font-size:12.5px;' }, ` · ${note}`));
+        r.appendChild(left);
+        r.appendChild(el('span', { class: 'pts' }, `${pts} pts`));
+        return r;
+    };
+    sum.appendChild(sumRow('Stroke play', t.strokePoints, `gross ${t.gross}`));
+    sum.appendChild(sumRow('\u{1F3AF} Bingo Bango Bongo', t.bbbPoints, `${parseInt(p.bbbTotal, 10) || 0} won`));
+    sum.appendChild(sumRow('\u{1F3BE} Balls remaining', t.ballPoints, `${effectiveBalls(round, p.id)} left`));
+    if (t.ctpPoints) {
+        let cw = 0;
+        for (let h = 0; h < 18; h++) if (idsEqual(effectiveCTP(round, h), p.id)) cw++;
+        sum.appendChild(sumRow('\u{1F4CD} Closest to the pin', t.ctpPoints, `${cw} won`));
+    }
+    if (t.skinsPoints) sum.appendChild(sumRow('\u{1F3B2} Skins', t.skinsPoints, `${t.skinsCount} skin${t.skinsCount === 1 ? '' : 's'}`));
+    if (t.extra9Points) sum.appendChild(sumRow('Extra 9', t.extra9Points, ''));
+    const tot = el('div', { class: 'sc-sumrow total' });
+    tot.appendChild(el('span', null, 'TOTAL'));
+    tot.appendChild(el('span', { class: 'pts' }, `${t.points} pts`));
+    sum.appendChild(tot);
+    wrap.appendChild(sum);
+    return wrap;
+}
+
+function renderPlayerCard() {
+    const round = getRoundById(state.selectedRoundId);
+    const groupPlayers = round ? getGroupPlayers(round, state.groupNumber) : [];
+    const p = groupPlayers.find(x => idsEqual(x.id, state.cardPlayerId));
+    if (!round || !p) {
+        state.cardPlayerId = null;
+        if (state.finished) renderRoundFinished(); else renderScoreEntry();
+        return;
+    }
+    setHeader(p.name || 'Scorecard', round.courseName || '');
+    $('#switch-btn').style.display = 'none';
+    $('#camera-btn').style.display = 'none';
+    $('#gallery-btn').style.display = 'none';
+    const appEl = $('#app');
+    appEl.innerHTML = '';
+    appEl.appendChild(buildPlayerCard(round, p));
+    appEl.appendChild(el('button', {
+        class: 'foot-btn prev', type: 'button', style: 'width:100%;margin-top:4px;',
+        onclick: () => { state.cardPlayerId = null; if (state.finished) renderRoundFinished(); else renderScoreEntry(); }
+    }, '← Back'));
 }
 
 function goToHole(holeIdx) {
