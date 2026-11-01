@@ -778,7 +778,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = 'v2026.11.01.36';
+        const APP_VERSION = 'v2026.11.01.37';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -13946,6 +13946,17 @@ ${(() => {
                           highlightLabel: '' }
                     ];
                     
+                    // ── Wire the BBB crown data onto the analytics object the
+                    // award builder reads. These fields were never assigned to
+                    // presentationAnalytics (they only lived on the presentation
+                    // state literal), so the whole BBB award family — the BBB
+                    // CHAMPION award, the split crowns, and the envelope gate in
+                    // the render — silently read undefined and never fired.
+                    presentationAnalytics.bbbWinner = (bbbCrownCounts.length ? bbbCrownCounts[0] : null);
+                    presentationAnalytics.bbbTop3 = bbbCrownCounts.slice(0, 3).map((p, i) => ({ ...p, place: i + 1 }));
+                    presentationAnalytics.bbbSplitCounts = bbbSplitCounts;
+                    presentationAnalytics.bbbSplitWinners = bbbSplitWinners;
+                    presentationAnalytics.prevChampionName = _rr.prevChampionName;
                     // Build the awards list for each player
                     individualPlayerSlides.forEach(playerSlide => {
                         const awards = [];
