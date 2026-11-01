@@ -45,7 +45,11 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
 .app-header {
     background: var(--card);
     border-bottom: 3px solid var(--fairway);
-    padding: 8px 16px 7px;
+    /* In home-screen (standalone) mode the status bar is translucent and the
+       page draws underneath it — pad the header down by the safe-area inset
+       so the title and Switch player button clear the clock / Dynamic Island.
+       In a normal browser tab the inset is 0 and this changes nothing. */
+    padding: calc(8px + env(safe-area-inset-top)) 16px 7px;
     position: sticky; top: 0; z-index: 100;
     display: flex; align-items: center; justify-content: space-between; gap: 8px;
 }
@@ -629,7 +633,7 @@ document.addEventListener('visibilitychange', () => {
     try { if (document.visibilityState === 'hidden' && hasPendingEdits()) flushPendingEdits(); } catch (e) {}
 });
 
-const SE_VERSION = '2.24.0'; // points tray: drag/tap badge tokens onto names (option B)
+const SE_VERSION = '2.24.1'; // header clears the iOS status bar in standalone mode
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
