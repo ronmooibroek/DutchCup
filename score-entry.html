@@ -207,8 +207,8 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
 .score-chip:active { transform: scale(0.95); }
 .score-chip.dimmed { opacity: 0.38; }
 .score-chip.picked { border-style: solid; }
-.score-chip.picked.birdie { border-color: var(--birdie); color: var(--birdie); background: #EDF7F1; }
-.score-chip.picked.eagle, .score-chip.picked.albatross { border-color: var(--eagle); color: var(--eagle); background: #FBF4E1; }
+.score-chip.picked.birdie { border-color: var(--birdie); color: white; background: var(--birdie); }
+.score-chip.picked.eagle, .score-chip.picked.albatross { border-color: var(--eagle); color: #3d2c00; background: var(--eagle); }
 .score-chip.picked.par-score { border-color: var(--fairway); color: var(--fairway-dk); background: #F4FAF6; }
 .score-chip.picked.bogey { border-color: var(--bogey); color: var(--bogey); background: #FBF2E7; }
 .score-chip.picked.double, .score-chip.picked.worse { border-color: var(--dbl); color: var(--dbl); background: #FBEBE9; }
@@ -259,10 +259,10 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
 }
 .score-cell .word { font-size: 9px; font-weight: 800; letter-spacing: 0.6px; text-transform: uppercase; }
 .score-cell.empty { color: #B9C4BC; }
-.score-cell.birdie { border-style: solid; border-color: var(--birdie); color: var(--birdie); background: #EDF7F1; }
-.score-cell.eagle { border-style: solid; border-color: var(--eagle); color: var(--eagle); background: #FBF4E1; }
+.score-cell.birdie { border-style: solid; border-color: var(--birdie); color: white; background: var(--birdie); }
+.score-cell.eagle { border-style: solid; border-color: var(--eagle); color: #3d2c00; background: var(--eagle); }
 .score-cell.par-score { border-style: solid; border-color: var(--fairway); color: var(--fairway-dk); background: #F4FAF6; }
-.score-cell.albatross { border-style: solid; border-color: var(--eagle); color: var(--eagle); background: #FBF4E1; }
+.score-cell.albatross { border-style: solid; border-color: var(--eagle); color: #3d2c00; background: var(--eagle); }
 .score-cell.bogey  { border-style: solid; border-color: var(--bogey); color: var(--bogey); background: #FBF2E7; }
 .score-cell.double, .score-cell.worse { border-style: solid; border-color: var(--dbl); color: var(--dbl); background: #FBEBE9; }
 
@@ -628,7 +628,7 @@ document.addEventListener('visibilitychange', () => {
     try { if (document.visibilityState === 'hidden' && hasPendingEdits()) flushPendingEdits(); } catch (e) {}
 });
 
-const SE_VERSION = '2.36.0'; // group editor: anyone can create or change groups until the first score is entered
+const SE_VERSION = '2.37.0'; // net shading made visible: under-par chips get solid fills (birdie green, eagle gold) so a net birdie no longer looks like a par
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
