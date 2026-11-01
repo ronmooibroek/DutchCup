@@ -70,7 +70,7 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
 .save-status.error  { background: #FBDEDC; color: var(--dbl); }
 
 /* ─── App shell ─── */
-#app { max-width: 560px; margin: 0 auto; padding: 6px 10px 172px; }
+#app { max-width: 560px; margin: 0 auto; padding: 6px 10px 96px; }
 /* ─── Live leaderboard ─── */
 .lb-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
 .lb-tab {
@@ -214,12 +214,9 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
       Drag a token onto a player's card, or tap a token then tap a card.
       Awarded points show as badges beside the player's name. ── */
 .points-bar {
-    position: fixed; left: 0; right: 0; z-index: 150;
-    bottom: calc(71px + env(safe-area-inset-bottom));
-    max-width: 560px; margin: 0 auto;
     display: flex; flex-direction: row; justify-content: center; gap: 10px;
-    background: var(--card); border-top: 2px solid var(--sand);
-    padding: 8px 12px;
+    background: white; border: 2px dashed var(--fairway); border-radius: 12px;
+    padding: 8px 10px; margin-bottom: 8px;
 }
 .point-token {
     width: 48px; height: 48px; border-radius: 12px; border: 2px solid var(--sand);
@@ -624,7 +621,7 @@ document.addEventListener('visibilitychange', () => {
     try { if (document.visibilityState === 'hidden' && hasPendingEdits()) flushPendingEdits(); } catch (e) {}
 });
 
-const SE_VERSION = '2.29.2'; // fix mangled avatar CSS selectors so panel photos actually render
+const SE_VERSION = '2.30.0'; // points bar sits in-flow below the last player, above the photo card
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
@@ -1468,7 +1465,6 @@ function buildScoresList(round, groupPlayers) {
         tok.addEventListener('pointerdown', e => onTokenPointerDown(e, s.key, s.icon));
         tray.appendChild(tok);
     });
-    list.appendChild(tray);
 
     groupPlayers.forEach(p => {
         const pid = idStr(p.id);
@@ -1559,6 +1555,7 @@ function buildScoresList(round, groupPlayers) {
         list.appendChild(row);
     });
 
+    list.appendChild(tray);
     return list;
 }
 
