@@ -201,11 +201,16 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
 /* ── Points tray (Option B): one tray per hole holds the BBB/CTP tokens.
       Drag a token onto a player's card, or tap a token then tap a card.
       Awarded points show as badges beside the player's name. ── */
-.points-tray {
-    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-    background: white; border: 2px dashed var(--fairway); border-radius: 12px;
-    padding: 8px 10px; margin-bottom: 8px;
+.points-rail {
+    position: fixed; right: 6px; top: 50%; transform: translateY(-50%); z-index: 150;
+    display: flex; flex-direction: column; gap: 8px;
+    background: white; border: 2px dashed var(--fairway); border-radius: 14px;
+    padding: 8px 6px; box-shadow: var(--shadow);
 }
+/* the scoring column leaves room for the rail so cards never slide under it */
+.score-list { padding-right: 62px; }
+.hole-nav { padding-right: 62px; }
+.pick-card.photo-card { margin-right: 62px; }
 .point-token {
     width: 48px; height: 48px; border-radius: 12px; border: 2px solid var(--sand);
     background: var(--card); padding: 0; flex-shrink: 0; cursor: grab;
@@ -616,7 +621,7 @@ document.addEventListener('visibilitychange', () => {
     try { if (document.visibilityState === 'hidden' && hasPendingEdits()) flushPendingEdits(); } catch (e) {}
 });
 
-const SE_VERSION = '2.25.0'; // tray is icons-only; hole-number strip removed (Prev/Next only)
+const SE_VERSION = '2.26.0'; // points tokens ride a vertical rail on the right edge
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
@@ -1282,7 +1287,7 @@ function renderScoreEntry() {
     // Live leaderboard entry point
     appEl.appendChild(el('button', {
         class: 'foot-btn prev', type: 'button',
-        style: 'width:100%;margin-bottom:6px;min-height:44px;background:#EDF4EE;color:var(--fairway-dk);font-size:15px;',
+        style: 'width:calc(100% - 62px);margin-bottom:6px;min-height:44px;background:#EDF4EE;color:var(--fairway-dk);font-size:15px;',
         onclick: () => { state.board = 'teams'; renderLeaderboard(); }
     }, '\u{1F4CA} Live leaderboard'));
 
@@ -1422,7 +1427,7 @@ function buildScoresList(round, groupPlayers) {
     // badges). Tokens for Bingo/Bango/Bongo, plus CTP on par 3s. A token
     // dims once its point is awarded; awarded points ride as badges beside
     // the holder's name (built per player below).
-    const tray = el('div', { class: 'points-tray' });
+    const tray = el('div', { class: 'points-rail' });
     const traySlots = BBB_SLOTS.map(s => ({ key: s.key, icon: s.icon, name: s.name, used: !!bbbSlots[s.key] }));
     if (isPar3) traySlots.push({ key: 'ctp', icon: '\u{1F4CD}', name: 'Closest to the pin', used: !!ctpWinnerId });
     traySlots.forEach(s => {
