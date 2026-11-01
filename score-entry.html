@@ -182,7 +182,7 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
    at the left of the card, no name text anywhere on the card. */
 .avatar-panel { width: 72px; height: 72px; border-radius: 12px; overflow: hidden; flex-shrink: 0; position: relative; }
 .avatar-panel .player-avatar { width: 100%; height: 100%; border-radius: 0; font-size: 30px; }
-.avatar-panel .avatar-panel img.player-avatar-img { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 0; object-fit: cover; background: #e5e7eb; }
+.avatar-panel .avatar-wrap img.player-avatar-img { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 0; object-fit: cover; background: #e5e7eb; }
 .panel-badges { position: absolute; left: 6px; bottom: 6px; display: flex; gap: 4px; z-index: 2; }
 .stroke-pips {
     position: absolute; top: 6px; right: 6px; z-index: 2;
@@ -237,7 +237,7 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
     box-shadow: 0 8px 20px rgba(30,42,32,0.35); transform: translate(-50%, -50%);
 }
 .score-row.drop-hint { outline: 3px solid var(--fairway); outline-offset: 1px; }
-.avatar-wrap { position: relative; width: 42px; height: 42px; flex-shrink: 0; }
+.avatar-panel .avatar-wrap { position: absolute; inset: 0; display: block; }
 .player-avatar { display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; }
 .bbb-badge { border: 2px solid var(--sand); border-radius: 999px; padding: 1px 8px; font-size: 13px; line-height: 1.4; cursor: pointer; }
 .bbb-badge.b-bingo { background: var(--fairway); border-color: var(--fairway-dk); }
@@ -624,7 +624,7 @@ document.addEventListener('visibilitychange', () => {
     try { if (document.visibilityState === 'hidden' && hasPendingEdits()) flushPendingEdits(); } catch (e) {}
 });
 
-const SE_VERSION = '2.29.1'; // photo panel is a fixed 72px square; card height back to compact
+const SE_VERSION = '2.29.2'; // fix mangled avatar CSS selectors so panel photos actually render
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
