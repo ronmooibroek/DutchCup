@@ -173,13 +173,25 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
 .score-list { margin-bottom: 6px; }
 .score-row {
     background: var(--card); border-radius: 12px; box-shadow: var(--shadow);
-    padding: 7px 10px; margin-bottom: 6px;
+    padding: 0; margin-bottom: 6px; overflow: hidden;
     border-left: 4px solid transparent;
+    display: flex; align-items: stretch; min-height: 94px;
 }
-.score-row.is-me { border-left-color: var(--fairway); }
-.score-row-top { display: flex; align-items: center; gap: 10px; }
+.score-row.is-me { border-left-color: var(--fairway); outline: 2px solid var(--fairway); outline-offset: -2px; }
+/* Option B (Ron's pick): the photo IS the identity — a full-height panel
+   at the left of the card, no name text anywhere on the card. */
+.avatar-panel { width: 92px; flex-shrink: 0; position: relative; }
+.avatar-panel .player-avatar { width: 100%; height: 100%; border-radius: 0; font-size: 38px; }
+.avatar-panel .avatar-panel img.player-avatar-img { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 0; object-fit: cover; background: #e5e7eb; }
+.panel-badges { position: absolute; left: 6px; bottom: 6px; display: flex; gap: 4px; z-index: 2; }
+.stroke-pips {
+    position: absolute; top: 6px; right: 6px; z-index: 2;
+    background: rgba(30,42,32,0.55); color: white; font-size: 10px;
+    letter-spacing: 2px; padding: 3px 5px 3px 7px; border-radius: 999px; line-height: 1;
+}
+.score-main { flex: 1; min-width: 0; padding: 8px 10px; display: flex; flex-direction: column; justify-content: center; }
 /* ── One-tap score chips: the 4 common scores (par..triple) sit right under the name ── */
-.score-chips { display: flex; gap: 6px; margin-top: 6px; }
+.score-chips { display: flex; gap: 6px; }
 .score-chip {
     flex: 1 1 0; min-height: 46px; border: 2px solid var(--sand); background: white;
     border-radius: 10px; cursor: pointer; padding: 3px 0 4px;
@@ -226,28 +238,12 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
 }
 .score-row.drop-hint { outline: 3px solid var(--fairway); outline-offset: 1px; }
 .avatar-wrap { position: relative; width: 42px; height: 42px; flex-shrink: 0; }
-.player-avatar {
-    width: 42px; height: 42px; border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    color: white; font-weight: 700; font-size: 19px;
-}
-.avatar-wrap img.player-avatar-img {
-    position: absolute; inset: 0; width: 42px; height: 42px;
-    border-radius: 50%; object-fit: cover; background: #e5e7eb;
-}
-.bbb-badges { display: inline-flex; gap: 4px; flex-shrink: 0; }
+.player-avatar { display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; }
 .bbb-badge { border: 2px solid var(--sand); border-radius: 999px; padding: 1px 8px; font-size: 13px; line-height: 1.4; cursor: pointer; }
 .bbb-badge.b-bingo { background: var(--fairway); border-color: var(--fairway-dk); }
 .bbb-badge.b-bango { background: #2B6CB0; border-color: #215685; }
 .bbb-badge.b-bongo { background: #FFD95E; border-color: #E3B93E; }
 .bbb-badge.b-ctp { background: var(--flag); border-color: #b03330; }
-.player-info { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; }
-.player-name { font-size: 16px; font-weight: 800; display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; flex: 0 1 auto; min-width: 0; }
-.me-tag {
-    background: var(--fairway); color: white; font-size: 10px; font-weight: 900;
-    letter-spacing: 0.8px; padding: 2px 7px; border-radius: 999px;
-}
-.stroke-dots { color: var(--fairway-dk); font-weight: 900; letter-spacing: 1px; }
 .score-cell {
     width: 54px; height: 54px; border-radius: 12px; flex-shrink: 0; cursor: pointer;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -628,7 +624,7 @@ document.addEventListener('visibilitychange', () => {
     try { if (document.visibilityState === 'hidden' && hasPendingEdits()) flushPendingEdits(); } catch (e) {}
 });
 
-const SE_VERSION = '2.28.0'; // points bar at the bottom + player avatars on the cards
+const SE_VERSION = '2.29.0'; // Option B cards: full-height photo panel, no names
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
@@ -1429,11 +1425,14 @@ function avatarFallbackColor(playerId) {
     const n = parseInt(playerId) || 0;
     return palette[Math.abs(n) % palette.length];
 }
-function buildPlayerAvatar(p) {
+function playerPhotoUrl(p) {
+    const league = (state.leaguePlayers || []).find(x => idsEqual(x.id, p.id));
+    return (league && league.photoUrl) || p.photoUrl || '';
+}
+function buildPanelAvatar(p) {
     const initial = (p.name || '?').trim().charAt(0).toUpperCase() || '?';
     const fallback = el('div', { class: 'player-avatar', style: `background:${avatarFallbackColor(p.id)};` }, initial);
-    const league = (state.leaguePlayers || []).find(x => idsEqual(x.id, p.id));
-    const url = (league && league.photoUrl) || p.photoUrl || '';
+    const url = playerPhotoUrl(p);
     if (!url) return fallback;
     const wrap = el('span', { class: 'avatar-wrap' });
     wrap.appendChild(fallback);
@@ -1478,46 +1477,49 @@ function buildScoresList(round, groupPlayers) {
         const strokes = strokesOnHole(hc, holeHc);
         const currentScore = effectiveScore(round, p.id, state.currentHole);
 
-        const row = el('div', { class: 'score-row' + (isMe ? ' is-me' : '') });
+        const row = el('div', { class: 'score-row' + (isMe ? ' is-me' : ''), 'aria-label': p.name || 'player' });
         row.dataset.playerId = pid;
         // Tap-a-name half of the tray flow: with a token picked up, tapping
         // the card gives this player that point (see onRowTap).
         row.addEventListener('click', e => onRowTap(pid, e));
-        const top = el('div', { class: 'score-row-top' });
-        top.appendChild(buildPlayerAvatar(p));
-
-        // Points this player holds ride as badges beside their name.
+        // ── Option B card (Ron's pick): no name — the player's photo fills
+        // a full-height panel at the left of the card. Earned point badges
+        // overlay the panel's bottom corner; stroke dots become pips at
+        // its top corner; "you" is the green frame on the card.
+        const panel = el('div', { class: 'avatar-panel' });
+        panel.appendChild(buildPanelAvatar(p));
+        if (strokes > 0) {
+            panel.appendChild(el('span', {
+                class: 'stroke-pips',
+                'aria-label': `${strokes} stroke${strokes > 1 ? 's' : ''} on this hole`
+            }, '\u25cf'.repeat(strokes)));
+        }
+        // Points this player holds ride as badges on the photo panel.
         // Tapping a badge takes that point back.
-        const badges = el('span', { class: 'bbb-badges' });
         const heldSlots = BBB_SLOTS
-            .filter(s => pid !== '' && idStr(bbbSlots[s.key]) === pid)
-            .map(s => ({ key: s.key, icon: s.icon, name: s.name }));
+            .filter(s2 => pid !== '' && idStr(bbbSlots[s2.key]) === pid)
+            .map(s2 => ({ key: s2.key, icon: s2.icon, name: s2.name }));
         if (isPar3 && pid !== '' && ctpWinnerId === pid) {
             heldSlots.push({ key: 'ctp', icon: '\u{1F4CD}', name: 'Closest to the pin' });
         }
-        heldSlots.forEach(h => {
-            const b = el('button', {
-                class: 'bbb-badge b-' + h.key, type: 'button',
-                'aria-label': `Take ${h.name} back from ${p.name || 'player'}`
-            }, h.icon);
-            b.addEventListener('click', e => {
-                if (e && e.stopPropagation) e.stopPropagation();
-                assignPoint(pid, h.key);
+        if (heldSlots.length) {
+            const badges = el('span', { class: 'panel-badges' });
+            heldSlots.forEach(h => {
+                const b = el('button', {
+                    class: 'bbb-badge b-' + h.key, type: 'button',
+                    'aria-label': `Take ${h.name} back from ${p.name || 'player'}`
+                }, h.icon);
+                b.addEventListener('click', e => {
+                    if (e && e.stopPropagation) e.stopPropagation();
+                    assignPoint(pid, h.key);
+                });
+                badges.appendChild(b);
             });
-            badges.appendChild(b);
-        });
+            panel.appendChild(badges);
+        }
+        row.appendChild(panel);
 
-        top.appendChild(el('div', { class: 'player-info' },
-            el('div', { class: 'player-name' },
-                document.createTextNode(p.name || '?'),
-                isMe ? el('span', { class: 'me-tag' }, 'YOU') : null,
-                strokes > 0 ? el('span', { class: 'stroke-dots' }, ' ' + '\u25cf'.repeat(strokes)) : null
-            ),
-            badges
-        ));
-
-        row.appendChild(top);
-
+        const main = el('div', { class: 'score-main' });
         // ── One-tap score chips: par, bogey, double, triple for this hole,
         // right under the name. One tap sets the score — no sheet to open.
         const chips = el('div', { class: 'score-chips' });
@@ -1551,10 +1553,9 @@ function buildScoresList(round, groupPlayers) {
         },
             el('span', { class: 'n' }, '\u00b7\u00b7\u00b7')
         ));
-        row.appendChild(chips);
+        main.appendChild(chips);
+        row.appendChild(main);
 
-        // (No per-card BBB buttons anymore — the points live in the tray
-        // at the top of the list and ride as badges beside the holder's name.)
         list.appendChild(row);
     });
 
