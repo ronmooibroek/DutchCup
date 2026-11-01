@@ -778,7 +778,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = 'v2026.11.01.31';
+        const APP_VERSION = 'v2026.11.01.32';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -20119,76 +20119,51 @@ ${(() => {
                 const _skStep = Math.min(presentationState.skinsRevealStep || 0, _skMaxB);
                 presentationState.__skinsDetail = analytics.skins || null;
                 if (_skStep < _skMaxB) {
-                    const _skPps = (analytics.skins || {}).pointsPerSkin || 0.5;
-                    const _fmtSk = (n) => String(Math.round(n * 100) / 100);
-                    const _curB = _skStep >= 1 ? _skBeats[_skStep - 1] : null;
-                    const _runSk = {};
-                    _skBeats.slice(0, _skStep).forEach(h => {
-                        if (h.winnerId) _runSk[h.winnerId] = (_runSk[h.winnerId] || 0) + (h.skinsValue || 0);
-                        if (h.status === 'split-final' && h.finalShares) Object.keys(h.finalShares).forEach(id => { _runSk[id] = (_runSk[id] || 0) + h.finalShares[id]; });
-                    });
-                    const _runSkL = Object.keys(_runSk).map(id => {
-                        const t = ((analytics.skins || {}).allTotals || []).find(x => String(x.id) === String(id));
-                        return { id, name: t ? t.name : 'Player', skins: _runSk[id] };
-                    }).sort((a, b) => b.skins - a.skins).slice(0, 3);
-                    const _heroSk = (() => {
-                        if (!_curB) return `
-                            <div style="text-align:center;padding:26px 10px;">
-                                <div style="font-size:64px;margin-bottom:8px;">🃏</div>
-                                <div style="color:white;font-size:30px;font-weight:800;line-height:1.35;">${_skBeats.length} holes had something on them —<br>let's settle them one at a time.</div>
-                                <div style="color:#a5b4fc;font-size:19px;margin-top:14px;">Lowest net takes the hole — ties carry the pot 🔥</div>
-                            </div>`;
-                        const _par = (mostRecentRound.pars || [])[_curB.hole - 1];
-                        if (_curB.winnerId) {
-                            const _wSp = state.players.find(x => String(x.id) === String(_curB.winnerId)) || { id: _curB.winnerId, name: _curB.winnerName };
-                            return `
-                            <div style="text-align:center;animation:rrCardIn 0.55s cubic-bezier(0.34,1.3,0.64,1) both;">
-                                <div style="color:#fbbf24;font-size:21px;font-weight:900;letter-spacing:4px;">HOLE ${_curB.hole}${_par ? ' · PAR ' + _par : ''}</div>
-                                <div style="display:flex;justify-content:center;margin:18px 0 10px;">
-                                    <div style="border:5px solid #f59e0b;border-radius:50%;padding:4px;box-shadow:0 0 44px rgba(245,158,11,0.45);">${renderAvatar(_wSp, 118)}</div>
-                                </div>
-                                <div style="color:white;font-size:42px;font-weight:900;">${_curB.winnerName}</div>
-                                <div style="color:#fcd34d;font-size:27px;font-weight:900;margin-top:6px;">takes ${_fmtSk(_curB.skinsValue)} skin${_curB.skinsValue === 1 ? '' : 's'} · +${_fmtSk(_curB.skinsValue * _skPps)} pts</div>
-                                ${_curB.carriedIn > 0 ? `<div style="color:#fb923c;font-size:19px;font-weight:800;margin-top:8px;">🔁 ${_fmtSk(_curB.carriedIn)} carried in — the pot was riding on it</div>` : ''}
-                            </div>`;
-                        }
-                        if (_curB.status === 'split-final') {
-                            return `
-                            <div style="text-align:center;animation:rrCardIn 0.55s cubic-bezier(0.34,1.3,0.64,1) both;">
-                                <div style="color:#fbbf24;font-size:21px;font-weight:900;letter-spacing:4px;">HOLE ${_curB.hole}${_par ? ' · PAR ' + _par : ''} — THE LAST WORD</div>
-                                <div style="font-size:64px;margin:14px 0 6px;">👑</div>
-                                <div style="color:white;font-size:32px;font-weight:900;">No outright winner — the King of Ties splits the pot</div>
-                                <div style="color:#fcd34d;font-size:22px;font-weight:800;margin-top:10px;">${(_curB.kingOfTies || []).map(k => k.name).join(' · ')}</div>
-                            </div>`;
-                        }
-                        return `
-                            <div style="text-align:center;animation:rrCardIn 0.55s cubic-bezier(0.34,1.3,0.64,1) both;">
-                                <div style="color:#fbbf24;font-size:21px;font-weight:900;letter-spacing:4px;">HOLE ${_curB.hole}${_par ? ' · PAR ' + _par : ''}</div>
-                                <div style="font-size:64px;margin:14px 0 6px;">🤝</div>
-                                <div style="color:white;font-size:34px;font-weight:900;">Tied — ${(_curB.tiedNames || []).join(' & ')}</div>
-                                <div style="color:#fb923c;font-size:23px;font-weight:900;margin-top:10px;">${_curB.status === 'tie-carry' ? `🔥 The pot grows to ${_fmtSk(_curB.carriedOut)} — winner takes it all later` : 'No carry — this skin dies here'}</div>
-                            </div>`;
-                    })();
+                    // 🃏 SKINS — THE SPOTLIGHT (Ron, Nov 1; Option D). One unbroken
+                    // auto-playing flow replaces the per-hole detail cards: best net
+                    // first, the first avatar fades into the light, a held pause, then
+                    // the rest; a lone avatar is a skin — gold flare, sting, the pot
+                    // pays out. The runner (window.__runSkinsSpotlight) drives the
+                    // stage; "Next" during the run jumps straight to the podium.
+                    const _pps = (analytics.skins || {}).pointsPerSkin || 0.5;
+                    presentationState.__skinsDetail = analytics.skins || null;
+                    presentationState.__skSpotData = {
+                        beats: _skBeats,
+                        pars: (mostRecentRound && mostRecentRound.pars) || [],
+                        pps: _pps,
+                        round: mostRecentRound || null
+                    };
+                    presentationState.__skSpotDone = false;
                     html += `
+                    <style>
+                        @keyframes skFadeUp { 0% { transform: translateY(14px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
+                        @keyframes skPulse { 0% { transform: scale(1); } 40% { transform: scale(1.18); } 100% { transform: scale(1.08); } }
+                        @keyframes skPop { 0% { transform: scale(0.4); opacity: 0; } 70% { transform: scale(1.15); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+                        @keyframes skBurst { 0% { transform: translate(0,0) scale(0.6); opacity: 1; } 100% { transform: translate(var(--dx), var(--dy)) scale(1.25); opacity: 0; } }
+                    </style>
                     <div style="animation:slideUp 0.7s ease-out;max-width:1000px;width:100%;">
                         <h1 style="color:white;font-size:clamp(34px, 4.5vw, 46px);margin:0 0 6px;text-shadow:0 4px 20px rgba(0,0,0,0.5);">🃏 Skins Game</h1>
-                        <p style="color:#a5b4fc;font-size:19px;margin:0 0 22px;">Hole by hole · ${_fmtSk(_skPps)} pts per skin · beat ${_skStep} of ${_skBeats.length}</p>
-                        <div style="background:linear-gradient(135deg, rgba(245,158,11,0.16), rgba(0,0,0,0.25));border:3px solid rgba(245,158,11,0.55);border-radius:20px;padding:28px;min-height:300px;display:flex;flex-direction:column;justify-content:center;box-shadow:0 12px 32px rgba(0,0,0,0.3);">
-                            ${_heroSk}
+                        <p style="color:#a5b4fc;font-size:19px;margin:0 0 22px;">In the spotlight · ${_pps} pts per skin · ties carry the pot 🔥</p>
+                        <div id="skSpotStage" style="position:relative;background:#0b1020;border:3px solid rgba(245,158,11,0.55);border-radius:20px;min-height:470px;overflow:hidden;box-shadow:0 12px 32px rgba(0,0,0,0.3);color:#e8ecf8;">
+                            <div id="skSpotGhost" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:200px;font-weight:900;color:rgba(255,255,255,0.05);pointer-events:none;"></div>
+                            <div id="skSpotFlare" style="position:absolute;top:0;left:50%;transform:translateX(-50%);width:640px;height:400px;background:radial-gradient(ellipse at 50% 38%,rgba(255,240,190,0.28),rgba(255,240,190,0) 65%);pointer-events:none;transition:opacity 0.5s;"></div>
+                            <div id="skSpotHole" style="position:relative;text-align:center;margin-top:30px;font-size:17px;font-weight:800;letter-spacing:5px;color:#c9d4f2;min-height:24px;"></div>
+                            <div id="skSpotBest" style="position:relative;text-align:center;font-size:27px;font-weight:900;margin-top:8px;min-height:36px;"></div>
+                            <div id="skSpotLane" style="position:relative;display:flex;flex-wrap:wrap;gap:16px;justify-content:center;align-items:flex-start;margin:24px auto 0;max-width:880px;padding:0 16px;"></div>
+                            <div id="skSpotOut" style="position:relative;text-align:center;font-size:23px;font-weight:900;letter-spacing:1px;margin-top:24px;min-height:32px;padding:0 12px;"></div>
+                            <div id="skSpotPot" style="position:absolute;bottom:54px;left:0;right:0;display:flex;justify-content:center;gap:6px;"></div>
+                            <div id="skSpotTally" style="position:absolute;bottom:16px;left:0;right:0;text-align:center;font-size:15px;font-weight:800;color:#c9d4f2;min-height:20px;"></div>
                         </div>
-                        ${_skStep > 1 ? `
-                        <div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:18px;">
-                            ${_skBeats.slice(0, _skStep - 1).map(h => `<span style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);color:rgba(255,255,255,0.75);font-size:13px;font-weight:700;border-radius:999px;padding:5px 12px;">H${h.hole} · ${h.winnerName ? h.winnerName.split(' ')[0] : 'tied'}</span>`).join('')}
-                        </div>` : ''}
-                        ${_runSkL.length ? `
-                        <div style="display:flex;gap:10px;justify-content:center;margin-top:16px;flex-wrap:wrap;">
-                            ${_runSkL.map((l, i) => `<span style="background:rgba(245,158,11,0.14);border:2px solid ${i === 0 ? '#fbbf24' : 'rgba(255,255,255,0.2)'};color:white;font-size:15px;font-weight:800;border-radius:10px;padding:7px 14px;">${i === 0 ? '👑 ' : ''}${l.name} · ${_fmtSk(l.skins)}</span>`).join('')}
-                        </div>` : ''}
                         <p style="color:rgba(255,255,255,0.5);font-size:15px;font-style:italic;text-align:center;margin:20px 0 0;">
-                            ${_skStep < _skBeats.length ? 'Tap "Next →" for the next hole' : 'Tap "Next →" for the final standings'} · <span onclick="event.stopPropagation();window.openSkinsScorecard();" style="cursor:pointer;text-decoration:underline;">full scorecard 👆</span>
+                            Sit back — the skins settle themselves · <span onclick="event.stopPropagation();window.openSkinsScorecard();" style="cursor:pointer;text-decoration:underline;">full scorecard 👆</span> · Tap "Next →" anytime to jump to the podium
                         </p>
                     </div>
                     `;
+                    try {
+                        presentationState.__skSpotToken = (presentationState.__skSpotToken || 0) + 1;
+                        const _skTok = presentationState.__skSpotToken;
+                        setTimeout(() => { try { if (window.__runSkinsSpotlight) window.__runSkinsSpotlight(_skTok); } catch (e) {} }, 90);
+                    } catch (e) {}
                 } else {
                 // ── The podium (final step of the reveal) ──
                 try {
@@ -20667,15 +20642,10 @@ ${(() => {
             // the SKINS WINNER sting, and so does the podium.
             if (!_navOnPhoto && presentationState._skinsSlideIndex >= 0 && _navContentIdx === presentationState._skinsSlideIndex
                 && (presentationState.skinsRevealStep || 0) < (presentationState._skinsMaxStep || 0)) {
-                presentationState.skinsRevealStep = (presentationState.skinsRevealStep || 0) + 1;
-                try {
-                    const _skA = presentationState.analytics && presentationState.analytics.skins;
-                    const _beats = _skA ? (_skA.holes || []).filter(h => h.status && h.status !== 'pending') : [];
-                    const _beat = _beats[presentationState.skinsRevealStep - 1];
-                    if ((_beat && _beat.winnerId) || presentationState.skinsRevealStep >= (presentationState._skinsMaxStep || 0)) {
-                        setTimeout(() => { try { playSfx('SKINS WINNER', null, 0.9); } catch (e) {} }, 350);
-                    }
-                } catch (e) {}
+                // Spotlight flow (.32): the slide auto-plays; "Next" ends the
+                // run and jumps straight to the podium.
+                presentationState.__skSpotToken = (presentationState.__skSpotToken || 0) + 1;
+                presentationState.skinsRevealStep = presentationState._skinsMaxStep || 0;
                 renderPresentation();
                 return;
             }
@@ -25702,6 +25672,163 @@ ${(() => {
         // Net scores only; won/tied skins highlighted; carryovers marked with 🔁.
         // Pure DOM overlay — no impact on the slide pipeline. Closes via ✕,
         // tap-outside, or Escape (see presentationKeyHandler).
+        // 🃏 SKINS SPOTLIGHT RUNNER (.32) — auto-plays the skins slide as one
+        // flow: per decided hole, best net first, the first avatar fades into
+        // the light, a held pause, then the rest; a lone avatar is a skin
+        // (gold flare + SKINS WINNER sting + the pot pays out); ties dim the
+        // light and carry the pot; a split-final goes to the King of Ties.
+        // Token-guarded: any nav or re-render that bumps __skSpotToken, or the
+        // stage leaving the DOM, stops the run silently.
+        window.__runSkinsSpotlight = async (token) => {
+            const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+            const el = (id) => document.getElementById(id);
+            const alive = () => token === (presentationState.__skSpotToken || 0) && !!el('skSpotStage');
+            const data = presentationState.__skSpotData || {};
+            const beats = data.beats || [];
+            const pars = data.pars || [];
+            const pps = data.pps || 0.5;
+            const round = data.round || null;
+            const fmt = (n) => String(Math.round(n * 100) / 100);
+            const first = (n) => (n || 'Player').split(' ')[0];
+            const playerObj = (id, name) => state.players.find(x => String(x.id) === String(id)) || { id: id, name: name || 'Player' };
+            const avHtml = (id, name, size, delay) =>
+                '<div style="text-align:center;animation:skFadeUp 0.6s ease both;animation-delay:' + delay + 'ms;">'
+                + renderAvatar(playerObj(id, name), size)
+                + '<div style="font-size:' + Math.max(12, Math.round(size * 0.19)) + 'px;font-weight:800;margin-top:5px;color:#e8ecf8;">' + first(name) + '</div></div>';
+            const bestNetFor = (h) => {
+                if (h.tiedScore != null) return h.tiedScore;
+                try {
+                    if (!round || !h.winnerId) return null;
+                    for (const t of (round.teams || [])) for (const p of (t.players || [])) {
+                        if (String(p.id) === String(h.winnerId)) {
+                            const gross = parseInt((p.scores || [])[h.hole - 1]);
+                            if (isNaN(gross)) return null;
+                            const sp = state.players.find(x => String(x.id) === String(p.id));
+                            const hc = getPlayerHandicapForRound(sp, round, p) || 0;
+                            const hh = parseInt((round.handicaps || [])[h.hole - 1]) || h.hole;
+                            let s = 0; if (hc >= hh) s = 1; if (hc >= hh + 18) s = 2;
+                            return gross - s;
+                        }
+                    }
+                } catch (e) {}
+                return null;
+            };
+            const potHtml = (pot) => {
+                let s = '';
+                for (let i = 0; i < pot; i++) s += '<span style="display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;background:#111827;border:2px solid #fbbf24;font-size:15px;box-shadow:0 0 14px rgba(251,191,36,0.65);animation:skPop 0.35s ease;">🃏</span>';
+                return s;
+            };
+            const burst = () => {
+                const stage = el('skSpotStage'); if (!stage) return;
+                const chars = ['★', '✦', '🎉', '★', '✦'];
+                for (let i = 0; i < 10; i++) {
+                    const sp = document.createElement('span');
+                    sp.textContent = chars[i % chars.length];
+                    sp.style.cssText = 'position:absolute;left:50%;top:190px;font-size:22px;pointer-events:none;z-index:5;animation:skBurst 1s ease-out forwards;--dx:' + (Math.random() * 260 - 130) + 'px;--dy:' + (Math.random() * -140 - 20) + 'px;';
+                    stage.appendChild(sp);
+                    setTimeout(() => sp.remove(), 1050);
+                }
+            };
+            const names = {};
+            beats.forEach(h => {
+                if (h.winnerId) names[h.winnerId] = h.winnerName;
+                (h.tiedIds || []).forEach((id, i) => { names[id] = (h.tiedNames || [])[i]; });
+                if (h.finalShares) Object.keys(h.finalShares).forEach(id => {
+                    if (!names[id]) {
+                        const t = (((presentationState.analytics || {}).skins || {}).allTotals || []).find(x => String(x.id) === String(id));
+                        if (t) names[id] = t.name;
+                    }
+                });
+            });
+            const tally = {};
+            const drawTally = () => {
+                const t = el('skSpotTally'); if (!t) return;
+                const rows = Object.keys(tally).map(id => ({ name: names[id] || 'Player', skins: tally[id] })).sort((a, b) => b.skins - a.skins);
+                t.innerHTML = rows.length ? rows.map(r => first(r.name) + ' · ' + fmt(r.skins) + ' 🃏').join(' &nbsp;&nbsp; ') : '';
+            };
+
+            if (!alive()) return;
+            // ── Intro beat ──
+            el('skSpotGhost').textContent = '🃏';
+            el('skSpotHole').textContent = 'S K I N S';
+            el('skSpotBest').textContent = beats.length + ' holes had something on them';
+            el('skSpotOut').innerHTML = '<span style="color:#8fa3cc;font-size:17px;letter-spacing:2px;">LOWEST NET TAKES THE HOLE — TIES CARRY THE POT</span>';
+            el('skSpotPot').innerHTML = potHtml(1);
+            await sleep(1500); if (!alive()) return;
+
+            for (const h of beats) {
+                const par = pars[h.hole - 1];
+                const pot = (h.carriedIn || 0) + 1;
+                el('skSpotGhost').textContent = h.hole;
+                el('skSpotFlare').style.opacity = '1';
+                el('skSpotFlare').style.background = 'radial-gradient(ellipse at 50% 38%,rgba(255,240,190,0.28),rgba(255,240,190,0) 65%)';
+                el('skSpotHole').textContent = 'H O L E  ' + h.hole + (par ? '  ·  P A R  ' + par : '');
+                el('skSpotBest').textContent = '';
+                el('skSpotLane').innerHTML = '';
+                el('skSpotOut').textContent = '';
+                el('skSpotPot').innerHTML = potHtml(pot);
+                await sleep(600); if (!alive()) return;
+                const bn = bestNetFor(h);
+                el('skSpotBest').innerHTML = bn != null ? 'Best net — <span style="color:#fcd34d;">' + bn + '</span>' : 'Best net takes it';
+                el('skSpotBest').style.animation = 'skFadeUp 0.6s ease';
+                await sleep(550); if (!alive()) return;
+                const isWin = !!h.winnerId;
+                const isSplit = h.status === 'split-final';
+                const ids = isWin ? [h.winnerId] : (h.tiedIds || []);
+                const nms = isWin ? [h.winnerName] : (h.tiedNames || []);
+                const size = ids.length <= 1 ? 118 : ids.length <= 3 ? 92 : ids.length <= 5 ? 72 : ids.length <= 8 ? 58 : 46;
+                if (ids.length) {
+                    el('skSpotLane').innerHTML = avHtml(ids[0], nms[0], size, 0);
+                    await sleep(1200); if (!alive()) return;
+                    if (ids.length > 1) {
+                        for (let i = 1; i < ids.length; i++) el('skSpotLane').insertAdjacentHTML('beforeend', avHtml(ids[i], nms[i], size, (i - 1) * 260));
+                        await sleep(320 + (ids.length - 1) * 260); if (!alive()) return;
+                    }
+                }
+                await sleep(480); if (!alive()) return;
+                if (isWin) {
+                    tally[h.winnerId] = (tally[h.winnerId] || 0) + (h.skinsValue || 0);
+                    el('skSpotFlare').style.background = 'radial-gradient(ellipse at 50% 38%,rgba(251,191,36,0.5),rgba(251,191,36,0) 65%)';
+                    const lane = el('skSpotLane');
+                    if (lane && lane.firstChild) lane.firstChild.style.animation = 'skPulse 0.7s ease forwards';
+                    el('skSpotOut').innerHTML = '<span style="color:#fbbf24;">' + first(h.winnerName).toUpperCase() + ' WINS ' + fmt(h.skinsValue) + ' SKIN' + (h.skinsValue === 1 ? '' : 'S') + ' · +' + fmt(h.skinsValue * pps) + ' PTS</span>';
+                    burst();
+                    try { playSfx('SKINS WINNER', null, 0.9); } catch (e) {}
+                    el('skSpotPot').innerHTML = '';
+                    drawTally();
+                    await sleep(1450); if (!alive()) return;
+                } else if (isSplit) {
+                    const shares = h.finalShares || {};
+                    Object.keys(shares).forEach(id => { tally[id] = (tally[id] || 0) + shares[id]; });
+                    el('skSpotOut').innerHTML = '<span style="color:#fbbf24;">👑 THE KING OF TIES SPLITS THE POT</span>';
+                    try { playSfx('SKINS WINNER', null, 0.9); } catch (e) {}
+                    el('skSpotPot').innerHTML = '';
+                    drawTally();
+                    await sleep(1600); if (!alive()) return;
+                } else {
+                    el('skSpotOut').innerHTML = h.status === 'tie-carry'
+                        ? '<span style="color:#8fa3cc;">— IT CARRIES —</span>'
+                        : '<span style="color:#8fa3cc;">TIED — NO CARRY, THIS SKIN DIES HERE</span>';
+                    el('skSpotFlare').style.opacity = '0.45';
+                    await sleep(900); if (!alive()) return;
+                }
+            }
+
+            // ── Settled ──
+            if (!alive()) return;
+            el('skSpotGhost').textContent = '🃏';
+            el('skSpotHole').textContent = 'S K I N S  S E T T L E D';
+            el('skSpotBest').textContent = '';
+            el('skSpotLane').innerHTML = '';
+            el('skSpotPot').innerHTML = '';
+            const rows = Object.keys(tally).map(id => ({ name: names[id] || 'Player', skins: tally[id] })).sort((a, b) => b.skins - a.skins);
+            el('skSpotOut').innerHTML = rows.length
+                ? rows.map(r => first(r.name) + ' takes ' + fmt(r.skins) + ' skin' + (r.skins === 1 ? '' : 's')).join(' &nbsp;·&nbsp; ')
+                : 'No skins won';
+            presentationState.__skSpotDone = true;
+        };
+
+
         window.openSkinsScorecard = () => {
             try { if (document.getElementById('skinsScorecardModal')) return; } catch (e) {}
             const detail = (typeof presentationState !== 'undefined' && presentationState.__skinsDetail) || null;
