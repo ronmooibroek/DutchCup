@@ -239,7 +239,6 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
     background: var(--fairway); color: white; font-size: 10px; font-weight: 900;
     letter-spacing: 0.8px; padding: 2px 7px; border-radius: 999px;
 }
-.player-meta { font-size: 11px; color: var(--ink-soft); margin-left: auto; text-align: right; flex-shrink: 0; white-space: nowrap; }
 .stroke-dots { color: var(--fairway-dk); font-weight: 900; letter-spacing: 1px; }
 .score-cell {
     width: 54px; height: 54px; border-radius: 12px; flex-shrink: 0; cursor: pointer;
@@ -621,7 +620,7 @@ document.addEventListener('visibilitychange', () => {
     try { if (document.visibilityState === 'hidden' && hasPendingEdits()) flushPendingEdits(); } catch (e) {}
 });
 
-const SE_VERSION = '2.26.0'; // points tokens ride a vertical rail on the right edge
+const SE_VERSION = '2.27.0'; // name line is name + badges only (no HCP/running-total text)
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
@@ -1449,7 +1448,6 @@ function buildScoresList(round, groupPlayers) {
         const hc = seHandicapForRound(round, p);   // course handicap, matches the admin app
         const strokes = strokesOnHole(hc, holeHc);
         const currentScore = effectiveScore(round, p.id, state.currentHole);
-        const totals = computePlayerTotals(round, p);
 
         const row = el('div', { class: 'score-row' + (isMe ? ' is-me' : '') });
         row.dataset.playerId = pid;
@@ -1485,9 +1483,7 @@ function buildScoresList(round, groupPlayers) {
                 isMe ? el('span', { class: 'me-tag' }, 'YOU') : null,
                 strokes > 0 ? el('span', { class: 'stroke-dots' }, ' ' + '\u25cf'.repeat(strokes)) : null
             ),
-            badges,
-            el('div', { class: 'player-meta' },
-                `HCP ${hc} \u00b7 Thru ${totals.thru}: ${totals.gross || '\u2014'} (${totals.points} pts)`)
+            badges
         ));
 
         row.appendChild(top);
@@ -2486,7 +2482,6 @@ function onScoreInput(e) {
     state.pendingEdits.scores[playerId][state.currentHole] = val;
 
     updateCellLiveColor(playerId, val);
-    updatePlayerTotalsLive();
 
     markUnsaved();
 
@@ -2972,19 +2967,6 @@ function updateCellLiveColor(playerId, gross) {
     }
 }
 
-function updatePlayerTotalsLive() {
-    const round = getRoundById(state.selectedRoundId);
-    if (!round) return;
-    const groupPlayers = getGroupPlayers(round, state.groupNumber);
-    const rows = document.querySelectorAll('.score-row');
-    rows.forEach((row, i) => {
-        const p = groupPlayers[i];
-        if (!p) return;
-        const totals = computePlayerTotals(round, p);
-        const meta = row.querySelector('.player-meta .total');
-        if (meta) meta.textContent = `Thru ${totals.thru}: ${totals.gross || '—'} (${totals.points} pts)`;
-    });
-}
 
 
 function refreshScoreEntryFromServer() {
@@ -3016,7 +2998,6 @@ function refreshScoreEntryFromServer() {
         });
     }
 
-    updatePlayerTotalsLive();
 }
 
 // ─── Photo upload & remove (transactional Firestore updates) ────────────
