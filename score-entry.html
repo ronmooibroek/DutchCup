@@ -53,7 +53,8 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
     position: sticky; top: 0; z-index: 100;
     display: flex; align-items: center; justify-content: space-between; gap: 8px;
 }
-.header-text { min-width: 0; }
+.header-text { display: none; }
+.hdr-flag { font-size: 30px; line-height: 1; }
 #header-title { font-size: 17px; font-weight: 800; margin: 0; letter-spacing: -0.2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #header-subtitle { font-size: 13px; color: var(--ink-soft); margin: 1px 0 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .header-actions { display: flex; gap: 6px; flex-shrink: 0; align-items: center; }
@@ -407,6 +408,7 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
 <body>
 
 <header class="app-header">
+    <span class="hdr-flag" role="img" aria-label="Dutch Cup">🇳🇱</span>
     <div class="header-text">
         <h1 id="header-title">Dutch Cup</h1>
         <div id="header-subtitle">Connecting…</div>
@@ -623,7 +625,7 @@ document.addEventListener('visibilitychange', () => {
     try { if (document.visibilityState === 'hidden' && hasPendingEdits()) flushPendingEdits(); } catch (e) {}
 });
 
-const SE_VERSION = '2.32.0'; // Next hole button is yellow while the hole is incomplete, green when scores + all BBB are in
+const SE_VERSION = '2.33.0'; // header shows a Dutch flag instead of the round title and player name
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
