@@ -324,6 +324,23 @@
         .mx-chip.picked { box-shadow: inset 0 0 0 2px #2E7D4F; border-color: #2E7D4F; }
         .mx-bbbcell { display: inline-flex; flex-direction: column; align-items: center; min-width: 30px; padding: 3px 1px; border: 1px dashed #d1d5db; border-radius: 6px; background: transparent; cursor: pointer; font-size: 11px; }
         .mx-bbbcell.has { border: 1px solid #E3B93E; background: #FFD95E; }
+        /* .27: single matrix — slim group divider rows + alternating group bands */
+        .mx-grouprow td { background: #EDF4EE; text-align: left !important; font-size: 11px; font-weight: 800; letter-spacing: .6px; color: #256B42; padding: 3px 8px !important; text-transform: uppercase; }
+        .mx-band1 td.mx-who, .mx-band1 td.mx-sub, .mx-band1 td.mx-empty, .mx-band1 td.mx-pts { background: #f7faf7; }
+        /* .27: skins row + pop-up */
+        .mx-skinlab { text-align: left !important; white-space: nowrap; padding: 3px 8px !important; font-weight: 800; font-size: 12.5px; color: #92400e; background: #fffbeb; }
+        .mx-skincell { cursor: pointer; background: #fffbeb; padding: 2px 1px !important; }
+        .mx-skincell:hover { outline: 2px solid #f59e0b; outline-offset: -2px; }
+        .mx-skinnet { display: block; font-size: 9px; font-weight: 800; color: #92400e; line-height: 1.1; }
+        .mx-skintie { font-size: 10.5px; font-weight: 800; color: #b45309; }
+        .mx-pop-back { position: fixed; inset: 0; background: rgba(17,24,39,.55); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 18px; }
+        .mx-pop { background: white; border-radius: 16px; max-width: 430px; width: 100%; padding: 18px; box-shadow: 0 18px 50px rgba(0,0,0,.35); max-height: 84vh; overflow-y: auto; }
+        /* .27: winner avatar cards (Extra 9 / CTP side by side) */
+        .mx-wincard { flex: 1 1 300px; border-radius: 12px; padding: 14px 16px; }
+        .mx-winslot { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 58px; }
+        .mx-winslot .mx-winname { font-size: 11px; font-weight: 700; color: #374151; text-align: center; line-height: 1.15; }
+        .mx-winslot .mx-winhole { font-size: 10px; font-weight: 800; color: #6b7280; letter-spacing: .4px; }
+        .mx-winempty { width: 48px; height: 48px; border-radius: 50%; border: 2px dashed #c3c8cf; display: flex; align-items: center; justify-content: center; color: #c3c8cf; font-size: 18px; font-weight: 800; }
 
         /* Premium Input Fields */
         .score-input {
@@ -755,7 +772,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = 'v2026.11.01.26';
+        const APP_VERSION = 'v2026.11.01.27';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -4925,40 +4942,10 @@
                 
                 // Skins points for this round — added to each player's total below
                 const _roundSkinsPts = window.skinsPointsForRound(round);
+                const allMatrixRows = [];
                 sortedGroupKeys.forEach(groupKey => {
-                    // Add group header
-                    if (groupKey !== 'unassigned') {
-                        html += `
-                            <div style="background:linear-gradient(135deg,#8b5cf6,#6366f1);padding:20px;border-radius:12px;margin:24px 0 16px 0;text-align:center;box-shadow:0 4px 6px rgba(0,0,0,0.1);">
-                                <h2 style="margin:0;color:white;font-size:24px;font-weight:700;">🏌️ GROUP ${groupKey}</h2>
-                                <p style="margin:8px 0 0 0;color:#e9d5ff;font-size:14px;">Foursome ${groupKey}</p>
-                                ${(() => {
-                                    // Every hole awards exactly 3 BBB points, so a finished
-                                    // group totals 54. Anything else means holes are missing.
-                                    const prog = window.bbbGroupProgress(round, parseInt(groupKey));
-                                    const done = prog.awarded === 54;
-                                    const bad = prog.incomplete.filter(x => x.n > 3);
-                                    return `
-                                        <div style="margin-top:12px;background:rgba(255,255,255,0.15);border-radius:8px;padding:10px;">
-                                            <div style="color:white;font-weight:800;font-size:15px;">
-                                                🎯 BBB ${prog.awarded} / 54 ${done ? '✅' : ''}
-                                            </div>
-                                            <div style="height:6px;background:rgba(255,255,255,0.25);border-radius:3px;margin:6px 0;overflow:hidden;">
-                                                <div style="height:100%;width:${Math.min(100, (prog.awarded / 54) * 100)}%;background:${done ? '#4ade80' : '#fbbf24'};"></div>
-                                            </div>
-                                            <div style="color:#e9d5ff;font-size:12px;">
-                                                ${done ? 'All 18 holes complete'
-                                                    : `Holes still needing points: ${prog.incomplete.filter(x => x.n < 3).map(x => x.hole).join(', ') || '—'}`}
-                                                ${bad.length ? `<br><span style="color:#fecaca;font-weight:700;">⚠️ Over-awarded on hole(s): ${bad.map(x => x.hole).join(', ')}</span>` : ''}
-                                            </div>
-                                        </div>`;
-                                })()}
-                            </div>
-                        `;
-                    }
                     
                     // Render players in this group
-                    const groupRows = [];
                     playersByGroup[groupKey].forEach(({ teamIdx, playerIdx, teamName, player }) => {
                         const statePlayer = state.players.find(sp => sp.id === player.id);
                         const effectiveHc = getPlayerHandicapForRound(statePlayer, round, player);
@@ -4998,10 +4985,10 @@
                             }
                         }
                         
-                        groupRows.push({ teamIdx, playerIdx, teamName, player, statePlayer, effectiveHc, strokePlayPoints, bbbPoints, ballsRemaining, ballPoints, extra9Points, ctpPoints, skinsPoints, grandTotal, grossTotal, holesPlayed });
+                        allMatrixRows.push({ groupKey, teamIdx, playerIdx, teamName, player, statePlayer, effectiveHc, strokePlayPoints, bbbPoints, ballsRemaining, ballPoints, extra9Points, ctpPoints, skinsPoints, grandTotal, grossTotal, holesPlayed });
                     });
-                    html += buildGroupMatrix(round, groupKey, groupRows, courseTees);
                 });
+                html += buildRoundMatrix(round, allMatrixRows, courseTees);
                 
                 // Get all players from the round
                 const allRoundPlayers = [];
@@ -5016,211 +5003,139 @@
                     });
                 });
                 
-                // Add Extra 9 Winners section
-                html += `
-                    <div class="card" style="margin-top:24px;background:#f0fdf4;border:2px solid #10b981;">
-                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-                            <h3 style="color:#065f46;margin:0;">🏆 Extra 9 Winners</h3>
-                            <span style="background:#10b981;color:white;padding:4px 12px;border-radius:6px;font-size:12px;font-weight:700;">${state.settings.extra9Points} pts each</span>
-                        </div>
-                        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">
-                `;
-                
-                // Initialize extra9Winners if not exists
-                if (!round.extra9Winners) {
-                    round.extra9Winners = ['', '', '', ''];
-                }
-                
-                for (let i = 0; i < 4; i++) {
-                    html += `
-                        <div>
-                            <label style="display:block;margin-bottom:6px;font-weight:600;font-size:12px;color:#065f46;">Winner ${i + 1}:</label>
-                            <select id="extra9-${i}" 
-                                    onchange="updateExtra9(${i}, this.value)"
-                                    style="width:100%;padding:8px;border:2px solid #10b981;border-radius:6px;font-size:14px;">
-                                <option value="">-- None --</option>
-                                ${allRoundPlayers.map(p => `
-                                    <option value="${p.id}" ${round.extra9Winners[i] === p.id ? 'selected' : ''}>${p.name}</option>
-                                `).join('')}
-                            </select>
-                        </div>
-                    `;
-                }
-                
-                html += `
-                        </div>
-                        <div style="background:#d1fae5;padding:10px;border-radius:6px;margin-top:12px;font-size:12px;color:#065f46;">
-                            💡 Select up to 4 players who won the extra 9. Same player can win multiple times.
-                        </div>
-                    </div>
-                `;
-                
-                // Add Closest to Pin section
-                html += `
-                    <div class="card" style="margin-top:16px;background:#f0f9ff;border:2px solid #0ea5e9;">
-                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-                            <h3 style="color:#0369a1;margin:0;">🎯 Closest to the Pin Winners</h3>
-                            <span style="background:#0ea5e9;color:white;padding:4px 12px;border-radius:6px;font-size:12px;font-weight:700;">${state.settings.ctpPoints} pts each</span>
-                        </div>
-                        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">
-                `;
-                
+                // Extra 9 + CTP winners — side-by-side avatar cards (.27).
+                // The cards show the winners' photos; "Change" opens an
+                // editor with the same selects (and save behaviour) as before.
+                if (!round.extra9Winners) round.extra9Winners = ['', '', '', ''];
                 if (!round.ctpWinners) round.ctpWinners = [];
-                
-                // One CTP per par 3, keyed by HOLE — the same key the on-course app uses,
-                // so a change in either app lands on the same hole. Last change wins.
                 const _par3Holes = (round.pars || [])
                     .map((p, i) => (parseInt(p) === 3 ? i : -1)).filter(i => i >= 0);
-                if (_par3Holes.length === 0) {
-                    html += `<div style="grid-column:1/-1;color:#6b7280;font-size:14px;">No par 3s on this course.</div>`;
-                }
-                _par3Holes.forEach(holeIdx => {
-                    // allRoundPlayers uses "teamIdx-playerIdx" ids, so compare in that space.
-                    const currentPlayerId = window.ctpForHole(round, holeIdx);
-                    const current = currentPlayerId
-                        ? (window.ctpPositionOf(round, currentPlayerId) || '') : '';
-                    const entry = window.ctpEntries(round).find(e => e.holeIdx === holeIdx);
-                    const who = entry && entry.setBy ? entry.setBy : null;
-                    const when = entry && entry.setAt ? new Date(entry.setAt) : null;
-                    html += `
-                        <div>
-                            <label style="display:block;margin-bottom:6px;font-weight:600;font-size:12px;color:#0369a1;">
-                                Hole ${holeIdx + 1} (Par 3):
-                            </label>
-                            <select onchange="updateCTP(${holeIdx}, this.value)"
-                                    style="width:100%;padding:8px;border:2px solid #0ea5e9;border-radius:6px;font-size:14px;">
-                                <option value="">-- None --</option>
-                                ${allRoundPlayers.map(p => `
-                                    <option value="${p.id}" ${String(current) === String(p.id) ? 'selected' : ''}>${p.name}</option>
-                                `).join('')}
-                            </select>
-                            ${who ? `<div style="font-size:10px;color:#6b7280;margin-top:4px;">
-                                set by ${who}${when ? ' · ' + when.toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' }) : ''}
-                            </div>` : ''}
-                        </div>
-                    `;
-                });
-                
+                const _winAvatar = (pl, size) => {
+                    if (!pl) return `<div class="mx-winempty">?</div>`;
+                    const sp = (state.players || []).find(s => String(s.id) === String(pl.id));
+                    const ap = pl.photoUrl ? pl : (sp && sp.photoUrl ? sp : pl);
+                    return renderAvatar(ap, size);
+                };
+                const _e9PlayerAt = (slot) => {
+                    const pos = round.extra9Winners[slot];
+                    if (!pos) return null;
+                    const parts = String(pos).split('-');
+                    const t = round.teams[parseInt(parts[0])];
+                    return (t && t.players[parseInt(parts[1])]) || null;
+                };
+                const _ctpPlayerAt = (holeIdx) => {
+                    const pid = window.ctpForHole(round, holeIdx);
+                    if (!pid) return null;
+                    let found = null;
+                    (round.teams || []).forEach(t => (t.players || []).forEach(p => {
+                        if (String(p.id) === String(pid)) found = p;
+                    }));
+                    return found;
+                };
+                html += `<div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:24px;">`;
+                // ── Extra 9 card ──
                 html += `
+                    <div class="card mx-wincard" style="background:#f0fdf4;border:2px solid #10b981;margin:0;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                            <h3 style="color:#065f46;margin:0;font-size:16px;">🏆 Extra 9 Winners</h3>
+                            <span style="display:flex;gap:8px;align-items:center;">
+                                <span style="background:#10b981;color:white;padding:4px 10px;border-radius:6px;font-size:12px;font-weight:700;">${state.settings.extra9Points} pts each</span>
+                                <button onclick="mxTogglePanel('extra9')" style="background:white;border:2px solid #10b981;color:#065f46;padding:4px 12px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;">${window.__mxPanel === 'extra9' ? 'Close' : 'Change'}</button>
+                            </span>
                         </div>
-                        <div style="background:#dbeafe;padding:10px;border-radius:6px;margin-top:12px;font-size:12px;color:#0369a1;">
-                            💡 Select up to 4 players who won closest to the pin. Same player can win multiple times.
+                        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                            ${[0, 1, 2, 3].map(i => {
+                                const pl = _e9PlayerAt(i);
+                                return `<div class="mx-winslot">${_winAvatar(pl, 48)}<div class="mx-winname">${pl ? pl.name.split(' ')[0] : '—'}</div></div>`;
+                            }).join('')}
                         </div>
-                    </div>
                 `;
-                
+                if (window.__mxPanel === 'extra9') {
+                    html += `<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:14px;">
+                        ${[0, 1, 2, 3].map(i => `
+                            <div>
+                                <label style="display:block;margin-bottom:4px;font-weight:600;font-size:12px;color:#065f46;">Winner ${i + 1}:</label>
+                                <select id="extra9-${i}" onchange="updateExtra9(${i}, this.value)" style="width:100%;padding:8px;border:2px solid #10b981;border-radius:6px;font-size:14px;">
+                                    <option value="">-- None --</option>
+                                    ${allRoundPlayers.map(p => `<option value="${p.id}" ${round.extra9Winners[i] === p.id ? 'selected' : ''}>${p.name}</option>`).join('')}
+                                </select>
+                            </div>`).join('')}
+                        </div>
+                        <div style="background:#d1fae5;padding:8px 10px;border-radius:6px;margin-top:10px;font-size:12px;color:#065f46;">💡 Same player can win multiple times.</div>`;
+                }
+                html += `</div>`;
+                // ── CTP card ──
+                html += `
+                    <div class="card mx-wincard" style="background:#f0f9ff;border:2px solid #0ea5e9;margin:0;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                            <h3 style="color:#0369a1;margin:0;font-size:16px;">🎯 Closest to the Pin</h3>
+                            <span style="display:flex;gap:8px;align-items:center;">
+                                <span style="background:#0ea5e9;color:white;padding:4px 10px;border-radius:6px;font-size:12px;font-weight:700;">${state.settings.ctpPoints} pts each</span>
+                                <button onclick="mxTogglePanel('ctp')" style="background:white;border:2px solid #0ea5e9;color:#0369a1;padding:4px 12px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;">${window.__mxPanel === 'ctp' ? 'Close' : 'Change'}</button>
+                            </span>
+                        </div>
+                        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                            ${_par3Holes.length === 0 ? '<div style="color:#6b7280;font-size:14px;">No par 3s on this course.</div>' : _par3Holes.map(holeIdx => {
+                                const pl = _ctpPlayerAt(holeIdx);
+                                return `<div class="mx-winslot"><div class="mx-winhole">HOLE ${holeIdx + 1}</div>${_winAvatar(pl, 48)}<div class="mx-winname">${pl ? pl.name.split(' ')[0] : '—'}</div></div>`;
+                            }).join('')}
+                        </div>
+                `;
+                if (window.__mxPanel === 'ctp') {
+                    html += `<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:14px;">`;
+                    _par3Holes.forEach(holeIdx => {
+                        const currentPlayerId = window.ctpForHole(round, holeIdx);
+                        const current = currentPlayerId
+                            ? (window.ctpPositionOf(round, currentPlayerId) || '') : '';
+                        const entry = window.ctpEntries(round).find(e => e.holeIdx === holeIdx);
+                        const who = entry && entry.setBy ? entry.setBy : null;
+                        const when = entry && entry.setAt ? new Date(entry.setAt) : null;
+                        html += `
+                            <div>
+                                <label style="display:block;margin-bottom:4px;font-weight:600;font-size:12px;color:#0369a1;">Hole ${holeIdx + 1} (Par 3):</label>
+                                <select onchange="updateCTP(${holeIdx}, this.value)" style="width:100%;padding:8px;border:2px solid #0ea5e9;border-radius:6px;font-size:14px;">
+                                    <option value="">-- None --</option>
+                                    ${allRoundPlayers.map(p => `<option value="${p.id}" ${String(current) === String(p.id) ? 'selected' : ''}>${p.name}</option>`).join('')}
+                                </select>
+                                ${who ? `<div style="font-size:10px;color:#6b7280;margin-top:4px;">set by ${who}${when ? ' · ' + when.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : ''}</div>` : ''}
+                            </div>
+                        `;
+                    });
+                    html += `</div>
+                        <div style="background:#dbeafe;padding:8px 10px;border-radius:6px;margin-top:10px;font-size:12px;color:#0369a1;">💡 One winner per par 3.</div>`;
+                }
+                html += `</div></div>`;
+
                 // Add Skins Game section
                 {
+                    // Skins settings — compact strip (.27). Per-hole results
+                    // live in the matrix's skins row now; this strip keeps
+                    // only the round's skins switches.
                     const sk = round.skins || {};
                     const skEnabled = sk.enabled !== false;
                     const skCarry = sk.carryover !== false;
-                    // Per-round override → league default → 0.5
                     const leagueSkinsDefault = (state.settings && state.settings.skinsPoints != null) ? state.settings.skinsPoints : 0.5;
                     const skPts = sk.pointsPerSkin != null ? sk.pointsPerSkin : leagueSkinsDefault;
-                    // Resolve each player's effective handicap for net skins scoring
-                    const _hcMap = {};
-                    (round.teams || []).forEach(team => (team.players || []).forEach(p => {
-                        const _sp = (state.players || []).find(sp => String(sp.id) === String(p.id));
-                        try { _hcMap[p.id] = getPlayerHandicapForRound(_sp, round, p) || 0; }
-                        catch (e) { _hcMap[p.id] = (p.handicap || 0); }
-                    }));
-                    const _skins = window.computeSkins(round, _hcMap, skPts);
                     const _fmtN = (n) => String(Math.round(n * 100) / 100);
-                    const _holeRow = (h) => {
-                        let who = '<span style="color:#9ca3af;">–</span>';
-                        let val = '<span style="color:#9ca3af;">–</span>';
-                        if (h.status === 'won' || h.status === 'won-carry') {
-                            who = `<strong>${h.winnerName}</strong>`;
-                            val = h.skinsValue > 1
-                                ? `<strong style="color:#b45309;">${_fmtN(h.skinsValue)} 🔥</strong>`
-                                : '1';
-                        } else if (h.status === 'tie-carry') {
-                            who = `<span style="color:#92400e;">🔁 Tie (${h.tiedNames.join(', ')})</span>`;
-                            val = `<span style="color:#92400e;">pot → ${_fmtN(h.carriedOut)}</span>`;
-                        } else if (h.status === 'tie-dead') {
-                            who = `<span style="color:#9ca3af;">Tie — no skin</span>`;
-                        } else if (h.status === 'split-final') {
-                            if (h.finalShares && h.kingOfTies && h.kingOfTies.length) {
-                                const _kotName = (id) => { const _t = _skins.totals.find(x => String(x.id) === String(id)); return _t ? _t.name : String(id); };
-                                who = `<span style="color:#92400e;">👑 King of Ties: ${h.kingOfTies.map(k => k.name).join(', ')}</span>`;
-                                val = `<strong style="color:#b45309;">${Object.keys(h.finalShares).map(id => `${_kotName(id)} ${_fmtN(h.finalShares[id])}`).join(' · ')}</strong>`;
-                            } else {
-                                who = `<span style="color:#92400e;">Split: ${h.tiedNames.join(', ')}</span>`;
-                                val = `<strong style="color:#b45309;">${_fmtN(h.splitValue)} ea</strong>`;
-                            }
-                        }
-                        return `<tr style="border-top:1px solid #fde68d;">
-                            <td style="padding:6px 8px;text-align:center;font-weight:700;color:#92400e;">${h.hole}</td>
-                            <td style="padding:6px 8px;">${who}</td>
-                            <td style="padding:6px 8px;text-align:center;">${val}</td>
-                        </tr>`;
-                    };
-
                     html += `
-                    <div class="card" style="margin-top:16px;background:#fffbeb;border:2px solid #f59e0b;">
-                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
-                            <h3 style="color:#92400e;margin:0;">🃏 Skins Game</h3>
-                            <label style="display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;color:#92400e;cursor:pointer;">
-                                <input type="checkbox" ${skEnabled ? 'checked' : ''}
-                                       onchange="updateSkinsSetting('enabled', this.checked)"
-                                       style="width:18px;height:18px;cursor:pointer;">
-                                Enabled
+                    <div class="card" style="margin-top:16px;background:#fffbeb;border:2px solid #f59e0b;padding:10px 14px;">
+                        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 20px;">
+                            <h3 style="color:#92400e;margin:0;font-size:15px;">🃏 Skins</h3>
+                            <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:#92400e;">
+                                <input type="checkbox" ${skEnabled ? 'checked' : ''} onchange="updateSkinsSetting('enabled', this.checked)" style="width:18px;height:18px;"> On
                             </label>
+                            <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:#92400e;">
+                                <input type="checkbox" ${skCarry ? 'checked' : ''} onchange="updateSkinsSetting('carryover', this.checked)" style="width:18px;height:18px;"> Carryover
+                            </label>
+                            <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:#92400e;">
+                                <input type="number" value="${skPts}" min="0" step="0.5" onchange="updateSkinsSetting('pointsPerSkin', parseFloat(this.value) || 0)" style="width:64px;padding:5px 8px;border:2px solid #f59e0b;border-radius:6px;font-size:13px;"> pts each
+                            </label>
+                            <span style="font-size:12px;color:#a16207;">League default ${_fmtN(leagueSkinsDefault)} · results are in the matrix's last row ↑</span>
                         </div>
-                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:14px;">
-                            <div>
-                                <label style="display:block;margin-bottom:6px;font-weight:600;font-size:12px;color:#92400e;">Pts per skin:</label>
-                                <input type="number" value="${skPts}" min="0" step="0.5"
-                                       onchange="updateSkinsSetting('pointsPerSkin', parseFloat(this.value) || 0)"
-                                       style="width:100%;padding:8px;border:2px solid #f59e0b;border-radius:6px;font-size:14px;">
-                                <div style="font-size:11px;color:#a16207;margin-top:4px;">League default: ${_fmtN(leagueSkinsDefault)} pts</div>
-                            </div>
-                            <div style="display:flex;align-items:flex-end;padding-bottom:8px;">
-                                <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:#92400e;cursor:pointer;">
-                                    <input type="checkbox" ${skCarry ? 'checked' : ''}
-                                           onchange="updateSkinsSetting('carryover', this.checked)"
-                                           style="width:18px;height:18px;cursor:pointer;">
-                                    Carryover on ties
-                                </label>
-                            </div>
-                        </div>
-                        ${!skEnabled ? `
-                            <div style="color:#a16207;font-size:13px;font-style:italic;">Skins are off for this round — flip the switch to play.</div>
-                        ` : (!_skins.decided && _skins.liveCarry === 0 ? `
-                            <div style="color:#a16207;font-size:13px;font-style:italic;">No skins decided yet — they light up as holes are scored.</div>
-                        ` : `
-                            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
-                                ${_skins.totals.filter(t => t.skins > 0).map(t => `
-                                    <div style="background:#fef3c7;border:2px solid #f59e0b;border-radius:10px;padding:8px 12px;font-size:13px;">
-                                        <strong style="color:#92400e;">${t.name}</strong>
-                                        <span style="color:#78350f;"> · ${_fmtN(t.skins)} skin${t.skins === 1 ? '' : 's'}</span>
-                                        <span style="color:#065f46;font-weight:700;"> · +${_fmtN(t.points)} pts</span>
-                                    </div>
-                                `).join('') || '<div style="color:#a16207;font-size:13px;">No skins won yet.</div>'}
-                                ${_skins.liveCarry > 0 ? `
-                                    <div style="background:#fef3c7;border:2px dashed #f59e0b;border-radius:10px;padding:8px 12px;font-size:13px;color:#92400e;">
-                                        🔁 <strong>${_fmtN(_skins.liveCarry)}</strong> skin${_skins.liveCarry === 1 ? '' : 's'} live in the pot
-                                    </div>
-                                ` : ''}
-                            </div>
-                            <div style="overflow-x:auto;">
-                            <table style="width:100%;border-collapse:collapse;font-size:13px;background:white;border-radius:8px;overflow:hidden;">
-                                <thead><tr style="background:#fef3c7;">
-                                    <th style="padding:6px 8px;color:#92400e;">Hole</th>
-                                    <th style="padding:6px 8px;text-align:left;color:#92400e;">Skin</th>
-                                    <th style="padding:6px 8px;color:#92400e;">Value</th>
-                                </tr></thead>
-                                <tbody>${_skins.holes.map(_holeRow).join('')}</tbody>
-                            </table>
-                            </div>
-                            <div style="background:#fef3c7;padding:10px;border-radius:6px;margin-top:12px;font-size:12px;color:#92400e;">
-                                💡 Lowest net score wins the hole outright. Ties ${skCarry ? 'carry the skin forward — the pot builds 🔥' : 'win nothing'}.
-                                Each skin is worth ${_fmtN(_skins.settings.pointsPerSkin)} event pts, added to the player's total.
-                            </div>
-                        `)}
                     </div>
                     `;
                 }
+
 
                 // Add photo upload section
                 html += `
@@ -24795,7 +24710,35 @@
             return h;
         };
 
-        const buildGroupMatrix = (round, groupKey, rows, courseTees) => {
+        window.__mxSkinPop = null;  // holeIdx whose skins pop-up is open
+        window.__mxPanel = null;    // 'extra9' | 'ctp' winner-editor panel open below the matrix
+        window.mxSkinPop = (hi) => { window.__mxSkinPop = hi; mxRenderKeepScroll(); };
+        window.mxCloseSkinPop = () => { window.__mxSkinPop = null; mxRenderKeepScroll(); };
+        window.mxTogglePanel = (name) => {
+            window.__mxPanel = (window.__mxPanel === name) ? null : name;
+            mxRenderKeepScroll();
+        };
+
+        // Skins detail for one hole, computed with the same net rule
+        // computeSkins uses (gross − strokes from the effective handicap).
+        const mxSkinHoleDetail = (round, rows, hi) => {
+            const contenders = [];
+            rows.forEach(r => {
+                const gross = parseInt((r.player.scores || [])[hi]);
+                if (isNaN(gross) || gross <= 0) return;
+                const net = gross - mxStrokesFor(r.effectiveHc, round.handicaps[hi]);
+                contenders.push({ player: r.player, statePlayer: r.statePlayer, gross, net });
+            });
+            if (!contenders.length) return null;
+            const best = Math.min.apply(null, contenders.map(c => c.net));
+            return { best, leaders: contenders.filter(c => c.net === best) };
+        };
+        const mxAvatarFor = (player, statePlayer, size) => {
+            const ap = player.photoUrl ? player : (statePlayer && statePlayer.photoUrl ? statePlayer : player);
+            return renderAvatar(ap, size);
+        };
+
+        const buildRoundMatrix = (round, rows, courseTees) => {
             const pars = round.pars || [];
             const filled = (s) => s !== '' && s !== null && s !== undefined;
             let h = '<div class="mx-wrap"><table class="mx-table">';
@@ -24809,16 +24752,33 @@
             h += `<th class="par-row">${pars.slice(0, 9).reduce((a, b) => a + (b || 0), 0)}</th>`;
             for (let i = 9; i < 18; i++) h += `<th class="par-row">${pars[i] != null ? pars[i] : ''}</th>`;
             h += `<th class="par-row">${pars.slice(9, 18).reduce((a, b) => a + (b || 0), 0)}</th><th></th></tr>`;
+            let lastGroup = undefined;
+            let groupIdx = -1;
             rows.forEach(r => {
                 const { teamIdx, playerIdx, player } = r;
                 const key = teamIdx + '-' + playerIdx;
+                if (r.groupKey !== lastGroup) {
+                    lastGroup = r.groupKey;
+                    groupIdx++;
+                    let check = '';
+                    if (r.groupKey !== 'unassigned' && window.bbbGroupProgress) {
+                        const prog = window.bbbGroupProgress(round, parseInt(r.groupKey));
+                        const over = prog.incomplete.some(x => x.n > 3);
+                        check = prog.awarded === 54
+                            ? ' <span style="color:#1B7F4B;">🎯 ✓</span>'
+                            : ` <span style="color:#9ca3af;text-transform:none;letter-spacing:0;">🎯 ${prog.awarded}/54</span>`;
+                        if (over) check += ' <span style="color:#B3261E;">⚠️</span>';
+                    }
+                    h += `<tr class="mx-grouprow"><td colspan="22">${r.groupKey === 'unassigned' ? 'Ungrouped' : 'Group ' + r.groupKey}${check}</td></tr>`;
+                }
+                const band = groupIdx % 2 === 1 ? ' class="mx-band1"' : '';
                 const avatarPlayer = player.photoUrl ? player : (r.statePlayer && r.statePlayer.photoUrl ? r.statePlayer : player);
                 const scores = player.scores || [];
                 const frontPlayed = scores.slice(0, 9).some(filled);
                 const backPlayed = scores.slice(9, 18).some(filled);
                 const outG = scores.slice(0, 9).reduce((a, s) => a + (parseInt(s) || 0), 0);
                 const inG = scores.slice(9, 18).reduce((a, s) => a + (parseInt(s) || 0), 0);
-                h += `<tr><td class="mx-who" onclick="mxTogglePlayer(${teamIdx}, ${playerIdx})"><span style="display:inline-flex;align-items:center;gap:7px;">${renderAvatar(avatarPlayer, 34)}<span><span class="mx-name">${player.name}</span><br><span class="mx-hc">HCP ${r.effectiveHc} ${window.__mxExpand === key ? '▾' : '▸'}</span></span></span></td>`;
+                h += `<tr${band}><td class="mx-who" onclick="mxTogglePlayer(${teamIdx}, ${playerIdx})"><span style="display:inline-flex;align-items:center;gap:7px;">${renderAvatar(avatarPlayer, 34)}<span><span class="mx-name">${player.name}</span><br><span class="mx-hc">HCP ${r.effectiveHc} ${window.__mxExpand === key ? '▾' : '▸'}</span></span></span></td>`;
                 for (let hi = 0; hi < 18; hi++) {
                     if (hi === 9) h += `<td class="mx-sub">${frontPlayed ? outG : '–'}</td>`;
                     const raw = scores[hi];
@@ -24830,9 +24790,62 @@
                 }
                 h += `<td class="mx-sub">${backPlayed ? inG : '–'}</td><td class="mx-pts">${r.grandTotal}</td></tr>`;
                 if (window.__mxExpand === key) {
-                    h += `<tr class="mx-detail"><td colspan="22">${mxDetailHtml(round, groupKey, r, courseTees)}</td></tr>`;
+                    h += `<tr class="mx-detail"><td colspan="22">${mxDetailHtml(round, r.groupKey, r, courseTees)}</td></tr>`;
                 }
             });
+            // ── Skins row (last row): winner's avatar per hole, "Tie" when
+            // tied; tap a decided hole for the pop-up (winner / all tied
+            // players, with the score that won). Replaces the old long
+            // skins section — its settings live in the slim strip below.
+            const skObj = round.skins || {};
+            if (skObj.enabled !== false && window.computeSkins) {
+                const leagueSkinsDefault = (state.settings && state.settings.skinsPoints != null) ? state.settings.skinsPoints : 0.5;
+                const skPts = skObj.pointsPerSkin != null ? skObj.pointsPerSkin : leagueSkinsDefault;
+                const hcMap = {};
+                rows.forEach(r => { hcMap[r.player.id] = r.effectiveHc; });
+                const skins = window.computeSkins(round, hcMap, skPts);
+                const fmtN = (n) => String(Math.round(n * 100) / 100);
+                h += `<tr><td class="mx-skinlab">🃏 Skins</td>`;
+                skins.holes.forEach((sh, hi) => {
+                    if (hi === 9) h += `<td class="mx-sub"></td>`;
+                    const detail = (sh.status === 'won' || sh.status === 'won-carry' || sh.status === 'tie-carry' || sh.status === 'tie-dead' || sh.status === 'split-final')
+                        ? mxSkinHoleDetail(round, rows, hi) : null;
+                    if (sh.status === 'won' || sh.status === 'won-carry') {
+                        const wr = rows.find(r => String(r.player.id) === String(sh.winnerId));
+                        const net = detail ? detail.best : null;
+                        h += `<td class="mx-skincell" onclick="mxSkinPop(${hi})" title="Hole ${hi + 1} skin — ${sh.winnerName}${net != null ? ', net ' + net : ''}${sh.skinsValue > 1 ? ' (' + fmtN(sh.skinsValue) + ' skins 🔥)' : ''}">${wr ? mxAvatarFor(wr.player, wr.statePlayer, 24) : sh.winnerName}<span class="mx-skinnet">${net != null ? net : ''}${sh.skinsValue > 1 ? ' 🔥' : ''}</span></td>`;
+                    } else if (sh.status === 'tie-carry' || sh.status === 'tie-dead' || sh.status === 'split-final') {
+                        const net = detail ? detail.best : sh.tiedScore;
+                        h += `<td class="mx-skincell" onclick="mxSkinPop(${hi})" title="Hole ${hi + 1} skin tied${net != null ? ' at net ' + net : ''} — tap to see who"><span class="mx-skintie">Tie</span><span class="mx-skinnet">${net != null ? net : ''}</span></td>`;
+                    } else {
+                        h += `<td class="mx-skincell" style="cursor:default;"><span style="color:#d1d5db;">–</span></td>`;
+                    }
+                });
+                h += `<td class="mx-sub"></td><td class="mx-pts" style="font-size:11px;">${skins.liveCarry > 0 ? '🔁 ' + fmtN(skins.liveCarry) : ''}</td></tr>`;
+                // Skins pop-up for the tapped hole.
+                if (window.__mxSkinPop != null) {
+                    const hi = window.__mxSkinPop;
+                    const sh = skins.holes[hi];
+                    const detail = sh ? mxSkinHoleDetail(round, rows, hi) : null;
+                    if (sh && detail) {
+                        const isWin = sh.status === 'won' || sh.status === 'won-carry';
+                        h += `<div class="mx-pop-back" onclick="if (event.target === this) mxCloseSkinPop()"><div class="mx-pop">
+                            <div style="display:flex;justify-content:space-between;align-items:center;">
+                                <strong style="font-size:16px;">🃏 Hole ${hi + 1} · Par ${pars[hi]} — ${isWin ? 'Skin won' : 'Skin tied'}</strong>
+                                <button onclick="mxCloseSkinPop()" style="border:none;background:#f3f4f6;border-radius:8px;width:32px;height:32px;font-size:15px;cursor:pointer;">✕</button>
+                            </div>
+                            <div style="color:#6b7280;font-size:13px;margin:6px 0 12px;">Winning score: <strong style="color:#92400e;">net ${detail.best}</strong>${sh.skinsValue > 1 ? ` · worth <strong>${fmtN(sh.skinsValue)} skins</strong> 🔥 (carried pot)` : ''}${sh.status === 'split-final' ? ' · final-hole pot split by the King of Ties rule' : ''}</div>
+                            <div style="display:flex;flex-wrap:wrap;gap:14px;">${detail.leaders.map(l => `
+                                <div style="display:flex;flex-direction:column;align-items:center;gap:3px;min-width:64px;">
+                                    ${mxAvatarFor(l.player, l.statePlayer, 52)}
+                                    <div style="font-size:12px;font-weight:700;text-align:center;line-height:1.2;">${l.player.name}</div>
+                                    <div style="font-size:11px;color:#6b7280;">gross ${l.gross} · net ${l.net}</div>
+                                </div>`).join('')}
+                            </div>
+                        </div></div>`;
+                    }
+                }
+            }
             h += '</table></div>';
             return h;
         };
