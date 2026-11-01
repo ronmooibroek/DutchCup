@@ -778,7 +778,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = 'v2026.11.01.28';
+        const APP_VERSION = 'v2026.11.01.29';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -5507,17 +5507,18 @@ ${(() => {
                                     return 'R' + (i + 1) + (d ? '<br><span style="font-weight:600;text-transform:none;letter-spacing:0;">' + d + (course ? ' · ' + course : '') + '</span>' : '');
                                 };
                                 const colorOf = (team) => { const st = state.teams.find(t => t.id === team.id); return st && st.color ? st.color : '#3b82f6'; };
+                                const ordered = eventRounds.map((r, i) => ({ r: r, i: i })).sort((a, b) => { const da = a.r.date || '', db = b.r.date || ''; return da < db ? -1 : da > db ? 1 : a.i - b.i; });
                                 let h = '<h3 style="margin:0 0 8px;color:#1f2937;font-size:15px;">Team Standings</h3>';
                                 h += '<div class="mx-wrap"><table class="mx-table lb-table"><tr><th class="mx-who">Team</th>';
-                                eventRounds.forEach((r, i) => { h += '<th>' + roundLabel(r, i) + '</th>'; });
+                                ordered.forEach((o, pos) => { h += '<th>' + roundLabel(o.r, pos) + '</th>'; });
                                 h += '<th>Total</th>' + (winProbByTeam ? '<th>Win %</th>' : '') + '</tr>';
                                 leaderboard.forEach((team, idx) => {
                                     const color = colorOf(team);
                                     const per = teamPerRound[String(team.id)] || {};
                                     h += '<tr onclick="navigateToTeamStats(' + team.id + ')" style="cursor:pointer;"><td class="mx-who"><span style="display:inline-flex;align-items:center;gap:7px;"><span style="width:12px;height:12px;border-radius:3px;background:' + color + ';flex:none;"></span><span><span class="mx-name">#' + (idx + 1) + ' ' + team.name + '</span><br><span class="mx-hc">' + team.rounds + 'R · ' + team.wins + 'W · ' + team.avg.toFixed(1) + ' avg</span></span></span></td>';
-                                    eventRounds.forEach((r, i) => {
-                                        const v = per[i];
-                                        const won = (roundWinnerIds[i] || []).map(String).indexOf(String(team.id)) >= 0;
+                                    ordered.forEach((o) => {
+                                        const v = per[o.i];
+                                        const won = (roundWinnerIds[o.i] || []).map(String).indexOf(String(team.id)) >= 0;
                                         h += '<td class="' + (won ? 'lb-win' : '') + '">' + (v === undefined ? '–' : fmt(v)) + (won ? ' 🏆' : '') + '</td>';
                                     });
                                     h += '<td class="mx-pts" style="color:#1f2937;background:#fffbeb;">' + fmt(team.points) + '</td>';
@@ -6403,6 +6404,7 @@ ${(() => {
                                 return 'R' + (i + 1) + (d ? '<br><span style="font-weight:600;text-transform:none;letter-spacing:0;">' + d + (course ? ' · ' + course : '') + '</span>' : '');
                             };
                             const teamOf = (player) => state.teams.find(t => t.players && t.players.includes(player.id));
+                            const ordered = eventRounds.map((r, i) => ({ r: r, i: i })).sort((a, b) => { const da = a.r.date || '', db = b.r.date || ''; return da < db ? -1 : da > db ? 1 : a.i - b.i; });
                             const whoCell = (player, idx) => {
                                 const playerTeam = teamOf(player);
                                 const teamColor = playerTeam && playerTeam.color ? playerTeam.color : '#3b82f6';
@@ -6410,12 +6412,12 @@ ${(() => {
                                 return '<td class="mx-who"><span style="display:inline-flex;align-items:center;gap:7px;">' + renderAvatar(sp, 30) + '<span><span class="mx-name">#' + (idx + 1) + ' ' + player.name + '</span><br><span class="mx-hc">' + (playerTeam ? '<span style="color:' + teamColor + ';font-weight:700;">' + playerTeam.name + '</span> · ' : '') + player.rounds + ' round' + (player.rounds === 1 ? '' : 's') + ' · ' + player.avgPoints.toFixed(1) + ' avg · ' + player.totalGrossStrokes + ' gross</span></span></span></td>';
                             };
                             let h = '<div class="mx-wrap"><table class="mx-table lb-table"><tr><th class="mx-who">Player</th>';
-                            eventRounds.forEach((r, i) => { h += '<th>' + roundLabel(r, i) + '</th>'; });
+                            ordered.forEach((o, pos) => { h += '<th>' + roundLabel(o.r, pos) + '</th>'; });
                             h += '<th>Total</th></tr>';
                             filteredPlayers.forEach((player, idx) => {
                                 h += '<tr onclick="navigateToPlayerDetail(\'' + player.id + '\')" style="cursor:pointer;">' + whoCell(player, idx);
-                                eventRounds.forEach((r) => {
-                                    const gIdx = state.rounds.indexOf(r);
+                                ordered.forEach((o) => {
+                                    const gIdx = state.rounds.indexOf(o.r);
                                     const det = (player.roundDetails || []).filter(d => d.roundIndex === gIdx)[0];
                                     h += '<td>' + (det ? fmt(det.total) : '–') + '</td>';
                                 });
