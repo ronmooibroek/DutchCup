@@ -184,21 +184,20 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
 .score-list { margin-bottom: 6px; }
 .score-row {
     background: var(--card); border-radius: 12px; box-shadow: var(--shadow);
-    padding: 5px 9px; margin-bottom: 5px;
+    padding: 7px 10px; margin-bottom: 6px;
     border-left: 4px solid transparent;
 }
 .score-row.is-me { border-left-color: var(--fairway); }
 .score-row-top { display: flex; align-items: center; gap: 8px; }
 /* ── One-tap score chips: the 5 common scores sit right under the name ── */
-.score-chips { display: flex; gap: 6px; margin-top: 5px; }
+.score-chips { display: flex; gap: 6px; margin-top: 6px; }
 .score-chip {
     flex: 1 1 0; min-height: 46px; border: 2px solid var(--sand); background: white;
     border-radius: 10px; cursor: pointer; padding: 3px 0 4px;
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0;
     color: var(--ink); font-variant-numeric: tabular-nums;
 }
-.score-chip .n { font-size: 20px; font-weight: 900; line-height: 1.05; }
-.score-chip .w { font-size: 8.5px; font-weight: 800; letter-spacing: 0.4px; text-transform: uppercase; color: var(--ink-soft); }
+.score-chip .n { font-size: 25px; font-weight: 900; line-height: 1.05; }
 .score-chip:active { transform: scale(0.95); }
 .score-chip.picked { border-style: solid; }
 .score-chip.picked.birdie { border-color: var(--birdie); color: var(--birdie); background: #EDF7F1; }
@@ -207,11 +206,11 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
 .score-chip.picked.bogey { border-color: var(--bogey); color: var(--bogey); background: #FBF2E7; }
 .score-chip.picked.double, .score-chip.picked.worse { border-color: var(--dbl); color: var(--dbl); background: #FBEBE9; }
 .score-chip.other { flex: 0 0 46px; color: var(--ink-soft); }
-.score-chip.other .n { font-size: 17px; letter-spacing: 1px; }
+.score-chip.other .n { font-size: 22px; letter-spacing: 1px; }
 .score-chip.other.has-score { border-color: var(--fairway); color: var(--fairway-dk); background: #F4FAF6; }
 
 /* ── Bingo Bango Bongo: one labelled icon button per point, per player ── */
-.bbb-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 5px; }
+.bbb-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 6px; }
 .bbb-row.has-ctp { grid-template-columns: repeat(4, 1fr); }
 .bbb-row.has-ctp .bbb-btn { gap: 5px; padding: 4px 2px; }
 .bbb-btn.on-ctp { background: var(--flag); border-color: #b03330; color: white; }
@@ -222,10 +221,9 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
     display: flex; align-items: center; justify-content: center; gap: 7px;
 }
 .bbb-btn:active { transform: scale(0.96); }
-.bbb-btn .ic { font-size: 18px; line-height: 1; opacity: 0.65; filter: grayscale(0.5); }
-.bbb-btn .tx { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.1; }
-.bbb-btn .tx b { font-size: 13px; font-weight: 900; letter-spacing: 0.2px; }
-.bbb-btn .tx small { font-size: 9px; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase; }
+.bbb-btn .ic { font-size: 20px; line-height: 1; opacity: 0.65; filter: grayscale(0.5); }
+.bbb-btn .tx { display: flex; align-items: center; line-height: 1.1; }
+.bbb-btn .tx b { font-size: 16px; font-weight: 900; letter-spacing: 0.2px; }
 .bbb-btn.on-bingo { background: var(--fairway); border-color: var(--fairway-dk); color: white; }
 .bbb-btn.on-bango { background: #2B6CB0; border-color: #215685; color: white; }
 .bbb-btn.on-bongo { background: #FFD95E; border-color: #E3B93E; color: #6b4e00; }
@@ -618,7 +616,7 @@ document.addEventListener('visibilitychange', () => {
     try { if (document.visibilityState === 'hidden' && hasPendingEdits()) flushPendingEdits(); } catch (e) {}
 });
 
-const SE_VERSION = '2.21.0'; // + CTP replace confirmation pop-up
+const SE_VERSION = '2.22.0'; // subtexts removed, bigger numbers + labels
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
@@ -1403,8 +1401,7 @@ function buildScoresList(round, groupPlayers) {
                 'aria-label': `Score ${v} for ${p.name || 'player'}`,
                 onclick: () => setScoreInline(pid, v)
             },
-                el('span', { class: 'n' }, String(v)),
-                par ? el('span', { class: 'w' }, grossWord(v, par)) : null
+                el('span', { class: 'n' }, String(v))
             ));
         });
         // Anything outside the range (or Clear) lives on the full pad, one tap away.
@@ -1415,8 +1412,7 @@ function buildScoresList(round, groupPlayers) {
             'aria-label': `Other scores for ${p.name || 'player'}`,
             onclick: () => { state.sheetPlayerId = pid; state.padExpanded = true; renderScoreEntry(); }
         },
-            el('span', { class: 'n' }, '\u00b7\u00b7\u00b7'),
-            el('span', { class: 'w' }, 'other')
+            el('span', { class: 'n' }, '\u00b7\u00b7\u00b7')
         ));
         row.appendChild(chips);
 
@@ -1436,8 +1432,7 @@ function buildScoresList(round, groupPlayers) {
             },
                 el('span', { class: 'ic' }, slot.icon),
                 el('span', { class: 'tx' },
-                    el('b', null, slot.name),
-                    el('small', null, slot.desc)
+                    el('b', null, slot.name)
                 )
             ));
         });
@@ -1455,8 +1450,7 @@ function buildScoresList(round, groupPlayers) {
             },
                 el('span', { class: 'ic' }, '\u{1F4CD}'),
                 el('span', { class: 'tx' },
-                    el('b', null, 'CTP'),
-                    el('small', null, 'Tee shot')
+                    el('b', null, 'CTP')
                 )
             ));
         }
