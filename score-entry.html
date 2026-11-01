@@ -379,6 +379,17 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
 .sc-sumrow:last-child { border-bottom: none; }
 .sc-sumrow .pts { font-weight: 900; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .sc-sumrow.total { font-size: 18px; }
+/* Extra 9 winner chooser */
+.e9-count { font-size: 16px; font-weight: 900; margin-top: 8px; }
+.e9-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 4px; }
+.e9-tile { position: relative; background: var(--card); border: 2px solid var(--line); border-radius: 14px; padding: 10px 4px 8px; cursor: pointer; font-family: inherit; }
+.e9-tile.on { border-color: var(--fairway); background: #EDF7F1; }
+.e9-avatar { width: 58px; height: 58px; border-radius: 50%; overflow: hidden; position: relative; margin: 0 auto 6px; }
+.e9-avatar .avatar-wrap { position: absolute; inset: 0; display: block; }
+.e9-avatar .player-avatar { width: 100%; height: 100%; border-radius: 0; font-size: 22px; }
+.e9-avatar img.player-avatar-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.e9-name { font-size: 12.5px; font-weight: 800; line-height: 1.2; }
+.e9-check { position: absolute; top: 4px; right: 6px; width: 22px; height: 22px; border-radius: 50%; background: var(--fairway); color: #fff; font-size: 14px; font-weight: 900; line-height: 22px; text-align: center; }
 @media (orientation: landscape) {
     .sc-nines { flex-direction: row; }
     .sc-nines > * { flex: 1; }
@@ -448,6 +459,7 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
         <span class="save-status" id="save-status" style="display:none;"></span>
         <button class="hdr-btn hdr-icon" id="camera-btn" style="display:none;" onclick="document.getElementById('photo-file-input').click()" aria-label="Take or add a photo">📷</button>
         <button class="hdr-btn hdr-icon" id="gallery-btn" style="display:none;" onclick="window.__openPhotos && window.__openPhotos()" aria-label="View round photos">🖼️</button>
+        <button class="hdr-btn hdr-icon" id="extra9-btn" style="display:none;font-weight:900;" onclick="window.__openExtra9 && window.__openExtra9()" aria-label="Extra 9 winners">9</button>
         <button class="hdr-btn" id="switch-btn" style="display:none;" onclick="window.__switchPlayer && window.__switchPlayer()">Switch player</button>
     </div>
 </header>
@@ -658,7 +670,7 @@ document.addEventListener('visibilitychange', () => {
     try { if (document.visibilityState === 'hidden' && hasPendingEdits()) flushPendingEdits(); } catch (e) {}
 });
 
-const SE_VERSION = '2.38.0'; // persistent footer nav (Next double-tap fix) + hole-jump dropdown; player scorecard/summary on photo tap; unpicked chips dimmed further
+const SE_VERSION = '2.39.0'; // extra 9: header "9" icon appears once every score is in; tap it to pick the four winners and submit
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
@@ -674,6 +686,8 @@ const state = {
     finished: false,           // showing the end-of-round summary screen
     board: null,               // 'teams' | 'players' | 'match' when the leaderboard is open
     photos: false,             // round-photos view open (header gallery icon)
+    extra9: false,             // extra-9 winner chooser open (header "9" icon)
+    extra9Pick: [],            // player ids picked so far in the chooser (max 4)
     editGroups: false,         // group editor open (from the player picker)
     groupDraft: null,          // { assignments: {pid: group# (0 = unassigned)}, groups: [..] }
     groupPick: null,           // player id picked up in the group editor
@@ -1189,6 +1203,7 @@ function renderRoundPicker(rounds) {
     $('#switch-btn').style.display = 'none';
     $('#camera-btn').style.display = 'none';
     $('#gallery-btn').style.display = 'none';
+    $('#extra9-btn').style.display = 'none';
 
     // Bucket-sort: in-progress first (most likely the round being played right now),
     // then today's scheduled, then upcoming (closest first), then past (most recent first).
@@ -1240,6 +1255,7 @@ function renderPlayerPicker() {
     $('#switch-btn').style.display = 'none';
     $('#camera-btn').style.display = 'none';
     $('#gallery-btn').style.display = 'none';
+    $('#extra9-btn').style.display = 'none';
     setStatus('', '');
 
     const appEl = $('#app'); appEl.innerHTML = '';
@@ -1408,6 +1424,7 @@ function renderGroupEditor() {
     $('#switch-btn').style.display = 'none';
     $('#camera-btn').style.display = 'none';
     $('#gallery-btn').style.display = 'none';
+    $('#extra9-btn').style.display = 'none';
 
     const draft = state.groupDraft;
     const all = getAllRoundPlayers(round);
@@ -1535,6 +1552,7 @@ window.__switchPlayer = function() {
     state.sheetPlayerId = null; state.padExpanded = false; state.photos = false;
     state.editGroups = false; state.groupDraft = null; state.groupPick = null;
     state.cardPlayerId = null;
+    state.extra9 = false; state.extra9Pick = [];
     state.pendingEdits = { scores: {}, ctpWinners: {}, balls: {}, bbb: {} };
     setStatus('', '');
     renderPlayerPicker();
@@ -1544,6 +1562,15 @@ window.__openPhotos = function() {
     state.board = null;
     state.photos = true;
     renderScoreEntry();
+};
+
+window.__openExtra9 = function() {
+    const round = getRoundById(state.selectedRoundId);
+    if (!round || !roundFullyScored(round)) return;
+    state.board = null;
+    state.extra9Pick = currentExtra9Pick(round);
+    state.extra9 = true;
+    if (state.finished) renderRoundFinished(); else renderScoreEntry();
 };
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -1562,6 +1589,8 @@ function renderScoreEntry() {
     $('#switch-btn').style.display = 'inline-block';
     $('#camera-btn').style.display = 'inline-block';
     $('#gallery-btn').style.display = 'inline-block';
+    syncExtra9Btn();
+    if (state.extra9) { renderExtra9View(round); return; }
     if (state.cardPlayerId) { renderPlayerCard(); return; }
     if (state.editGroups) { renderGroupEditor(); return; }
     if (state.photos) { renderPhotosView(round); return; }
@@ -2635,12 +2664,14 @@ function renderRoundFinished() {
     const round = getRoundById(state.selectedRoundId);
     if (!round) return;
     if (state.cardPlayerId) { renderPlayerCard(); return; }
+    if (state.extra9) { renderExtra9View(round); return; }
     const groupPlayers = getGroupPlayers(round, state.groupNumber);
 
     setHeader(round.courseName || 'Round', `Group ${state.groupNumber} · Finished`);
     $('#switch-btn').style.display = 'inline-block';
     $('#camera-btn').style.display = 'inline-block';
     $('#gallery-btn').style.display = 'inline-block';
+    syncExtra9Btn();
 
     // Any holes still incomplete? (missing scores or missing BBB points)
     const incomplete = [];
@@ -2823,6 +2854,160 @@ function buildPlayerCard(round, p) {
     return wrap;
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// EXTRA 9 — once EVERY score in the round is in, a "9" icon appears in
+// the header; tapping it opens a chooser for the four extra-9 winners
+// (Ron, 2026-11-01). Winners are stored exactly as the main app's admin
+// picker stores them: round.extra9Winners as a 4-slot array of player
+// ids ('' = empty slot), worth BONUS.extra9 points each.
+// ═══════════════════════════════════════════════════════════════════════
+function roundFullyScored(round) {
+    if (!round) return false;
+    const players = getAllRoundPlayers(round);
+    if (!players.length) return false;
+    return players.every(p => {
+        for (let h = 0; h < 18; h++) {
+            const s = effectiveScore(round, p.id, h);
+            if (s === '' || s == null) return false;
+        }
+        return true;
+    });
+}
+
+function syncExtra9Btn() {
+    if (typeof document === 'undefined' || !document.getElementById) return;
+    const btn = document.getElementById('extra9-btn');
+    if (!btn) return;
+    const round = getRoundById(state.selectedRoundId);
+    const inScoring = state.currentPlayerId != null && !state.board
+        && !state.cardPlayerId && !state.editGroups && !state.extra9;
+    btn.style.display = (inScoring && round && roundFullyScored(round)) ? 'inline-block' : 'none';
+}
+
+// Seed the chooser from any saved winners — the canonical form is player
+// ids, but older position strings ("teamIdx-playerIdx") and {playerId}
+// objects are converted too, so an existing result can be corrected.
+function currentExtra9Pick(round) {
+    const arr = Array.isArray(round.extra9Winners) ? round.extra9Winners : [];
+    const ids = [];
+    arr.forEach(w => {
+        if (w == null || w === '') return;
+        if (typeof w === 'object') { if (w.playerId != null) ids.push(idStr(w.playerId)); return; }
+        const s = String(w);
+        const m = s.match(/^(\d+)-(\d+)$/);
+        if (m) {
+            const t = (round.teams || [])[+m[1]];
+            const pl = t && (t.players || [])[+m[2]];
+            if (pl) ids.push(idStr(pl.id));
+        } else ids.push(s);
+    });
+    return [...new Set(ids)].slice(0, 4);
+}
+
+function toggleExtra9Pick(playerId) {
+    const pid = idStr(playerId);
+    const i = state.extra9Pick.indexOf(pid);
+    if (i >= 0) state.extra9Pick.splice(i, 1);
+    else {
+        if (state.extra9Pick.length >= 4) return;   // exactly four winners
+        state.extra9Pick.push(pid);
+    }
+    const round = getRoundById(state.selectedRoundId);
+    if (round) renderExtra9View(round);
+}
+
+function buildExtra9View(round) {
+    const players = getAllRoundPlayers(round);
+    const wrap = el('div', null);
+    const intro = el('div', { class: 'card', style: 'text-align:center;' });
+    intro.appendChild(el('div', { style: 'font-size:40px;line-height:1.1;' }, '🏆'));
+    intro.appendChild(el('h2', null, 'Extra 9 winners'));
+    intro.appendChild(el('p', { class: 'muted' },
+        `All scores are in. Tap the four players who won the extra 9 — ${BONUS.extra9} pts each.`));
+    intro.appendChild(el('div', { class: 'e9-count' }, `${state.extra9Pick.length} of 4 picked`));
+    wrap.appendChild(intro);
+
+    const grid = el('div', { class: 'e9-grid' });
+    players.forEach(p => {
+        const on = state.extra9Pick.includes(idStr(p.id));
+        const tile = el('button', {
+            class: 'e9-tile' + (on ? ' on' : ''), type: 'button',
+            onclick: () => toggleExtra9Pick(p.id)
+        });
+        const av = el('div', { class: 'e9-avatar' });
+        av.appendChild(buildPanelAvatar(p));
+        tile.appendChild(av);
+        tile.appendChild(el('div', { class: 'e9-name' }, p.name || '?'));
+        if (on) tile.appendChild(el('div', { class: 'e9-check' }, '✓'));
+        grid.appendChild(tile);
+    });
+    wrap.appendChild(grid);
+
+    const ready = state.extra9Pick.length === 4;
+    wrap.appendChild(el('button', {
+        class: 'foot-btn next e9-submit', type: 'button',
+        disabled: ready ? null : '',
+        style: 'width:100%;margin-top:10px;' + (ready ? '' : 'opacity:.45;'),
+        onclick: () => saveExtra9Winners()
+    }, ready ? 'Submit extra 9 winners' : `Pick ${4 - state.extra9Pick.length} more`));
+    return wrap;
+}
+
+function renderExtra9View(round) {
+    round = round || getRoundById(state.selectedRoundId);
+    if (!round) return;
+    setHeader('Extra 9', round.courseName || '');
+    $('#switch-btn').style.display = 'none';
+    $('#camera-btn').style.display = 'none';
+    $('#gallery-btn').style.display = 'none';
+    $('#extra9-btn').style.display = 'none';
+    const appEl = $('#app');
+    appEl.innerHTML = '';
+    appEl.appendChild(buildExtra9View(round));
+    appEl.appendChild(el('button', {
+        class: 'foot-btn prev', type: 'button', style: 'width:100%;margin-top:8px;',
+        onclick: () => { state.extra9 = false; state.extra9Pick = []; if (state.finished) renderRoundFinished(); else renderScoreEntry(); }
+    }, '← Back'));
+}
+
+async function saveExtra9Winners() {
+    const roundId = state.selectedRoundId;
+    const round = getRoundById(roundId);
+    if (!round || state.extra9Pick.length !== 4) return;
+    const winners = ['', '', '', ''];
+    state.extra9Pick.forEach((pid, i) => { winners[i] = pid; });
+    state.saving = true;
+    setStatus('Saving extra 9…', 'saving');
+    try {
+        await firestoreDb.runTransaction(async (tx) => {
+            const ref = roundDocRef(roundId);
+            const snap = await tx.get(ref);
+            if (!snap.exists) throw new Error('Round doc missing');
+            const srv = JSON.parse(JSON.stringify(snap.data().value || {}));
+            if (!srv || srv.id == null) throw new Error('Round no longer exists');
+            if (srv.completed === true) { const e = new Error('ROUND_COMPLETED'); e.code = 'ROUND_COMPLETED'; throw e; }
+            srv.extra9Winners = winners;
+            tx.set(ref, {
+                value: srv,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+        });
+    } catch (e) {
+        state.saving = false;
+        setStatus('Extra 9 save failed', 'error');
+        alert(e && e.code === 'ROUND_COMPLETED'
+            ? 'This round is already marked complete in the main app, so the extra 9 winners can no longer be saved from here.'
+            : 'Could not save the extra 9 winners. Check your connection and try again.');
+        return;
+    }
+    state.saving = false;
+    round.extra9Winners = winners;
+    state.extra9 = false;
+    state.extra9Pick = [];
+    setStatus('Extra 9 saved ✓', 'saved');
+    if (state.finished) renderRoundFinished(); else renderScoreEntry();
+}
+
 function renderPlayerCard() {
     const round = getRoundById(state.selectedRoundId);
     const groupPlayers = round ? getGroupPlayers(round, state.groupNumber) : [];
@@ -2836,6 +3021,7 @@ function renderPlayerCard() {
     $('#switch-btn').style.display = 'none';
     $('#camera-btn').style.display = 'none';
     $('#gallery-btn').style.display = 'none';
+    $('#extra9-btn').style.display = 'none';
     const appEl = $('#app');
     appEl.innerHTML = '';
     appEl.appendChild(buildPlayerCard(round, p));
@@ -3525,6 +3711,7 @@ function updateCellLiveColor(playerId, gross) {
 
 
 function refreshScoreEntryFromServer() {
+    syncExtra9Btn();
     const round = getRoundById(state.selectedRoundId);
     if (!round) return;
     const groupPlayers = getGroupPlayers(round, state.groupNumber);
