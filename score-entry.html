@@ -131,6 +131,8 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
     font-size: 18px; font-weight: 700; color: var(--ink); min-height: 58px;
 }
 .player-btn:active { border-color: var(--fairway); background: #F4FAF6; }
+.player-btn.selected { border-color: var(--fairway); background: #F4FAF6; box-shadow: 0 0 0 2px rgba(46,125,79,0.35); }
+.group-card.drop-ok { outline: 2px dashed var(--fairway); outline-offset: -2px; cursor: pointer; }
 .player-btn .hcp { font-size: 13px; font-weight: 600; color: var(--ink-soft); }
 .player-btn .team { margin-left: auto; font-size: 12px; color: var(--ink-soft); }
 
@@ -626,7 +628,7 @@ document.addEventListener('visibilitychange', () => {
     try { if (document.visibilityState === 'hidden' && hasPendingEdits()) flushPendingEdits(); } catch (e) {}
 });
 
-const SE_VERSION = '2.35.0'; // points help text sits beside the icons, not under them
+const SE_VERSION = '2.36.0'; // group editor: anyone can create or change groups until the first score is entered
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
@@ -642,6 +644,9 @@ const state = {
     finished: false,           // showing the end-of-round summary screen
     board: null,               // 'teams' | 'players' | 'match' when the leaderboard is open
     photos: false,             // round-photos view open (header gallery icon)
+    editGroups: false,         // group editor open (from the player picker)
+    groupDraft: null,          // { assignments: {pid: group# (0 = unassigned)}, groups: [..] }
+    groupPick: null,           // player id picked up in the group editor
     auditPlayerId: null,       // when set, the leaderboard shows that player's score audit
     events: [],                // league events (carry the match-play bracket)
     leaguePlayers: [],         // player records (carry handicapIndex for USGA mode)
@@ -1219,8 +1224,14 @@ function renderPlayerPicker() {
     if (groupNums.length === 0) {
         appEl.appendChild(el('div', { class: 'card' },
             el('h2', null, 'Groups not assigned yet'),
-            el('p', { class: 'muted' }, "The admin hasn't assigned players to groups for this round yet.")
+            el('p', { class: 'muted' }, 'No groups have been set for this round yet — anyone can create them right here.')
         ));
+        if (groupsEditable(round)) {
+            appEl.appendChild(el('button', {
+                class: 'foot-btn prev', type: 'button', style: 'width:100%;min-height:44px;',
+                onclick: () => openGroupEditor()
+            }, '\u{1F465} Create groups'));
+        }
         return;
     }
 
@@ -1228,6 +1239,19 @@ function renderPlayerPicker() {
         el('h2', null, 'Pick your name'),
         el('p', { class: 'muted' }, 'Tap your name to start scoring for your group.')
     ));
+
+    // Groups belong to everyone until play starts (Ron, 2026-11-01): anyone
+    // can create or rearrange them from here — no admin needed. The moment
+    // the first score is entered, they lock.
+    if (groupsEditable(round)) {
+        appEl.appendChild(el('button', {
+            class: 'foot-btn prev', type: 'button', style: 'width:100%;margin-bottom:10px;min-height:44px;',
+            onclick: () => openGroupEditor()
+        }, '\u{1F465} Edit groups'));
+    } else {
+        appEl.appendChild(el('p', { class: 'muted', style: 'text-align:center;margin:0 0 10px;' },
+            '\u{1F512} Groups are locked — scoring has started for this round.'));
+    }
 
     groupNums.forEach(num => {
         const card = el('div', { class: 'group-card' }, el('div', { class: 'group-title' }, `Group ${num}`));
@@ -1255,12 +1279,227 @@ function selectPlayer(playerId, groupNumber) {
     renderScoreEntry();
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// GROUP EDITOR — anyone can create or rearrange the groups from the
+// scoring app until the first score is entered (Ron, 2026-11-01: "that
+// doesn't need to be an admin function only"). Tap a player to pick them
+// up, tap a group to put them there — no drag-and-drop. Edits live in a
+// draft until Save; Save re-checks the lock inside the write transaction,
+// so a first score landing mid-edit (another scorer) wins over the edit.
+// ═══════════════════════════════════════════════════════════════════════
+function roundHasAnyScores(round) {
+    let found = false;
+    (round.teams || []).forEach(team => {
+        (team.players || []).forEach(p => {
+            (Array.isArray(p.scores) ? p.scores : []).forEach(v => {
+                if (v !== '' && v != null) found = true;
+            });
+        });
+    });
+    return found;
+}
+
+function groupsEditable(round) {
+    if (!round || round.completed === true) return false;
+    if (roundHasAnyScores(round)) return false;
+    const ps = (state.pendingEdits && state.pendingEdits.scores) || {};
+    return !Object.keys(ps).some(pid => Object.keys(ps[pid] || {}).length > 0);
+}
+
+function buildGroupDraft(round) {
+    const assignments = {};
+    const found = [];
+    (round.teams || []).forEach(team => {
+        (team.players || []).forEach(p => {
+            const g = p.groupNumber ? Number(p.groupNumber) : 0;
+            assignments[idStr(p.id)] = g;
+            if (g && !found.includes(g)) found.push(g);
+        });
+    });
+    found.sort((a, b) => a - b);
+    if (!found.length) found.push(1);
+    return { assignments, groups: found };
+}
+
+// Writes a draft into a round object: players get their drafted group,
+// renumbered 1..N in draft order so an emptied group leaves no gap.
+function applyGroupDraft(round, draft) {
+    const used = draft.groups.filter(g =>
+        Object.keys(draft.assignments).some(pid => draft.assignments[pid] === g));
+    const renum = {};
+    used.forEach((g, i) => { renum[g] = i + 1; });
+    (round.teams || []).forEach(team => {
+        (team.players || []).forEach(p => {
+            const pid = idStr(p.id);
+            if (!(pid in draft.assignments)) return;
+            const a = draft.assignments[pid];
+            p.groupNumber = a === 0 ? 0 : (renum[a] || 0);
+        });
+    });
+    return round;
+}
+
+function openGroupEditor() {
+    const round = getRoundById(state.selectedRoundId);
+    if (!round) return;
+    if (!groupsEditable(round)) { setStatus('Groups are locked — scoring has started', 'error'); return; }
+    state.groupDraft = buildGroupDraft(round);
+    state.groupPick = null;
+    state.editGroups = true;
+    renderGroupEditor();
+}
+
+function pickDraftPlayer(pid) {
+    state.groupPick = state.groupPick === pid ? null : pid;
+    renderGroupEditor();
+}
+
+function dropPickedPlayer(num) {
+    if (!state.groupPick || !state.groupDraft) return;
+    state.groupDraft.assignments[state.groupPick] = num;
+    state.groupPick = null;
+    renderGroupEditor();
+}
+
+function addDraftGroup() {
+    if (!state.groupDraft) return;
+    state.groupDraft.groups.push(Math.max(0, ...state.groupDraft.groups) + 1);
+    renderGroupEditor();
+}
+
+function renderGroupEditor() {
+    const round = getRoundById(state.selectedRoundId);
+    if (!round || !state.groupDraft) { state.editGroups = false; renderPlayerPicker(); return; }
+    setHeader(round.courseName || 'Round', 'Edit groups');
+    $('#switch-btn').style.display = 'none';
+    $('#camera-btn').style.display = 'none';
+    $('#gallery-btn').style.display = 'none';
+
+    const draft = state.groupDraft;
+    const all = getAllRoundPlayers(round);
+    const byId = {};
+    all.forEach(p => { byId[idStr(p.id)] = p; });
+    const picked = state.groupPick ? byId[state.groupPick] : null;
+
+    const appEl = $('#app');
+    appEl.innerHTML = '';
+
+    const intro = el('div', { class: 'card' },
+        el('h2', null, '\u{1F465} Edit groups'),
+        el('p', { class: 'muted' }, picked
+            ? `Moving ${picked.name} — tap the group they belong in.`
+            : 'Tap a player to pick them up, then tap their group. Anyone can set the groups until the first score is entered.')
+    );
+    const actions = el('div', { style: 'display:flex;gap:8px;margin-top:10px;' });
+    actions.appendChild(el('button', {
+        class: 'foot-btn prev', type: 'button', style: 'flex:1;min-height:44px;',
+        onclick: () => addDraftGroup()
+    }, '+ Add group'));
+    actions.appendChild(el('button', {
+        class: 'foot-btn next', type: 'button', style: 'flex:1.4;min-height:44px;',
+        onclick: () => saveGroupAssignments()
+    }, 'Save groups'));
+    actions.appendChild(el('button', {
+        class: 'foot-btn prev', type: 'button', style: 'flex:1;min-height:44px;',
+        onclick: () => { state.editGroups = false; state.groupDraft = null; state.groupPick = null; renderPlayerPicker(); }
+    }, 'Cancel'));
+    intro.appendChild(actions);
+    appEl.appendChild(intro);
+
+    const renderGroupCard = (num, label) => {
+        const members = all.filter(p => (draft.assignments[idStr(p.id)] || 0) === num);
+        const card = el('div', {
+            class: 'group-card' + (picked && (draft.assignments[state.groupPick] || 0) !== num ? ' drop-ok' : '')
+        }, el('div', { class: 'group-title' }, label + (members.length ? ` \u00B7 ${members.length}` : '')));
+        card.addEventListener('click', () => dropPickedPlayer(num));
+        if (!members.length) {
+            card.appendChild(el('p', { class: 'muted', style: 'margin:0;' },
+                picked ? `Tap here to move ${picked.name.split(' ')[0]} here.` : 'No players yet.'));
+        }
+        members.forEach(p => {
+            const pid = idStr(p.id);
+            const btn = el('button', {
+                class: 'player-btn' + (state.groupPick === pid ? ' selected' : ''),
+                type: 'button'
+            },
+                document.createTextNode(p.name),
+                el('span', { class: 'hcp' }, ` \u00B7 HCP ${p.handicap ?? '—'}`),
+                el('span', { class: 'team' }, p.teamName || '')
+            );
+            btn.addEventListener('click', e => {
+                if (e && e.stopPropagation) e.stopPropagation();
+                pickDraftPlayer(pid);
+            });
+            card.appendChild(btn);
+        });
+        appEl.appendChild(card);
+    };
+
+    draft.groups.forEach(num => renderGroupCard(num, `Group ${num}`));
+    renderGroupCard(0, 'Unassigned');
+}
+
+async function saveGroupAssignments() {
+    const roundId = state.selectedRoundId;
+    const round = getRoundById(roundId);
+    if (!round || !state.groupDraft) return;
+    if (!groupsEditable(round)) {
+        setStatus('Groups are locked — scoring has started', 'error');
+        state.editGroups = false; state.groupDraft = null; state.groupPick = null;
+        renderPlayerPicker();
+        return;
+    }
+    const draft = JSON.parse(JSON.stringify(state.groupDraft));
+    state.saving = true;
+    setStatus('Saving groups…', 'saving');
+    try {
+        await firestoreDb.runTransaction(async (tx) => {
+            const ref = roundDocRef(roundId);
+            const snap = await tx.get(ref);
+            if (!snap.exists) throw new Error('Round doc missing');
+            const srv = JSON.parse(JSON.stringify(snap.data().value || {}));
+            if (!srv || srv.id == null) throw new Error('Round no longer exists');
+            if (srv.completed === true) { const e = new Error('ROUND_COMPLETED'); e.code = 'ROUND_COMPLETED'; throw e; }
+            if (roundHasAnyScores(srv)) { const e = new Error('SCORING_STARTED'); e.code = 'SCORING_STARTED'; throw e; }
+            applyGroupDraft(srv, draft);
+            tx.set(ref, {
+                value: srv,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+        });
+        // Reflect it locally at once (the snapshot will confirm a beat later),
+        // and if I am mid-session, follow my own player record to its new group.
+        applyGroupDraft(round, draft);
+        if (state.currentPlayerId) {
+            const g = findGroupForPlayer(round, state.currentPlayerId);
+            if (g) state.groupNumber = g;
+        }
+        state.editGroups = false; state.groupDraft = null; state.groupPick = null;
+        setStatus('Groups saved \u2713', 'saved');
+        renderPlayerPicker();
+    } catch (err) {
+        console.error('Save groups failed:', err);
+        if (err && err.code === 'SCORING_STARTED') {
+            state.editGroups = false; state.groupDraft = null; state.groupPick = null;
+            setStatus('Scoring has started — groups are locked', 'error');
+            renderPlayerPicker();
+        } else if (err && err.code === 'ROUND_COMPLETED') {
+            setStatus('That round is finished — groups cannot change', 'error');
+        } else {
+            setStatus('Could not save groups — try again', 'error');
+        }
+    } finally {
+        state.saving = false;
+    }
+}
+
 window.__switchPlayer = function() {
     if (state.pendingTimer) clearTimeout(state.pendingTimer);
     if (hasPendingEdits()) flushPendingEdits();
     try { localStorage.removeItem('dcScoreMe'); } catch (e) {}
     state.currentPlayerId = null; state.groupNumber = null;
     state.sheetPlayerId = null; state.padExpanded = false; state.photos = false;
+    state.editGroups = false; state.groupDraft = null; state.groupPick = null;
     state.pendingEdits = { scores: {}, ctpWinners: {}, balls: {}, bbb: {} };
     setStatus('', '');
     renderPlayerPicker();
@@ -1288,6 +1527,7 @@ function renderScoreEntry() {
     $('#switch-btn').style.display = 'inline-block';
     $('#camera-btn').style.display = 'inline-block';
     $('#gallery-btn').style.display = 'inline-block';
+    if (state.editGroups) { renderGroupEditor(); return; }
     if (state.photos) { renderPhotosView(round); return; }
 
     const appEl = $('#app');
