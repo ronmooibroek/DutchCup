@@ -778,7 +778,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = 'v2026.11.01.35';
+        const APP_VERSION = 'v2026.11.01.36';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -12217,6 +12217,20 @@ ${(() => {
                     }
                 }
                 
+                // ── The BBB CROWN uses tonight's RAW counts (fix, Nov 1): the
+                // previous-winner rotation above starved the headline award —
+                // by round 3 the excluded list left nobody to crown. The
+                // envelope (and the BBB CHAMPION award) go to whoever actually
+                // took the most B's tonight.
+                const bbbCrownCounts = [];
+                mostRecentRound.teams.forEach(team => {
+                    const stateTeam = state.teams.find(t => t.id === team.teamId);
+                    team.players.forEach(player => {
+                        const c = player.bbbTotal || 0;
+                        if (c > 0) bbbCrownCounts.push({ playerId: player.id, playerName: player.name, teamName: stateTeam ? stateTeam.name : 'Unknown', teamColor: stateTeam ? (stateTeam.color || '#3b82f6') : '#3b82f6', bbbCount: c });
+                    });
+                });
+                bbbCrownCounts.sort((a, b) => b.bbbCount - a.bbbCount);
                 // ── BBB SPLIT crowns (Ron, Nov 1): Bingo/Bango/Bongo counted
                 // separately from the round's bbbAwards — first-on, closest,
                 // first-in are three different skills and get three crowns.
@@ -15167,8 +15181,8 @@ ${(() => {
                     netTop3: netTop3,
                     netTop5: netTop5,
                     previousNetWinners: previousNetWinnersInfo,
-                    bbbWinner: bbbWinner,
-                    bbbTop3: bbbTop3,
+                    bbbWinner: (bbbCrownCounts.length ? bbbCrownCounts[0] : null),
+                    bbbTop3: bbbCrownCounts.slice(0, 3).map((p, i) => ({ ...p, place: i + 1 })),
                     bbbSplitCounts: bbbSplitCounts,
                     bbbSplitWinners: bbbSplitWinners,
                     previousBBBWinners: previousBBBWinnersInfo,
@@ -20165,7 +20179,7 @@ ${(() => {
                         <div style="color:white;font-size:clamp(64px,9vw,110px);font-weight:900;line-height:1;margin:6px 0 0;">#${_cu.rank}</div>
                         <img src="${_cuAv}" alt="${player.playerName}" style="width:128px;height:128px;border-radius:50%;object-fit:cover;border:4px solid ${player.teamColor || '#fbbf24'};box-shadow:0 14px 40px rgba(0,0,0,0.5);margin:14px auto 10px;display:block;">
                         <h1 style="color:white;font-size:clamp(30px,4.4vw,44px);font-weight:900;margin:0;">${player.playerName}</h1>
-                        <div style="color:#a5b4fc;font-size:16px;font-weight:700;margin-top:4px;">${player.teamName || ''} · <span style="color:#6ee7b7;">${player.totalPoints} pts tonight</span> · Gross ${player.grossScore} · Net ${player.netScore}</div>
+                        <div style="color:#a5b4fc;font-size:16px;font-weight:700;margin-top:4px;">${player.teamName || ''} · <span style="color:#6ee7b7;">${player.totalPoints} pts tonight</span> · Gross ${player.grossScore} · Net ${player.grossScore != null ? (player.grossScore - (player.handicap || 0)) : '—'}</div>
                         <div style="color:#94a3b8;font-size:14px;font-weight:700;margin-top:4px;">Cup standing: #${player.posAfter != null ? player.posAfter : '—'}${_cuMove != null && _cuMove !== 0 ? ` · ${_cuMove > 0 ? '▲' : '▼'} ${_cuMove > 0 ? 'up' : 'down'} ${Math.abs(_cuMove)} tonight` : ''}</div>
                         ${_cuHead ? `
                         <div style="margin:22px auto 0;max-width:640px;background:rgba(255,255,255,0.06);border:2px solid rgba(251,191,36,0.45);border-radius:16px;padding:16px 20px;">
@@ -20258,7 +20272,7 @@ ${(() => {
                         <img src="${_cwAv}" alt="" style="width:156px;height:156px;border-radius:50%;object-fit:cover;border:6px solid #fbbf24;box-shadow:0 18px 50px rgba(0,0,0,0.6);margin:18px auto 12px;display:block;">
                         <h1 style="color:white;font-size:clamp(38px,5.6vw,56px);font-weight:900;margin:0;">${_cw ? _cw.playerName : ''}</h1>
                         <div style="color:#a5b4fc;font-size:18px;font-weight:700;margin-top:5px;">${_cw ? _cw.teamName : ''}</div>
-                        <div style="color:#fcd34d;font-size:26px;font-weight:900;margin-top:14px;">${_cw ? _cw.totalPoints : ''} points tonight · Net ${_cw ? _cw.netScore : ''}</div>
+                        <div style="color:#fcd34d;font-size:26px;font-weight:900;margin-top:14px;">${_cw ? _cw.totalPoints : ''} points tonight · Net ${_cw && _cw.grossScore != null ? (_cw.grossScore - (_cw.handicap || 0)) : '—'}</div>
                         ${_cwBadges.length ? `<div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:16px;">${_cwBadges.map(a => `<span style="background:rgba(251,191,36,0.14);border:1px solid rgba(251,191,36,0.55);color:#fde68a;border-radius:999px;padding:5px 13px;font-size:13.5px;font-weight:700;">${a.emoji || '🏅'} ${a.label || ''}</span>`).join('')}</div>` : ''}
                         ${_prevChamp && _cw && _prevChamp !== _cw.playerName ? `<div style="color:#94a3b8;font-size:15.5px;margin-top:20px;">Presented by ${_prevChamp} — last round's champion 🤝</div>` : ''}
                     </div>
