@@ -189,13 +189,43 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
 }
 .score-row.is-me { border-left-color: var(--fairway); }
 .score-row-top { display: flex; align-items: center; gap: 8px; }
-.bbb-pill {
-    border: 2px solid var(--sand); background: white; color: #A8B3AA;
-    font-size: 11px; font-weight: 900; letter-spacing: 0.4px;
-    padding: 0 8px; border-radius: 999px; cursor: pointer; flex-shrink: 0;
-    min-height: 40px; min-width: 58px;
+/* ── One-tap score chips: the 5 common scores sit right under the name ── */
+.score-chips { display: flex; gap: 6px; margin-top: 7px; }
+.score-chip {
+    flex: 1 1 0; min-height: 52px; border: 2px solid var(--sand); background: white;
+    border-radius: 10px; cursor: pointer; padding: 3px 0 4px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0;
+    color: var(--ink); font-variant-numeric: tabular-nums;
 }
-.bbb-pill.on { background: #FFD95E; border-color: #E3B93E; color: #6b4e00; font-size: 17px; }
+.score-chip .n { font-size: 21px; font-weight: 900; line-height: 1.05; }
+.score-chip .w { font-size: 8.5px; font-weight: 800; letter-spacing: 0.4px; text-transform: uppercase; color: var(--ink-soft); }
+.score-chip:active { transform: scale(0.95); }
+.score-chip.picked { border-style: solid; }
+.score-chip.picked.birdie { border-color: var(--birdie); color: var(--birdie); background: #EDF7F1; }
+.score-chip.picked.eagle, .score-chip.picked.albatross { border-color: var(--eagle); color: var(--eagle); background: #FBF4E1; }
+.score-chip.picked.par-score { border-color: var(--fairway); color: var(--fairway-dk); background: #F4FAF6; }
+.score-chip.picked.bogey { border-color: var(--bogey); color: var(--bogey); background: #FBF2E7; }
+.score-chip.picked.double, .score-chip.picked.worse { border-color: var(--dbl); color: var(--dbl); background: #FBEBE9; }
+.score-chip.other { flex: 0 0 46px; color: var(--ink-soft); }
+.score-chip.other .n { font-size: 17px; letter-spacing: 1px; }
+.score-chip.other.has-score { border-color: var(--fairway); color: var(--fairway-dk); background: #F4FAF6; }
+
+/* ── Bingo Bango Bongo: one labelled icon button per point, per player ── */
+.bbb-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 6px; }
+.bbb-btn {
+    min-height: 48px; border: 2px solid var(--sand); background: white; border-radius: 10px;
+    cursor: pointer; padding: 4px 4px; color: #93A197;
+    display: flex; align-items: center; justify-content: center; gap: 7px;
+}
+.bbb-btn:active { transform: scale(0.96); }
+.bbb-btn .ic { font-size: 20px; line-height: 1; opacity: 0.65; filter: grayscale(0.5); }
+.bbb-btn .tx { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.1; }
+.bbb-btn .tx b { font-size: 13px; font-weight: 900; letter-spacing: 0.2px; }
+.bbb-btn .tx small { font-size: 9px; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase; }
+.bbb-btn.on-bingo { background: var(--fairway); border-color: var(--fairway-dk); color: white; }
+.bbb-btn.on-bango { background: #2B6CB0; border-color: #215685; color: white; }
+.bbb-btn.on-bongo { background: #FFD95E; border-color: #E3B93E; color: #6b4e00; }
+.bbb-btn.on-bingo .ic, .bbb-btn.on-bango .ic, .bbb-btn.on-bongo .ic { opacity: 1; filter: none; }
 .player-info { flex: 1; min-width: 0; }
 .player-name { font-size: 16px; font-weight: 800; display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; }
 .me-tag {
@@ -584,7 +614,7 @@ document.addEventListener('visibilitychange', () => {
     try { if (document.visibilityState === 'hidden' && hasPendingEdits()) flushPendingEdits(); } catch (e) {}
 });
 
-const SE_VERSION = '2.18.0'; // sharded rounds + offline support
+const SE_VERSION = '2.19.0'; // one-tap score chips + labelled BBB icon buttons
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
@@ -1237,7 +1267,7 @@ function renderScoreEntry() {
     appEl.innerHTML = '';
     appEl.appendChild(buildHoleNav(round, groupPlayers));
     appEl.appendChild(buildScoresList(round, groupPlayers));
-    // BBB lives on each player's score row now (the pill) — no separate card.
+    // Scores + BBB both live on each player's card now (chips + icon buttons) — no separate cards.
 
     const par = (round.pars || [])[state.currentHole];
     if (par === 3) appEl.appendChild(buildCTPCard(round));
@@ -1324,8 +1354,7 @@ function buildScoresList(round, groupPlayers) {
     const list = el('div', { class: 'score-list', id: 'score-list' });
     const par = (round.pars || [])[state.currentHole];
     const holeHc = (round.handicaps || [])[state.currentHole];
-    const bbbCounts = bbbCountsForHole(round, state.currentHole);
-    const bbbUsed = bbbTotalUsed(bbbCounts);
+    const bbbSlots = effectiveBBB(round, state.currentHole);
 
     groupPlayers.forEach(p => {
         const pid = idStr(p.id);
@@ -1333,9 +1362,7 @@ function buildScoresList(round, groupPlayers) {
         const hc = seHandicapForRound(round, p);   // course handicap, matches the admin app
         const strokes = strokesOnHole(hc, holeHc);
         const currentScore = effectiveScore(round, p.id, state.currentHole);
-        const cls = classForScore(currentScore, par, strokes);
         const totals = computePlayerTotals(round, p);
-        const myBBB = bbbCounts[pid] || 0;
 
         const row = el('div', { class: 'score-row' + (isMe ? ' is-me' : '') });
         const top = el('div', { class: 'score-row-top' });
@@ -1350,29 +1377,66 @@ function buildScoresList(round, groupPlayers) {
                 `HCP ${hc} \u00b7 Thru ${totals.thru}: ${totals.gross || '\u2014'} (${totals.points} pts)`)
         ));
 
-        // BBB pill: tap to cycle this player's BBB points (0\u21921\u21922\u21923\u21920),
-        // capped so the hole never gives out more than 3 in total.
-        top.appendChild(el('button', {
-            class: 'bbb-pill' + (myBBB > 0 ? ' on' : ''),
-            type: 'button',
-            onclick: () => tapBBBPill(pid)
-        }, myBBB > 0 ? String(myBBB) : 'BBB'));
-
-        // Score cell: tap to open the score sheet
-        const cell = el('div', {
-            class: 'score-cell ' + (currentScore !== '' ? (cls || '') : 'empty'),
-            onclick: () => { state.sheetPlayerId = pid; state.padExpanded = false; renderScoreEntry(); }
-        });
-        if (currentScore !== '') {
-            cell.appendChild(el('span', null, String(currentScore)));
-            const n = parseInt(currentScore, 10);
-            if (!isNaN(n) && par) cell.appendChild(el('span', { class: 'word' }, grossWord(n, par)));
-        } else {
-            cell.appendChild(el('span', null, '\u2013'));
-            cell.appendChild(el('span', { class: 'word' }, 'tap'));
-        }
-        top.appendChild(cell);
         row.appendChild(top);
+
+        // ── One-tap score chips: the 5 common scores for this hole's par,
+        // right under the name. One tap sets the score — no sheet to open.
+        const chips = el('div', { class: 'score-chips' });
+        const curN = currentScore === '' || currentScore == null ? null : parseInt(currentScore, 10);
+        const values = scoreChipValues(par);
+        const shown = values.slice();
+        // A score outside the chip range (eagle, snowman…) still gets its own
+        // picked chip, inserted in numeric order, so what's set is always visible.
+        if (curN != null && !isNaN(curN) && !shown.includes(curN)) {
+            shown.push(curN);
+            shown.sort((a, b) => a - b);
+        }
+        shown.forEach(v => {
+            const picked = curN != null && curN === v;
+            chips.appendChild(el('button', {
+                class: 'score-chip' + (picked ? ' picked ' + (classForScore(v, par, strokes) || '') : ''),
+                type: 'button',
+                'aria-label': `Score ${v} for ${p.name || 'player'}`,
+                onclick: () => setScoreInline(pid, v)
+            },
+                el('span', { class: 'n' }, String(v)),
+                par ? el('span', { class: 'w' }, grossWord(v, par)) : null
+            ));
+        });
+        // Anything outside the range (or Clear) lives on the full pad, one tap away.
+        const inRange = curN != null && values.includes(curN);
+        chips.appendChild(el('button', {
+            class: 'score-chip other' + (curN != null && !inRange ? ' has-score' : ''),
+            type: 'button',
+            'aria-label': `Other scores for ${p.name || 'player'}`,
+            onclick: () => { state.sheetPlayerId = pid; state.padExpanded = true; renderScoreEntry(); }
+        },
+            el('span', { class: 'n' }, '\u00b7\u00b7\u00b7'),
+            el('span', { class: 'w' }, 'other')
+        ));
+        row.appendChild(chips);
+
+        // ── Bingo Bango Bongo: three DIFFERENT labelled icon buttons.
+        // Tap one to give this player that point (it moves off whoever had it);
+        // tap it again on the same player to take it back.
+        const bbbRow = el('div', { class: 'bbb-row' });
+        BBB_SLOTS.forEach(slot => {
+            const mine = idStr(bbbSlots[slot.key]) === pid && pid !== '';
+            bbbRow.appendChild(el('button', {
+                class: 'bbb-btn' + (mine ? ' ' + slot.onCls : ''),
+                type: 'button',
+                'aria-label': `${slot.name} (${slot.desc}) for ${p.name || 'player'}`,
+                'aria-pressed': mine ? 'true' : 'false',
+                onclick: () => tapBBBSlot(pid, slot.key)
+            },
+                el('span', { class: 'ic' }, slot.icon),
+                el('span', { class: 'tx' },
+                    el('b', null, slot.name),
+                    el('small', null, slot.desc)
+                )
+            ));
+        });
+        row.appendChild(bbbRow);
         list.appendChild(row);
     });
 
@@ -1392,6 +1456,37 @@ function grossWord(gross, par) {
     return '+' + d;
 }
 
+// ─── Bingo Bango Bongo slots: one point each, three different icons ───
+// Bingo = first ball on the green, Bango = closest to the pin (all on),
+// Bongo = first ball in the hole. Stored as player ids in the round's
+// bbbAwards entry for the hole — the exact shape the app has always used.
+const BBB_SLOTS = [
+    { key: 'bingo', name: 'Bingo', desc: 'First on',  icon: '\u{1F6A9}', onCls: 'on-bingo' },
+    { key: 'bango', name: 'Bango', desc: 'Closest',   icon: '\u{1F3AF}', onCls: 'on-bango' },
+    { key: 'bongo', name: 'Bongo', desc: 'First in',  icon: '\u{1F573}\u{FE0F}', onCls: 'on-bongo' }
+];
+
+// The 5 one-tap scores shown under each name: par−1 … par+3 covers nearly
+// every hole (par 4 → 3,4,5,6,7). Anything else goes through the full pad.
+function scoreChipValues(par) {
+    const p = parseInt(par, 10);
+    if (isNaN(p)) return [3, 4, 5, 6, 7];
+    const out = [];
+    for (let v = p - 1; v <= p + 3; v++) if (v >= 1) out.push(v);
+    return out;
+}
+
+// One tap on a score chip: record it in place. No sheet, no advancing —
+// the scorer stays on the same card and taps the next player's chip.
+function setScoreInline(playerId, value) {
+    const pid = idStr(playerId);
+    if (!state.pendingEdits.scores[pid]) state.pendingEdits.scores[pid] = {};
+    state.pendingEdits.scores[pid][state.currentHole] = String(value);
+    markUnsaved();
+    renderScoreEntry();
+    maybeCelebrateHoleComplete();
+}
+
 // ─── BBB helpers: per-player counts derived from the stored 3 slots ───
 function bbbCountsForHole(round, holeIdx) {
     const slots = effectiveBBB(round, holeIdx);
@@ -1409,27 +1504,19 @@ function bbbTotalUsed(counts) {
     return Object.values(counts).reduce((s, n) => s + n, 0);
 }
 
-// Tap a player's BBB pill: cycle their count up; if the 3-point pool is exhausted,
-// the tap wraps that player back to 0 (so a mis-tap is fixed by tapping through).
-function tapBBBPill(playerId) {
+// Tap a BBB icon button on a player's card: give THAT point to this player
+// (it moves off whoever held it — only one holder per point per hole), or, if
+// this player already holds it, take it back. The other two points are untouched,
+// so Bingo/Bango/Bongo can never be mixed up the way the old cycle pill could.
+function tapBBBSlot(playerId, slotKey) {
     const round = getRoundById(state.selectedRoundId);
     if (!round) return;
     const pid = idStr(playerId);
-    const counts = bbbCountsForHole(round, state.currentHole);
-    const mine = counts[pid] || 0;
-    const others = bbbTotalUsed(counts) - mine;
-    const next = (others + mine + 1 > 3) ? 0 : mine + 1;
-
-    // Rebuild the slot array: other players keep their points, this player gets `next`.
-    const arr = [];
-    Object.keys(counts).forEach(id => {
-        if (id === pid) return;
-        for (let i = 0; i < counts[id]; i++) arr.push(id);
-    });
-    for (let i = 0; i < next; i++) arr.push(pid);
+    const slots = { ...effectiveBBB(round, state.currentHole) };
+    slots[slotKey] = (idStr(slots[slotKey]) === pid) ? '' : pid;
 
     state.pendingEdits.bbb[String(state.currentHole)] = {
-        bingo: arr[0] || '', bango: arr[1] || '', bongo: arr[2] || ''
+        bingo: idStr(slots.bingo) || '', bango: idStr(slots.bango) || '', bongo: idStr(slots.bongo) || ''
     };
     markUnsaved();
 
