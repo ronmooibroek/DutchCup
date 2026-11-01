@@ -333,6 +333,12 @@
         .mx-skincell:hover { outline: 2px solid #f59e0b; outline-offset: -2px; }
         .mx-skinnet { display: block; font-size: 9px; font-weight: 800; color: #92400e; line-height: 1.1; }
         .mx-skintie { font-size: 10.5px; font-weight: 800; color: #b45309; }
+        .lb-table th, .lb-table td { padding: 5px 7px; font-size: 13px; }
+        .lb-win { background: #fef9e3; font-weight: 900; }
+        .lb-best { background: #EDF4EE; font-weight: 900; }
+        .lb-winpct { min-width: 92px; }
+        .lb-winbar { display: block; height: 5px; border-radius: 3px; background: #eef0ee; margin-top: 4px; overflow: hidden; }
+        .lb-winbar > span { display: block; height: 100%; border-radius: 3px; }
         .mx-pop-back { position: fixed; inset: 0; background: rgba(17,24,39,.55); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 18px; }
         .mx-pop { background: white; border-radius: 16px; max-width: 430px; width: 100%; padding: 18px; box-shadow: 0 18px 50px rgba(0,0,0,.35); max-height: 84vh; overflow-y: auto; }
         /* .27: winner avatar cards (Extra 9 / CTP side by side) */
@@ -772,7 +778,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = 'v2026.11.01.27';
+        const APP_VERSION = 'v2026.11.01.28';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -5281,8 +5287,11 @@
                     team.points = team.strokePoints + team.bbbPoints + team.ballPoints + team.ctpPoints + team.extra9Points + team.skinsPoints;
                 });
                 
+                // (.28) teamPerRound / roundWinnerIds feed the standings matrix.
+                const teamPerRound = {};
+                const roundWinnerIds = {};
                 // Calculate wins by recalculating team totals for each round
-                eventRounds.forEach(r => {
+                eventRounds.forEach((r, rIdx) => {
                     // Recalculate team totals for this round
                     const roundTotals = {};
                     const _skinsW = window.skinsPointsForRound(r);
@@ -5313,6 +5322,10 @@
                     
                     const maxTotal = Math.max(...Object.values(roundTotals));
                     Object.keys(roundTotals).forEach(teamId => {
+                        (teamPerRound[teamId] = teamPerRound[teamId] || {})[rIdx] = roundTotals[teamId];
+                    });
+                    roundWinnerIds[rIdx] = Object.keys(roundTotals).filter(teamId => roundTotals[teamId] === maxTotal);
+                    Object.keys(roundTotals).forEach(teamId => {
                         if (roundTotals[teamId] === maxTotal) {
                             stats[parseInt(teamId)].wins += 1;
                         }
@@ -5322,6 +5335,132 @@
                 const leaderboard = Object.values(stats)
                     .map(s => ({...s, avg: s.points / s.rounds}))
                     .sort((a, b) => b.points - a.points);
+                // Win probabilities (Monte Carlo), hoisted in .28: the standings
+                // matrix carries the odds as a column, so compute them here.
+                let winProbByTeam = null;
+                let winMeta = null;
+                {
+                    const scheduledRounds = state.rounds.filter(r => 
+                        r.eventId === state.currentEventId && 
+                        r.active === false
+                    );
+                    if (scheduledRounds.length > 0 && eventRounds.length > 0) {
+                    
+                    // Helper for normal distribution random
+                    const normalRandom = (mean, stdDev) => {
+                        const u1 = Math.random();
+                        const u2 = Math.random();
+                        const z0 = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+                        return z0 * stdDev + mean;
+                    };
+                    
+                    // Calculate team statistics
+                    const teamStats = {};
+                    Object.keys(stats).forEach(teamId => {
+                        const team = stats[teamId];
+                        const stateTeam = state.teams.find(t => t.id === parseInt(teamId));
+                        
+                        // Calculate average handicap for this team
+                        let avgHandicap = 18;
+                        if (stateTeam && stateTeam.players) {
+                            const teamPlayers = stateTeam.players
+                                .map(pid => state.players.find(p => p.id === pid))
+                                .filter(p => p);
+                            if (teamPlayers.length > 0) {
+                                avgHandicap = teamPlayers.reduce((sum, p) => sum + (p.handicap || 18), 0) / teamPlayers.length;
+                            }
+                        }
+                        
+                        // Get historical points for this team (freshly calculated)
+                        const pointsHistory = [];
+                        eventRounds.forEach(round => {
+                            const teamIdxInRound = round.teams.findIndex(t => t.teamId === parseInt(teamId));
+                            if (teamIdxInRound >= 0) {
+                                pointsHistory.push(computeTeamRoundTotal(round, round.teams[teamIdxInRound], teamIdxInRound));
+                            }
+                        });
+                        
+                        const historicalMean = pointsHistory.reduce((a, b) => a + b, 0) / pointsHistory.length;
+                        
+                        // Handicap-based standard deviation model
+                        const handicapBasedStdDev = 15 + (avgHandicap * 0.8);
+                        
+                        let finalStdDev = handicapBasedStdDev;
+                        
+                        // Blend with historical data if we have enough rounds
+                        if (pointsHistory.length >= 2) {
+                            const variance = pointsHistory.reduce((sum, pts) => 
+                                sum + Math.pow(pts - historicalMean, 2), 0
+                            ) / pointsHistory.length;
+                            const historicalStdDev = Math.sqrt(variance);
+                            
+                            // Weight increases with more data (max 50% weight at 5+ rounds)
+                            const weight = Math.min(0.5, pointsHistory.length * 0.1);
+                            finalStdDev = handicapBasedStdDev * (1 - weight) + historicalStdDev * weight;
+                            
+                            // Safety minimum
+                            if (finalStdDev < 10) finalStdDev = 10;
+                        }
+                        
+                        teamStats[teamId] = {
+                            name: team.name,
+                            currentPoints: team.points,
+                            avgPerRound: historicalMean,
+                            stdDev: finalStdDev,
+                            avgHandicap: avgHandicap,
+                            color: stateTeam && stateTeam.color ? stateTeam.color : '#3b82f6'
+                        };
+                    });
+                    
+                    // Monte Carlo simulation
+                    const numSimulations = 10000;
+                    const remainingRounds = scheduledRounds.length;
+                    const winCounts = {};
+                    
+                    for (let sim = 0; sim < numSimulations; sim++) {
+                        const finalTotals = {};
+                        
+                        Object.keys(teamStats).forEach(teamId => {
+                            const team = teamStats[teamId];
+                            let projectedTotal = team.currentPoints;
+                            
+                            // Simulate remaining rounds
+                            for (let r = 0; r < remainingRounds; r++) {
+                                const simulatedScore = normalRandom(team.avgPerRound, team.stdDev);
+                                projectedTotal += Math.max(0, simulatedScore);
+                            }
+                            
+                            finalTotals[teamId] = projectedTotal;
+                        });
+                        
+                        // Find winner of this simulation
+                        const winnerTeamId = Object.keys(finalTotals).reduce((a, b) =>
+                            finalTotals[a] > finalTotals[b] ? a : b
+                        );
+                        
+                        winCounts[winnerTeamId] = (winCounts[winnerTeamId] || 0) + 1;
+                    }
+                    
+                    // Calculate probabilities and build display
+                    const probabilities = Object.keys(teamStats).map(teamId => {
+                        const winProb = ((winCounts[teamId] || 0) / numSimulations) * 100;
+                        return {
+                            teamId: teamId,
+                            name: teamStats[teamId].name,
+                            probability: winProb,
+                            currentPoints: teamStats[teamId].currentPoints,
+                            avgPerRound: teamStats[teamId].avgPerRound,
+                            stdDev: teamStats[teamId].stdDev,
+                            avgHandicap: teamStats[teamId].avgHandicap,
+                            color: teamStats[teamId].color
+                        };
+                    }).sort((a, b) => b.probability - a.probability);
+                        winProbByTeam = {};
+                        probabilities.forEach(p => { winProbByTeam[p.teamId] = p.probability; });
+                        winMeta = { remainingRounds: remainingRounds, numSimulations: numSimulations };
+                    }
+                }
+
                 
                 app.innerHTML = `
                     <button class="back-btn" onclick="navigate('home')">← Back</button>
@@ -5354,225 +5493,58 @@
                                 ${!state.readOnly ? `<br><button onclick="navigate('newRound')" class="btn-primary" style="margin-top:16px;">➕ Start First Round</button>` : ''}
                             </p>
                         ` : `
-                            <div style="margin-bottom:16px;">
-                                <h3 style="margin:0 0 8px;color:#1f2937;font-size:15px;">Team Standings</h3>
-                                ${leaderboard.map((team, idx) => {
-                                    // Get team color from state
-                                    const stateTeam = state.teams.find(t => t.id === team.id);
-                                    const teamColor = stateTeam && stateTeam.color ? stateTeam.color : '#3b82f6';
-                                    
-                                    // Helper function to check if a color is dark
-                                    const isColorDark = (hexColor) => {
-                                        // Remove # if present
-                                        const hex = hexColor.replace('#', '');
-                                        // Convert to RGB
-                                        const r = parseInt(hex.substr(0, 2), 16);
-                                        const g = parseInt(hex.substr(2, 2), 16);
-                                        const b = parseInt(hex.substr(4, 2), 16);
-                                        // Calculate brightness (perceived luminance)
-                                        const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-                                        return brightness < 128; // Dark if brightness < 128
-                                    };
-                                    
-                                    const isDark = isColorDark(teamColor);
-                                    const cardBorder = isDark ? `2px solid ${teamColor}` : '2px solid #000000';
-                                    const textColor = isDark ? '#ffffff' : '#000000';
-                                    const labelOpacity = isDark ? '0.8' : '0.6';
-                                    
-                                    return `
-                                    <div class="list-item" onclick="navigateToTeamStats(${team.id})" style="background:${teamColor}20;border:${cardBorder};border-left:4px solid ${teamColor};display:block;padding:8px;margin-bottom:6px;cursor:pointer;">
-                                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-                                            <div style="flex:1;">
-                                                <strong style="font-size:22px;color:#000000;">#${idx + 1} ${team.name}</strong>
-                                                <small style="color:#6b7280;font-size:15px;margin-left:8px;">${team.rounds}R • ${team.wins}W • ${team.avg.toFixed(1)}avg</small>
-                                            </div>
-                                            <strong style="font-size:33px;color:${textColor};background:${teamColor};padding:8px 16px;border-radius:8px;">${team.points}</strong>
-                                        </div>
-                                        
-                                        <div style="background:rgba(255,255,255,0.5);padding:6px;border-radius:4px;">
-                                            <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:4px;">
-                                                <div style="background:${teamColor};padding:4px;border-radius:3px;text-align:center;">
-                                                    <div style="font-size:12px;color:rgba(${isDark ? '255,255,255' : '0,0,0'},${labelOpacity});font-weight:600;">⛳</div>
-                                                    <div style="font-size:20px;font-weight:700;color:${textColor};">${team.strokePoints.toFixed(1)}</div>
-                                                </div>
-                                                <div style="background:${teamColor};padding:4px;border-radius:3px;text-align:center;">
-                                                    <div style="font-size:12px;color:rgba(${isDark ? '255,255,255' : '0,0,0'},${labelOpacity});font-weight:600;">🎯 BBB</div>
-                                                    <div style="font-size:20px;font-weight:700;color:${textColor};">${team.bbbPoints.toFixed(1)}</div>
-                                                </div>
-                                                <div style="background:${teamColor};padding:4px;border-radius:3px;text-align:center;">
-                                                    <div style="font-size:12px;color:rgba(${isDark ? '255,255,255' : '0,0,0'},${labelOpacity});font-weight:600;">⚪</div>
-                                                    <div style="font-size:20px;font-weight:700;color:${textColor};">${team.ballPoints.toFixed(1)}</div>
-                                                </div>
-                                                <div style="background:${teamColor};padding:4px;border-radius:3px;text-align:center;">
-                                                    <div style="font-size:12px;color:rgba(${isDark ? '255,255,255' : '0,0,0'},${labelOpacity});font-weight:600;">🎯</div>
-                                                    <div style="font-size:20px;font-weight:700;color:${textColor};">${team.ctpPoints.toFixed(1)}</div>
-                                                </div>
-                                                <div style="background:${teamColor};padding:4px;border-radius:3px;text-align:center;">
-                                                    <div style="font-size:12px;color:rgba(${isDark ? '255,255,255' : '0,0,0'},${labelOpacity});font-weight:600;">🏆</div>
-                                                    <div style="font-size:20px;font-weight:700;color:${textColor};">${team.extra9Points.toFixed(1)}</div>
-                                                </div>
-                                                <div style="background:${teamColor};padding:4px;border-radius:3px;text-align:center;">
-                                                    <div style="font-size:12px;color:rgba(${isDark ? '255,255,255' : '0,0,0'},${labelOpacity});font-weight:600;">🃏</div>
-                                                    <div style="font-size:20px;font-weight:700;color:${textColor};">${team.skinsPoints.toFixed(1)}</div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                `}).join('')}
-                            </div>
-                            
-                            ${(() => {
-                                // Win Probability Calculation (no graph)
-                                const scheduledRounds = state.rounds.filter(r => 
-                                    r.eventId === state.currentEventId && 
-                                    r.active === false
-                                );
-                                
-                                if (scheduledRounds.length === 0 || eventRounds.length === 0) return '';
-                                
-                                // Helper for normal distribution random
-                                const normalRandom = (mean, stdDev) => {
-                                    const u1 = Math.random();
-                                    const u2 = Math.random();
-                                    const z0 = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
-                                    return z0 * stdDev + mean;
+${(() => {
+                                // Standings matrices (.28): round-by-round + scoring-type
+                                // breakdown replace the stacked team cards and the
+                                // separate win-probability bar list.
+                                const fmt = (n) => String(Math.round((n || 0) * 100) / 100);
+                                const fmt1 = (n) => (n || 0).toFixed(1);
+                                const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                                const roundLabel = (r, i) => {
+                                    let d = '';
+                                    if (r.date) { const p = String(r.date).split('-'); if (p.length === 3) d = months[parseInt(p[1], 10) - 1] + ' ' + parseInt(p[2], 10); }
+                                    const course = (r.courseName || '').split(' to ')[0];
+                                    return 'R' + (i + 1) + (d ? '<br><span style="font-weight:600;text-transform:none;letter-spacing:0;">' + d + (course ? ' · ' + course : '') + '</span>' : '');
                                 };
-                                
-                                // Calculate team statistics
-                                const teamStats = {};
-                                Object.keys(stats).forEach(teamId => {
-                                    const team = stats[teamId];
-                                    const stateTeam = state.teams.find(t => t.id === parseInt(teamId));
-                                    
-                                    // Calculate average handicap for this team
-                                    let avgHandicap = 18;
-                                    if (stateTeam && stateTeam.players) {
-                                        const teamPlayers = stateTeam.players
-                                            .map(pid => state.players.find(p => p.id === pid))
-                                            .filter(p => p);
-                                        if (teamPlayers.length > 0) {
-                                            avgHandicap = teamPlayers.reduce((sum, p) => sum + (p.handicap || 18), 0) / teamPlayers.length;
-                                        }
-                                    }
-                                    
-                                    // Get historical points for this team (freshly calculated)
-                                    const pointsHistory = [];
-                                    eventRounds.forEach(round => {
-                                        const teamIdxInRound = round.teams.findIndex(t => t.teamId === parseInt(teamId));
-                                        if (teamIdxInRound >= 0) {
-                                            pointsHistory.push(computeTeamRoundTotal(round, round.teams[teamIdxInRound], teamIdxInRound));
-                                        }
+                                const colorOf = (team) => { const st = state.teams.find(t => t.id === team.id); return st && st.color ? st.color : '#3b82f6'; };
+                                let h = '<h3 style="margin:0 0 8px;color:#1f2937;font-size:15px;">Team Standings</h3>';
+                                h += '<div class="mx-wrap"><table class="mx-table lb-table"><tr><th class="mx-who">Team</th>';
+                                eventRounds.forEach((r, i) => { h += '<th>' + roundLabel(r, i) + '</th>'; });
+                                h += '<th>Total</th>' + (winProbByTeam ? '<th>Win %</th>' : '') + '</tr>';
+                                leaderboard.forEach((team, idx) => {
+                                    const color = colorOf(team);
+                                    const per = teamPerRound[String(team.id)] || {};
+                                    h += '<tr onclick="navigateToTeamStats(' + team.id + ')" style="cursor:pointer;"><td class="mx-who"><span style="display:inline-flex;align-items:center;gap:7px;"><span style="width:12px;height:12px;border-radius:3px;background:' + color + ';flex:none;"></span><span><span class="mx-name">#' + (idx + 1) + ' ' + team.name + '</span><br><span class="mx-hc">' + team.rounds + 'R · ' + team.wins + 'W · ' + team.avg.toFixed(1) + ' avg</span></span></span></td>';
+                                    eventRounds.forEach((r, i) => {
+                                        const v = per[i];
+                                        const won = (roundWinnerIds[i] || []).map(String).indexOf(String(team.id)) >= 0;
+                                        h += '<td class="' + (won ? 'lb-win' : '') + '">' + (v === undefined ? '–' : fmt(v)) + (won ? ' 🏆' : '') + '</td>';
                                     });
-                                    
-                                    const historicalMean = pointsHistory.reduce((a, b) => a + b, 0) / pointsHistory.length;
-                                    
-                                    // Handicap-based standard deviation model
-                                    const handicapBasedStdDev = 15 + (avgHandicap * 0.8);
-                                    
-                                    let finalStdDev = handicapBasedStdDev;
-                                    
-                                    // Blend with historical data if we have enough rounds
-                                    if (pointsHistory.length >= 2) {
-                                        const variance = pointsHistory.reduce((sum, pts) => 
-                                            sum + Math.pow(pts - historicalMean, 2), 0
-                                        ) / pointsHistory.length;
-                                        const historicalStdDev = Math.sqrt(variance);
-                                        
-                                        // Weight increases with more data (max 50% weight at 5+ rounds)
-                                        const weight = Math.min(0.5, pointsHistory.length * 0.1);
-                                        finalStdDev = handicapBasedStdDev * (1 - weight) + historicalStdDev * weight;
-                                        
-                                        // Safety minimum
-                                        if (finalStdDev < 10) finalStdDev = 10;
+                                    h += '<td class="mx-pts" style="color:#1f2937;background:#fffbeb;">' + fmt(team.points) + '</td>';
+                                    if (winProbByTeam) {
+                                        const p = winProbByTeam[String(team.id)] || 0;
+                                        h += '<td class="lb-winpct"><strong>' + p.toFixed(1) + '%</strong><span class="lb-winbar"><span style="width:' + Math.max(2, p) + '%;background:' + color + ';"></span></span></td>';
                                     }
-                                    
-                                    teamStats[teamId] = {
-                                        name: team.name,
-                                        currentPoints: team.points,
-                                        avgPerRound: historicalMean,
-                                        stdDev: finalStdDev,
-                                        avgHandicap: avgHandicap,
-                                        color: stateTeam && stateTeam.color ? stateTeam.color : '#3b82f6'
-                                    };
+                                    h += '</tr>';
                                 });
-                                
-                                // Monte Carlo simulation
-                                const numSimulations = 10000;
-                                const remainingRounds = scheduledRounds.length;
-                                const winCounts = {};
-                                
-                                for (let sim = 0; sim < numSimulations; sim++) {
-                                    const finalTotals = {};
-                                    
-                                    Object.keys(teamStats).forEach(teamId => {
-                                        const team = teamStats[teamId];
-                                        let projectedTotal = team.currentPoints;
-                                        
-                                        // Simulate remaining rounds
-                                        for (let r = 0; r < remainingRounds; r++) {
-                                            const simulatedScore = normalRandom(team.avgPerRound, team.stdDev);
-                                            projectedTotal += Math.max(0, simulatedScore);
-                                        }
-                                        
-                                        finalTotals[teamId] = projectedTotal;
-                                    });
-                                    
-                                    // Find winner of this simulation
-                                    const winnerTeamId = Object.keys(finalTotals).reduce((a, b) =>
-                                        finalTotals[a] > finalTotals[b] ? a : b
-                                    );
-                                    
-                                    winCounts[winnerTeamId] = (winCounts[winnerTeamId] || 0) + 1;
-                                }
-                                
-                                // Calculate probabilities and build display
-                                const probabilities = Object.keys(teamStats).map(teamId => {
-                                    const winProb = ((winCounts[teamId] || 0) / numSimulations) * 100;
-                                    return {
-                                        teamId: teamId,
-                                        name: teamStats[teamId].name,
-                                        probability: winProb,
-                                        currentPoints: teamStats[teamId].currentPoints,
-                                        avgPerRound: teamStats[teamId].avgPerRound,
-                                        stdDev: teamStats[teamId].stdDev,
-                                        avgHandicap: teamStats[teamId].avgHandicap,
-                                        color: teamStats[teamId].color
-                                    };
-                                }).sort((a, b) => b.probability - a.probability);
-                                
-                                // Generate HTML
-                                let html = '<div style="background:white;border:2px solid #e5e7eb;border-radius:12px;padding:20px;margin-top:16px;margin-bottom:16px;">';
-                                html += '<h3 style="margin:0 0 8px;color:#1f2937;">🎲 Win Probabilities</h3>';
-                                html += '<p style="font-size:12px;color:#6b7280;margin:0 0 16px;">Based on ' + remainingRounds + ' scheduled round' + (remainingRounds === 1 ? '' : 's') + ' (' + numSimulations.toLocaleString() + ' simulations)</p>';
-                                html += '<p style="font-size:11px;color:#6b7280;margin:0 0 16px;line-height:1.5;">Model uses handicap-based variance (scratch: σ=15, HC 18: σ=29.4) blended with historical performance. Higher handicap teams have higher variance.</p>';
-                                
-                                probabilities.forEach((team, idx) => {
-                                    const barColors = ['#10b981', '#3b82f6', '#8b5cf6', '#ef4444'];
-                                    const barColor = barColors[idx] || '#6b7280';
-                                    
-                                    html += '<div style="margin-bottom:12px;">';
-                                    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">';
-                                    html += '<div style="display:flex;align-items:center;gap:8px;">';
-                                    html += '<div style="width:12px;height:12px;background:' + team.color + ';border-radius:2px;"></div>';
-                                    html += '<strong style="font-size:14px;color:#1f2937;">' + team.name + '</strong>';
-                                    html += '</div>';
-                                    html += '<strong style="font-size:16px;color:' + barColor + ';">' + team.probability.toFixed(1) + '%</strong>';
-                                    html += '</div>';
-                                    
-                                    html += '<div style="background:#f3f4f6;border-radius:8px;height:24px;position:relative;overflow:hidden;">';
-                                    html += '<div style="background:' + barColor + ';height:100%;width:' + team.probability + '%;transition:width 0.3s;"></div>';
-                                    html += '</div>';
-                                    
-                                    html += '<div style="font-size:10px;color:#6b7280;margin-top:2px;display:flex;justify-content:space-between;">';
-                                    html += '<span>Avg: ' + team.avgPerRound.toFixed(1) + ' pts/round</span>';
-                                    html += '<span>HC: ' + team.avgHandicap.toFixed(1) + ' • σ: ' + team.stdDev.toFixed(1) + '</span>';
-                                    html += '</div>';
-                                    html += '</div>';
+                                h += '</table></div>';
+                                if (winMeta) h += '<p style="font-size:11px;color:#6b7280;margin:4px 0 2px;">Win % — Monte Carlo (' + winMeta.numSimulations.toLocaleString() + ' simulations over ' + winMeta.remainingRounds + ' remaining scheduled round' + (winMeta.remainingRounds === 1 ? '' : 's') + '); handicap-based variance blended with historical performance.</p>';
+                                const cats = [['⛳', 'Stroke', 'strokePoints'], ['🎯', 'BBB', 'bbbPoints'], ['⚪', 'Balls', 'ballPoints'], ['🎯', 'CTP', 'ctpPoints'], ['🏆', 'Extra 9', 'extra9Points'], ['🃏', 'Skins', 'skinsPoints']];
+                                const best = {};
+                                cats.forEach(c => { best[c[2]] = Math.max.apply(null, leaderboard.map(t => t[c[2]] || 0)); });
+                                h += '<h3 style="margin:16px 0 8px;color:#1f2937;font-size:15px;">Where the points come from</h3>';
+                                h += '<div class="mx-wrap"><table class="mx-table lb-table"><tr><th class="mx-who">Team</th>' + cats.map(c => '<th>' + c[0] + ' ' + c[1] + '</th>').join('') + '<th>Total</th></tr>';
+                                leaderboard.forEach((team) => {
+                                    const color = colorOf(team);
+                                    h += '<tr onclick="navigateToTeamStats(' + team.id + ')" style="cursor:pointer;"><td class="mx-who"><span style="display:inline-flex;align-items:center;gap:7px;"><span style="width:12px;height:12px;border-radius:3px;background:' + color + ';flex:none;"></span><span class="mx-name">' + team.name + '</span></span></td>';
+                                    cats.forEach(c => { const v = team[c[2]] || 0; h += '<td class="' + (v === best[c[2]] && v > 0 ? 'lb-best' : '') + '">' + fmt1(v) + '</td>'; });
+                                    h += '<td class="mx-pts" style="color:#1f2937;background:#fffbeb;">' + fmt(team.points) + '</td></tr>';
                                 });
-                                
-                                html += '</div>';
-                                return html;
+                                h += '</table></div>';
+                                return h;
                             })()}
+
+                            
                             
                             ${(() => {
                                 // Low Net Scores - Show top 3 net scores when no scheduled rounds
@@ -6419,75 +6391,51 @@
                             <p style="color:#6b7280;margin-bottom:20px;">Individual performance in this event</p>
                         `}
                         
-                        ${filteredPlayers.map((player, idx) => {
-                            // Find player's team to get color
-                            const playerTeam = state.teams.find(t => 
-                                t.players && t.players.includes(player.id)
-                            );
-                            const teamColor = playerTeam && playerTeam.color ? playerTeam.color : '#3b82f6';
-                            
-                            return `
-                            <div class="list-item" onclick="navigateToPlayerDetail('${player.id}')"
-                                 style="background:${teamColor}20;border-left:4px solid ${teamColor};margin-bottom:16px;display:block;cursor:pointer;transition:transform 0.1s, box-shadow 0.1s;"
-                                 onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 4px 12px rgba(0,0,0,0.12)';"
-                                 onmouseout="this.style.transform='';this.style.boxShadow='';">
-                                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-                                    <div style="flex:1;">
-                                        <strong style="font-size:20px;">#${idx + 1} ${player.name}</strong>${playerTeam ? ` <span style="color:${teamColor};font-size:14px;">• ${playerTeam.name}</span>` : ''}<br>
-                                        <small style="color:#6b7280;">${player.rounds} round${player.rounds === 1 ? '' : 's'} • ${player.avgPoints.toFixed(1)} avg pts • ${player.totalGrossStrokes} gross strokes</small>
-                                    </div>
-                                    <div style="display:flex;align-items:center;gap:12px;">
-                                        <div onclick="event.stopPropagation();showHandicapModal('${player.id}')" 
-                                             style="cursor:pointer;background:${teamColor};color:white;padding:8px 14px;border-radius:8px;text-align:center;min-width:70px;box-shadow:0 2px 8px rgba(0,0,0,0.2);transition:transform 0.2s,box-shadow 0.2s;"
-                                             onmouseover="this.style.transform='scale(1.05)';this.style.boxShadow='0 4px 12px rgba(0,0,0,0.3)'"
-                                             onmouseout="this.style.transform='scale(1)';this.style.boxShadow='0 2px 8px rgba(0,0,0,0.2)'">
-                                            <div style="font-size:10px;opacity:0.9;font-weight:600;margin-bottom:2px;">HCP</div>
-                                            <div style="font-size:24px;font-weight:700;line-height:1;">${player.handicap}</div>
-                                        </div>
-                                        <strong style="font-size:28px;color:white;background:${teamColor};padding:6px 12px;border-radius:6px;">${player.totalPoints}</strong>
-                                    </div>
-                                </div>
-                                
-                                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(95px,1fr));gap:8px;">
-                                    <div style="background:${teamColor};padding:8px;border-radius:6px;">
-                                        <div style="font-size:10px;color:rgba(255,255,255,0.8);font-weight:600;margin-bottom:3px;">⛳ STROKE</div>
-                                        <div style="font-size:18px;font-weight:700;color:white;">${player.totalStrokePoints}</div>
-                                        <div style="font-size:10px;color:rgba(255,255,255,0.7);">${player.avgStroke.toFixed(1)} avg</div>
-                                    </div>
-                                    
-                                    <div style="background:${teamColor};padding:8px;border-radius:6px;">
-                                        <div style="font-size:10px;color:rgba(255,255,255,0.8);font-weight:600;margin-bottom:3px;">🎯 CTP</div>
-                                        <div style="font-size:18px;font-weight:700;color:white;">${player.totalCTPPoints}</div>
-                                        <div style="font-size:10px;color:rgba(255,255,255,0.7);">${(player.totalCTPPoints / state.settings.ctpPoints).toFixed(0)} wins</div>
-                                    </div>
-                                    
-                                    <div style="background:${teamColor};padding:8px;border-radius:6px;">
-                                        <div style="font-size:10px;color:rgba(255,255,255,0.8);font-weight:600;margin-bottom:3px;">🎯 BBB</div>
-                                        <div style="font-size:18px;font-weight:700;color:white;">${player.totalBBBPoints}</div>
-                                        <div style="font-size:10px;color:rgba(255,255,255,0.7);">${player.totalBBB} BBB</div>
-                                    </div>
-                                    
-                                    <div style="background:${teamColor};padding:8px;border-radius:6px;">
-                                        <div style="font-size:10px;color:rgba(255,255,255,0.8);font-weight:600;margin-bottom:3px;">⚪ BALLS</div>
-                                        <div style="font-size:18px;font-weight:700;color:white;">${player.totalBallPoints}</div>
-                                        <div style="font-size:10px;color:rgba(255,255,255,0.7);">${player.totalBalls} kept</div>
-                                    </div>
-                                    
-                                    <div style="background:${teamColor};padding:8px;border-radius:6px;">
-                                        <div style="font-size:10px;color:rgba(255,255,255,0.8);font-weight:600;margin-bottom:3px;">🏆 EXTRA9</div>
-                                        <div style="font-size:18px;font-weight:700;color:white;">${player.totalExtra9Points}</div>
-                                        <div style="font-size:10px;color:rgba(255,255,255,0.7);">${(player.totalExtra9Points / state.settings.extra9Points).toFixed(0)} wins</div>
-                                    </div>
-                                    
-                                    <div style="background:${teamColor};padding:8px;border-radius:6px;">
-                                        <div style="font-size:10px;color:rgba(255,255,255,0.8);font-weight:600;margin-bottom:3px;">🃏 SKINS</div>
-                                        <div style="font-size:18px;font-weight:700;color:white;">${player.totalSkinsPoints}</div>
-                                        <div style="font-size:10px;color:rgba(255,255,255,0.7);">${player.avgSkins.toFixed(1)} avg</div>
-                                    </div>
-                                </div>
-                            </div>
-                        `;
-                        }).join('')}
+${(() => {
+                            // Player matrices (.28): round-by-round + scoring-type
+                            // breakdown replace the stacked player cards.
+                            const fmt = (n) => String(Math.round((n || 0) * 100) / 100);
+                            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                            const roundLabel = (r, i) => {
+                                let d = '';
+                                if (r.date) { const p = String(r.date).split('-'); if (p.length === 3) d = months[parseInt(p[1], 10) - 1] + ' ' + parseInt(p[2], 10); }
+                                const course = (r.courseName || '').split(' to ')[0];
+                                return 'R' + (i + 1) + (d ? '<br><span style="font-weight:600;text-transform:none;letter-spacing:0;">' + d + (course ? ' · ' + course : '') + '</span>' : '');
+                            };
+                            const teamOf = (player) => state.teams.find(t => t.players && t.players.includes(player.id));
+                            const whoCell = (player, idx) => {
+                                const playerTeam = teamOf(player);
+                                const teamColor = playerTeam && playerTeam.color ? playerTeam.color : '#3b82f6';
+                                const sp = state.players.find(p => String(p.id) === String(player.id)) || player;
+                                return '<td class="mx-who"><span style="display:inline-flex;align-items:center;gap:7px;">' + renderAvatar(sp, 30) + '<span><span class="mx-name">#' + (idx + 1) + ' ' + player.name + '</span><br><span class="mx-hc">' + (playerTeam ? '<span style="color:' + teamColor + ';font-weight:700;">' + playerTeam.name + '</span> · ' : '') + player.rounds + ' round' + (player.rounds === 1 ? '' : 's') + ' · ' + player.avgPoints.toFixed(1) + ' avg · ' + player.totalGrossStrokes + ' gross</span></span></span></td>';
+                            };
+                            let h = '<div class="mx-wrap"><table class="mx-table lb-table"><tr><th class="mx-who">Player</th>';
+                            eventRounds.forEach((r, i) => { h += '<th>' + roundLabel(r, i) + '</th>'; });
+                            h += '<th>Total</th></tr>';
+                            filteredPlayers.forEach((player, idx) => {
+                                h += '<tr onclick="navigateToPlayerDetail(\'' + player.id + '\')" style="cursor:pointer;">' + whoCell(player, idx);
+                                eventRounds.forEach((r) => {
+                                    const gIdx = state.rounds.indexOf(r);
+                                    const det = (player.roundDetails || []).filter(d => d.roundIndex === gIdx)[0];
+                                    h += '<td>' + (det ? fmt(det.total) : '–') + '</td>';
+                                });
+                                h += '<td class="mx-pts" style="color:#1f2937;background:#fffbeb;">' + fmt(player.totalPoints) + '</td></tr>';
+                            });
+                            h += '</table></div>';
+                            const cats = [['⛳', 'Stroke', 'totalStrokePoints'], ['🎯', 'BBB', 'totalBBBPoints'], ['⚪', 'Balls', 'totalBallPoints'], ['🎯', 'CTP', 'totalCTPPoints'], ['🏆', 'Extra 9', 'totalExtra9Points'], ['🃏', 'Skins', 'totalSkinsPoints']];
+                            const best = {};
+                            cats.forEach(c => { best[c[2]] = Math.max.apply(null, filteredPlayers.map(p => p[c[2]] || 0)); });
+                            h += '<h3 style="margin:16px 0 8px;color:#1f2937;font-size:15px;">Where the points come from</h3>';
+                            h += '<div class="mx-wrap"><table class="mx-table lb-table"><tr><th class="mx-who">Player</th>' + cats.map(c => '<th>' + c[0] + ' ' + c[1] + '</th>').join('') + '<th>HCP</th><th>Total</th></tr>';
+                            filteredPlayers.forEach((player, idx) => {
+                                h += '<tr onclick="navigateToPlayerDetail(\'' + player.id + '\')" style="cursor:pointer;">' + whoCell(player, idx);
+                                cats.forEach(c => { const v = player[c[2]] || 0; h += '<td class="' + (v === best[c[2]] && v > 0 ? 'lb-best' : '') + '">' + fmt(v) + '</td>'; });
+                                h += '<td><span onclick="event.stopPropagation();showHandicapModal(\'' + player.id + '\')" style="cursor:pointer;font-weight:800;color:#0369a1;">' + player.handicap + '</span></td>';
+                                h += '<td class="mx-pts" style="color:#1f2937;background:#fffbeb;">' + fmt(player.totalPoints) + '</td></tr>';
+                            });
+                            h += '</table></div>';
+                            return h;
+                        })()}
                     </div>
                 `;
             } catch (err) {
@@ -31363,12 +31311,14 @@
                         .then(txt => {
                             if (!txt) return;
                             const latest = txt.trim();
-                            if (!latest || latest === APP_VERSION) return;
+                            // version.txt carries no leading 'v'; APP_VERSION does (.28 fix:
+                            // the mismatch made the banner show on every load).
+                            if (!latest || latest.replace(/^v/i, '') === APP_VERSION.replace(/^v/i, '')) return;
                             const bar = document.createElement('div');
                             bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#f97316;color:white;'
                                 + 'padding:12px 16px;font-size:15px;font-weight:800;text-align:center;cursor:pointer;'
                                 + 'box-shadow:0 4px 18px rgba(0,0,0,0.4);';
-                            bar.textContent = `⬆️ Update available (v${latest}) — you're on v${APP_VERSION}. Tap to reload.`;
+                            bar.textContent = `⬆️ Update available (v${latest}) — you're on ${APP_VERSION}. Tap to reload.`;
                             bar.onclick = () => {
                                 // Query string forces a fresh document rather than the cached one.
                                 const base = location.href.split('?')[0].split('#')[0];
