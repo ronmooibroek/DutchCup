@@ -70,7 +70,7 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
 .save-status.error  { background: #FBDEDC; color: var(--dbl); }
 
 /* ─── App shell ─── */
-#app { max-width: 560px; margin: 0 auto; padding: 6px 10px 96px; }
+#app { max-width: 560px; margin: 0 auto; padding: 6px 10px 172px; }
 /* ─── Live leaderboard ─── */
 .lb-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
 .lb-tab {
@@ -177,7 +177,7 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
     border-left: 4px solid transparent;
 }
 .score-row.is-me { border-left-color: var(--fairway); }
-.score-row-top { display: flex; align-items: center; gap: 8px; }
+.score-row-top { display: flex; align-items: center; gap: 10px; }
 /* ── One-tap score chips: the 4 common scores (par..triple) sit right under the name ── */
 .score-chips { display: flex; gap: 6px; margin-top: 6px; }
 .score-chip {
@@ -201,16 +201,14 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
 /* ── Points tray (Option B): one tray per hole holds the BBB/CTP tokens.
       Drag a token onto a player's card, or tap a token then tap a card.
       Awarded points show as badges beside the player's name. ── */
-.points-rail {
-    position: fixed; right: 6px; top: 50%; transform: translateY(-50%); z-index: 150;
-    display: flex; flex-direction: column; gap: 8px;
-    background: white; border: 2px dashed var(--fairway); border-radius: 14px;
-    padding: 8px 6px; box-shadow: var(--shadow);
+.points-bar {
+    position: fixed; left: 0; right: 0; z-index: 150;
+    bottom: calc(71px + env(safe-area-inset-bottom));
+    max-width: 560px; margin: 0 auto;
+    display: flex; flex-direction: row; justify-content: center; gap: 10px;
+    background: var(--card); border-top: 2px solid var(--sand);
+    padding: 8px 12px;
 }
-/* the scoring column leaves room for the rail so cards never slide under it */
-.score-list { padding-right: 62px; }
-.hole-nav { padding-right: 62px; }
-.pick-card.photo-card { margin-right: 62px; }
 .point-token {
     width: 48px; height: 48px; border-radius: 12px; border: 2px solid var(--sand);
     background: var(--card); padding: 0; flex-shrink: 0; cursor: grab;
@@ -227,6 +225,16 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
     box-shadow: 0 8px 20px rgba(30,42,32,0.35); transform: translate(-50%, -50%);
 }
 .score-row.drop-hint { outline: 3px solid var(--fairway); outline-offset: 1px; }
+.avatar-wrap { position: relative; width: 42px; height: 42px; flex-shrink: 0; }
+.player-avatar {
+    width: 42px; height: 42px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: white; font-weight: 700; font-size: 19px;
+}
+.avatar-wrap img.player-avatar-img {
+    position: absolute; inset: 0; width: 42px; height: 42px;
+    border-radius: 50%; object-fit: cover; background: #e5e7eb;
+}
 .bbb-badges { display: inline-flex; gap: 4px; flex-shrink: 0; }
 .bbb-badge { border: 2px solid var(--sand); border-radius: 999px; padding: 1px 8px; font-size: 13px; line-height: 1.4; cursor: pointer; }
 .bbb-badge.b-bingo { background: var(--fairway); border-color: var(--fairway-dk); }
@@ -620,7 +628,7 @@ document.addEventListener('visibilitychange', () => {
     try { if (document.visibilityState === 'hidden' && hasPendingEdits()) flushPendingEdits(); } catch (e) {}
 });
 
-const SE_VERSION = '2.27.0'; // name line is name + badges only (no HCP/running-total text)
+const SE_VERSION = '2.28.0'; // points bar at the bottom + player avatars on the cards
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
@@ -1286,7 +1294,7 @@ function renderScoreEntry() {
     // Live leaderboard entry point
     appEl.appendChild(el('button', {
         class: 'foot-btn prev', type: 'button',
-        style: 'width:calc(100% - 62px);margin-bottom:6px;min-height:44px;background:#EDF4EE;color:var(--fairway-dk);font-size:15px;',
+        style: 'width:100%;margin-bottom:6px;min-height:44px;background:#EDF4EE;color:var(--fairway-dk);font-size:15px;',
         onclick: () => { state.board = 'teams'; renderLeaderboard(); }
     }, '\u{1F4CA} Live leaderboard'));
 
@@ -1414,6 +1422,27 @@ function onTokenPointerDown(e, slotKey, icon) {
     document.addEventListener('pointerup', up);
 }
 
+// Same avatar as the main app: the league player's photoUrl when there is
+// one, otherwise a coloured initial circle (same palette + hash as index).
+function avatarFallbackColor(playerId) {
+    const palette = ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#06b6d4', '#ef4444', '#6366f1'];
+    const n = parseInt(playerId) || 0;
+    return palette[Math.abs(n) % palette.length];
+}
+function buildPlayerAvatar(p) {
+    const initial = (p.name || '?').trim().charAt(0).toUpperCase() || '?';
+    const fallback = el('div', { class: 'player-avatar', style: `background:${avatarFallbackColor(p.id)};` }, initial);
+    const league = (state.leaguePlayers || []).find(x => idsEqual(x.id, p.id));
+    const url = (league && league.photoUrl) || p.photoUrl || '';
+    if (!url) return fallback;
+    const wrap = el('span', { class: 'avatar-wrap' });
+    wrap.appendChild(fallback);
+    const img = el('img', { class: 'player-avatar-img', src: url, alt: p.name || '' });
+    img.onerror = () => { img.style.display = 'none'; };
+    wrap.appendChild(img);
+    return wrap;
+}
+
 function buildScoresList(round, groupPlayers) {
     const list = el('div', { class: 'score-list', id: 'score-list' });
     const par = (round.pars || [])[state.currentHole];
@@ -1426,7 +1455,7 @@ function buildScoresList(round, groupPlayers) {
     // badges). Tokens for Bingo/Bango/Bongo, plus CTP on par 3s. A token
     // dims once its point is awarded; awarded points ride as badges beside
     // the holder's name (built per player below).
-    const tray = el('div', { class: 'points-rail' });
+    const tray = el('div', { class: 'points-bar' });
     const traySlots = BBB_SLOTS.map(s => ({ key: s.key, icon: s.icon, name: s.name, used: !!bbbSlots[s.key] }));
     if (isPar3) traySlots.push({ key: 'ctp', icon: '\u{1F4CD}', name: 'Closest to the pin', used: !!ctpWinnerId });
     traySlots.forEach(s => {
@@ -1455,6 +1484,7 @@ function buildScoresList(round, groupPlayers) {
         // the card gives this player that point (see onRowTap).
         row.addEventListener('click', e => onRowTap(pid, e));
         const top = el('div', { class: 'score-row-top' });
+        top.appendChild(buildPlayerAvatar(p));
 
         // Points this player holds ride as badges beside their name.
         // Tapping a badge takes that point back.
