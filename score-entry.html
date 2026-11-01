@@ -203,6 +203,7 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
 }
 .score-chip .n { font-size: 25px; font-weight: 900; line-height: 1.05; }
 .score-chip:active { transform: scale(0.95); }
+.score-chip.dimmed { opacity: 0.38; }
 .score-chip.picked { border-style: solid; }
 .score-chip.picked.birdie { border-color: var(--birdie); color: var(--birdie); background: #EDF7F1; }
 .score-chip.picked.eagle, .score-chip.picked.albatross { border-color: var(--eagle); color: var(--eagle); background: #FBF4E1; }
@@ -625,7 +626,7 @@ document.addEventListener('visibilitychange', () => {
     try { if (document.visibilityState === 'hidden' && hasPendingEdits()) flushPendingEdits(); } catch (e) {}
 });
 
-const SE_VERSION = '2.33.0'; // header shows a Dutch flag instead of the round title and player name
+const SE_VERSION = '2.34.0'; // unpicked score chips grey out once a score is set
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
@@ -1558,7 +1559,7 @@ function buildScoresList(round, groupPlayers) {
         shown.forEach(v => {
             const picked = curN != null && curN === v;
             chips.appendChild(el('button', {
-                class: 'score-chip' + (picked ? ' picked ' + (classForScore(v, par, strokes) || '') : ''),
+                class: 'score-chip' + (picked ? ' picked ' + (classForScore(v, par, strokes) || '') : (curN != null ? ' dimmed' : '')),
                 type: 'button',
                 'aria-label': `Score ${v} for ${p.name || 'player'}`,
                 onclick: () => setScoreInline(pid, v)
@@ -1569,7 +1570,7 @@ function buildScoresList(round, groupPlayers) {
         // Anything outside the range (or Clear) lives on the full pad, one tap away.
         const inRange = curN != null && values.includes(curN);
         chips.appendChild(el('button', {
-            class: 'score-chip other' + (curN != null && !inRange ? ' has-score' : ''),
+            class: 'score-chip other' + (curN != null && !inRange ? ' has-score' : '') + (curN != null ? ' dimmed' : ''),
             type: 'button',
             'aria-label': `Other scores for ${p.name || 'player'}`,
             onclick: () => { state.sheetPlayerId = pid; state.padExpanded = true; renderScoreEntry(); }
