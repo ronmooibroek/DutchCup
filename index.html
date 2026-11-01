@@ -296,6 +296,35 @@
             box-shadow: var(--shadow-md);
         }
         
+        /* Admin scoring matrix (Option C, 2026-11-01): one compact table per
+           group — photo rows, course-app net shading, tap a cell to edit with
+           one-tap chips in the player's expanded detail row. */
+        .mx-wrap { overflow-x: auto; background: white; border-radius: 12px; box-shadow: var(--shadow-md); margin-bottom: 16px; }
+        .mx-table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+        .mx-table th, .mx-table td { border: 1px solid #e5e7eb; text-align: center; padding: 3px 2px; font-size: 12.5px; }
+        .mx-table th { background: #f9fafb; color: #6b7280; font-size: 11px; }
+        .mx-table th.par-row { font-weight: 600; color: #9ca3af; }
+        .mx-who { text-align: left !important; white-space: nowrap; cursor: pointer; padding: 3px 8px !important; }
+        .mx-who .mx-name { font-weight: 700; font-size: 13px; }
+        .mx-who .mx-hc { color: #6b7280; font-size: 11px; font-weight: 600; }
+        .mx-cell { font-weight: 800; cursor: pointer; min-width: 26px; }
+        .mx-cell:hover { outline: 2px solid #2E7D4F; outline-offset: -2px; }
+        .mx-birdie { background: #1B7F4B !important; color: #fff !important; }
+        .mx-eagle { background: #B8860B !important; color: #3D2C00 !important; }
+        .mx-par { background: #F4FAF6; color: #256B42; }
+        .mx-bogey { background: #FDF0EF; color: #B3261E; }
+        .mx-double { background: #F7EEFA; color: #7B1FA2; }
+        .mx-empty { background: #fff; color: #d1d5db; font-weight: 400; }
+        .mx-editing { outline: 3px solid #FF9A00 !important; outline-offset: -3px; }
+        .mx-sub { background: #f3f4f6; font-weight: 800; }
+        .mx-pts { font-weight: 900; color: #FF9A00; font-size: 14px; background: #fffbeb; }
+        .mx-dots { font-size: 8px; vertical-align: super; letter-spacing: -1px; }
+        .mx-detail td { background: #f9fafb; text-align: left !important; padding: 12px !important; }
+        .mx-chip { min-width: 44px; height: 44px; padding: 0 10px; border-radius: 10px; border: 2px solid #d1d5db; font-size: 16px; font-weight: 800; cursor: pointer; }
+        .mx-chip.picked { box-shadow: inset 0 0 0 2px #2E7D4F; border-color: #2E7D4F; }
+        .mx-bbbcell { display: inline-flex; flex-direction: column; align-items: center; min-width: 30px; padding: 3px 1px; border: 1px dashed #d1d5db; border-radius: 6px; background: transparent; cursor: pointer; font-size: 11px; }
+        .mx-bbbcell.has { border: 1px solid #E3B93E; background: #FFD95E; }
+
         /* Premium Input Fields */
         .score-input {
             width: 100%;
@@ -726,7 +755,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = 'v2026.11.01.25';
+        const APP_VERSION = 'v2026.11.01.26';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -4929,6 +4958,7 @@
                     }
                     
                     // Render players in this group
+                    const groupRows = [];
                     playersByGroup[groupKey].forEach(({ teamIdx, playerIdx, teamName, player }) => {
                         const statePlayer = state.players.find(sp => sp.id === player.id);
                         const effectiveHc = getPlayerHandicapForRound(statePlayer, round, player);
@@ -4968,192 +4998,9 @@
                             }
                         }
                         
-                        html += `
-                            <div class="card" style="border-left:4px solid ${groupKey !== 'unassigned' ? '#8b5cf6' : '#d1d5db'};">
-                            <div style="padding:16px;background:#f9fafb;border-radius:12px;">
-                                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-                                    <div>
-                                        <strong style="font-size:18px;">${player.name}</strong>
-                                        <small style="display:block;color:#6b7280;">${(() => {
-                                            const sp = state.players.find(s => s.id === player.id);
-                                            const deriv = getHandicapDerivation(sp, round, player);
-                                            let hcDisplay;
-                                            if (deriv.mode === 'usga' && deriv.index !== null) {
-                                                hcDisplay = `Index ${deriv.index.toFixed(1)} · Course HCP ${deriv.courseHandicap}${deriv.teeName ? ` (${deriv.teeName})` : ''}`;
-                                            } else if (deriv.mode === 'usga' && deriv.fallback) {
-                                                hcDisplay = `Course HCP ${deriv.courseHandicap} (fallback)`;
-                                            } else {
-                                                hcDisplay = `HCP ${deriv.courseHandicap}`;
-                                            }
-                                            return `Team: ${teamName} • ${hcDisplay} • Gross: ${grossTotal}${holesPlayed < 18 ? ` (${holesPlayed} holes)` : ''}`;
-                                        })()}</small>
-                                    </div>
-                                    <div style="text-align:right;display:flex;align-items:center;gap:8px;">
-                                        <button onclick="autoFillFromAverage(${teamIdx}, ${playerIdx})" 
-                                                style="background:#10b981;color:white;border:none;padding:6px 12px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;"
-                                                title="Auto-fill scores based on event averages">
-                                            📊 Auto-fill
-                                        </button>
-                                        <button onclick="recalculateScore(${teamIdx}, ${playerIdx})" 
-                                                style="background:#3b82f6;color:white;border:none;padding:6px 12px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;">
-                                            🔄 Recalc
-                                        </button>
-                                        <div>
-                                            <div style="font-size:32px;font-weight:700;color:#FF9A00;">${grandTotal}</div>
-                                            <div style="font-size:11px;color:#6b7280;">${strokePlayPoints} stroke • ${bbbPoints} BBB • ${ballPoints} balls${extra9Points > 0 ? ` • ${extra9Points} extra9` : ''}${ctpPoints > 0 ? ` • ${ctpPoints} CTP` : ''}${skinsPoints > 0 ? ` • 🃏 ${skinsPoints} skins` : ''}</div>
-                                        </div>
-                                    </div>
-                                </div>
-                                
-                                ${courseTees.length > 0 ? `
-                                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:8px 10px;background:white;border:1px solid #e5e7eb;border-radius:6px;">
-                                        <span style="font-size:12px;color:#6b7280;font-weight:600;">🏁 Tee:</span>
-                                        <select onchange="updatePlayerTee(${teamIdx}, ${playerIdx}, this.value); renderScoreEntry();"
-                                                style="flex:1;padding:6px 8px;font-size:13px;border:1px solid #d1d5db;border-radius:4px;background:white;">
-                                            ${courseTees.map(t => `
-                                                <option value="${t.id}" ${player.teeId === t.id ? 'selected' : ''}>${t.name}${t.slope && t.rating ? ` (${t.slope}/${t.rating.toFixed(1)})` : ''}</option>
-                                            `).join('')}
-                                        </select>
-                                    </div>
-                                ` : ''}
-                                
-                                <div style="background:#fef3c7;padding:12px;border-radius:8px;margin-bottom:12px;">
-                                    <div style="display:flex;gap:16px;align-items:center;">
-                                        <div style="flex:1;">
-                                            <div style="font-weight:600;font-size:12px;margin-bottom:6px;">⛳ Balls</div>
-                                            <div style="display:flex;gap:6px;align-items:center;">
-                                                ${[0, 1, 2].map(ballIdx => {
-                                                    const isKept = ballsRemaining > ballIdx;
-                                                    return `
-                                                        <button onclick="toggleBall(${teamIdx}, ${playerIdx}, ${ballIdx})"
-                                                                style="width:40px;height:40px;border:none;background:transparent;cursor:pointer;font-size:32px;padding:0;display:flex;align-items:center;justify-content:center;transition:transform 0.2s;"
-                                                                onmousedown="this.style.transform='scale(0.9)'"
-                                                                onmouseup="this.style.transform='scale(1)'">
-                                                            ${isKept ? '⚪' : '<div style="position:relative;"><span style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#ef4444;font-size:40px;font-weight:700;line-height:1;">✗</span><span style="opacity:0.2;">⚪</span></div>'}
-                                                        </button>
-                                                    `;
-                                                }).join('')}
-                                            </div>
-                                        </div>
-                                        
-                                        <div style="flex:1;">
-                                            <div style="font-weight:600;font-size:12px;margin-bottom:6px;">
-                                                🎯 BBB <span style="font-weight:500;color:#6b7280;">(from hole taps)</span>
-                                            </div>
-                                            <!-- Derived only. Bulk entry is deliberately impossible: a typed total
-                                                 silently disagreed with the per-hole awards, and the two apps then
-                                                 scored differently. Tap the 🎯 badge under each hole instead. -->
-                                            <div style="width:70px;padding:8px;border:2px dashed #d1d5db;border-radius:8px;font-size:16px;font-weight:700;text-align:center;background:#f9fafb;color:#374151;">
-                                                ${window.bbbCountForPlayer(round, player.id)}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                        `;
-                        
-                        for (let nine = 0; nine < 2; nine++) {
-                            const start = nine * 9;
-                            html += `<div class="score-grid" style="margin-top:8px;">`;
-                            
-                            for (let i = 0; i < 9; i++) {
-                                const holeNum = start + i + 1;
-                                const holeIdx = start + i;
-                                const score = player.scores[holeIdx] || '';
-                                
-                                // Calculate how many strokes player gets on this hole
-                                const holeHandicap = round.handicaps[holeIdx];
-                                let strokes = 0;
-                                if (effectiveHc >= holeHandicap) strokes = 1;
-                                if (effectiveHc >= holeHandicap + 18) strokes = 2;
-                                const par = round.pars[holeIdx];
-                                
-                                // Calculate points for this hole
-                                let points = 0;
-                                if (score !== '' && score !== null && score !== undefined) {
-                                    const netScore = parseInt(score) - strokes;
-                                    const netToPar = netScore - par;
-                                    points = getPoints(netToPar);
-                                }
-                                
-                                // Calculate color based on net score
-                                let bgColor = 'white';
-                                let textColor = '#1f2937';
-                                let fontWeight = '400';
-                                
-                                if (score) {
-                                    const netScore = parseInt(score) - strokes;
-                                    const netToPar = netScore - par;
-                                    
-                                    if (netToPar <= -3) {
-                                        // Albatross
-                                        bgColor = '#000000';
-                                        textColor = '#ffffff';
-                                        fontWeight = '700';
-                                    } else if (netToPar === -2) {
-                                        // Eagle - dark green with white text
-                                        bgColor = '#065f46';
-                                        textColor = '#ffffff';
-                                        fontWeight = '700';
-                                    } else if (netToPar === -1) {
-                                        // Birdie
-                                        bgColor = '#86efac';
-                                        textColor = '#065f46';
-                                        fontWeight = '700';
-                                    } else if (netToPar === 0) {
-                                        // Par - light grey
-                                        bgColor = '#e5e7eb';
-                                        textColor = '#1f2937';
-                                        fontWeight = '700';
-                                    } else if (netToPar === 1) {
-                                        // Bogey
-                                        bgColor = '#fca5a5';
-                                        textColor = '#7f1d1d';
-                                        fontWeight = '700';
-                                    } else {
-                                        // Double Bogey or worse - dark purple with white text
-                                        bgColor = '#6b21a8';
-                                        textColor = '#ffffff';
-                                        fontWeight = '700';
-                                    }
-                                }
-                                
-                                // Border color based on strokes: red for 2, blue for 1, gray for 0
-                                const borderStyle = strokes === 2 ? 'border:3px solid #ef4444;' : 
-                                                   strokes === 1 ? 'border:3px solid #3b82f6;' : 
-                                                   'border:2px solid #d1d5db;';
-                                const holePar = round.pars[holeIdx];
-                                
-                                html += `
-                                    <div style="display:flex;flex-direction:column;align-items:center;">
-                                        <input type="tel" 
-                                               class="score-input" 
-                                               id="score-${teamIdx}-${playerIdx}-${holeIdx}"
-                                               value="${score}" 
-                                               placeholder="${holePar}"
-                                               maxlength="1"
-                                               style="${borderStyle}background-color:${bgColor};color:${textColor};font-weight:${fontWeight};margin-bottom:2px;"
-                                               oninput="handleScoreInput(${teamIdx}, ${playerIdx}, ${holeIdx}, this.value, this.id)">
-                                        <div style="font-size:9px;color:${points > 0 ? '#059669' : '#dc2626'};font-weight:600;min-height:12px;">
-                                            ${points !== 0 ? (points > 0 ? '+' : '') + points : ''}
-                                        </div>
-                                        ${(() => {
-                                            // Per-hole BBB tap — drives Honey Pot, Swiper, I've Been Robbed, Vulture
-                                            const n = window.bbbCountFor(round, holeIdx, player.id);
-                                            return `<button onclick="cycleHoleBBB(${teamIdx}, ${playerIdx}, ${holeIdx})"
-                                                title="Bingo-Bango-Bongo points on hole ${holeNum} — tap to cycle"
-                                                style="margin-top:2px;width:100%;max-width:44px;min-height:20px;border-radius:6px;cursor:pointer;font-size:10px;font-weight:800;line-height:1;padding:3px 0;
-                                                       ${n > 0 ? 'background:#FFD95E;border:1px solid #E3B93E;color:#6b4e00;' : 'background:transparent;border:1px dashed #d1d5db;color:#c3c8cf;'}">
-                                                ${n > 0 ? '🎯' + n : '🎯'}
-                                            </button>`;
-                                        })()}
-                                    </div>`;
-                            }
-                            
-                            html += '</div>'; // Close grid
-                        }
-                        
-                        html += '</div></div>'; // Close padding div and card div
+                        groupRows.push({ teamIdx, playerIdx, teamName, player, statePlayer, effectiveHc, strokePlayPoints, bbbPoints, ballsRemaining, ballPoints, extra9Points, ctpPoints, skinsPoints, grandTotal, grossTotal, holesPlayed });
                     });
+                    html += buildGroupMatrix(round, groupKey, groupRows, courseTees);
                 });
                 
                 // Get all players from the round
@@ -24808,6 +24655,186 @@
                 console.error('Handle score input error:', err);
                 showError('Score input failed: ' + err.message);
             }
+        };
+
+        // ── Admin scoring matrix (Option C, Ron's pick 2026-11-01) ──────
+        // One compact table per group replaces the tall per-player cards:
+        // photo rows × 18 shaded gross cells + gross/points totals. Scores
+        // are edited by tapping a cell, which expands the player's detail
+        // row with one-tap chips (no typing). Edits mutate the activeRound
+        // copy exactly like the old typed inputs did; the existing Save /
+        // Back buttons (finishRound) remain the only path to Firestore.
+        window.__mxExpand = null;   // 'teamIdx-playerIdx' of the expanded player
+        window.__mxEdit = null;     // {t, p, h} cell being edited
+        window.__mxPad = false;     // full 1–12 pad instead of quick chips
+
+        const mxRenderKeepScroll = () => {
+            const sx = window.scrollX || window.pageXOffset;
+            const sy = window.scrollY || window.pageYOffset;
+            render();
+            setTimeout(() => { window.scrollTo(sx, sy); }, 10);
+        };
+        window.mxTogglePlayer = (t, p) => {
+            const key = t + '-' + p;
+            const opening = window.__mxExpand !== key;
+            window.__mxExpand = opening ? key : null;
+            if (!opening) window.__mxEdit = null;
+            mxRenderKeepScroll();
+        };
+        window.mxEditCell = (t, p, h) => {
+            window.__mxExpand = t + '-' + p;
+            window.__mxEdit = { t, p, h };
+            window.__mxPad = false;
+            mxRenderKeepScroll();
+        };
+        window.mxTogglePad = () => { window.__mxPad = !window.__mxPad; mxRenderKeepScroll(); };
+        window.mxCloseEdit = () => { window.__mxEdit = null; mxRenderKeepScroll(); };
+        window.mxSetScore = (value) => {
+            const e = window.__mxEdit;
+            if (!e || !state.activeRound) return;
+            const team = state.activeRound.teams[e.t];
+            const pl = team && team.players[e.p];
+            if (!pl) return;
+            if (!Array.isArray(pl.scores)) pl.scores = Array(18).fill('');
+            pl.scores[e.h] = (value === '') ? '' : String(value);
+            // Like the old typed inputs, move on to the next hole so a whole
+            // card can be keyed in with taps alone.
+            if (value !== '' && e.h < 17) window.__mxEdit = { t: e.t, p: e.p, h: e.h + 1 };
+            mxRenderKeepScroll();
+        };
+
+        const mxStrokesFor = (effectiveHc, holeHandicap) => {
+            let s = 0;
+            if (effectiveHc >= holeHandicap) s = 1;
+            if (effectiveHc >= holeHandicap + 18) s = 2;
+            return s;
+        };
+        const mxCellClass = (round, player, effectiveHc, hi) => {
+            const raw = (player.scores || [])[hi];
+            if (raw === '' || raw === null || raw === undefined) return 'mx-empty';
+            const gross = parseInt(raw);
+            if (isNaN(gross)) return 'mx-empty';
+            const net = gross - mxStrokesFor(effectiveHc, round.handicaps[hi]);
+            const d = net - round.pars[hi];
+            if (d <= -2) return 'mx-eagle';
+            if (d === -1) return 'mx-birdie';
+            if (d === 0) return 'mx-par';
+            if (d === 1) return 'mx-bogey';
+            return 'mx-double';
+        };
+
+        const mxDetailHtml = (round, groupKey, r, courseTees) => {
+            const { teamIdx, playerIdx, teamName, player } = r;
+            const deriv = getHandicapDerivation(r.statePlayer, round, player);
+            let hcDisplay;
+            if (deriv.mode === 'usga' && deriv.index !== null) {
+                hcDisplay = `Index ${deriv.index.toFixed(1)} · Course HCP ${deriv.courseHandicap}${deriv.teeName ? ` (${deriv.teeName})` : ''}`;
+            } else if (deriv.mode === 'usga' && deriv.fallback) {
+                hcDisplay = `Course HCP ${deriv.courseHandicap} (fallback)`;
+            } else {
+                hcDisplay = `HCP ${deriv.courseHandicap}`;
+            }
+            let h = '';
+            const e = window.__mxEdit;
+            if (e && e.t === teamIdx && e.p === playerIdx) {
+                const par = round.pars[e.h];
+                const cur = (player.scores || [])[e.h];
+                const chipFor = (v) => {
+                    const fakeScores = Array(18).fill('');
+                    fakeScores[e.h] = v;
+                    const cls = mxCellClass(round, { scores: fakeScores }, r.effectiveHc, e.h);
+                    return `<button class="mx-chip ${cls}${String(cur) === String(v) ? ' picked' : ''}" onclick="mxSetScore(${v})">${v}</button>`;
+                };
+                h += `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;background:#EDF4EE;border-radius:10px;padding:8px;margin-bottom:10px;">
+                    <strong style="font-size:13px;">Hole ${e.h + 1} · Par ${par} · ${player.name.split(' ')[0]}:</strong>`;
+                if (window.__mxPad) {
+                    for (let v = 1; v <= 12; v++) h += chipFor(v);
+                    h += `<button class="mx-chip" onclick="mxTogglePad()">quick</button>`;
+                } else {
+                    [par, par + 1, par + 2, par + 3].forEach(v => { h += chipFor(v); });
+                    h += `<button class="mx-chip" onclick="mxTogglePad()">···</button>`;
+                }
+                h += `<button class="mx-chip" style="color:#B3261E;background:#fff;" onclick="mxSetScore('')">Clear</button>
+                      <button class="mx-chip" style="background:#fff;" onclick="mxCloseEdit()">✕</button></div>`;
+            }
+            h += `<div style="display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start;">
+                <div style="flex:1;min-width:230px;">
+                    <div style="font-size:12.5px;color:#374151;"><strong>${player.name}</strong> · Team: ${teamName} • ${hcDisplay} • Gross: ${r.grossTotal}${r.holesPlayed < 18 ? ` (${r.holesPlayed} holes)` : ''}</div>
+                    <div style="font-size:11.5px;color:#6b7280;margin-top:2px;">${r.strokePlayPoints} stroke • ${r.bbbPoints} BBB • ${r.ballPoints} balls${r.extra9Points > 0 ? ` • ${r.extra9Points} extra9` : ''}${r.ctpPoints > 0 ? ` • ${r.ctpPoints} CTP` : ''}${r.skinsPoints > 0 ? ` • 🃏 ${r.skinsPoints} skins` : ''}</div>
+                    <div style="margin-top:8px;display:flex;gap:8px;">
+                        <button onclick="autoFillFromAverage(${teamIdx}, ${playerIdx})" style="background:#10b981;color:white;border:none;padding:6px 12px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;" title="Auto-fill scores based on event averages">📊 Auto-fill</button>
+                        <button onclick="recalculateScore(${teamIdx}, ${playerIdx})" style="background:#3b82f6;color:white;border:none;padding:6px 12px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;">🔄 Recalc</button>
+                    </div>
+                    ${courseTees.length > 0 ? `<div style="display:flex;align-items:center;gap:8px;margin-top:10px;max-width:420px;"><span style="font-size:12px;color:#6b7280;font-weight:600;">🏁 Tee:</span><select onchange="updatePlayerTee(${teamIdx}, ${playerIdx}, this.value); renderScoreEntry();" style="flex:1;padding:6px 8px;font-size:13px;border:1px solid #d1d5db;border-radius:4px;background:white;">${courseTees.map(t => `<option value="${t.id}" ${player.teeId === t.id ? 'selected' : ''}>${t.name}${t.slope && t.rating ? ` (${t.slope}/${t.rating.toFixed(1)})` : ''}</option>`).join('')}</select></div>` : ''}
+                </div>
+                <div>
+                    <div style="font-weight:600;font-size:12px;margin-bottom:4px;">⛳ Balls</div>
+                    <div style="display:flex;gap:2px;">${[0, 1, 2].map(ballIdx => {
+                        const isKept = r.ballsRemaining > ballIdx;
+                        return `<button onclick="toggleBall(${teamIdx}, ${playerIdx}, ${ballIdx})" style="width:38px;height:38px;border:none;background:transparent;cursor:pointer;font-size:28px;padding:0;">${isKept ? '⚪' : '<span style="position:relative;"><span style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#ef4444;font-size:34px;font-weight:700;line-height:1;">✗</span><span style="opacity:0.2;">⚪</span></span>'}</button>`;
+                    }).join('')}</div>
+                </div>
+                <div>
+                    <div style="font-weight:600;font-size:12px;margin-bottom:4px;">🎯 BBB total</div>
+                    <div style="width:56px;padding:6px;border:2px dashed #d1d5db;border-radius:8px;font-size:15px;font-weight:700;text-align:center;background:#fff;color:#374151;">${window.bbbCountForPlayer(round, player.id)}</div>
+                </div>
+            </div>`;
+            const gNum = window.groupOfPlayer ? window.groupOfPlayer(round, player.id) : null;
+            h += `<div style="margin-top:10px;"><div style="font-weight:600;font-size:12px;margin-bottom:4px;">🎯 BBB by hole <span style="font-weight:500;color:#6b7280;">(tap to cycle — same as the old 🎯 buttons)</span></div><div style="display:flex;flex-wrap:wrap;gap:3px;">`;
+            for (let hi = 0; hi < 18; hi++) {
+                const entry = (round.bbbAwards || []).find(a => a.holeIdx === hi && (gNum == null || a.groupNumber === gNum));
+                let icons = '';
+                if (entry) {
+                    if (String(entry.bingo) === String(player.id)) icons += '🚩';
+                    if (String(entry.bango) === String(player.id)) icons += '🎯';
+                    if (String(entry.bongo) === String(player.id)) icons += '🕳️';
+                }
+                h += `<button class="mx-bbbcell${icons ? ' has' : ''}" onclick="cycleHoleBBB(${teamIdx}, ${playerIdx}, ${hi})" title="Hole ${hi + 1} BBB — tap to cycle"><span style="color:#6b7280;font-weight:700;">${hi + 1}</span><span>${icons || '<span style="opacity:.3;">🎯</span>'}</span></button>`;
+            }
+            h += `</div></div>`;
+            return h;
+        };
+
+        const buildGroupMatrix = (round, groupKey, rows, courseTees) => {
+            const pars = round.pars || [];
+            const filled = (s) => s !== '' && s !== null && s !== undefined;
+            let h = '<div class="mx-wrap"><table class="mx-table">';
+            h += '<tr><th class="mx-who">Player</th>';
+            for (let i = 0; i < 9; i++) h += `<th>${i + 1}</th>`;
+            h += '<th>OUT</th>';
+            for (let i = 9; i < 18; i++) h += `<th>${i + 1}</th>`;
+            h += '<th>IN</th><th>PTS</th></tr>';
+            h += '<tr><th class="mx-who par-row">Par</th>';
+            for (let i = 0; i < 9; i++) h += `<th class="par-row">${pars[i] != null ? pars[i] : ''}</th>`;
+            h += `<th class="par-row">${pars.slice(0, 9).reduce((a, b) => a + (b || 0), 0)}</th>`;
+            for (let i = 9; i < 18; i++) h += `<th class="par-row">${pars[i] != null ? pars[i] : ''}</th>`;
+            h += `<th class="par-row">${pars.slice(9, 18).reduce((a, b) => a + (b || 0), 0)}</th><th></th></tr>`;
+            rows.forEach(r => {
+                const { teamIdx, playerIdx, player } = r;
+                const key = teamIdx + '-' + playerIdx;
+                const avatarPlayer = player.photoUrl ? player : (r.statePlayer && r.statePlayer.photoUrl ? r.statePlayer : player);
+                const scores = player.scores || [];
+                const frontPlayed = scores.slice(0, 9).some(filled);
+                const backPlayed = scores.slice(9, 18).some(filled);
+                const outG = scores.slice(0, 9).reduce((a, s) => a + (parseInt(s) || 0), 0);
+                const inG = scores.slice(9, 18).reduce((a, s) => a + (parseInt(s) || 0), 0);
+                h += `<tr><td class="mx-who" onclick="mxTogglePlayer(${teamIdx}, ${playerIdx})"><span style="display:inline-flex;align-items:center;gap:7px;">${renderAvatar(avatarPlayer, 34)}<span><span class="mx-name">${player.name}</span><br><span class="mx-hc">HCP ${r.effectiveHc} ${window.__mxExpand === key ? '▾' : '▸'}</span></span></span></td>`;
+                for (let hi = 0; hi < 18; hi++) {
+                    if (hi === 9) h += `<td class="mx-sub">${frontPlayed ? outG : '–'}</td>`;
+                    const raw = scores[hi];
+                    const empty = !filled(raw);
+                    const strokes = mxStrokesFor(r.effectiveHc, round.handicaps[hi]);
+                    const ed = window.__mxEdit;
+                    const editing = ed && ed.t === teamIdx && ed.p === playerIdx && ed.h === hi;
+                    h += `<td class="mx-cell ${mxCellClass(round, player, r.effectiveHc, hi)}${editing ? ' mx-editing' : ''}" onclick="mxEditCell(${teamIdx}, ${playerIdx}, ${hi})">${empty ? '–' : raw}${strokes ? `<span class="mx-dots">${'•'.repeat(strokes)}</span>` : ''}</td>`;
+                }
+                h += `<td class="mx-sub">${backPlayed ? inG : '–'}</td><td class="mx-pts">${r.grandTotal}</td></tr>`;
+                if (window.__mxExpand === key) {
+                    h += `<tr class="mx-detail"><td colspan="22">${mxDetailHtml(round, groupKey, r, courseTees)}</td></tr>`;
+                }
+            });
+            h += '</table></div>';
+            return h;
         };
 
         window.toggleBall = (teamIdx, playerIdx, ballIdx) => {
