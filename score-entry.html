@@ -218,12 +218,12 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
       Drag a token onto a player's card, or tap a token then tap a card.
       Awarded points show as badges beside the player's name. ── */
 .points-bar {
-    display: flex; flex-direction: column; align-items: center; gap: 5px;
+    display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 12px;
     background: white; border: 2px dashed var(--fairway); border-radius: 12px;
     padding: 8px 10px; margin-bottom: 8px;
 }
 .points-row { display: flex; flex-direction: row; justify-content: center; gap: 10px; }
-.points-help { font-size: 11.5px; font-weight: 600; color: var(--ink-soft); letter-spacing: 0.2px; }
+.points-help { font-size: 11.5px; font-weight: 600; color: var(--ink-soft); letter-spacing: 0.2px; line-height: 1.25; }
 .point-token {
     width: 48px; height: 48px; border-radius: 12px; border: 2px solid var(--sand);
     background: var(--card); padding: 0; flex-shrink: 0; cursor: grab;
@@ -626,7 +626,7 @@ document.addEventListener('visibilitychange', () => {
     try { if (document.visibilityState === 'hidden' && hasPendingEdits()) flushPendingEdits(); } catch (e) {}
 });
 
-const SE_VERSION = '2.34.0'; // unpicked score chips grey out once a score is set
+const SE_VERSION = '2.35.0'; // points help text sits beside the icons, not under them
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
