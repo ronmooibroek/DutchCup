@@ -670,7 +670,7 @@ document.addEventListener('visibilitychange', () => {
     try { if (document.visibilityState === 'hidden' && hasPendingEdits()) flushPendingEdits(); } catch (e) {}
 });
 
-const SE_VERSION = '2.39.0'; // extra 9: header "9" icon appears once every score is in; tap it to pick the four winners and submit
+const SE_VERSION = '2.40.0'; // extra 9 winners now stored as position strings (the admin app's format — ids were invisible to it)
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
@@ -2857,9 +2857,12 @@ function buildPlayerCard(round, p) {
 // ═══════════════════════════════════════════════════════════════════════
 // EXTRA 9 — once EVERY score in the round is in, a "9" icon appears in
 // the header; tapping it opens a chooser for the four extra-9 winners
-// (Ron, 2026-11-01). Winners are stored exactly as the main app's admin
-// picker stores them: round.extra9Winners as a 4-slot array of player
-// ids ('' = empty slot), worth BONUS.extra9 points each.
+// (Ron, 2026-11-01). Winners are stored exactly as the main app stores
+// them: round.extra9Winners as a 4-slot array of "teamIdx-playerIdx"
+// POSITION strings ('' = empty slot) — the admin's Extra 9 dropdowns
+// build their option values from positions and its presentation counts
+// filter on positions, so player ids there would be invisible to both
+// (the .24 build wrote ids; fixed in .25). Worth BONUS.extra9 pts each.
 // ═══════════════════════════════════════════════════════════════════════
 function roundFullyScored(round) {
     if (!round) return false;
@@ -2970,12 +2973,22 @@ function renderExtra9View(round) {
     }, '← Back'));
 }
 
+// The stored form of a pick list: a 4-slot array of position strings.
+function extra9WinnerPositions(round, pickIds) {
+    const posOf = {};
+    (round.teams || []).forEach((t, ti) => (t.players || []).forEach((pl, pi) => {
+        posOf[idStr(pl.id)] = ti + '-' + pi;
+    }));
+    const winners = ['', '', '', ''];
+    (pickIds || []).slice(0, 4).forEach((pid, i) => { if (posOf[pid]) winners[i] = posOf[pid]; });
+    return winners;
+}
+
 async function saveExtra9Winners() {
     const roundId = state.selectedRoundId;
     const round = getRoundById(roundId);
     if (!round || state.extra9Pick.length !== 4) return;
-    const winners = ['', '', '', ''];
-    state.extra9Pick.forEach((pid, i) => { winners[i] = pid; });
+    const winners = extra9WinnerPositions(round, state.extra9Pick);
     state.saving = true;
     setStatus('Saving extra 9…', 'saving');
     try {

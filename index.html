@@ -726,7 +726,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = 'v2026.11.01.24';
+        const APP_VERSION = 'v2026.11.01.25';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -1190,6 +1190,12 @@
                                 // Per-hole BBB + CTP/Extra9 are authoritative from the server copy
                                 if (Array.isArray(server.bbbAwards) && server.bbbAwards.length > 0) {
                                     ar.bbbAwards = server.bbbAwards;
+                                }
+                                // Extra9: adopt the server copy too — the line above always
+                                // promised it but never did it, so winners submitted from
+                                // the scoring app never reached an open admin round.
+                                if (Array.isArray(server.extra9Winners) && server.extra9Winners.some(w => w !== '' && w != null)) {
+                                    ar.extra9Winners = server.extra9Winners.slice();
                                 }
                                 // CTP: merge per hole, newest setAt wins. The old rule only
                                 // adopted server CTP when we had none, so course changes were
