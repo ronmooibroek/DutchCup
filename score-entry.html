@@ -45,7 +45,7 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
 .app-header {
     background: var(--card);
     border-bottom: 3px solid var(--fairway);
-    padding: 12px 16px 10px;
+    padding: 8px 16px 7px;
     position: sticky; top: 0; z-index: 100;
     display: flex; align-items: center; justify-content: space-between; gap: 8px;
 }
@@ -66,7 +66,7 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
 .save-status.error  { background: #FBDEDC; color: var(--dbl); }
 
 /* ─── App shell ─── */
-#app { max-width: 560px; margin: 0 auto; padding: 8px 10px 96px; }
+#app { max-width: 560px; margin: 0 auto; padding: 6px 10px 96px; }
 /* ─── Live leaderboard ─── */
 .lb-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
 .lb-tab {
@@ -142,19 +142,19 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
 .hole-nav {
     background: linear-gradient(170deg, var(--fairway) 0%, var(--fairway-dk) 100%);
     border-radius: 16px; box-shadow: 0 4px 18px rgba(31,92,57,0.35);
-    padding: 10px 12px 9px; margin-bottom: 8px; color: white;
+    padding: 8px 12px 7px; margin-bottom: 6px; color: white;
 }
 .hole-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .hole-arrow {
     background: rgba(255,255,255,0.14); border: none; color: white;
-    width: 46px; height: 46px; border-radius: 12px; font-size: 24px; font-weight: 700; cursor: pointer;
+    width: 42px; height: 42px; border-radius: 12px; font-size: 24px; font-weight: 700; cursor: pointer;
     flex-shrink: 0;
 }
 .hole-arrow:disabled { opacity: 0.3; }
 .hole-arrow:active:not(:disabled) { background: rgba(255,255,255,0.3); }
 .hole-info { text-align: center; flex: 1; }
 .hole-info .num {
-    font-size: 36px; font-weight: 900; line-height: 1; letter-spacing: -0.5px;
+    font-size: 30px; font-weight: 900; line-height: 1; letter-spacing: -0.5px;
     font-variant-numeric: tabular-nums;
 }
 .hole-info .num small { font-size: 13px; font-weight: 700; opacity: 0.85; letter-spacing: 1px; }
@@ -168,10 +168,10 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
 /* progress track along the sign's base */
 .dots-strip {
     display: grid; grid-template-columns: repeat(18, 1fr); gap: 2px;
-    margin-top: 9px;
+    margin-top: 6px;
 }
 .dot {
-    height: 26px; border: none; border-radius: 6px; cursor: pointer;
+    height: 22px; border: none; border-radius: 6px; cursor: pointer;
     background: rgba(255,255,255,0.16); color: rgba(255,255,255,0.85);
     font-size: 11px; font-weight: 800; padding: 0;
     font-variant-numeric: tabular-nums;
@@ -181,23 +181,23 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
 .dot.current  { outline: 3px solid white; outline-offset: 1px; }
 
 /* ─── Score rows ─── */
-.score-list { margin-bottom: 8px; }
+.score-list { margin-bottom: 6px; }
 .score-row {
     background: var(--card); border-radius: 12px; box-shadow: var(--shadow);
-    padding: 7px 10px; margin-bottom: 6px;
+    padding: 5px 9px; margin-bottom: 5px;
     border-left: 4px solid transparent;
 }
 .score-row.is-me { border-left-color: var(--fairway); }
 .score-row-top { display: flex; align-items: center; gap: 8px; }
 /* ── One-tap score chips: the 5 common scores sit right under the name ── */
-.score-chips { display: flex; gap: 6px; margin-top: 7px; }
+.score-chips { display: flex; gap: 6px; margin-top: 5px; }
 .score-chip {
-    flex: 1 1 0; min-height: 52px; border: 2px solid var(--sand); background: white;
+    flex: 1 1 0; min-height: 46px; border: 2px solid var(--sand); background: white;
     border-radius: 10px; cursor: pointer; padding: 3px 0 4px;
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0;
     color: var(--ink); font-variant-numeric: tabular-nums;
 }
-.score-chip .n { font-size: 21px; font-weight: 900; line-height: 1.05; }
+.score-chip .n { font-size: 20px; font-weight: 900; line-height: 1.05; }
 .score-chip .w { font-size: 8.5px; font-weight: 800; letter-spacing: 0.4px; text-transform: uppercase; color: var(--ink-soft); }
 .score-chip:active { transform: scale(0.95); }
 .score-chip.picked { border-style: solid; }
@@ -211,14 +211,18 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
 .score-chip.other.has-score { border-color: var(--fairway); color: var(--fairway-dk); background: #F4FAF6; }
 
 /* ── Bingo Bango Bongo: one labelled icon button per point, per player ── */
-.bbb-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 6px; }
+.bbb-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 5px; }
+.bbb-row.has-ctp { grid-template-columns: repeat(4, 1fr); }
+.bbb-row.has-ctp .bbb-btn { gap: 5px; padding: 4px 2px; }
+.bbb-btn.on-ctp { background: var(--flag); border-color: #b03330; color: white; }
+.bbb-btn.on-ctp .ic { opacity: 1; filter: none; }
 .bbb-btn {
-    min-height: 48px; border: 2px solid var(--sand); background: white; border-radius: 10px;
+    min-height: 42px; border: 2px solid var(--sand); background: white; border-radius: 10px;
     cursor: pointer; padding: 4px 4px; color: #93A197;
     display: flex; align-items: center; justify-content: center; gap: 7px;
 }
 .bbb-btn:active { transform: scale(0.96); }
-.bbb-btn .ic { font-size: 20px; line-height: 1; opacity: 0.65; filter: grayscale(0.5); }
+.bbb-btn .ic { font-size: 18px; line-height: 1; opacity: 0.65; filter: grayscale(0.5); }
 .bbb-btn .tx { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.1; }
 .bbb-btn .tx b { font-size: 13px; font-weight: 900; letter-spacing: 0.2px; }
 .bbb-btn .tx small { font-size: 9px; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase; }
@@ -226,13 +230,13 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
 .bbb-btn.on-bango { background: #2B6CB0; border-color: #215685; color: white; }
 .bbb-btn.on-bongo { background: #FFD95E; border-color: #E3B93E; color: #6b4e00; }
 .bbb-btn.on-bingo .ic, .bbb-btn.on-bango .ic, .bbb-btn.on-bongo .ic { opacity: 1; filter: none; }
-.player-info { flex: 1; min-width: 0; }
-.player-name { font-size: 16px; font-weight: 800; display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; }
+.player-info { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; }
+.player-name { font-size: 16px; font-weight: 800; display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; flex: 0 1 auto; min-width: 0; }
 .me-tag {
     background: var(--fairway); color: white; font-size: 10px; font-weight: 900;
     letter-spacing: 0.8px; padding: 2px 7px; border-radius: 999px;
 }
-.player-meta { font-size: 11.5px; color: var(--ink-soft); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.player-meta { font-size: 11px; color: var(--ink-soft); margin-left: auto; text-align: right; flex-shrink: 0; white-space: nowrap; }
 .stroke-dots { color: var(--fairway-dk); font-weight: 900; letter-spacing: 1px; }
 .score-cell {
     width: 54px; height: 54px; border-radius: 12px; flex-shrink: 0; cursor: pointer;
@@ -614,7 +618,7 @@ document.addEventListener('visibilitychange', () => {
     try { if (document.visibilityState === 'hidden' && hasPendingEdits()) flushPendingEdits(); } catch (e) {}
 });
 
-const SE_VERSION = '2.19.0'; // one-tap score chips + labelled BBB icon buttons
+const SE_VERSION = '2.20.0'; // one-tap chips + BBB icons + par-3 CTP chip, squeezed layout
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
@@ -1269,8 +1273,8 @@ function renderScoreEntry() {
     appEl.appendChild(buildScoresList(round, groupPlayers));
     // Scores + BBB both live on each player's card now (chips + icon buttons) — no separate cards.
 
-    const par = (round.pars || [])[state.currentHole];
-    if (par === 3) appEl.appendChild(buildCTPCard(round));
+    // Par 3s: no separate CTP card — the CTP chip sits on each player's card
+    // as a 4th chip beside Bingo/Bango/Bongo (see buildScoresList).
 
     if (state.currentHole === 17) appEl.appendChild(buildBallsCard(round, groupPlayers));
 
@@ -1280,7 +1284,7 @@ function renderScoreEntry() {
     // Live leaderboard entry point
     appEl.appendChild(el('button', {
         class: 'foot-btn prev', type: 'button',
-        style: 'width:100%;margin-bottom:8px;background:#EDF4EE;color:var(--fairway-dk);font-size:15px;',
+        style: 'width:100%;margin-bottom:6px;min-height:44px;background:#EDF4EE;color:var(--fairway-dk);font-size:15px;',
         onclick: () => { state.board = 'teams'; renderLeaderboard(); }
     }, '\u{1F4CA} Live leaderboard'));
 
@@ -1419,7 +1423,8 @@ function buildScoresList(round, groupPlayers) {
         // ── Bingo Bango Bongo: three DIFFERENT labelled icon buttons.
         // Tap one to give this player that point (it moves off whoever had it);
         // tap it again on the same player to take it back.
-        const bbbRow = el('div', { class: 'bbb-row' });
+        const isPar3 = par === 3;
+        const bbbRow = el('div', { class: 'bbb-row' + (isPar3 ? ' has-ctp' : '') });
         BBB_SLOTS.forEach(slot => {
             const mine = idStr(bbbSlots[slot.key]) === pid && pid !== '';
             bbbRow.appendChild(el('button', {
@@ -1436,6 +1441,25 @@ function buildScoresList(round, groupPlayers) {
                 )
             ));
         });
+        // Par 3 only: a 4th chip — Closest to the Pin for the hole. Same tap
+        // rules as BBB: tap gives it to this player (moving it off whoever
+        // held it), tap again on the holder takes it back.
+        if (isPar3) {
+            const ctpMine = idStr(effectiveCTP(round, state.currentHole)) === pid && pid !== '';
+            bbbRow.appendChild(el('button', {
+                class: 'bbb-btn' + (ctpMine ? ' on-ctp' : ''),
+                type: 'button',
+                'aria-label': `Closest to the pin for ${p.name || 'player'}`,
+                'aria-pressed': ctpMine ? 'true' : 'false',
+                onclick: () => tapCTP(pid)
+            },
+                el('span', { class: 'ic' }, '\u{1F4CD}'),
+                el('span', { class: 'tx' },
+                    el('b', null, 'CTP'),
+                    el('small', null, 'Tee shot')
+                )
+            ));
+        }
         row.appendChild(bbbRow);
         list.appendChild(row);
     });
@@ -1522,6 +1546,19 @@ function tapBBBSlot(playerId, slotKey) {
 
     renderScoreEntry();
     maybeCelebrateHoleComplete();
+}
+
+// Tap the CTP chip on a par-3 card: give Closest to the Pin to this player,
+// or take it back if they already hold it. One winner per hole, stored in the
+// same ctpWinners slot the old dropdown wrote — CTP never gates hole completion.
+function tapCTP(playerId) {
+    const round = getRoundById(state.selectedRoundId);
+    if (!round) return;
+    const pid = idStr(playerId);
+    const cur = idStr(effectiveCTP(round, state.currentHole));
+    state.pendingEdits.ctpWinners[String(state.currentHole)] = (cur === pid) ? '' : pid;
+    markUnsaved();
+    renderScoreEntry();
 }
 
 // ─── SCORE SHEET: bottom sheet with the tap pad ───
@@ -1619,47 +1656,6 @@ function maybeCelebrateHoleComplete() {
     setStatus(`Hole ${state.currentHole + 1} done \u2713 \u2014 tap Next when ready`, 'saved');
 }
 
-// ─── CTP: slim optional dropdown (all groups' players; rarely used, so kept small) ───
-function buildCTPCard(round) {
-    const wrap = el('div', { class: 'pick-card ctp-slim', id: 'ctp-card' });
-    const current = idStr(effectiveCTP(round, state.currentHole));
-
-    const lbl = el('div', { class: 'lbl' }, '\u26f3 CTP');
-    lbl.appendChild(el('small', null, 'optional'));
-    wrap.appendChild(lbl);
-
-    const select = document.createElement('select');
-    select.className = current ? 'has-value' : '';
-    select.id = 'ctp-select';
-    select.addEventListener('change', onCTPChange);
-
-    const noneOpt = document.createElement('option');
-    noneOpt.value = ''; noneOpt.textContent = '\u2014 Closest to the pin \u2014';
-    select.appendChild(noneOpt);
-
-    const allPlayers = getAllRoundPlayers(round);
-    const grouped = {};
-    allPlayers.forEach(p => {
-        const g = p.groupNumber || 0;
-        if (!grouped[g]) grouped[g] = [];
-        grouped[g].push(p);
-    });
-    Object.keys(grouped).map(Number).sort((a,b) => a - b).forEach(g => {
-        const og = document.createElement('optgroup');
-        og.label = g === 0 ? 'No group' : `Group ${g}`;
-        [...grouped[g]].sort((a,b) => (a.name || '').localeCompare(b.name || '')).forEach(p => {
-            const opt = document.createElement('option');
-            opt.value = idStr(p.id);
-            opt.textContent = p.name;
-            og.appendChild(opt);
-        });
-        select.appendChild(og);
-    });
-
-    select.value = current;
-    wrap.appendChild(select);
-    return wrap;
-}
 
 // ─── Balls card (hole 18 only) ─────────────────────────────────────────
 function buildBallsCard(round, groupPlayers) {
@@ -2441,11 +2437,6 @@ function onScoreBlur() {
     }
 }
 
-function onCTPChange(e) {
-    state.pendingEdits.ctpWinners[String(state.currentHole)] = e.target.value || '';
-    e.target.classList.toggle('has-value', !!e.target.value);
-    markUnsaved();
-}
 
 function onBBBChange(e) {
     const slot = e.target.dataset.bbbSlot;
@@ -2933,15 +2924,7 @@ function refreshScoreEntryFromServer() {
     const oldList = document.getElementById('score-list');
     if (oldList) oldList.replaceWith(buildScoresList(round, groupPlayers));
 
-    // CTP — update the dropdown in place unless the user is mid-selection
-    const ctpSel = document.getElementById('ctp-select');
-    if (ctpSel && document.activeElement !== ctpSel
-        && state.pendingEdits.ctpWinners[String(state.currentHole)] === undefined) {
-        const v = idStr(effectiveCTP(round, state.currentHole));
-        if (ctpSel.value !== v) ctpSel.value = v;
-        ctpSel.classList.toggle('has-value', !!v);
-    }
-    // (BBB pills live on the score rows, already rebuilt above.)
+    // (BBB buttons + the par-3 CTP chip live on the score rows, rebuilt above.)
 
     // Balls (only present on hole 18)
     if (state.currentHole === 17) {
