@@ -778,7 +778,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = 'v2026.11.01.29';
+        const APP_VERSION = 'v2026.11.01.30';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -5510,7 +5510,7 @@ ${(() => {
                                 const ordered = eventRounds.map((r, i) => ({ r: r, i: i })).sort((a, b) => { const da = a.r.date || '', db = b.r.date || ''; return da < db ? -1 : da > db ? 1 : a.i - b.i; });
                                 let h = '<h3 style="margin:0 0 8px;color:#1f2937;font-size:15px;">Team Standings</h3>';
                                 h += '<div class="mx-wrap"><table class="mx-table lb-table"><tr><th class="mx-who">Team</th>';
-                                ordered.forEach((o, pos) => { h += '<th>' + roundLabel(o.r, pos) + '</th>'; });
+                                ordered.forEach((o, pos) => { h += '<th onclick="openRoundCard(' + state.rounds.indexOf(o.r) + ')" style="cursor:pointer;" title="Open this round below"><span style="color:#1d4ed8;text-decoration:underline;">' + roundLabel(o.r, pos) + '</span></th>'; });
                                 h += '<th>Total</th>' + (winProbByTeam ? '<th>Win %</th>' : '') + '</tr>';
                                 leaderboard.forEach((team, idx) => {
                                     const color = colorOf(team);
@@ -5731,8 +5731,8 @@ ${(() => {
                                         }
                                         
                                         return `
-                                            <div style="background:#f9fafb;border:2px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:16px;">
-                                                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
+                                            <div id="round-card-${globalRoundIndex}" style="background:#f9fafb;border:2px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:16px;">
+                                                <div onclick="toggleRoundCard(${globalRoundIndex})" title="Tap to expand this round" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
                                                     <div style="flex:1;">
                                                         <strong style="font-size:20px;color:#1f2937;">${round.courseName}</strong><br>
                                                         ${(() => {
@@ -5782,6 +5782,14 @@ ${(() => {
                                                             }
                                                             return `<strong style="color:#059669;font-size:15px;">${dateStr}</strong>`;
                                                         })()}
+                                                    </div>
+                                                    <div style="text-align:right;">
+                                                        <div style="font-size:12px;color:#6b7280;">Team Winner</div>
+                                                        <strong style="color:#FF9A00;">${winner.teamName}</strong>
+                                                        <div id="round-chev-${globalRoundIndex}" style="font-size:12px;color:#2563eb;font-weight:700;margin-top:2px;">▸ Details</div>
+                                                    </div>
+                                                </div>
+                                                <div id="round-detail-${globalRoundIndex}" style="display:none;">
                                                         ${!state.readOnly ? `
                                                             <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
                                                                 <button onclick="editRoundDateTime(${globalRoundIndex})" 
@@ -5808,12 +5816,6 @@ ${(() => {
                                                                 ` : ''}
                                                             </div>
                                                         ` : ''}
-                                                    </div>
-                                                    <div style="text-align:right;">
-                                                        <div style="font-size:12px;color:#6b7280;">Team Winner</div>
-                                                        <strong style="color:#FF9A00;">${winner.teamName}</strong>
-                                                    </div>
-                                                </div>
                                                 
                                                 ${lowNetWinner ? `
                                                     <div style="background:linear-gradient(135deg,#d1fae5,#a7f3d0);border:2px solid #10b981;border-radius:8px;padding:10px;margin-bottom:12px;">
@@ -5948,6 +5950,7 @@ ${(() => {
                                                     </button>
                                                 </div>
                                             ` : ''}
+                                                </div>
                                         </div>
                                     `;
                                 }).join('')
@@ -5968,6 +5971,7 @@ ${(() => {
                         ` : ''}
                     </div>
                 `;
+                if (window.__pendingOpenRound != null) { const __oi = window.__pendingOpenRound; window.__pendingOpenRound = null; setTimeout(() => { if (window.openRoundCard) window.openRoundCard(__oi); }, 80); }
             } catch (err) {
                 console.error('renderLeaderboard error:', err);
                 showError('Failed to render leaderboard: ' + err.message);
@@ -6412,7 +6416,7 @@ ${(() => {
                                 return '<td class="mx-who"><span style="display:inline-flex;align-items:center;gap:7px;">' + renderAvatar(sp, 30) + '<span><span class="mx-name">#' + (idx + 1) + ' ' + player.name + '</span><br><span class="mx-hc">' + (playerTeam ? '<span style="color:' + teamColor + ';font-weight:700;">' + playerTeam.name + '</span> · ' : '') + player.rounds + ' round' + (player.rounds === 1 ? '' : 's') + ' · ' + player.avgPoints.toFixed(1) + ' avg · ' + player.totalGrossStrokes + ' gross</span></span></span></td>';
                             };
                             let h = '<div class="mx-wrap"><table class="mx-table lb-table"><tr><th class="mx-who">Player</th>';
-                            ordered.forEach((o, pos) => { h += '<th>' + roundLabel(o.r, pos) + '</th>'; });
+                            ordered.forEach((o, pos) => { h += '<th onclick="window.__pendingOpenRound = ' + state.rounds.indexOf(o.r) + '; navigate(\'leaderboard\')" style="cursor:pointer;" title="Open this round"><span style="color:#1d4ed8;text-decoration:underline;">' + roundLabel(o.r, pos) + '</span></th>'; });
                             h += '<th>Total</th></tr>';
                             filteredPlayers.forEach((player, idx) => {
                                 h += '<tr onclick="navigateToPlayerDetail(\'' + player.id + '\')" style="cursor:pointer;">' + whoCell(player, idx);
@@ -29721,6 +29725,28 @@ ${(() => {
         };
         
         // Reopen a completed round so scoring can continue on all devices.
+        // Round-card collapse (.30): All Rounds cards start collapsed;
+        // the matrix round headers link straight to a card.
+        window.toggleRoundCard = (idx) => {
+            const el = document.getElementById('round-detail-' + idx);
+            if (!el) return;
+            const open = el.style.display !== 'none';
+            el.style.display = open ? 'none' : '';
+            const ch = document.getElementById('round-chev-' + idx);
+            if (ch) ch.textContent = open ? '▸ Details' : '▾ Details';
+        };
+
+        window.openRoundCard = (idx) => {
+            const el = document.getElementById('round-detail-' + idx);
+            if (el) {
+                el.style.display = '';
+                const ch = document.getElementById('round-chev-' + idx);
+                if (ch) ch.textContent = '▾ Details';
+            }
+            const card = document.getElementById('round-card-' + idx);
+            if (card) setTimeout(() => card.scrollIntoView({ behavior: 'smooth', block: 'start' }), 30);
+        };
+
         window.reopenRound = (roundIndex) => {
             try {
                 const round = state.rounds[roundIndex];
