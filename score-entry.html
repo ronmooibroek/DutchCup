@@ -618,7 +618,7 @@ document.addEventListener('visibilitychange', () => {
     try { if (document.visibilityState === 'hidden' && hasPendingEdits()) flushPendingEdits(); } catch (e) {}
 });
 
-const SE_VERSION = '2.20.0'; // one-tap chips + BBB icons + par-3 CTP chip, squeezed layout
+const SE_VERSION = '2.21.0'; // + CTP replace confirmation pop-up
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
@@ -1551,12 +1551,27 @@ function tapBBBSlot(playerId, slotKey) {
 // Tap the CTP chip on a par-3 card: give Closest to the Pin to this player,
 // or take it back if they already hold it. One winner per hole, stored in the
 // same ctpWinners slot the old dropdown wrote — CTP never gates hole completion.
+// CTP is ONE winner for the whole round (not per group), so replacing someone
+// else's hold — possibly set by another group's scorer — asks first with a
+// quick pop-up. Taking back your own tap needs no confirmation.
 function tapCTP(playerId) {
     const round = getRoundById(state.selectedRoundId);
     if (!round) return;
     const pid = idStr(playerId);
     const cur = idStr(effectiveCTP(round, state.currentHole));
-    state.pendingEdits.ctpWinners[String(state.currentHole)] = (cur === pid) ? '' : pid;
+    if (cur === pid) {
+        state.pendingEdits.ctpWinners[String(state.currentHole)] = '';
+    } else {
+        if (cur !== '') {
+            const all = getAllRoundPlayers(round);
+            const holder = all.find(p => idsEqual(p.id, cur));
+            const me = all.find(p => idsEqual(p.id, pid));
+            const holderName = (holder && holder.name) || 'another player';
+            const myName = (me && me.name) || 'this player';
+            if (!confirm(`Closest to the Pin on hole ${state.currentHole + 1} is currently ${holderName}.\n\nReplace them with ${myName}?`)) return;
+        }
+        state.pendingEdits.ctpWinners[String(state.currentHole)] = pid;
+    }
     markUnsaved();
     renderScoreEntry();
 }
