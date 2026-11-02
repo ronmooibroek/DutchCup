@@ -778,7 +778,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = 'v2026.11.01.43';
+        const APP_VERSION = 'v2026.11.01.44';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -15720,6 +15720,7 @@ ${(() => {
             if (t.indexOf('THE ENVELOPE, PLEASE') >= 0) return 'envelope';
             if (t.indexOf('THE COUNT-UP') >= 0 || /#\d+/.test(t) && t.indexOf('pts tonight') >= 0) return 'countup';
             if (t.indexOf('SKINS WINNER') >= 0) return 'skins';
+            if (t.indexOf('\uD83C\uDFC6') >= 0 && t.indexOf('CHAMPION') >= 0) return 'winner';
             return 'slide';
         };
         window.__pxEnhance = function () {
@@ -15743,6 +15744,7 @@ ${(() => {
             try { if (window.__pxWash) window.__pxWash(el, kind); } catch (e) {}
             try { if (window.__pxTransition) window.__pxTransition(el); } catch (e) {}
             try { if (window.__pxKenBurns) window.__pxKenBurns(el); } catch (e) {}
+            try { if (window.__pxConfetti) window.__pxConfetti(el, kind); } catch (e) {}
         };
 
         // ── PX ITERATION 2: THE BROADCAST SPINE ──
@@ -15851,6 +15853,7 @@ ${(() => {
             if (!color || !/^#[0-9a-fA-F]{6}$/.test(color)) return;
             const d = document.createElement('div');
             d.className = 'px-wash';
+            window.__pxState.washColor = color;
             d.style.background = 'radial-gradient(ellipse at 50% 36%, ' + color + '30 0%, ' + color + '16 44%, rgba(0,0,0,0) 74%)';
             el.appendChild(d);
         };
@@ -15910,6 +15913,59 @@ ${(() => {
                 im.classList.add(n % 2 === 0 ? 'px-kb' : 'px-kb2');
                 n++;
             }
+        };
+
+        // ── PX ITERATION 7: THE CONFETTI CANNON ──
+        // Crowns and winners get a real celebration: a canvas confetti
+        // burst (gold + the winner's team colour) the moment the slide
+        // lands. Also teaches the classifier to spot winner screens.
+        (function pxInjectStyle7() {
+            if (document.getElementById('px-style-7')) return;
+            const st = document.createElement('style');
+            st.id = 'px-style-7';
+            st.textContent = "#presentationMode canvas.px-confetti{position:absolute;inset:0;z-index:64;pointer-events:none;}";
+            document.head.appendChild(st);
+        })();
+        window.__pxConfetti = function (el, kind) {
+            if (kind !== 'crowning' && kind !== 'winner' && kind !== 'skins') return;
+            const cv = document.createElement('canvas');
+            cv.className = 'px-confetti';
+            cv.width = el.clientWidth || window.innerWidth;
+            cv.height = el.clientHeight || window.innerHeight;
+            el.appendChild(cv);
+            const ctx = cv.getContext('2d');
+            const team = window.__pxState.washColor;
+            const palette = ['#ffd75e', '#fff3b0', '#d4af37', '#ffffff', team || '#3b82f6'];
+            const parts = [];
+            for (let i = 0; i < 150; i++) {
+                const fromLeft = i % 2 === 0;
+                parts.push({
+                    x: fromLeft ? -10 : cv.width + 10,
+                    y: cv.height * (0.55 + Math.random() * 0.4),
+                    vx: (fromLeft ? 1 : -1) * (4 + Math.random() * 9),
+                    vy: -(7 + Math.random() * 9),
+                    w: 5 + Math.random() * 7, h: 3 + Math.random() * 5,
+                    rot: Math.random() * Math.PI, vr: (Math.random() - 0.5) * 0.3,
+                    c: palette[i % palette.length], circle: i % 5 === 0
+                });
+            }
+            const t0 = performance.now();
+            const tick = function (now) {
+                const age = now - t0;
+                ctx.clearRect(0, 0, cv.width, cv.height);
+                let alive = false;
+                for (const p of parts) {
+                    p.vy += 0.22; p.x += p.vx; p.y += p.vy; p.vx *= 0.992; p.rot += p.vr;
+                    if (p.y < cv.height + 30 && age < 3400) alive = true;
+                    ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.fillStyle = p.c;
+                    if (p.circle) { ctx.beginPath(); ctx.arc(0, 0, p.w / 2, 0, 7); ctx.fill(); }
+                    else ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+                    ctx.restore();
+                }
+                if (alive && document.body.contains(cv)) requestAnimationFrame(tick);
+                else if (cv.parentNode) cv.parentNode.removeChild(cv);
+            };
+            requestAnimationFrame(tick);
         };
         window.renderPresentation = () => {
             try {
