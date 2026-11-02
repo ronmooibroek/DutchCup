@@ -778,7 +778,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = 'v2026.11.01.55';
+        const APP_VERSION = 'v2026.11.01.56';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -15757,6 +15757,7 @@ ${(() => {
             try { if (window.__pxTrophyRoom) window.__pxTrophyRoom(el, kind); } catch (e) {}
             try { if (window.__pxCredits) window.__pxCredits(el, kind); } catch (e) {}
             try { if (window.__pxSpotlight) window.__pxSpotlight(el, kind); } catch (e) {}
+            try { if (window.__pxGhost) window.__pxGhost(el, kind); } catch (e) {}
         };
 
         // ── PX ITERATION 2: THE BROADCAST SPINE ──
@@ -16461,6 +16462,42 @@ ${(() => {
             const d = document.createElement('div');
             d.className = 'px-spot';
             d.style.background = 'radial-gradient(circle at ' + cx + ' ' + cy + ', rgba(0,0,0,0) 0px, rgba(0,0,0,0) ' + Math.round(r * 0.55) + 'px, rgba(0,0,0,.52) ' + Math.round(r) + 'px)';
+            el.appendChild(d);
+        };
+
+        // ── PX ITERATION 19: GHOST NUMERALS ──
+        // Behind every count-up screen looms the rank itself — a
+        // towering outlined numeral, half architecture, half taunt.
+        // Crowns get the loneliest number of all: 1.
+        (function pxInjectStyle19() {
+            if (document.getElementById('px-style-19')) return;
+            const st = document.createElement('style');
+            st.id = 'px-style-19';
+            st.textContent = "#presentationMode .px-ghost{position:absolute;right:-2vw;top:50%;transform:translateY(-50%);z-index:56;font-family:system-ui,sans-serif;font-weight:900;font-size:52vh;line-height:1;color:transparent;-webkit-text-stroke:2px rgba(255,255,255,.13);pointer-events:none;user-select:none;}";
+            document.head.appendChild(st);
+        })();
+        window.__pxGhost = function (el, kind) {
+            let g = null;
+            if (kind === 'crowning' || kind === 'winner') g = '1';
+            else if (kind === 'countup') {
+                const m = (el.textContent || '').match(/#(\d{1,2})\b/);
+                if (m) g = m[1];
+                if (!g) {
+                    const nodes = el.querySelectorAll('div,span,h1,h2,h3,p');
+                    for (let i = 0; i < nodes.length; i++) {
+                        const n = nodes[i];
+                        if (n.children.length > 0) continue;
+                        const txt = (n.textContent || '').trim();
+                        if (!/^\d{1,2}$/.test(txt)) continue;
+                        const fs = parseFloat(window.getComputedStyle(n).fontSize || '0');
+                        if (fs >= 56) { g = txt; break; }
+                    }
+                }
+            }
+            if (!g) return;
+            const d = document.createElement('div');
+            d.className = 'px-ghost';
+            d.textContent = g;
             el.appendChild(d);
         };
         window.renderPresentation = () => {
