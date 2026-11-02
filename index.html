@@ -778,7 +778,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = 'v2026.11.01.39';
+        const APP_VERSION = 'v2026.11.01.40';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -15739,6 +15739,7 @@ ${(() => {
             frag.appendChild(mk('px-grain'));
             el.appendChild(frag);
             try { if (window.__pxProgress) window.__pxProgress(el, kind); } catch (e) {}
+            try { if (window.__pxCountUp) window.__pxCountUp(el); } catch (e) {}
         };
 
         // ── PX ITERATION 2: THE BROADCAST SPINE ──
@@ -15780,6 +15781,47 @@ ${(() => {
             chip.className = 'px-chapter';
             chip.innerHTML = window.__pxChapter(kind, cs, total) + '<small>Slide ' + (cs + 1) + ' of ' + total + '</small>';
             el.appendChild(chip);
+        };
+
+        // ── PX ITERATION 3: NUMBER CHOREOGRAPHY ──
+        // Every hero number on the slide (points, ranks, totals) counts
+        // up with an ease-out sweep the moment the slide lands — the
+        // deck stops stating numbers and starts performing them.
+        window.__pxCountUp = function (el) {
+            const rx = /^[+]?[\d,]+(\.\d+)?%?$/;
+            const leaves = el.querySelectorAll('div,span,h1,h2,h3,h4,p,td,li,b,strong');
+            let done = 0;
+            for (let i = 0; i < leaves.length && done < 14; i++) {
+                const n = leaves[i];
+                if (n.children.length > 0) continue;
+                if (n.closest('.px-spine,.px-chapter,button,nav')) continue;
+                const raw = (n.textContent || '').trim();
+                if (!rx.test(raw) || raw.length > 9) continue;
+                const fs = parseFloat(window.getComputedStyle(n).fontSize || '0');
+                if (fs < 40) continue;
+                const pctSign = raw.endsWith('%') ? '%' : '';
+                const plus = raw.startsWith('+') ? '+' : '';
+                const numPart = raw.replace(/[^\d.]/g, '');
+                const target = parseFloat(numPart);
+                if (!isFinite(target) || target === 0) continue;
+                const decimals = numPart.indexOf('.') >= 0 ? (numPart.split('.')[1] || '').length : 0;
+                const commas = raw.indexOf(',') >= 0;
+                const fmt = function (v) {
+                    let s = v.toFixed(decimals);
+                    if (commas) s = Number(s).toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+                    return plus + s + pctSign;
+                };
+                done++;
+                const t0 = performance.now(), dur = 950;
+                const step = function (now) {
+                    const p = Math.min(1, (now - t0) / dur);
+                    const e = 1 - Math.pow(1 - p, 3);
+                    n.textContent = fmt(target * e);
+                    if (p < 1 && document.body.contains(n)) requestAnimationFrame(step);
+                    else if (document.body.contains(n)) n.textContent = fmt(target);
+                };
+                requestAnimationFrame(step);
+            }
         };
         window.renderPresentation = () => {
             try {
