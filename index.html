@@ -778,7 +778,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = 'v2026.11.01.53';
+        const APP_VERSION = 'v2026.11.01.54';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -15755,6 +15755,7 @@ ${(() => {
             try { if (window.__pxChapterCard) window.__pxChapterCard(el, kind); } catch (e) {}
             try { if (window.__pxColdOpen) window.__pxColdOpen(el, kind); } catch (e) {}
             try { if (window.__pxTrophyRoom) window.__pxTrophyRoom(el, kind); } catch (e) {}
+            try { if (window.__pxCredits) window.__pxCredits(el, kind); } catch (e) {}
         };
 
         // ── PX ITERATION 2: THE BROADCAST SPINE ──
@@ -16372,6 +16373,60 @@ ${(() => {
                 close.addEventListener('click', function (ev) { ev.stopPropagation(); if (panel.parentNode) panel.parentNode.removeChild(panel); });
                 panel.appendChild(close);
                 el.appendChild(panel);
+            });
+            dock.appendChild(b);
+        };
+
+        // ── PX ITERATION 17: END CREDITS ──
+        // Every good show rolls credits. The closing slide gains a
+        // CREDITS button: a slow theatrical roll — the field, the
+        // night's honours, and the production line — over the dark.
+        (function pxInjectStyle17() {
+            if (document.getElementById('px-style-17')) return;
+            const st = document.createElement('style');
+            st.id = 'px-style-17';
+            st.textContent = [
+                "#presentationMode .px-credits{position:absolute;inset:0;z-index:71;background:#020108;overflow:hidden;cursor:pointer;}",
+                "#presentationMode .px-credits-roll{position:absolute;left:0;right:0;top:100%;text-align:center;animation:pxCreditsRoll 30s linear forwards;padding-bottom:12vh;}",
+                "@keyframes pxCreditsRoll{from{transform:translateY(0)}to{transform:translateY(-240%)}}",
+                "#presentationMode .px-credits .cr-k{font:700 11px system-ui;letter-spacing:.42em;color:rgba(255,215,94,.8);margin:44px 0 10px;}",
+                "#presentationMode .px-credits .cr-n{font:800 clamp(19px,3vw,30px) system-ui;color:#fff;margin:3px 0;}",
+                "#presentationMode .px-credits .cr-s{font:600 13px system-ui;color:rgba(255,255,255,.6);margin:2px 0 8px;}",
+                "#presentationMode .px-credits .cr-title{font:900 clamp(30px,5.4vw,58px) system-ui;letter-spacing:.16em;color:#ffe9a8;}"
+            ].join('\n');
+            document.head.appendChild(st);
+        })();
+        window.__pxCredits = function (el, kind) {
+            if (kind !== 'closing') return;
+            const dock = window.__pxDock(el);
+            const b = document.createElement('button');
+            b.textContent = '\uD83C\uDFAC CREDITS';
+            b.addEventListener('click', function (e) {
+                e.stopPropagation();
+                const wrap = document.createElement('div');
+                wrap.className = 'px-credits';
+                let h = '<div class="px-credits-roll">';
+                h += '<div class="cr-title">THE DUTCH CUP</div><div class="cr-s">tonight\'s presentation</div>';
+                try {
+                    const slides = presentationState.individualPlayerSlides || [];
+                    if (slides.length) {
+                        h += '<div class="cr-k">STARRING</div>';
+                        for (const p of slides) { if (p && (p.playerName || p.name)) h += '<div class="cr-n">' + (p.playerName || p.name) + '</div>'; }
+                    }
+                } catch (err) {}
+                try {
+                    const honours = (typeof window.__pxHonours === 'function') ? window.__pxHonours() : [];
+                    if (honours.length) {
+                        h += '<div class="cr-k">TONIGHT\'S HONOURS</div>';
+                        for (const x of honours) h += '<div class="cr-n">' + x.who + '</div><div class="cr-s">' + x.ttl + (x.det ? ' \u00B7 ' + x.det : '') + '</div>';
+                    }
+                } catch (err) {}
+                try { const pc = presentationState.analytics && presentationState.analytics.prevChampionName; if (pc) h += '<div class="cr-k">CHAMPIONSHIP PRESENTED BY</div><div class="cr-n">' + pc + '</div>'; } catch (err) {}
+                h += '<div class="cr-k">PRODUCED BY</div><div class="cr-n">The Dutch Cup Committee</div><div class="cr-s">no golfers were harmed \u00B7 several were humbled</div>';
+                h += '<div class="cr-k">FIN</div></div>';
+                wrap.innerHTML = h;
+                wrap.addEventListener('click', function () { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); });
+                el.appendChild(wrap);
             });
             dock.appendChild(b);
         };
