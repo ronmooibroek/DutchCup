@@ -778,7 +778,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = 'v2026.11.01.51';
+        const APP_VERSION = 'v2026.11.01.52';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -15753,6 +15753,7 @@ ${(() => {
             try { if (window.__pxPodium) window.__pxPodium(el, kind); } catch (e) {}
             try { if (window.__pxTicker) window.__pxTicker(el, kind); } catch (e) {}
             try { if (window.__pxChapterCard) window.__pxChapterCard(el, kind); } catch (e) {}
+            try { if (window.__pxColdOpen) window.__pxColdOpen(el, kind); } catch (e) {}
         };
 
         // ── PX ITERATION 2: THE BROADCAST SPINE ──
@@ -16252,6 +16253,54 @@ ${(() => {
             d.innerHTML = '<div class="cc-kicker">DUTCH CUP PRESENTS</div><div class="cc-title">' + ch.toUpperCase() + '</div><div class="cc-rule"></div>';
             el.appendChild(d);
             setTimeout(function () { if (d.parentNode) d.parentNode.removeChild(d); }, 1750);
+        };
+
+        // ── PX ITERATION 15: LIGHTS-DOWN COLD OPEN ──
+        // The show no longer just appears — it OPENS. First slide of a
+        // fresh presentation: black stage, a 3-2-1 lights-down count,
+        // then the flag. Replays never re-trigger it; closing the show
+        // re-arms it for next time.
+        (function pxInjectStyle15() {
+            if (document.getElementById('px-style-15')) return;
+            const st = document.createElement('style');
+            st.id = 'px-style-15';
+            st.textContent = [
+                "#presentationMode .px-count{position:absolute;inset:0;z-index:69;background:#020108;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;transition:opacity .4s ease;}",
+                "#presentationMode .px-count.done{opacity:0;}",
+                "#presentationMode .px-count-num{font-family:system-ui,sans-serif;font-weight:900;font-size:clamp(90px,17vw,170px);color:#ffe9a8;text-shadow:0 10px 44px rgba(0,0,0,.9);line-height:1;}",
+                "#presentationMode .px-count-num.tick{animation:pxCountTick .58s ease both;}",
+                "#presentationMode .px-count-sub{margin-top:16px;font:700 13px system-ui;letter-spacing:.5em;color:rgba(255,233,168,.8);}",
+                "@keyframes pxCountTick{from{transform:scale(1.4);opacity:.35}to{transform:scale(1);opacity:1}}"
+            ].join('\n');
+            document.head.appendChild(st);
+        })();
+        window.__pxColdOpen = function (el, kind) {
+            if (!window.__pxState._closeWrapped && typeof window.closePresentationMode === 'function') {
+                const cp = window.closePresentationMode;
+                window.closePresentationMode = function () { window.__pxState.coldOpenDone = false; return cp.apply(this, arguments); };
+                window.__pxState._closeWrapped = true;
+            }
+            if (kind !== 'flag' || window.__pxState.coldOpenDone) return;
+            window.__pxState.coldOpenDone = true;
+            const d = document.createElement('div');
+            d.className = 'px-count';
+            d.innerHTML = '<div class="px-count-num tick">3</div><div class="px-count-sub">LIGHTS DOWN</div>';
+            el.appendChild(d);
+            const num = d.querySelector('.px-count-num');
+            let n = 3;
+            const iv = setInterval(function () {
+                n--;
+                if (n <= 0) {
+                    clearInterval(iv);
+                    d.classList.add('done');
+                    setTimeout(function () { if (d.parentNode) d.parentNode.removeChild(d); }, 430);
+                } else {
+                    num.textContent = n;
+                    num.classList.remove('tick');
+                    void num.offsetWidth;
+                    num.classList.add('tick');
+                }
+            }, 640);
         };
         window.renderPresentation = () => {
             try {
