@@ -778,7 +778,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = 'v2026.11.01.50';
+        const APP_VERSION = 'v2026.11.01.51';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -15752,6 +15752,7 @@ ${(() => {
             try { if (window.__pxVersus) window.__pxVersus(el, kind); } catch (e) {}
             try { if (window.__pxPodium) window.__pxPodium(el, kind); } catch (e) {}
             try { if (window.__pxTicker) window.__pxTicker(el, kind); } catch (e) {}
+            try { if (window.__pxChapterCard) window.__pxChapterCard(el, kind); } catch (e) {}
         };
 
         // ── PX ITERATION 2: THE BROADCAST SPINE ──
@@ -16219,6 +16220,38 @@ ${(() => {
             bar.className = 'px-ticker';
             bar.innerHTML = '<div class="px-ticker-track"><span>' + text + '</span><span>' + text + '</span></div>';
             el.appendChild(bar);
+        };
+
+        // ── PX ITERATION 14: CHAPTER TITLE CARDS ──
+        // Crossing into a new act stops the show for a beat: a full-
+        // screen title card ("ACT II · THE HONOURS") fades up, holds,
+        // and dissolves — the deck gets chapters, not just slides.
+        (function pxInjectStyle14() {
+            if (document.getElementById('px-style-14')) return;
+            const st = document.createElement('style');
+            st.id = 'px-style-14';
+            st.textContent = [
+                "#presentationMode .px-chaptercard{position:absolute;inset:0;z-index:68;background:rgba(4,3,14,.9);display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;animation:pxChapterCard 1.7s ease forwards;}",
+                "#presentationMode .px-chaptercard .cc-kicker{font:700 12px system-ui;letter-spacing:.42em;color:rgba(255,233,168,.75);}",
+                "#presentationMode .px-chaptercard .cc-title{margin-top:14px;font-family:system-ui,sans-serif;font-weight:900;font-size:clamp(34px,7vw,84px);letter-spacing:.1em;color:#ffe9a8;text-shadow:0 6px 34px rgba(0,0,0,.8);text-align:center;padding:0 24px;}",
+                "#presentationMode .px-chaptercard .cc-rule{margin-top:22px;width:190px;height:3px;border-radius:2px;background:linear-gradient(90deg,rgba(255,215,94,0),#ffd75e,rgba(255,215,94,0));}",
+                "@keyframes pxChapterCard{0%{opacity:0}16%{opacity:1}76%{opacity:1}100%{opacity:0}}"
+            ].join('\n');
+            document.head.appendChild(st);
+        })();
+        window.__pxChapterCard = function (el, kind) {
+            if (presentationState._lastRenderedSlide == null) return;
+            if (presentationState._lastRenderedSlide === presentationState.currentSlide) return;
+            const ch = window.__pxChapter(kind, presentationState.currentSlide, presentationState.totalSlides || 1);
+            const prev = window.__pxState.lastChapter;
+            window.__pxState.lastChapter = ch;
+            if (!prev || prev === ch) return;
+            if (presentationState.currentSlide === 0) return;
+            const d = document.createElement('div');
+            d.className = 'px-chaptercard';
+            d.innerHTML = '<div class="cc-kicker">DUTCH CUP PRESENTS</div><div class="cc-title">' + ch.toUpperCase() + '</div><div class="cc-rule"></div>';
+            el.appendChild(d);
+            setTimeout(function () { if (d.parentNode) d.parentNode.removeChild(d); }, 1750);
         };
         window.renderPresentation = () => {
             try {
