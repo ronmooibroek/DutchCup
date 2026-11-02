@@ -778,7 +778,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = 'v2026.11.01.46';
+        const APP_VERSION = 'v2026.11.01.47';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -15747,6 +15747,7 @@ ${(() => {
             try { if (window.__pxConfetti) window.__pxConfetti(el, kind); } catch (e) {}
             try { if (window.__pxDirectorBtn) window.__pxDirectorBtn(el); } catch (e) {}
             try { if (window.__pxSeal) window.__pxSeal(el, kind); } catch (e) {}
+            try { if (window.__pxHeadline) window.__pxHeadline(el, kind); } catch (e) {}
         };
 
         // ── PX ITERATION 2: THE BROADCAST SPINE ──
@@ -16075,6 +16076,44 @@ ${(() => {
             s.innerHTML = '<div class="px-seal-half l"></div><div class="px-seal-half r"></div><div class="px-seal-badge"><div class="env">\u2709\uFE0F</div><span class="lbl">' + (kind === 'crowning' ? 'TAP TO CROWN' : 'TAP TO OPEN') + '</span></div>';
             s.addEventListener('click', function (e) { e.stopPropagation(); window.__pxOpenSeal(s); });
             el.appendChild(s);
+        };
+
+        // ── PX ITERATION 10: HEADLINE CINEMA ──
+        // The biggest headline on every honours screen gets the movie-
+        // poster treatment: a rising entrance, a gold gradient on
+        // crowns, and a light-bar that sweeps underneath it.
+        (function pxInjectStyle10() {
+            if (document.getElementById('px-style-10')) return;
+            const st = document.createElement('style');
+            st.id = 'px-style-10';
+            st.textContent = [
+                "#presentationMode .px-head{animation:pxHeadIn .7s cubic-bezier(.2,.8,.3,1) both;}",
+                "@keyframes pxHeadIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}",
+                "#presentationMode .px-head-gold{background:linear-gradient(180deg,#fff3b0 0%,#ffd75e 46%,#c99612 92%);-webkit-background-clip:text;background-clip:text;color:transparent !important;}",
+                "#presentationMode .px-head-line{display:block;height:4px;margin-top:10px;border-radius:2px;background:linear-gradient(90deg,rgba(255,215,94,0),#ffd75e,rgba(255,215,94,0));transform-origin:left center;animation:pxLineSweep .85s .18s cubic-bezier(.2,.8,.3,1) both;}",
+                "@keyframes pxLineSweep{from{transform:scaleX(0)}to{transform:scaleX(1)}}"
+            ].join('\n');
+            document.head.appendChild(st);
+        })();
+        window.__pxHeadline = function (el, kind) {
+            if (['countup', 'crowning', 'envelope', 'winner', 'skins'].indexOf(kind) < 0) return;
+            const nodes = el.querySelectorAll('div,span,h1,h2,h3,p');
+            let best = null, bestFs = 0;
+            for (let i = 0; i < nodes.length; i++) {
+                const n = nodes[i];
+                if (n.children.length > 0) continue;
+                if (n.closest('.px-spine,.px-chapter,.px-seal,button')) continue;
+                const txt = (n.textContent || '').trim();
+                if (txt.length < 3) continue;
+                const fs = parseFloat(window.getComputedStyle(n).fontSize || '0');
+                if (fs >= 30 && fs > bestFs) { best = n; bestFs = fs; }
+            }
+            if (!best) return;
+            best.classList.add('px-head');
+            if (kind === 'crowning' || kind === 'winner') best.classList.add('px-head-gold');
+            const line = document.createElement('span');
+            line.className = 'px-head-line';
+            best.appendChild(line);
         };
         window.renderPresentation = () => {
             try {
