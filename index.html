@@ -778,7 +778,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = 'v2026.11.01.38';
+        const APP_VERSION = 'v2026.11.01.39';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -15738,6 +15738,48 @@ ${(() => {
             frag.appendChild(mk('px-letterbox bottom'));
             frag.appendChild(mk('px-grain'));
             el.appendChild(frag);
+            try { if (window.__pxProgress) window.__pxProgress(el, kind); } catch (e) {}
+        };
+
+        // ── PX ITERATION 2: THE BROADCAST SPINE ──
+        // A gold progress spine with chapter ticks runs the width of the
+        // stage, and a chapter bug ("ACT II · THE HONOURS — Slide 14 of
+        // 38") sits under the top letterbox like a TV broadcast graphic.
+        (function pxInjectStyle2() {
+            if (document.getElementById('px-style-2')) return;
+            const st = document.createElement('style');
+            st.id = 'px-style-2';
+            st.textContent = [
+                "#presentationMode .px-spine{position:absolute;left:0;right:0;bottom:4.2vh;height:5px;z-index:62;background:rgba(255,255,255,.14);pointer-events:none;}",
+                "#presentationMode .px-spine-fill{height:100%;background:linear-gradient(90deg,#b8860b,#ffd75e,#fff3b0);box-shadow:0 0 14px rgba(255,215,94,.85);}",
+                "#presentationMode .px-spine-tick{position:absolute;top:-3px;width:2px;height:11px;background:rgba(255,255,255,.55);}",
+                "#presentationMode .px-chapter{position:absolute;top:calc(4.2vh + 10px);left:18px;z-index:62;pointer-events:none;font-family:system-ui,sans-serif;font-weight:800;font-size:11px;line-height:1.35;letter-spacing:.22em;color:#ffe9a8;text-shadow:0 1px 6px rgba(0,0,0,.85);text-transform:uppercase;}",
+                "#presentationMode .px-chapter small{display:block;letter-spacing:.14em;color:rgba(255,255,255,.78);font-weight:600;font-size:10px;}"
+            ].join('\n');
+            document.head.appendChild(st);
+        })();
+        window.__pxChapter = function (kind, cs, total) {
+            if (kind === 'flag' || kind === 'montage') return 'Prologue';
+            if (kind === 'closing') return 'Curtain Call';
+            if (kind === 'countup' || kind === 'envelope' || kind === 'crowning' || kind === 'skins') return 'Act II · The Honours';
+            const f = total > 1 ? cs / (total - 1) : 0;
+            if (f < 0.32) return 'Act I · The Round';
+            if (f < 0.74) return 'Act II · The Honours';
+            if (f < 0.94) return 'Act III · The Finale';
+            return 'Curtain Call';
+        };
+        window.__pxProgress = function (el, kind) {
+            const total = presentationState.totalSlides || 1;
+            const cs = presentationState.currentSlide;
+            const pct = total > 1 ? (cs / (total - 1)) * 100 : 100;
+            const spine = document.createElement('div');
+            spine.className = 'px-spine';
+            spine.innerHTML = '<div class="px-spine-fill" style="width:' + pct + '%"></div>' + [32, 74, 94].map(function (p) { return '<div class="px-spine-tick" style="left:' + p + '%"></div>'; }).join('');
+            el.appendChild(spine);
+            const chip = document.createElement('div');
+            chip.className = 'px-chapter';
+            chip.innerHTML = window.__pxChapter(kind, cs, total) + '<small>Slide ' + (cs + 1) + ' of ' + total + '</small>';
+            el.appendChild(chip);
         };
         window.renderPresentation = () => {
             try {
