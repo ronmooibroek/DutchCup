@@ -778,7 +778,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = 'v2026.11.01.42';
+        const APP_VERSION = 'v2026.11.01.43';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -15742,6 +15742,7 @@ ${(() => {
             try { if (window.__pxCountUp) window.__pxCountUp(el); } catch (e) {}
             try { if (window.__pxWash) window.__pxWash(el, kind); } catch (e) {}
             try { if (window.__pxTransition) window.__pxTransition(el); } catch (e) {}
+            try { if (window.__pxKenBurns) window.__pxKenBurns(el); } catch (e) {}
         };
 
         // ── PX ITERATION 2: THE BROADCAST SPINE ──
@@ -15881,6 +15882,34 @@ ${(() => {
             if (presentationState._lastRenderedSlide === presentationState.currentSlide) return;
             if (presentationState._lastRenderedSlide == null) return;
             el.classList.add(window.__pxState.dir >= 0 ? 'px-enter-r' : 'px-enter-l');
+        };
+
+        // ── PX ITERATION 6: KEN BURNS EVERYWHERE ──
+        // Every photograph in the deck breathes: a slow 14-second pan
+        // and zoom, alternating direction per photo, like a documentary
+        // film. Avatars and icons are left alone.
+        (function pxInjectStyle6() {
+            if (document.getElementById('px-style-6')) return;
+            const st = document.createElement('style');
+            st.id = 'px-style-6';
+            st.textContent = [
+                "#presentationMode img.px-kb{animation:pxKB1 14s ease-in-out infinite alternate;will-change:transform;}",
+                "#presentationMode img.px-kb2{animation:pxKB2 16s ease-in-out infinite alternate;will-change:transform;}",
+                "@keyframes pxKB1{from{transform:scale(1.02) translate(0,0)}to{transform:scale(1.15) translate(-1.6%,1.6%)}}",
+                "@keyframes pxKB2{from{transform:scale(1.14) translate(1.6%,-1.2%)}to{transform:scale(1.03) translate(0,0)}}"
+            ].join('\n');
+            document.head.appendChild(st);
+        })();
+        window.__pxKenBurns = function (el) {
+            const imgs = el.querySelectorAll('img');
+            let n = 0;
+            for (let i = 0; i < imgs.length; i++) {
+                const im = imgs[i];
+                const w = im.clientWidth || 0, h = im.clientHeight || 0;
+                if (w < 180 && h < 180) continue;
+                im.classList.add(n % 2 === 0 ? 'px-kb' : 'px-kb2');
+                n++;
+            }
         };
         window.renderPresentation = () => {
             try {
