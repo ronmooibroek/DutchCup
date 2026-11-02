@@ -778,7 +778,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = 'v2026.11.01.49';
+        const APP_VERSION = 'v2026.11.01.50';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -15751,6 +15751,7 @@ ${(() => {
             try { if (window.__pxHeadline) window.__pxHeadline(el, kind); } catch (e) {}
             try { if (window.__pxVersus) window.__pxVersus(el, kind); } catch (e) {}
             try { if (window.__pxPodium) window.__pxPodium(el, kind); } catch (e) {}
+            try { if (window.__pxTicker) window.__pxTicker(el, kind); } catch (e) {}
         };
 
         // ── PX ITERATION 2: THE BROADCAST SPINE ──
@@ -16175,6 +16176,49 @@ ${(() => {
             d.className = 'px-podium';
             d.innerHTML = '<div class="step s2">2</div><div class="step s1">1</div><div class="step s3">3</div>';
             el.appendChild(d);
+        };
+
+        // ── PX ITERATION 13: THE ODDS TICKER ──
+        // From the finale onward, a broadcast news-crawl runs along
+        // the foot of the stage: the Cup standings and tonight's team
+        // scoring, scrolling endlessly like election night.
+        (function pxInjectStyle13() {
+            if (document.getElementById('px-style-13')) return;
+            const st = document.createElement('style');
+            st.id = 'px-style-13';
+            st.textContent = [
+                "#presentationMode .px-ticker{position:absolute;left:0;right:0;bottom:calc(4.2vh + 5px);height:27px;z-index:63;background:rgba(5,4,14,.85);border-top:1px solid rgba(255,215,94,.45);overflow:hidden;pointer-events:none;display:flex;align-items:center;}",
+                "#presentationMode .px-ticker-track{display:flex;white-space:nowrap;animation:pxTickerScroll 34s linear infinite;font-family:system-ui,sans-serif;font-weight:700;font-size:12.5px;letter-spacing:.08em;color:#ffe9a8;}",
+                "#presentationMode .px-ticker-track span{padding-right:72px;}",
+                "@keyframes pxTickerScroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}"
+            ].join('\n');
+            document.head.appendChild(st);
+        })();
+        window.__pxTicker = function (el, kind) {
+            const chapter = window.__pxChapter(kind, presentationState.currentSlide, presentationState.totalSlides || 1);
+            if (chapter !== 'Act III \u00B7 The Finale' && chapter !== 'Curtain Call') return;
+            const ts = presentationState.teamStandings || [];
+            if (!ts.length) return;
+            const items = [];
+            for (let i = 0; i < ts.length; i++) {
+                const t = ts[i] || {};
+                const nm = t.name || t.teamName || '';
+                const pts = (t.points != null ? t.points : (t.totalPoints != null ? t.totalPoints : ''));
+                if (nm) items.push((i + 1) + '. ' + nm + (pts !== '' ? ' ' + pts : ''));
+            }
+            if (!items.length) return;
+            let tonight = '';
+            const td = presentationState.todaysScores;
+            if (Array.isArray(td)) {
+                const parts = [];
+                for (const s of td) { if (s && (s.teamName || s.name)) parts.push((s.teamName || s.name) + ' +' + (s.points || 0)); }
+                tonight = parts.join(' \u00B7 ');
+            }
+            const text = '\uD83C\uDFC6 THE CUP \u2014 ' + items.join('  \u00B7  ') + (tonight ? '   \u26A1 TONIGHT \u2014 ' + tonight : '');
+            const bar = document.createElement('div');
+            bar.className = 'px-ticker';
+            bar.innerHTML = '<div class="px-ticker-track"><span>' + text + '</span><span>' + text + '</span></div>';
+            el.appendChild(bar);
         };
         window.renderPresentation = () => {
             try {
