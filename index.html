@@ -778,7 +778,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = 'v2026.11.01.58';
+        const APP_VERSION = 'v2026.11.01.59';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -15759,6 +15759,7 @@ ${(() => {
             try { if (window.__pxSpotlight) window.__pxSpotlight(el, kind); } catch (e) {}
             try { if (window.__pxGhost) window.__pxGhost(el, kind); } catch (e) {}
             try { if (window.__pxGazette) window.__pxGazette(el, kind); } catch (e) {}
+            try { if (window.__pxSparkle) window.__pxSparkle(el, kind); } catch (e) {}
         };
 
         // ── PX ITERATION 2: THE BROADCAST SPINE ──
@@ -16631,6 +16632,57 @@ ${(() => {
                 } catch (err) {}
             });
         }
+
+        // ── PX ITERATION 22: GOLDEN HOUR ──
+        // The curtain call plays under falling gold dust — a slow,
+        // warm sparkle rain for as long as the closing slide holds,
+        // so the night literally glitters on its way out.
+        (function pxInjectStyle22() {
+            if (document.getElementById('px-style-22')) return;
+            const st = document.createElement('style');
+            st.id = 'px-style-22';
+            st.textContent = "#presentationMode canvas.px-sparkle{position:absolute;inset:0;z-index:64;pointer-events:none;}";
+            document.head.appendChild(st);
+        })();
+        window.__pxSparkle = function (el, kind) {
+            if (kind !== 'closing') return;
+            const cv = document.createElement('canvas');
+            cv.className = 'px-sparkle';
+            cv.width = el.clientWidth || window.innerWidth;
+            cv.height = el.clientHeight || window.innerHeight;
+            el.appendChild(cv);
+            const ctx = cv.getContext('2d');
+            const parts = [];
+            for (let i = 0; i < 70; i++) {
+                parts.push({
+                    x: Math.random() * cv.width,
+                    y: Math.random() * cv.height,
+                    vy: 0.35 + Math.random() * 0.8,
+                    sway: 12 + Math.random() * 26,
+                    ph: Math.random() * 6.28,
+                    r: 0.8 + Math.random() * 1.9,
+                    gold: i % 3 !== 0
+                });
+            }
+            const t0 = performance.now();
+            const tick = function (now) {
+                if (!document.body.contains(cv)) return;
+                const t = (now - t0) / 1000;
+                ctx.clearRect(0, 0, cv.width, cv.height);
+                for (const p of parts) {
+                    p.y += p.vy;
+                    if (p.y > cv.height + 6) { p.y = -6; p.x = Math.random() * cv.width; }
+                    const x = p.x + Math.sin(t * 0.9 + p.ph) * p.sway * 0.3;
+                    const tw = 0.35 + 0.65 * Math.abs(Math.sin(t * 1.7 + p.ph));
+                    ctx.beginPath();
+                    ctx.arc(x, p.y, p.r, 0, 7);
+                    ctx.fillStyle = p.gold ? 'rgba(255,215,94,' + (0.75 * tw) + ')' : 'rgba(255,255,255,' + (0.6 * tw) + ')';
+                    ctx.fill();
+                }
+                requestAnimationFrame(tick);
+            };
+            requestAnimationFrame(tick);
+        };
         window.renderPresentation = () => {
             try {
                 // Bumped on every render; delayed audio starts capture it so a
