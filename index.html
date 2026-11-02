@@ -778,7 +778,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = 'v2026.11.01.56';
+        const APP_VERSION = 'v2026.11.01.57';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -15758,6 +15758,7 @@ ${(() => {
             try { if (window.__pxCredits) window.__pxCredits(el, kind); } catch (e) {}
             try { if (window.__pxSpotlight) window.__pxSpotlight(el, kind); } catch (e) {}
             try { if (window.__pxGhost) window.__pxGhost(el, kind); } catch (e) {}
+            try { if (window.__pxGazette) window.__pxGazette(el, kind); } catch (e) {}
         };
 
         // ── PX ITERATION 2: THE BROADCAST SPINE ──
@@ -16499,6 +16500,69 @@ ${(() => {
             d.className = 'px-ghost';
             d.textContent = g;
             el.appendChild(d);
+        };
+
+        // ── PX ITERATION 20: THE GAZETTE ──
+        // The night, set in type: a broadsheet front page generated
+        // from the results — masthead, the champion headline, the
+        // BBB and low-net stories, and the Cup table — on the dock.
+        (function pxInjectStyle20() {
+            if (document.getElementById('px-style-20')) return;
+            const st = document.createElement('style');
+            st.id = 'px-style-20';
+            st.textContent = [
+                "#presentationMode .px-gazette{position:absolute;inset:0;z-index:71;background:rgba(4,3,14,.93);display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:5vh 4vw calc(4.2vh + 24px);}",
+                "#presentationMode .gz-paper{background:#f5efe0;color:#1c1a14;width:min(880px,94vw);padding:34px 38px 28px;border-radius:3px;box-shadow:0 30px 80px rgba(0,0,0,.6);transform:rotate(-.4deg);font-family:Georgia,'Times New Roman',serif;animation:pxHeadIn .55s ease both;}",
+                "#presentationMode .gz-mast{text-align:center;font-weight:900;font-size:clamp(30px,5.4vw,52px);letter-spacing:.02em;border-bottom:4px double #1c1a14;padding-bottom:10px;}",
+                "#presentationMode .gz-date{text-align:center;font-size:12.5px;letter-spacing:.24em;text-transform:uppercase;border-bottom:1px solid #1c1a14;padding:7px 0;color:#4a463c;}",
+                "#presentationMode .gz-head{font-weight:900;font-size:clamp(28px,4.6vw,46px);line-height:1.08;margin:20px 0 6px;text-align:center;}",
+                "#presentationMode .gz-sub{text-align:center;font-style:italic;font-size:16px;color:#4a463c;margin-bottom:18px;}",
+                "#presentationMode .gz-cols{display:grid;grid-template-columns:1fr 1fr;gap:22px;border-top:2px solid #1c1a14;padding-top:16px;font-size:14.5px;line-height:1.5;}",
+                "#presentationMode .gz-cols h4{margin:0 0 6px;font-size:12px;letter-spacing:.22em;text-transform:uppercase;}",
+                "#presentationMode .gz-table{border-top:2px solid #1c1a14;margin-top:18px;padding-top:12px;font-size:14.5px;}",
+                "#presentationMode .gz-table div{display:flex;justify-content:space-between;padding:2.5px 0;border-bottom:1px dotted #9a937e;}",
+                "#presentationMode .gz-close{display:block;margin:22px auto 0;border:2px solid #1c1a14;background:transparent;color:#1c1a14;font:700 12px Georgia,serif;letter-spacing:.2em;padding:9px 20px;cursor:pointer;}"
+            ].join('\n');
+            document.head.appendChild(st);
+        })();
+        window.__pxGazette = function (el, kind) {
+            if (kind !== 'closing') return;
+            const dock = window.__pxDock(el);
+            const b = document.createElement('button');
+            b.textContent = '\uD83D\uDCF0 GAZETTE';
+            b.addEventListener('click', function (e) {
+                e.stopPropagation();
+                const honours = (typeof window.__pxHonours === 'function') ? window.__pxHonours() : [];
+                const champ = honours.length ? honours[0] : null;
+                const mr = presentationState.mostRecentRound || {};
+                const course = (mr.course && mr.course.name) || mr.courseName || '';
+                const dateLine = ((mr.date || '') + (course ? ' \u00B7 ' + course : '')).trim();
+                const wrap = document.createElement('div');
+                wrap.className = 'px-gazette';
+                let h = '<div class="gz-paper"><div class="gz-mast">The Dutch Cup Gazette</div>';
+                h += '<div class="gz-date">' + (dateLine ? dateLine + ' \u00B7 ' : '') + 'Tonight\'s Edition \u00B7 Price: One Beer</div>';
+                h += '<div class="gz-head">' + (champ ? champ.who + ' Takes The Night' : 'A Night To Remember') + '</div>';
+                h += '<div class="gz-sub">' + (champ ? champ.det + ' \u2014 the room was his by the end' : 'Full honours inside the Trophy Room') + '</div>';
+                h += '<div class="gz-cols">';
+                for (let i = 1; i < honours.length && i < 5; i++) {
+                    h += '<div><h4>' + honours[i].ttl + '</h4>' + honours[i].who + (honours[i].det ? ' \u2014 ' + honours[i].det : '') + '. A performance the gallery will be talking about until the next round.</div>';
+                }
+                h += '</div>';
+                const ts = presentationState.teamStandings || [];
+                if (ts.length) {
+                    h += '<div class="gz-table"><h4 style="font-size:12px;letter-spacing:.22em;">THE CUP TABLE</h4>';
+                    for (let i = 0; i < ts.length; i++) {
+                        const t = ts[i] || {};
+                        h += '<div><span>' + (i + 1) + '. ' + (t.name || t.teamName || '') + '</span><span>' + (t.points != null ? t.points : (t.totalPoints != null ? t.totalPoints : '')) + '</span></div>';
+                    }
+                    h += '</div>';
+                }
+                h += '<button class="gz-close">BACK TO THE SHOW</button></div>';
+                wrap.innerHTML = h;
+                wrap.querySelector('.gz-close').addEventListener('click', function (ev) { ev.stopPropagation(); if (wrap.parentNode) wrap.parentNode.removeChild(wrap); });
+                el.appendChild(wrap);
+            });
+            dock.appendChild(b);
         };
         window.renderPresentation = () => {
             try {
