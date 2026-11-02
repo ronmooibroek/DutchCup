@@ -778,7 +778,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = 'v2026.11.01.41';
+        const APP_VERSION = 'v2026.11.01.42';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -15741,6 +15741,7 @@ ${(() => {
             try { if (window.__pxProgress) window.__pxProgress(el, kind); } catch (e) {}
             try { if (window.__pxCountUp) window.__pxCountUp(el); } catch (e) {}
             try { if (window.__pxWash) window.__pxWash(el, kind); } catch (e) {}
+            try { if (window.__pxTransition) window.__pxTransition(el); } catch (e) {}
         };
 
         // ── PX ITERATION 2: THE BROADCAST SPINE ──
@@ -15851,6 +15852,35 @@ ${(() => {
             d.className = 'px-wash';
             d.style.background = 'radial-gradient(ellipse at 50% 36%, ' + color + '30 0%, ' + color + '16 44%, rgba(0,0,0,0) 74%)';
             el.appendChild(d);
+        };
+
+        // ── PX ITERATION 5: DIRECTIONAL TRANSITIONS ──
+        // Slides no longer snap-cut: advancing sweeps the new page in
+        // from the right, going back sweeps it in from the left, with a
+        // slight scale settle — the deck gains a sense of travel.
+        (function pxInjectStyle5() {
+            if (document.getElementById('px-style-5')) return;
+            const st = document.createElement('style');
+            st.id = 'px-style-5';
+            st.textContent = [
+                "#presentationMode.px-enter-r{animation:pxInR .38s cubic-bezier(.22,.8,.3,1);}",
+                "#presentationMode.px-enter-l{animation:pxInL .38s cubic-bezier(.22,.8,.3,1);}",
+                "@keyframes pxInR{from{transform:translateX(36px) scale(.988);opacity:.3}to{transform:translateX(0) scale(1);opacity:1}}",
+                "@keyframes pxInL{from{transform:translateX(-36px) scale(.988);opacity:.3}to{transform:translateX(0) scale(1);opacity:1}}"
+            ].join('\n');
+            document.head.appendChild(st);
+        })();
+        (function pxDirWrap() {
+            const nx = window.nextPresentationSlide, pv = window.prevPresentationSlide;
+            if (typeof nx === 'function') window.nextPresentationSlide = function () { window.__pxState.dir = 1; return nx.apply(this, arguments); };
+            if (typeof pv === 'function') window.prevPresentationSlide = function () { window.__pxState.dir = -1; return pv.apply(this, arguments); };
+        })();
+        window.__pxTransition = function (el) {
+            // _lastRenderedSlide still holds the previous index when this
+            // hook runs (the fade block updates it after us).
+            if (presentationState._lastRenderedSlide === presentationState.currentSlide) return;
+            if (presentationState._lastRenderedSlide == null) return;
+            el.classList.add(window.__pxState.dir >= 0 ? 'px-enter-r' : 'px-enter-l');
         };
         window.renderPresentation = () => {
             try {
