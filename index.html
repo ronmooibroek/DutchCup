@@ -778,7 +778,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = 'v2026.11.01.45';
+        const APP_VERSION = 'v2026.11.01.46';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -15746,6 +15746,7 @@ ${(() => {
             try { if (window.__pxKenBurns) window.__pxKenBurns(el); } catch (e) {}
             try { if (window.__pxConfetti) window.__pxConfetti(el, kind); } catch (e) {}
             try { if (window.__pxDirectorBtn) window.__pxDirectorBtn(el); } catch (e) {}
+            try { if (window.__pxSeal) window.__pxSeal(el, kind); } catch (e) {}
         };
 
         // ── PX ITERATION 2: THE BROADCAST SPINE ──
@@ -16037,6 +16038,44 @@ ${(() => {
                 } catch (e) {}
             }, 500);
         }
+
+        // ── PX ITERATION 9: THE SUSPENSE SEAL ──
+        // Crown and winner screens arrive SEALED behind a deep-red
+        // envelope screen. The room holds its breath until the
+        // presenter taps to open — the halves tear apart and the
+        // winner is revealed. Director Mode opens it on cue.
+        (function pxInjectStyle9() {
+            if (document.getElementById('px-style-9')) return;
+            const st = document.createElement('style');
+            st.id = 'px-style-9';
+            st.textContent = [
+                "#presentationMode .px-seal{position:absolute;inset:0;z-index:66;display:flex;cursor:pointer;}",
+                "#presentationMode .px-seal-half{flex:1;background:linear-gradient(160deg,#6d1420 0%,#8f1d2c 55%,#5d101b 100%);transition:transform .72s cubic-bezier(.7,0,.3,1),opacity .72s;box-shadow:inset 0 0 90px rgba(0,0,0,.5);}",
+                "#presentationMode .px-seal-half.l{border-right:2px solid rgba(255,215,94,.7);}",
+                "#presentationMode .px-seal-half.r{border-left:2px solid rgba(255,215,94,.7);}",
+                "#presentationMode .px-seal.open .px-seal-half.l{transform:translateX(-103%) rotate(-2.5deg);opacity:.25;}",
+                "#presentationMode .px-seal.open .px-seal-half.r{transform:translateX(103%) rotate(2.5deg);opacity:.25;}",
+                "#presentationMode .px-seal-badge{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;color:#ffe9a8;transition:transform .5s,opacity .5s;pointer-events:none;}",
+                "#presentationMode .px-seal-badge .env{font-size:84px;filter:drop-shadow(0 8px 26px rgba(0,0,0,.6));animation:pxSealPulse 1.6s ease-in-out infinite;}",
+                "#presentationMode .px-seal-badge .lbl{display:block;margin-top:10px;font:800 15px system-ui;letter-spacing:.34em;text-shadow:0 2px 10px rgba(0,0,0,.7);}",
+                "#presentationMode .px-seal.open .px-seal-badge{transform:translate(-50%,-50%) scale(1.7);opacity:0;}",
+                "@keyframes pxSealPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.09)}}"
+            ].join('\n');
+            document.head.appendChild(st);
+        })();
+        window.__pxOpenSeal = function (seal) {
+            if (!seal || seal.classList.contains('open')) return;
+            seal.classList.add('open');
+            setTimeout(function () { if (seal.parentNode) seal.parentNode.removeChild(seal); }, 760);
+        };
+        window.__pxSeal = function (el, kind) {
+            if (kind !== 'crowning' && kind !== 'winner') return;
+            const s = document.createElement('div');
+            s.className = 'px-seal';
+            s.innerHTML = '<div class="px-seal-half l"></div><div class="px-seal-half r"></div><div class="px-seal-badge"><div class="env">\u2709\uFE0F</div><span class="lbl">' + (kind === 'crowning' ? 'TAP TO CROWN' : 'TAP TO OPEN') + '</span></div>';
+            s.addEventListener('click', function (e) { e.stopPropagation(); window.__pxOpenSeal(s); });
+            el.appendChild(s);
+        };
         window.renderPresentation = () => {
             try {
                 // Bumped on every render; delayed audio starts capture it so a
