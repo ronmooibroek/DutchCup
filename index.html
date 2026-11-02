@@ -778,7 +778,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = 'v2026.11.01.48';
+        const APP_VERSION = 'v2026.11.01.49';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -15720,6 +15720,7 @@ ${(() => {
             if (t.indexOf('THE ENVELOPE, PLEASE') >= 0) return 'envelope';
             if (t.indexOf('THE COUNT-UP') >= 0 || /#\d+/.test(t) && t.indexOf('pts tonight') >= 0) return 'countup';
             if (t.indexOf('SKINS WINNER') >= 0) return 'skins';
+            if (t.indexOf('MEN WHO MOVED') >= 0) return 'podium';
             if (t.indexOf('\uD83C\uDFC6') >= 0 && t.indexOf('CHAMPION') >= 0) return 'winner';
             return 'slide';
         };
@@ -15749,6 +15750,7 @@ ${(() => {
             try { if (window.__pxSeal) window.__pxSeal(el, kind); } catch (e) {}
             try { if (window.__pxHeadline) window.__pxHeadline(el, kind); } catch (e) {}
             try { if (window.__pxVersus) window.__pxVersus(el, kind); } catch (e) {}
+            try { if (window.__pxPodium) window.__pxPodium(el, kind); } catch (e) {}
         };
 
         // ── PX ITERATION 2: THE BROADCAST SPINE ──
@@ -15846,7 +15848,7 @@ ${(() => {
         })();
         window.__pxWash = function (el, kind) {
             let color = null;
-            if (kind === 'crowning' || kind === 'envelope') color = '#d4af37';
+            if (kind === 'crowning' || kind === 'envelope' || kind === 'podium' || kind === 'winner') color = '#d4af37';
             if (!color && typeof state !== 'undefined' && state && state.teams) {
                 const t = el.textContent || '';
                 for (let i = 0; i < state.teams.length; i++) {
@@ -16147,6 +16149,32 @@ ${(() => {
             vs.className = 'px-vs';
             vs.textContent = 'VS';
             el.appendChild(vs);
+        };
+
+        // ── PX ITERATION 12: THE PODIUM ──
+        // "The Men Who Moved" gets a real podium: a lit three-step
+        // stage (silver, gold, bronze) rises across the foot of the
+        // screen with the 2-1-3 carved into the steps.
+        (function pxInjectStyle12() {
+            if (document.getElementById('px-style-12')) return;
+            const st = document.createElement('style');
+            st.id = 'px-style-12';
+            st.textContent = [
+                "#presentationMode .px-podium{position:absolute;left:50%;bottom:calc(4.2vh + 5px);transform:translateX(-50%);z-index:57;display:flex;align-items:flex-end;gap:6px;pointer-events:none;animation:pxPodiumRise .8s cubic-bezier(.2,.8,.3,1) both;}",
+                "#presentationMode .px-podium .step{display:flex;align-items:flex-start;justify-content:center;width:17vw;max-width:230px;border-radius:10px 10px 0 0;font:900 34px system-ui;padding-top:10px;color:rgba(0,0,0,.55);box-shadow:inset 0 2px 0 rgba(255,255,255,.5),0 -6px 30px rgba(0,0,0,.35);}",
+                "#presentationMode .px-podium .s2{height:64px;background:linear-gradient(180deg,#e8e8ec,#9a9aa5);}",
+                "#presentationMode .px-podium .s1{height:96px;background:linear-gradient(180deg,#ffe98a,#c99612);}",
+                "#presentationMode .px-podium .s3{height:48px;background:linear-gradient(180deg,#eda76a,#9c5a24);}",
+                "@keyframes pxPodiumRise{from{transform:translateX(-50%) translateY(46px);opacity:0}to{transform:translateX(-50%) translateY(0);opacity:1}}"
+            ].join('\n');
+            document.head.appendChild(st);
+        })();
+        window.__pxPodium = function (el, kind) {
+            if (kind !== 'podium') return;
+            const d = document.createElement('div');
+            d.className = 'px-podium';
+            d.innerHTML = '<div class="step s2">2</div><div class="step s1">1</div><div class="step s3">3</div>';
+            el.appendChild(d);
         };
         window.renderPresentation = () => {
             try {
