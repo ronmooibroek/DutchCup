@@ -778,7 +778,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = 'v2026.11.01.40';
+        const APP_VERSION = 'v2026.11.01.41';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -15740,6 +15740,7 @@ ${(() => {
             el.appendChild(frag);
             try { if (window.__pxProgress) window.__pxProgress(el, kind); } catch (e) {}
             try { if (window.__pxCountUp) window.__pxCountUp(el); } catch (e) {}
+            try { if (window.__pxWash) window.__pxWash(el, kind); } catch (e) {}
         };
 
         // ── PX ITERATION 2: THE BROADCAST SPINE ──
@@ -15822,6 +15823,34 @@ ${(() => {
                 };
                 requestAnimationFrame(step);
             }
+        };
+
+        // ── PX ITERATION 4: TEAM-COLOUR STAGE WASH ──
+        // The stage itself takes on the colour of whoever owns the
+        // moment: team pages glow in the team's colour, crowns glow
+        // gold. A lighting gel over the whole theatre.
+        (function pxInjectStyle4() {
+            if (document.getElementById('px-style-4')) return;
+            const st = document.createElement('style');
+            st.id = 'px-style-4';
+            st.textContent = "#presentationMode .px-wash{position:absolute;inset:0;z-index:58;pointer-events:none;transition:background .6s ease;}";
+            document.head.appendChild(st);
+        })();
+        window.__pxWash = function (el, kind) {
+            let color = null;
+            if (kind === 'crowning' || kind === 'envelope') color = '#d4af37';
+            if (!color && typeof state !== 'undefined' && state && state.teams) {
+                const t = el.textContent || '';
+                for (let i = 0; i < state.teams.length; i++) {
+                    const tm = state.teams[i];
+                    if (tm && tm.name && tm.color && t.indexOf(tm.name) >= 0) { color = tm.color; break; }
+                }
+            }
+            if (!color || !/^#[0-9a-fA-F]{6}$/.test(color)) return;
+            const d = document.createElement('div');
+            d.className = 'px-wash';
+            d.style.background = 'radial-gradient(ellipse at 50% 36%, ' + color + '30 0%, ' + color + '16 44%, rgba(0,0,0,0) 74%)';
+            el.appendChild(d);
         };
         window.renderPresentation = () => {
             try {
