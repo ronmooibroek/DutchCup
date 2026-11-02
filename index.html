@@ -778,7 +778,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = 'v2026.11.01.57';
+        const APP_VERSION = 'v2026.11.01.58';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -16564,6 +16564,73 @@ ${(() => {
             });
             dock.appendChild(b);
         };
+
+        // ── PX ITERATION 21: THE PRESENTER KIT ──
+        // The person driving the show gets a remote: B blacks the
+        // screen for a story or a drink refill, D toggles Director
+        // Mode, F goes fullscreen, 1-5 jump straight to chapters,
+        // H shows the key map. Installed once, active only on stage.
+        (function pxInjectStyle21() {
+            if (document.getElementById('px-style-21')) return;
+            const st = document.createElement('style');
+            st.id = 'px-style-21';
+            st.textContent = [
+                "#px-blackout{position:fixed;inset:0;z-index:3000;background:#000;display:none;align-items:flex-end;justify-content:center;}",
+                "#px-blackout.on{display:flex;}",
+                "#px-blackout span{color:rgba(255,255,255,.35);font:600 11px system-ui;letter-spacing:.3em;padding:18px;}",
+                "#px-help{position:fixed;right:18px;top:18px;z-index:3000;background:rgba(8,6,20,.92);border:1px solid rgba(255,215,94,.5);border-radius:14px;color:#ffe9a8;font:600 12.5px/1.9 system-ui;padding:14px 18px;display:none;}",
+                "#px-help.on{display:block;}",
+                "#px-help b{color:#fff;}"
+            ].join('\n');
+            document.head.appendChild(st);
+        })();
+        if (!window.__pxKeysInstalled) {
+            window.__pxKeysInstalled = true;
+            document.addEventListener('keydown', function (e) {
+                try {
+                    if (!presentationState || !presentationState.active) return;
+                    if (!document.getElementById('presentationMode')) return;
+                    const tag = (e.target && e.target.tagName) || '';
+                    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+                    const k = (e.key || '').toLowerCase();
+                    let bo = document.getElementById('px-blackout');
+                    if (!bo) {
+                        bo = document.createElement('div');
+                        bo.id = 'px-blackout';
+                        bo.innerHTML = '<span>B TO RESUME</span>';
+                        document.body.appendChild(bo);
+                    }
+                    if (k === 'b' && !e.repeat) { bo.classList.toggle('on'); return; }
+                    if (bo.classList.contains('on') && (k === 'arrowright' || k === 'arrowleft' || k === ' ' || k === 'escape')) bo.classList.remove('on');
+                    if (e.repeat) return;
+                    if (k === 'd') { window.__pxState.director = !window.__pxState.director; window.__pxState.slideLandedAt = Date.now(); if (typeof window.renderPresentation === 'function') window.renderPresentation(); return; }
+                    if (k === 'f') {
+                        if (document.fullscreenElement) document.exitFullscreen();
+                        else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(function () {});
+                        return;
+                    }
+                    if (k === 'h') {
+                        let hp = document.getElementById('px-help');
+                        if (!hp) {
+                            hp = document.createElement('div');
+                            hp.id = 'px-help';
+                            hp.innerHTML = '<b>\u2190 \u2192</b> navigate<br><b>B</b> blackout<br><b>D</b> director mode<br><b>F</b> fullscreen<br><b>1\u20135</b> jump to chapter<br><b>H</b> this card';
+                            document.body.appendChild(hp);
+                        }
+                        hp.classList.toggle('on');
+                        return;
+                    }
+                    if (['1', '2', '3', '4', '5'].indexOf(k) >= 0) {
+                        const total = presentationState.totalSlides || 1;
+                        const fracs = [0, 0.07, 0.4, 0.76, 0.995];
+                        const target = Math.min(total - 1, Math.round(fracs[Number(k) - 1] * (total - 1)));
+                        presentationState.currentSlide = target;
+                        window.__pxState.lastChapter = null;
+                        if (typeof window.renderPresentation === 'function') window.renderPresentation();
+                    }
+                } catch (err) {}
+            });
+        }
         window.renderPresentation = () => {
             try {
                 // Bumped on every render; delayed audio starts capture it so a
