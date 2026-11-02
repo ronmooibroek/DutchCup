@@ -778,7 +778,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = 'v2026.11.01.37';
+        const APP_VERSION = 'v2026.11.01.38';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -15683,6 +15683,62 @@ ${(() => {
             `;
         };
         
+
+        // ════════════════════════════════════════════════════════════════
+        // PX — PRESENTATION EXPERIENCE LAYER (innovation loop, Nov 1)
+        // Additive post-render layer: renderPresentation rebuilds
+        // #presentationMode on every render; __pxEnhance re-applies the
+        // experience to the fresh element. It never changes slide order,
+        // data, or navigation — only how the show feels.
+        // ════════════════════════════════════════════════════════════════
+        window.__pxState = window.__pxState || { dir: 1, lastKind: null };
+        (function pxInjectStyle() {
+            if (document.getElementById('px-style')) return;
+            const css = [
+                "#presentationMode .px-letterbox{position:absolute;left:0;right:0;height:4.2vh;z-index:60;pointer-events:none;background:linear-gradient(180deg,rgba(0,0,0,.92) 52%,rgba(0,0,0,.45) 82%,rgba(0,0,0,0));}",
+                "#presentationMode .px-letterbox.top{top:0;}",
+                "#presentationMode .px-letterbox.bottom{bottom:0;transform:scaleY(-1);}",
+                "#presentationMode .px-vignette{position:absolute;inset:0;z-index:59;pointer-events:none;background:radial-gradient(ellipse at center,rgba(0,0,0,0) 54%,rgba(0,0,0,.44) 100%);}",
+                "#presentationMode .px-grain{position:absolute;inset:-70px;z-index:61;pointer-events:none;opacity:.05;background-image:url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/><feColorMatrix type='saturate' values='0'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='0.55'/></svg>\");animation:pxGrainShift 900ms steps(4) infinite;}",
+                "@keyframes pxGrainShift{0%{transform:translate(0,0)}25%{transform:translate(-18px,12px)}50%{transform:translate(14px,-10px)}75%{transform:translate(-8px,-16px)}100%{transform:translate(0,0)}}"
+            ].join('\n');
+            const st = document.createElement('style');
+            st.id = 'px-style';
+            st.textContent = css;
+            document.head.appendChild(st);
+        })();
+        // Classify the current slide from its content so later PX features
+        // can theme and choreograph per moment.
+        window.__pxClassify = function (el) {
+            const cs = presentationState.currentSlide;
+            const total = presentationState.totalSlides || 1;
+            if (cs === 0) return 'flag';
+            if (cs === total - 1) return 'closing';
+            if (presentationState._montageSlideIndex === cs) return 'montage';
+            const t = (el.textContent || '');
+            if (t.indexOf('CHAMPION GOLFER OF THE DAY') >= 0) return 'crowning';
+            if (t.indexOf('THE ENVELOPE, PLEASE') >= 0) return 'envelope';
+            if (t.indexOf('THE COUNT-UP') >= 0 || /#\d+/.test(t) && t.indexOf('pts tonight') >= 0) return 'countup';
+            if (t.indexOf('SKINS WINNER') >= 0) return 'skins';
+            return 'slide';
+        };
+        window.__pxEnhance = function () {
+            const el = document.getElementById('presentationMode');
+            if (!el) return;
+            const kind = window.__pxClassify(el);
+            el.dataset.pxKind = kind;
+            window.__pxState.lastKind = kind;
+            // ── ITERATION 1: THE CINEMATIC FRAME ──
+            // Letterbox bars, a vignette and living film grain turn the
+            // deck into a theatre screen for every single slide.
+            const frag = document.createDocumentFragment();
+            const mk = (cls) => { const d = document.createElement('div'); d.className = cls; return d; };
+            frag.appendChild(mk('px-vignette'));
+            frag.appendChild(mk('px-letterbox top'));
+            frag.appendChild(mk('px-letterbox bottom'));
+            frag.appendChild(mk('px-grain'));
+            el.appendChild(frag);
+        };
         window.renderPresentation = () => {
             try {
                 // Bumped on every render; delayed audio starts capture it so a
@@ -20727,6 +20783,7 @@ ${(() => {
                 existingPresentation.remove();
             }
             document.body.insertAdjacentHTML('beforeend', html);
+            try { if (typeof window.__pxEnhance === 'function') window.__pxEnhance(); } catch (e) { /* PX is decorative — never break the show */ }
             
             // ─── SLIDE TRANSITION FADE-IN ───
             // Apply a quick fade-in to the new slide so transitions don't feel like a snap-cut.
