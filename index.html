@@ -778,7 +778,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = 'v2026.11.01.44';
+        const APP_VERSION = 'v2026.11.01.45';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -15745,6 +15745,7 @@ ${(() => {
             try { if (window.__pxTransition) window.__pxTransition(el); } catch (e) {}
             try { if (window.__pxKenBurns) window.__pxKenBurns(el); } catch (e) {}
             try { if (window.__pxConfetti) window.__pxConfetti(el, kind); } catch (e) {}
+            try { if (window.__pxDirectorBtn) window.__pxDirectorBtn(el); } catch (e) {}
         };
 
         // ── PX ITERATION 2: THE BROADCAST SPINE ──
@@ -15967,6 +15968,75 @@ ${(() => {
             };
             requestAnimationFrame(tick);
         };
+
+        // ── PX ITERATION 8: DIRECTOR MODE ──
+        // A hands-free showrunner: tap DIRECTOR and the deck presents
+        // itself — smart dwell per moment (long on crowns, brisk on the
+        // count-up), opens suspense seals itself, parks on the finale.
+        (function pxInjectStyle8() {
+            if (document.getElementById('px-style-8')) return;
+            const st = document.createElement('style');
+            st.id = 'px-style-8';
+            st.textContent = [
+                "#presentationMode .px-director{position:absolute;right:16px;bottom:calc(4.2vh + 16px);z-index:70;border:1px solid rgba(255,215,94,.65);background:rgba(10,8,24,.72);color:#ffe9a8;font:700 11px system-ui;letter-spacing:.18em;padding:9px 14px;border-radius:999px;cursor:pointer;backdrop-filter:blur(3px);}",
+                "#presentationMode .px-director.on{background:#ffd75e;color:#241a02;border-color:#fff3b0;box-shadow:0 0 18px rgba(255,215,94,.55);}"
+            ].join('\n');
+            document.head.appendChild(st);
+        })();
+        window.__pxDwell = function (kind) {
+            switch (kind) {
+                case 'crowning': case 'winner': return 7000;
+                case 'envelope': return 5200;
+                case 'countup': return 4600;
+                case 'montage': return 6000;
+                case 'flag': return 4200;
+                case 'skins': return 65000; /* the Spotlight drives itself */
+                default: return 6000;
+            }
+        };
+        window.__pxDirectorStamp = function () {
+            if (window.__pxState.lastSlideSeen !== presentationState.currentSlide) {
+                window.__pxState.lastSlideSeen = presentationState.currentSlide;
+                window.__pxState.slideLandedAt = Date.now();
+            }
+        };
+        window.__pxDirectorBtn = function (el) {
+            window.__pxDirectorStamp();
+            const b = document.createElement('button');
+            b.className = 'px-director' + (window.__pxState.director ? ' on' : '');
+            b.textContent = window.__pxState.director ? '\u23F8 DIRECTOR ON' : '\u25B6 DIRECTOR';
+            b.addEventListener('click', function (e) {
+                e.stopPropagation();
+                window.__pxState.director = !window.__pxState.director;
+                window.__pxState.slideLandedAt = Date.now();
+                b.className = 'px-director' + (window.__pxState.director ? ' on' : '');
+                b.textContent = window.__pxState.director ? '\u23F8 DIRECTOR ON' : '\u25B6 DIRECTOR';
+            });
+            el.appendChild(b);
+        };
+        if (!window.__pxDirectorTimer) {
+            window.__pxDirectorTimer = setInterval(function () {
+                try {
+                    if (!window.__pxState.director) return;
+                    const el = document.getElementById('presentationMode');
+                    if (!el || !presentationState.active || document.hidden) return;
+                    const now = Date.now();
+                    const seal = el.querySelector('.px-seal');
+                    if (seal) {
+                        if (now - (window.__pxState.slideLandedAt || 0) > 2600 && typeof window.__pxOpenSeal === 'function') {
+                            window.__pxOpenSeal(seal);
+                            window.__pxState.slideLandedAt = now;
+                        }
+                        return;
+                    }
+                    if (presentationState.currentSlide >= (presentationState.totalSlides || 1) - 1) { window.__pxState.director = false; return; }
+                    if (now - (window.__pxState.slideLandedAt || 0) > window.__pxDwell(window.__pxState.lastKind)) {
+                        window.__pxState.slideLandedAt = now;
+                        if (typeof window.nextPresentationSlide === 'function') window.nextPresentationSlide();
+                    }
+                } catch (e) {}
+            }, 500);
+        }
         window.renderPresentation = () => {
             try {
                 // Bumped on every render; delayed audio starts capture it so a
