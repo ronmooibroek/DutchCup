@@ -778,7 +778,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = 'v2026.11.01.47';
+        const APP_VERSION = 'v2026.11.01.48';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -15748,6 +15748,7 @@ ${(() => {
             try { if (window.__pxDirectorBtn) window.__pxDirectorBtn(el); } catch (e) {}
             try { if (window.__pxSeal) window.__pxSeal(el, kind); } catch (e) {}
             try { if (window.__pxHeadline) window.__pxHeadline(el, kind); } catch (e) {}
+            try { if (window.__pxVersus) window.__pxVersus(el, kind); } catch (e) {}
         };
 
         // ── PX ITERATION 2: THE BROADCAST SPINE ──
@@ -16114,6 +16115,38 @@ ${(() => {
             const line = document.createElement('span');
             line.className = 'px-head-line';
             best.appendChild(line);
+        };
+
+        // ── PX ITERATION 11: VERSUS FACE-OFFS ──
+        // Matchup slides become a face-off: the stage splits diagonally
+        // into the two teams' colours and a pulsing VS medallion holds
+        // the centre line.
+        (function pxInjectStyle11() {
+            if (document.getElementById('px-style-11')) return;
+            const st = document.createElement('style');
+            st.id = 'px-style-11';
+            st.textContent = [
+                "#presentationMode .px-versus{position:absolute;inset:0;z-index:57;pointer-events:none;opacity:.5;}",
+                "#presentationMode .px-vs{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:63;width:92px;height:92px;border-radius:50%;display:flex;align-items:center;justify-content:center;font:900 30px system-ui;color:#241a02;background:radial-gradient(circle at 35% 30%,#fff3b0,#ffd75e 55%,#c99612);box-shadow:0 0 0 4px rgba(0,0,0,.35),0 0 44px rgba(255,215,94,.65);pointer-events:none;animation:pxVsPulse 1.8s ease-in-out infinite;}",
+                "@keyframes pxVsPulse{0%,100%{transform:translate(-50%,-50%) scale(1)}50%{transform:translate(-50%,-50%) scale(1.08)}}"
+            ].join('\n');
+            document.head.appendChild(st);
+        })();
+        window.__pxVersus = function (el, kind) {
+            if (kind !== 'slide') return;
+            if (typeof state === 'undefined' || !state || !state.teams) return;
+            const t = el.textContent || '';
+            if (!/\bvs\b|versus/i.test(t)) return;
+            const present = state.teams.filter(function (tm) { return tm && tm.name && tm.color && /^#[0-9a-fA-F]{6}$/.test(tm.color) && t.indexOf(tm.name) >= 0; });
+            if (present.length < 2) return;
+            const d = document.createElement('div');
+            d.className = 'px-versus';
+            d.style.background = 'linear-gradient(115deg, ' + present[0].color + '40 0%, ' + present[0].color + '40 49.6%, rgba(255,255,255,.85) 50%, ' + present[1].color + '40 50.4%, ' + present[1].color + '40 100%)';
+            el.appendChild(d);
+            const vs = document.createElement('div');
+            vs.className = 'px-vs';
+            vs.textContent = 'VS';
+            el.appendChild(vs);
         };
         window.renderPresentation = () => {
             try {
