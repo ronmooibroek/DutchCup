@@ -778,7 +778,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = 'v2026.11.01.54';
+        const APP_VERSION = 'v2026.11.01.55';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -15756,6 +15756,7 @@ ${(() => {
             try { if (window.__pxColdOpen) window.__pxColdOpen(el, kind); } catch (e) {}
             try { if (window.__pxTrophyRoom) window.__pxTrophyRoom(el, kind); } catch (e) {}
             try { if (window.__pxCredits) window.__pxCredits(el, kind); } catch (e) {}
+            try { if (window.__pxSpotlight) window.__pxSpotlight(el, kind); } catch (e) {}
         };
 
         // ── PX ITERATION 2: THE BROADCAST SPINE ──
@@ -16429,6 +16430,38 @@ ${(() => {
                 el.appendChild(wrap);
             });
             dock.appendChild(b);
+        };
+
+        // ── PX ITERATION 18: SPOTLIGHT ISOLATION ──
+        // On the honours screens the room darkens around the featured
+        // man: a radial spotlight is thrown on his photo (found live
+        // from the slide), everything else falls off into shadow.
+        (function pxInjectStyle18() {
+            if (document.getElementById('px-style-18')) return;
+            const st = document.createElement('style');
+            st.id = 'px-style-18';
+            st.textContent = "#presentationMode .px-spot{position:absolute;inset:0;z-index:58;pointer-events:none;}";
+            document.head.appendChild(st);
+        })();
+        window.__pxSpotlight = function (el, kind) {
+            if (['countup', 'crowning', 'winner', 'envelope'].indexOf(kind) < 0) return;
+            let cx = '50%', cy = '42%', r = 340;
+            const imgs = el.querySelectorAll('img');
+            let best = null, bestA = 0;
+            for (let i = 0; i < imgs.length; i++) {
+                const a = (imgs[i].clientWidth || 0) * (imgs[i].clientHeight || 0);
+                if (a > bestA) { bestA = a; best = imgs[i]; }
+            }
+            if (best && bestA > 12000) {
+                const er = el.getBoundingClientRect(), ir = best.getBoundingClientRect();
+                cx = (ir.left + ir.width / 2 - er.left) + 'px';
+                cy = (ir.top + ir.height / 2 - er.top) + 'px';
+                r = Math.max(ir.width, ir.height) * 1.25;
+            }
+            const d = document.createElement('div');
+            d.className = 'px-spot';
+            d.style.background = 'radial-gradient(circle at ' + cx + ' ' + cy + ', rgba(0,0,0,0) 0px, rgba(0,0,0,0) ' + Math.round(r * 0.55) + 'px, rgba(0,0,0,.52) ' + Math.round(r) + 'px)';
+            el.appendChild(d);
         };
         window.renderPresentation = () => {
             try {
