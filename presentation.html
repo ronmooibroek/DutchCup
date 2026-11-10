@@ -849,19 +849,23 @@ function sPictures(night) {
   return out;
 }
 function sNumbers(night) {
+  // CYCLE 26 — The Wall and The Gift live ONLY in The Hole Story now (they
+  // were revealed twice), and the Hot Streak card duplicated the fun-award
+  // streak crown. In their place: the field's NET average (a different
+  // number from the gross) and The Favourite Number — the gross score the
+  // field wrote most tonight, counted off the real cards.
   const r = DATA.rounds[night - 1], c = RC(night), ps = Object.values(c.players);
   const avgGross = ps.reduce((s, d) => s + d.gross, 0) / ps.length;
-  const tough = c.holeAvg.slice().sort((a, b) => b.avg - a.avg)[0];
-  const easy = c.holeAvg.slice().sort((a, b) => a.avg - b.avg)[0];
-  const streak = ps.slice().sort((a, b) => b.bestStreak - a.bestStreak)[0];
+  const avgNet = ps.reduce((s, d) => s + d.net, 0) / ps.length;
+  const freq = {}; let modeN = null, modeCnt = 0;
+  ps.forEach(d => { const rd = r.players[d.pid]; ((rd && rd.scores) || []).forEach(s => { if (typeof s === 'number' && s > 0) { freq[s] = (freq[s] || 0) + 1; if (freq[s] > modeCnt) { modeCnt = freq[s]; modeN = s; } } }); });
   return { ch: 'Act I · The Round', snd: SND.field, html:
     '<div class="kick">Act I · The Round in Numbers</div><h2>' + esc(r.course) + '</h2>' +
     '<div class="cards">' +
     card('📊', 'Field Average', avgGross.toFixed(1), 'the field’s gross average', 0) +
-    card('🐦', 'Birdie Counter', c.fieldBirdies + (c.fieldEagles ? ' + ' + c.fieldEagles + ' 🦅' : ''), 'gross birdies today', 120) +
-    card('🧱', 'The Wall', 'Hole ' + tough.hole, 'Par ' + tough.par + ' · ' + (tough.avg >= 0 ? '+' : '') + tough.avg.toFixed(2) + ' net', 240) +
-    card('🎁', 'The Gift', 'Hole ' + easy.hole, 'Par ' + easy.par + ' · ' + easy.avg.toFixed(2) + ' net', 360) +
-    card('🔥', 'Hot Streak', pname(streak.pid), streak.bestStreak + ' straight at net par or better', 480) +
+    card('🎯', 'Field Average · Net', avgNet.toFixed(1), 'the same field with strokes given — handicaps at work', 120) +
+    card('🐦', 'Birdie Counter', c.fieldBirdies + (c.fieldEagles ? ' + ' + c.fieldEagles + ' 🦅' : ''), 'gross birdies today', 240) +
+    (modeN !== null && modeCnt > 1 ? card('🔔', 'The Favourite Number', modeN, 'the score the field wrote most — ' + modeCnt + ' times tonight', 360) : '') +
     '</div>' };
 }
 function sHoleStory(night) {
@@ -951,8 +955,9 @@ function sSkinsSummary(night) {
   const c = RC(night);
   if (c.skinsEnabled === false) return null;
   const wins = c.skinsLog.filter(l => l.winner);
-  const top = Object.values(c.players).filter(d => d.skins > 0).sort((a, b) => b.skins - a.skins).slice(0, 4);
-  const max = top.length ? top[0].skins : 1;
+  // CYCLE 26 — the top-4 skins bars are gone: tonight's skins king is
+  // crowned exactly once, on the Honours Board. This slide keeps the pot
+  // river (the game's shape) and the King of Ties pill (its only home).
   const river = '<div style="display:flex;gap:.5vmin;align-items:flex-end;width:100%;margin:1.4vmin 0 .6vmin;">' + c.skinsLog.map(l => {
     if (l.winner) return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:.4vmin;"><div style="width:100%;height:' + (2.5 + l.pot * 2.2) + 'vmin;background:linear-gradient(180deg,#fff3b0,#c99612);border-radius:.7vmin .7vmin 0 0;transform-origin:bottom;animation:growUp .7s cubic-bezier(.2,.8,.3,1) both;animation-delay:' + (l.hole * 45) + 'ms;"></div><div style="font-size:1.45vmin;font-weight:800;">' + l.hole + '</div><div style="font-size:1.35vmin;color:var(--gold);font-weight:800;">' + initials(pname(l.winner)) + '</div></div>';
     return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:.4vmin;"><div style="width:100%;height:1.6vmin;background:#ffffff2e;border-radius:.7vmin .7vmin 0 0;"></div><div style="font-size:1.45vmin;font-weight:800;">' + l.hole + '</div><div style="font-size:1.35vmin;color:var(--dim);">×' + (l.tied ? l.tied.length : 0) + '</div></div>';
@@ -960,7 +965,6 @@ function sSkinsSummary(night) {
   return { ch: 'Act I · Skins', snd: SND.skins, html:
     '<div class="kick">Side Game · Skins</div><h2>💰 The Skins Game</h2>' +
     river +
-    top.map((d, ix) => '<div class="barRow" style="--i:' + ix + '"><div class="bn">' + esc(pname(d.pid)) + '</div><div class="bt"><div class="bf" style="width:' + (d.skins / max * 100) + '%;background:' + tcolor(d.pid) + '"></div></div><div class="bv">' + fmt(d.skins) + ' skins</div></div>').join('') +
     (c.kingOfTies ? '<div style="margin-top:2vmin;"><span class="pill" style="font-size:2.3vmin;">👑 KING OF TIES — ' + c.kingOfTies.map(pname).join(' · ') + ' · the last pot split by the house rule</span></div>' : '') };
 }
 function sBigPot(night) {
@@ -1154,18 +1158,13 @@ function sMatches(night) {
         '<div class="faceRow" style="margin-top:1.6vmin;">' +
           '<div style="text-align:center;"><div style="font-size:3.6vmin;">👑</div>' + face(bm.res.winnerPid, true) + '</div>' +
           '<div class="vsBadge">VS</div>' + face(bm.res.loserPid, true) + '</div>' +
-        '<div class="big gold" style="margin-top:1.8vmin;">' + Math.max(bd.w1, bd.w2) + ' – ' + Math.min(bd.w1, bd.w2) + '</div>' +
+        '<div class="sub" style="margin-top:1.8vmin;font-size:2.5vmin;">Final score ' + Math.max(bd.w1, bd.w2) + ' – ' + Math.min(bd.w1, bd.w2) + ' — told in full in the races above.</div>' +
         '<div style="margin-top:1.6vmin;"><span class="pill" style="font-size:2.4vmin;">' + (bd.note ? '🏁 ' + esc(bd.note) : 'DECIDED ON HOLE ' + best.holeNo) + '</span></div>' +
         '<div class="sub" style="margin-top:1.4vmin;">' + bd.halved + ' holes halved · the last match alive tonight</div>' });
     }
-    out.push({ ch: 'Act I · Match Play', snd: SND.hop, html:
-      '<div class="kick">Match Play · Tonight’s Results</div><h2>⚔️ The Bracket Board</h2>' +
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:.9vmin 1.8vmin;width:min(150vmin,96%);">' +
-      decided.map(m => '<div style="display:flex;align-items:center;gap:1.2vmin;background:var(--card);border:1px solid var(--line);border-radius:1.6vmin;padding:.9vmin 1.4vmin;">' +
-        '<div style="width:19vmin;text-align:left;font-size:1.5vmin;letter-spacing:.06em;font-weight:800;color:var(--cream);">' + esc(m.label) + '</div>' +
-        '<div style="margin-left:auto;">' + miniFace(m.res.winnerPid) + '</div>' +
-        '<div style="font-weight:900;font-size:3.2vmin;color:var(--gold);min-width:10vmin;">' + Math.max(m.res.detail.w1, m.res.detail.w2) + '–' + Math.min(m.res.detail.w1, m.res.detail.w2) + '</div>' +
-        '<div style="opacity:.38;filter:grayscale(1);">' + miniFace(m.res.loserPid) + '</div></div>').join('') + '</div>' });
+    // CYCLE 26 — The Bracket Board is CUT: it re-listed every race result a
+    // third time (races → advance cards → board). The advance cards carry
+    // the scores as context; the board's grid is gone.
   }
   return out;
 }
@@ -1240,25 +1239,30 @@ function miniFace(pid, name) {
   return '<div style="text-align:center;width:12.5vmin;">' + img + '<div style="font-weight:800;font-size:1.7vmin;margin-top:.4vmin;">' + esc(label) + '</div></div>';
 }
 function sBBB(night) {
-  const h = honours(night); if (!h) return [];
-  const cum = {}; DATA.players.forEach(p => { cum[p.id] = 0; });
-  for (let n = 1; n <= night; n++) Object.values(RC(n).players).forEach(d => { cum[d.pid] += d.bbb.total; });
-  const race = Object.keys(cum).map(pid => ({ pid, v: cum[pid] })).sort((a, b) => b.v - a.v).slice(0, 5);
-  const max = race[0].v || 1;
+  // CYCLE 26 — the BBB crowns live in the Awards block now (the honours
+  // sequence + sBBBCrowns crown the champion and the three sub-crowns
+  // exactly once), and the B's Race duplicated Week's Leaders, so Act I
+  // keeps only the Full House sweep — a fact with no other home.
   const sweeps = (DATA.rounds[night - 1].bbbAwards || []).filter(a => a.bingo && a.bingo === a.bango && a.bango === a.bongo);
-  const sweepHtml = sweeps.length ? '<div style="margin-top:1.6vmin;"><span class="pill" style="font-size:2.2vmin;">🍯 FULL HOUSE — ' + sweeps.slice(0, 2).map(a => esc(pname(a.bingo)) + ' swept all three B’s on hole ' + (a.holeIdx + 1)).join(' · ') + (sweeps.length > 2 ? ' · +' + (sweeps.length - 2) + ' more tonight' : '') + '</span></div>' : '';
+  if (!sweeps.length) return [];
+  return [{ ch: 'Act I · Bingo Bango Bongo', snd: SND.honey, html:
+    '<div class="kick">Side Game · Bingo Bango Bongo</div><h2>🍯 Full House</h2>' +
+    '<div class="faceRow" style="margin-top:1.2vmin;">' + sweeps.slice(0, 3).map(a => face(a.bingo)).join('') + '</div>' +
+    '<div style="margin-top:1.8vmin;"><span class="pill" style="font-size:2.3vmin;">🍯 ' + sweeps.slice(0, 2).map(a => esc(pname(a.bingo)) + ' swept all three B’s on hole ' + (a.holeIdx + 1)).join(' · ') + (sweeps.length > 2 ? ' · +' + (sweeps.length - 2) + ' more tonight' : '') + '</span></div>' +
+    '<div class="sub" style="margin-top:1.4vmin;">First on, closest to the pin, first in the hole — all three B’s on one hole.</div>' }];
+}
+function sBBBCrowns(night) {
+  // CYCLE 26 — the three B's sub-crowns, presented in the Awards block
+  // right after the BBB champion is crowned. The count rides a little
+  // red flag — no bare count-up.
+  const h = honours(night); if (!h) return null;
   const colFor = (emo, ttl, s) => '<div style="flex:1;text-align:center;background:var(--card);border:1px solid var(--line);border-radius:2vmin;padding:1.8vmin 1.2vmin;">' +
     '<div style="font-size:5vmin;">' + emo + '</div><div style="font-weight:800;letter-spacing:.22em;font-size:1.7vmin;color:var(--gold);margin-top:.5vmin;">' + ttl + '</div>' +
-    (s.who.length ? '<div style="display:flex;flex-wrap:wrap;justify-content:center;gap:.8vmin;margin:.9vmin 0;">' + s.who.map(d => miniFace(d.pid)).join('') + '</div><div style="font-weight:900;font-size:5.4vmin;color:var(--gold);" data-n="' + s.n + '">' + s.n + '</div>' : '<div class="sub" style="margin-top:1.6vmin;">No crown tonight</div>') + '</div>';
-  return [
-    { ch: 'Act I · Bingo Bango Bongo', snd: SND.sparkle, html:
-      '<div class="kick">Side Game · Bingo Bango Bongo</div>' +
-      '<div style="display:flex;align-items:center;gap:3vmin;margin-top:1vmin;">' + face(h.bbbChamp.pid, true) + '<div style="text-align:left;"><div class="kick">👑 BBB Champion</div><div style="font-weight:900;font-size:4.6vmin;">' + esc(pname(h.bbbChamp.pid)) + '</div><div class="sub">🚩 ' + h.bbbChamp.bbb.bingo + ' · 🎯 ' + h.bbbChamp.bbb.bango + ' · 🕳️ ' + h.bbbChamp.bbb.bongo + ' — ' + h.bbbChamp.bbb.total + ' in all</div></div></div>' +
-      '<div style="display:flex;gap:2vmin;width:100%;margin-top:2vmin;">' + colFor('🚩', 'THE OPENER', h.opener) + colFor('🎯', 'PIN SEEKER', h.pinSeeker) + colFor('🕳️', 'THE FINISHER', h.finisher) + '</div>' + sweepHtml },
-    { ch: 'Act I · Bingo Bango Bongo', html:
-      '<div class="kick">Bingo Bango Bongo · The Week-Long Race</div><h2>🏁 The B’s Race</h2>' +
-      '<div style="width:100%;margin-top:1.6vmin;">' + race.map((x, ix) => '<div class="barRow" style="--i:' + ix + '"><div class="bn">' + esc(pname(x.pid)) + '</div><div class="bt"><div class="bf" style="width:' + (x.v / max * 100) + '%;background:' + tcolor(x.pid) + '"></div></div><div class="bv">' + x.v + '</div></div>').join('') + '</div>' }
-  ];
+    (s.who.length ? '<div style="display:flex;flex-wrap:wrap;justify-content:center;gap:.8vmin;margin:.9vmin 0;">' + s.who.map(d => miniFace(d.pid)).join('') + '</div><div><span class="crownFlag">' + s.n + '</span></div>' : '<div class="sub" style="margin-top:1.6vmin;">No crown tonight</div>') + '</div>';
+  return { ch: 'Act II · The Honours', snd: SND.sparkle, html:
+    '<div class="kick">Honours · The B’s Crowns</div><h2>🚩 The Three B’s Crowns</h2>' +
+    '<div style="display:flex;gap:2vmin;width:100%;margin-top:1.6vmin;">' + colFor('🚩', 'THE OPENER', h.opener) + colFor('🎯', 'PIN SEEKER', h.pinSeeker) + colFor('🕳️', 'THE FINISHER', h.finisher) + '</div>' +
+    '<div class="sub" style="margin-top:1.6vmin;">First on the green, nearest the pin, first in the hole — the counts fly on the flags.</div>' };
 }
 function sCTPE9(night) {
   // CYCLE 17 · D4 — CTP is now a hole-by-hole reveal (like the skins beats):
@@ -1347,8 +1351,7 @@ function sHonours(night) {
       '<div class="kick">Act II · The Honours Board</div><h2>🏅 Tonight’s Board</h2>' +
       '<div style="display:flex;gap:2vmin;width:100%;margin-top:1.4vmin;">' +
       tile('⛳ LOW GROSS', h.lowGross.pid, h.lowGross.gross, '') +
-      tile('💰 SKINS KING', h.skinsKing.pid, fmt(h.skinsKing.skins), 'skins · +' + fmt(h.skinsKing.skinsPts) + ' pts') +
-      tile('👑 BBB CHAMPION', h.bbbChamp.pid, h.bbbChamp.bbb.total, 'B’s points') +
+      tile('💰 SKINS KING', h.skinsKing.pid, '<span style="font-size:3.4vmin;">' + '🪙'.repeat(Math.max(1, Math.min(5, h.skinsKing.skins))) + (h.skinsKing.skins > 5 ? '…' : '') + '</span>', fmt(h.skinsKing.skins) + ' skins · +' + fmt(h.skinsKing.skinsPts) + ' pts') +
       ctpTile +
       '</div>' }
   ];
@@ -1441,7 +1444,7 @@ function sTurn(night) {
     '<div class="kick">Act II · The Turn</div><h2>🔥 The Turn</h2>' +
     '<div class="sub" style="margin-top:.5vmin;">Net scores, front nine against back nine — who caught fire after the turn?</div>' +
     '<div style="width:min(130vmin,94%);margin-top:1.2vmin;">' + top.map(row).join('') + '</div>' +
-    '<div class="sub" style="margin-top:1.5vmin;font-size:2.6vmin;">' + esc(pname(w.pid)) + ' — <b style="color:var(--gold);">' + (w.imp > 0 ? w.imp + ' shot' + (w.imp === 1 ? '' : 's') + ' better after the turn' : 'the steadiest card after the turn') + '</b> · back nine in net ' + w.back + '</div>' }];
+    '<div class="sub" style="margin-top:1.5vmin;font-size:2.6vmin;">' + esc(pname(w.pid)) + ' — <b style="color:var(--gold);">' + (w.imp > 0 ? w.imp + ' shot' + (w.imp === 1 ? '' : 's') + ' better after the turn' : 'the steadiest card after the turn') + '</b></div>' }];
 }
 function sMoment(night, led) {
   const c = RC(night), r = DATA.rounds[night - 1];
@@ -1505,15 +1508,24 @@ function sBarrage(night) {
     '<div class="sub" style="margin-top:.8vmin;">' + (hs.birds === 3 ? 'Three straight gross birdies. The hottest stretch anyone played tonight.' : hs.birds === 2 ? 'Two birdies in three holes — the hottest stretch anyone played tonight.' : 'The hottest three-hole stretch anyone played tonight.') + '</div>' }];
 }
 function sBestNine(night) {
-  // CYCLE 20 · I3 — THE BEST NINE: the lowest nine-hole net of the night.
+  // CYCLE 26 — the winning nine is READ OFF A SCORECARD now: nine paper
+  // cells, hole by hole, with the net total sitting in the gold TOTAL
+  // cell — the number is the card's total, not a count-up.
   const bn = bestNine(night); if (!bn || !bn.winners.length) return [];
   const ws = bn.winners.slice(0, 3);
+  const r = DATA.rounds[night - 1], c = RC(night);
+  const w0 = ws[0], d0 = c.players[w0.pid];
+  const seg0 = w0.seg.toLowerCase().indexOf('back') === 0 ? 9 : 0;
+  let cells = '';
+  for (let k = 0; k < 9; k++) { const hi = seg0 + k, net = d0.nets[hi], par = r.pars[hi], rel = net - par;
+    cells += '<div class="bnCell"><div class="bnHole">HOLE ' + (hi + 1) + '</div><div class="bnNet" style="color:' + (rel < 0 ? '#b8860b' : rel > 0 ? '#c0392b' : '#17351f') + ';">' + net + '</div><div class="bnPar">par ' + par + '</div></div>'; }
+  cells += '<div class="bnCell bnTot"><div class="bnHole">TOTAL</div><div class="bnNet">' + bn.v + '</div><div class="bnPar">net</div></div>';
   return [{ ch: 'Act II · The Best Nine', snd: SND.swoosh, html:
     '<div class="kick">Act II · The Best Nine</div><h2>🎯 The Best Nine</h2>' +
-    '<div class="sub">The lowest nine holes anyone played tonight — net.</div>' +
+    '<div class="sub">The lowest nine holes anyone played tonight — net. Read it off the card:</div>' +
     '<div style="display:flex;justify-content:center;gap:3.4vmin;margin-top:1.4vmin;">' + ws.map(w => '<div style="text-align:center;">' + face(w.pid, true) + '<div style="margin-top:.9vmin;"><span class="pill" style="font-size:2vmin;">' + w.seg + '</span></div></div>').join('') + '</div>' +
-    '<div class="big gold" data-n="' + bn.v + '" style="margin-top:1.4vmin;">NET ' + bn.v + '</div>' +
-    '<div class="sub" style="margin-top:.6vmin;">' + (ws.length > 1 ? 'Shared — the same number, matched hole for hole in spirit.' : esc(pname(ws[0].pid)) + ' · ' + ws[0].seg.toLowerCase() + ' · net ' + bn.v + '.') + '</div>' }];
+    '<div class="bnStrip">' + cells + '</div>' +
+    '<div class="sub" style="margin-top:1.4vmin;">' + (ws.length > 1 ? 'Shared — the same number, matched hole for hole in spirit.' : esc(pname(w0.pid)) + '’s ' + w0.seg.toLowerCase() + ', in ink.') + '</div>' }];
 }
 function sTeamNight(night) {
   // CYCLE 20 · I1 — TEAM OF THE NIGHT: tonight's highest team total gets its
@@ -1805,9 +1817,7 @@ function sStorySoFar(night) {
     s.ranks.forEach((r, ix) => { lines += '<circle cx="' + X(ix + 1) + '" cy="' + Y(r) + '" r="5.5" fill="' + s.tm.color + '"/>'; });
     const lx = X(night), ly = Y(s.ranks[s.ranks.length - 1]);
     lines += '<circle cx="' + lx + '" cy="' + ly + '" r="9" fill="' + s.tm.color + '" stroke="#ffffff" stroke-width="2.5"/>';
-    const cur = stNow.find(x => x.team === s.ti);
-    const gapTxt = isLead ? '' : ' · ' + fmt(stNow[0].total - cur.total) + ' back';
-    labels.push({ lx, ly, y: ly, swatch: s.tm.color, txt: esc(s.tm.name) + ' · ' + fmt(cur.total) + gapTxt, fill: dark ? '#e8eaf2' : s.tm.color });
+    labels.push({ lx, ly, y: ly, swatch: s.tm.color, txt: (isLead ? '👑 ' : '') + esc(s.tm.name), fill: dark ? '#e8eaf2' : s.tm.color });
   });
   labels.sort((a, b) => a.y - b.y);
   for (let i = 1; i < labels.length; i++) if (labels[i].y < labels[i - 1].y + 27) labels[i].y = labels[i - 1].y + 27;
@@ -2079,7 +2089,7 @@ function sGroups(tomorrowNight) {
         '<div style="flex:1;background:var(--card);border:2px solid ' + DCOLORS[i] + ';border-radius:2vmin;padding:1.8vmin 1.2vmin;">' +
         '<div style="font-weight:900;font-size:2.6vmin;color:' + DCOLORS[i] + ';">TEAM ' + (i + 1) + '</div>' +
         '<div style="display:flex;flex-wrap:wrap;justify-content:center;gap:1vmin;margin-top:1.2vmin;">' + tm.map((p, ix) =>
-          '<div style="text-align:center;">' + miniFace(p.pid) + '<div style="font-size:1.6vmin;margin-top:.2vmin;">' + (ix === 0 ? '👑 ' : '') + 'gross ' + p.gross + '</div></div>').join('') + '</div></div>').join('') + '</div>' +
+          '<div style="text-align:center;">' + miniFace(p.pid) + '<div style="font-size:1.6vmin;margin-top:.2vmin;">' + (ix === 0 ? '👑 captain' : '&nbsp;') + '</div></div>').join('') + '</div></div>').join('') + '</div>' +
       '<div class="sub" style="margin-top:1.6vmin;">👑 = captain, each team’s first pick.</div>' });
   }
   return out;
@@ -2156,7 +2166,7 @@ function sTomorrow(night) {
       '<div class="sub">' + prettyDate(nx.date) + ' · Par ' + nx.pars.reduce((s, p) => s + p, 0) + '</div>' +
       weatherHtml() +
       (fx ? '<div style="display:grid;grid-template-columns:1fr 1fr;gap:1vmin 2vmin;margin:1.6vmin 0;">' + fx + '</div>' : '') +
-      '<div style="display:flex;align-items:center;gap:2.2vmin;justify-content:center;"><span class="pill" style="font-size:2.1vmin;">👑 ' + esc(st[0].name) + ' · ' + fmt(st[0].total) + '</span><span class="sub" style="font-size:1.95vmin;">averaging ' + fmt(leadAvg) + ' a night — the chasers:</span></div>' +
+      '<div style="display:flex;align-items:center;gap:2.2vmin;justify-content:center;"><span class="pill" style="font-size:2.1vmin;">👑 ' + esc(st[0].name) + ' leads the Cup</span><span class="sub" style="font-size:1.95vmin;">averaging ' + fmt(leadAvg) + ' a night — the chasers:</span></div>' +
       '<div style="width:min(120vmin,96%);margin:.8vmin auto 0;">' + chaseRows + '</div></div>' }
   ];
   out.push(...sDuel(night));
@@ -2176,12 +2186,12 @@ function sWrap(night) {
   const wall = ph.length >= 2 ? ph : [{ src: courseImg(r.course) }].concat(AREA.map(src => ({ src }))).filter(x => x.src).slice(0, 6);
   if (wall.length >= 2) return { ch: 'The Wrap', snd: SND.closing, html:
     '<div class="kick">Night ' + night + ' · The Wrap</div><h2>🌙 That’s the Night</h2>' + photoGrid(wall) +
-    '<div class="sub" style="margin-top:2vmin;">' + esc(pname(top.pid)) + ' owned the night with ' + fmt(top.total) + ' points.' + tail + '</div>' };
+    '<div class="sub" style="margin-top:2vmin;">' + esc(pname(top.pid)) + ' owned the night.' + tail + '</div>' };
   return { ch: 'The Wrap', snd: SND.closing, html:
     bgImg(IMG.hero, .45) +
     '<div class="kick">Night ' + night + ' · The Wrap</div><h2>🌙 That’s the Night</h2>' +
     '<div style="margin:1.6vmin 0;">' + face(top.pid, true) + '</div>' +
-    '<div class="sub">' + esc(pname(top.pid)) + ' owned the night with ' + fmt(top.total) + ' points.' + (nx ? '<br>Tomorrow: ' + esc(nx.course) + ', ' + prettyDate(nx.date) + '. Sleep well — the Cup resumes at breakfast. 🍺' : '') + '</div>' };
+    '<div class="sub">' + esc(pname(top.pid)) + ' owned the night.' + (nx ? '<br>Tomorrow: ' + esc(nx.course) + ', ' + prettyDate(nx.date) + '. Sleep well — the Cup resumes at breakfast. 🍺' : '') + '</div>' };
 }
 function sCast(night) {
   const last = night >= DATA.event.nights;
@@ -2202,18 +2212,13 @@ function sChampion(night) {
       '<div style="position:absolute;inset:0;z-index:-1;background:radial-gradient(ellipse at 50% 28%,' + st[0].color + '47,transparent 70%);"></div>' +
       '<div class="kick">🏆 The Dutch Cup Champions 🏆</div>' +
       '<div style="font-weight:900;font-size:8.6vmin;line-height:1.02;" class="gold">' + esc(st[0].name) + '</div>' +
-      '<div class="big" data-n="' + st[0].total + '">' + fmt(st[0].total) + '</div>' +
       '<div class="faceRow" style="margin-top:2vmin;">' + DATA.teams[st[0].team].players.map(pid => face(pid, true)).join('') + '</div>' },
     { ch: 'Champion Night', snd: SND.anthem, html:
       '<div class="kick">Golfer of the Event</div>' + face(inds[0].pid, true) +
-      '<div class="big gold" data-n="' + inds[0].total + '" style="margin-top:1.4vmin;">' + fmt(inds[0].total) + '</div>' +
       '<h3>' + esc(pname(inds[0].pid)) + ' — the week’s best</h3>' },
-    { ch: 'Champion Night', html:
-      '<div class="kick">The Week in Honours</div><h2>📜 The Roll of Honour</h2><div class="cards">' +
-      card('💰', 'Skins King of the Week', pname(lead(skinsTot)), fmt(skinsTot[lead(skinsTot)]) + ' skins across seven nights', 0) +
-      card('👑', 'BBB King of the Week', pname(lead(bbbTot)), bbbTot[lead(bbbTot)] + ' points', 150) +
-      card('🐦', 'Birdie King', pname(lead(birdTot)), birdTot[lead(birdTot)] + ' gross birdies', 300) +
-      '</div>' },
+    // CYCLE 26 — The Roll of Honour is CUT: its three week crowns
+    // duplicated The Vault (skins), Week's Leaders (the B's) and the
+    // birdie counts on the Form/Leaders boards.
     { ch: 'Champion Night', snd: SND.closing, html:
       '<div class="kick">The Dutch Cup</div><h1>FIN</h1><div class="rule"></div>' +
       '<div class="sub" style="line-height:1.7;">Starring<br>' + DATA.players.map(p => esc(p.name)).join(' · ') + '<br><br>Same time next year. 🍺</div>' }
@@ -2229,7 +2234,7 @@ function sChampion(night) {
     const cell = (lbl, d, val) => '<div style="flex:1;display:flex;align-items:center;gap:1.1vmin;background:var(--card);border:1px solid var(--line);border-radius:1.4vmin;padding:.6vmin 1.1vmin;">' + sf(d.pid) + '<div style="text-align:left;"><div style="font-size:1.3vmin;letter-spacing:.12em;color:var(--gold);font-weight:800;">' + lbl + '</div><div style="font-weight:900;font-size:2vmin;">' + val + '</div></div></div>';
     nightRows.push('<div class="c12rise" style="display:flex;align-items:center;gap:1.2vmin;width:min(138vmin,97%);margin:.6vmin auto;animation-delay:' + (n * 70) + 'ms;">' +
       '<div style="width:16vmin;text-align:left;flex:none;"><div style="font-weight:900;font-size:2.05vmin;">NIGHT ' + n + '</div><div class="sub" style="font-size:1.5vmin;">' + esc(DATA.rounds[n - 1].course) + '</div></div>' +
-      cell('LOW NET', low, 'net ' + low.net) + cell('TOP SCORER', topP, fmt(topP.total) + ' pts') + cell('SKINS KING', sk, fmt(sk.skins) + ' skins') + '</div>');
+      cell('LOW NET', low, n === night ? 'tonight' : 'net ' + low.net) + cell('TOP SCORER', topP, n === night ? 'tonight' : fmt(topP.total) + ' pts') + cell('SKINS KING', sk, n === night ? 'tonight' : fmt(sk.skins) + ' skins') + '</div>');
   }
   if (nightRows.length) out.splice(out.length - 1, 0, { ch: 'Champion Night', html:
     '<div class="kick">Champion Night · The Week, Night by Night</div><h2>📅 Seven Nights, Seven Stories</h2>' +
@@ -2372,6 +2377,129 @@ function sTrailer(night) {
     '<div style="font-weight:900;font-size:8.6vmin;line-height:1.08;">' + words[left] + '</div>' +
     '<div class="sub" style="margin-top:1.8vmin;">' + (left === 1 ? 'By this time tomorrow, the Dutch Cup has a champion.' : 'Every night from here is for keeps.') + '</div></div>' };
 }
+/* ================= CYCLE 26 · THE FAIRWAY + THE CLUBHOUSE BOARD ======
+   The back half of the show, rebuilt on Ron's Nov 9 directives:
+   · every fact revealed exactly once (see cycle26-ledger.md);
+   · the team-by-team progression replaces the per-player Fairway, Team
+     of the Night, the thermometer Final Two count and the ranks 6→1
+     reveal sequence;
+   · the finale is ONE Clubhouse Board — cumulative totals live there
+     and nowhere earlier. ============================================ */
+const FW_CATS = [['⛳', 'Strokes', 'strokePts', 'shot'], ['🖐', 'The B’s', 'bbbPts', 'shot'], ['⚪', 'Balls', 'ballPts', 'putt'], ['📍', 'Closest to the Pin', 'ctpPts', 'putt'], ['9️⃣', 'Extra 9', 'e9Pts', 'putt'], ['💰', 'Skins', 'skinsPts', 'putt']];
+function fwTeamCat(c, ti, key) { return DATA.teams[ti].players.reduce((s, pid) => s + ((c.players[pid] || {})[key] || 0), 0); }
+function fwFace(pid, col, size) { const p = PL[pid]; const sz = size || 5.8; return p.photo ? '<img src="' + p.photo + '" style="width:' + sz + 'vmin;height:' + sz + 'vmin;border-radius:50%;object-fit:cover;border:.35vmin solid ' + col + ';background:#2a2560;">' : '<div style="width:' + sz + 'vmin;height:' + sz + 'vmin;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:1.8vmin;background:#2a2560;color:var(--cream);border:.35vmin solid ' + col + ';">' + initials(p.name) + '</div>'; }
+function fwStrip(o) {
+  // One visual golf hole: tee at the left, mown stripes, the green and
+  // the pin at the right. The scale is TONIGHT's points — yardage stones
+  // carry the numbers, so position IS the data. Balls of teams already
+  // home rest on the hole as crest markers (positions, never numbers).
+  const X = v => 4 + (v / o.scale) * 84;
+  let h = '<div class="fwHole"><div class="fwStripe"></div><div class="fwGreen"></div><div class="fwTee">TEE</div>' +
+    '<div class="fwPin"><div class="fwFlag"></div><div class="fwPole"></div><div class="fwCup"></div></div>';
+  [0, .25, .5, .75, 1].forEach(f => { h += '<div class="fwStone" style="left:' + (4 + 84 * f).toFixed(1) + '%;">' + fmt(o.scale * f) + '</div>'; });
+  let lastLx = -99;
+  (o.rests || []).forEach((r, ix) => { let lx = X(r.v); if (lx < lastLx + 5.4) lx = lastLx + 5.4; lastLx = lx; h += '<div class="fwRest" style="left:' + lx.toFixed(1) + '%;top:' + (ix % 2 ? 69 : 33) + '%;">' + teamLogo(DATA.teams[r.ti].id, 4.4) + '</div>'; });
+  if (o.cur) {
+    if (o.cur.v > 0) h += '<div class="fwTrail" style="width:' + (X(o.cur.v) - 4).toFixed(1) + '%;"></div>';
+    if (o.striker) h += '<div class="fwGolfer" style="left:' + X(o.cur.v).toFixed(1) + '%;">' + fwFace(o.striker, o.cur.color) + '</div>';
+    h += '<div class="fwBall ' + (o.cur.cls || '') + '" style="--from:' + X(o.cur.from).toFixed(1) + '%;--to:' + X(o.cur.v).toFixed(1) + '%;left:' + X(o.cur.v).toFixed(1) + '%;border-color:' + o.cur.color + ';"></div>';
+  }
+  return h + '</div>';
+}
+function sFairway26(night) {
+  // THE FAIRWAY — six team chapters, weakest card first, the night's best
+  // saved for last. Borrowed from the OLD in-app Team Dial (the fairway
+  // Ron loved): a literal striped fairway with the pin beyond the field,
+  // rival markers planted on the hole, big methods struck as full shots
+  // and small ones as putts, and pacing that lets each shot land. Made
+  // better: the scale is tonight-only (cumulative totals belong to the
+  // Clubhouse Board), both players stand at the tee and the bigger
+  // contributor in each category plays that shot, resting balls stay on
+  // the hole so every chapter visibly chases the ones before it, and the
+  // night's total is revealed ONCE — written on the hole's scorecard
+  // card at the green, never counted up.
+  const c = RC(night); if (!c) return [];
+  const st = standings(night);
+  const order = st.slice().sort((a, b) => (a.tonight - b.tonight) || (a.total - b.total) || a.name.localeCompare(b.name));
+  const scale = Math.max.apply(null, st.map(s => s.tonight).concat([1])) * 1.14;
+  const prevCum = night > 1 ? cumulative(night - 1) : null;
+  const out = [{ ch: 'Act III · The Fairway', dwell: 3400, snd: SND.fairy, html:
+    '<div class="kick">Act III · The Fairway</div><h2>⛳ Team by Team Down the Fairway</h2>' +
+    '<div class="sub" style="max-width:118vmin;">Six teams, one hole. Weakest card first, the night’s best saved for last — every team’s day told shot by shot: strokes, the B’s, balls, pins, the Extra 9 and the skins. The farther the ball travels, the bigger the day. The stones along the fringe carry the scale.</div>' +
+    '<div style="display:flex;justify-content:center;gap:2.6vmin;margin-top:2.6vmin;">' + order.map(s => '<div style="text-align:center;">' + teamLogo(DATA.teams[s.team].id, 8) + '<div style="font-size:1.7vmin;font-weight:800;margin-top:.5vmin;">' + esc(s.name) + '</div></div>').join('') + '</div>' }];
+  const rests = [];
+  order.forEach((s, ix) => {
+    const tm = DATA.teams[s.team], col = s.color;
+    const cats = FW_CATS.map(([emo, lbl, key, kind]) => ({ emo, lbl, key, kind, v: fwTeamCat(c, s.team, key) }));
+    const total = cats.reduce((a, x) => a + x.v, 0);
+    const strikerFor = key => { const a = tm.players[0], b = tm.players[1]; const va = (c.players[a] || {})[key] || 0, vb = (c.players[b] || {})[key] || 0; return vb > va ? b : a; };
+    out.push({ ch: 'Act III · The Fairway', dwell: 3400, snd: teamWalkupSnd(tm.id) || SND.hop, html:
+      '<div class="kick">Act III · The Fairway · Team ' + (ix + 1) + ' of 6</div>' +
+      '<div style="display:flex;align-items:center;justify-content:center;gap:4vmin;margin-top:.4vmin;">' + teamLogo(tm.id, 16) +
+      '<div style="text-align:left;"><div style="font-weight:900;font-size:5.4vmin;color:' + col + ';line-height:1.05;">' + esc(s.name) + '</div><div class="sub">on the tee — how was their day built?</div></div></div>' +
+      '<div class="faceRow" style="margin-top:1.2vmin;">' + tm.players.map(pid => face(pid)).join('') + '</div>' +
+      '<div class="fwWrap">' + fwStrip({ scale, rests, cur: { color: col, v: 0, from: 0, cls: '' }, striker: tm.players[0] }) + '</div>' });
+    let run = 0; const passedSet = new Set();
+    cats.forEach((cat, ci) => {
+      const from = run; run += cat.v;
+      const newly = rests.filter(r => !passedSet.has(r.ti) && run > r.v);
+      newly.forEach(r => passedSet.add(r.ti));
+      const stk = strikerFor(cat.key);
+      out.push({ ch: 'Act III · The Fairway', dwell: cat.v > 0 ? 1500 : 1200, snd: cat.v > 0 ? (cat.kind === 'shot' ? SND.skins : SND.hop) : null, html:
+        '<div class="kick">Act III · The Fairway · ' + esc(s.name) + '</div>' +
+        '<div style="font-weight:900;font-size:4.3vmin;">' + cat.emo + ' ' + cat.lbl + (cat.v > 0 ? ' — <span style="color:var(--gold);">+' + fmt(cat.v) + '</span>' : ' — <span style="color:var(--dim);">no joy</span>') + '</div>' +
+        '<div class="fwWrap">' + fwStrip({ scale, rests, cur: { color: col, v: run, from, cls: cat.v > 0 ? (cat.kind === 'shot' ? 'fwShotA' : 'fwRollA') : '' }, striker: stk }) + '</div>' +
+        '<div class="sub" style="margin-top:1.3vmin;">' + esc(pname(stk)) + ' plays it' + (cat.v > 0 ? (ci === cats.length - 1 ? ' — and the ball is on the green…' : ' — watch it run.') : ' — nothing doing; the ball stays where it was.') + '</div>' +
+        (cat.v > 0 && newly.length ? '<div style="margin-top:1vmin;"><span class="pill" style="font-size:2.2vmin;">🏌️ ROLLS PAST ' + newly.map(r => esc(DATA.teams[r.ti].name)).join(' · ') + '</span></div>' : '') });
+    });
+    const isBest = ix === order.length - 1;
+    const crossed = prevCum && Math.floor(s.total / 100) > Math.floor(prevCum.teams[s.team] / 100);
+    out.push({ ch: 'Act III · The Fairway', dwell: isBest ? 7500 : 6000, fx: isBest ? 'confetti' : undefined, fxCols: [col, '#ffd75e', '#ffffff'], snd: SND.nail, html:
+      '<div class="kick">Act III · The Fairway · ' + esc(s.name) + ' · The Green</div>' +
+      '<div class="fwWrap">' + fwStrip({ scale, rests, cur: { color: col, v: total, from: total, cls: '' }, striker: null }) + '</div>' +
+      '<div style="margin-top:2vmin;animation:dropIn .8s cubic-bezier(.2,.8,.3,1) .3s both;"><span class="fwCard"><span class="fwCardTop">' + esc(s.name) + ' · TONIGHT</span><span class="fwCardNum">' + fmt(total) + '</span></span></div>' +
+      (crossed ? '<div style="margin-top:1.3vmin;"><span class="pill" style="font-size:2.2vmin;">💯 THROUGH ' + (Math.floor(s.total / 100) * 100) + ' ON THE WEEK</span></div>' : '') +
+      '<div class="sub" style="margin-top:1.2vmin;">' + (isBest ? '👑 TEAM OF THE NIGHT — the best card of the day, holed last. What it does to the Cup, the Clubhouse Board is about to say.' : 'The ball is home. For now, that is the score the rest must fly past to take the night.') + '</div>' });
+    rests.push({ ti: s.team, v: total });
+  });
+  return out;
+}
+function sClubhouse26(night) {
+  // THE CLUBHOUSE BOARD — the night ENDS with the event standings, and
+  // the cumulative totals appear HERE and nowhere earlier. Rows light in
+  // reverse order, last place first; the leader's row lands last, in
+  // gold, to his own walkup. The individual race gets ONE board too —
+  // a scorecard: a row per man, a cell per night, the gold cell the week.
+  const st = standings(night), inds = indStandings(night);
+  const final = night === DATA.event.nights;
+  const lead = st[0], tmLead = DATA.teams[lead.team];
+  const teamBoard = { ch: 'Act III · The Clubhouse Board', dwell: 12000, fx: 'confetti', fxCols: [lead.color, '#ffd75e', '#ffffff'], snd: teamWalkupSnd(tmLead.id) || SND.first, html:
+    bgImg(IMG.trophy, .16) +
+    '<div style="position:relative;z-index:3;width:100%;"><div class="kick">Act III · The Clubhouse Board</div><h2>' + (final ? '🏆 The Final Board' : '🏆 The Board After Night ' + night) + '</h2>' +
+    '<div style="width:min(118vmin,94%);margin:1vmin auto 0;">' + st.map(s =>
+      '<div class="cbRow' + (s.rank === 1 ? ' cbFirst' : '') + '" style="--d:' + ((st.length - s.rank) * 0.55).toFixed(2) + 's;">' +
+      '<div class="cbRank">' + s.rank + '</div>' + teamLogo(DATA.teams[s.team].id, 6) +
+      '<div style="flex:1;"><span style="font-weight:900;font-size:2.9vmin;color:' + s.color + ';">' + esc(s.name) + '</span>' + (s.rank === 1 ? ' <span style="font-size:2.4vmin;">👑</span>' : '') + '<div style="font-size:1.8vmin;color:var(--dim);">+' + fmt(s.tonight) + ' tonight</div></div>' +
+      moveHtml(s.move) +
+      '<div class="cbTot">' + fmt(s.total) + '</div></div>').join('') + '</div>' +
+    '<div class="sub" style="margin-top:1.3vmin;">' + (final ? 'That’s the week — the Cup has a home.' : (DATA.event.nights - night) + ' night' + (DATA.event.nights - night === 1 ? '' : 's') + ' to play. These totals live on this board and nowhere else in the show.') + '</div></div>' };
+  const gap = inds.length > 1 ? inds[0].total - inds[1].total : 99;
+  const climber = inds.filter(x => x.move >= 3).sort((a, b) => b.move - a.move)[0];
+  const indBoard = { ch: 'Act III · The Clubhouse Board', dwell: 12000, snd: SND.bed, html:
+    '<div class="kick">Act III · The Clubhouse Board</div><h2>👤 The Individual Board</h2>' +
+    '<div class="sub">The week on one card — a row per man, a cell per night, the gold cell is the week.</div>' +
+    '<div style="width:min(130vmin,96%);margin:1vmin auto 0;">' + inds.map(x => {
+      let cells = '';
+      for (let n = 1; n <= night; n++) { const d = RC(n).players[x.pid]; cells += '<span class="scCell sm">' + (d ? fmt(d.total) : '–') + '</span>'; }
+      return '<div class="cbRow" style="--d:' + ((inds.length - x.rank) * 0.26).toFixed(2) + 's;padding:.42vmin 1.6vmin;margin:.48vmin auto;">' +
+        '<div class="cbRank" style="font-size:2.3vmin;width:4vmin;">' + x.rank + '</div>' + fwFace(x.pid, tcolor(x.pid), 4.2) +
+        '<div style="flex:1;font-weight:800;font-size:2.05vmin;">' + esc(pname(x.pid)) + ' <span style="color:var(--dim);font-weight:700;font-size:1.75vmin;">' + esc(tname(x.pid)) + '</span></div>' +
+        '<div style="display:flex;gap:.5vmin;">' + cells + '<span class="scCell sm scTot">' + fmt(x.total) + '</span></div>' +
+        '<div style="width:5.5vmin;text-align:right;">' + moveHtml(x.move) + '</div></div>';
+    }).join('') + '</div>' +
+    '<div style="display:flex;justify-content:center;gap:1.2vmin;flex-wrap:wrap;margin-top:.9vmin;">' + (gap <= 12 ? '<span class="pill" style="font-size:2vmin;">⚔️ THE RACE IS ALIVE — ' + fmt(gap) + ' between ' + esc(pname(inds[0].pid)) + ' and ' + esc(pname(inds[1].pid)) + '</span>' : '') + (climber ? '<span class="pill" style="font-size:2vmin;">🚀 ' + esc(pname(climber.pid)) + ' climbed ' + climber.move + ' places tonight</span>' : '') + '</div>' };
+  return [teamBoard, indBoard];
+}
 function deckFor(night) {
   const r = DATA.rounds[night - 1];
   if (!r || !r.completed) return previewDeck(night);
@@ -2392,10 +2520,15 @@ function deckFor(night) {
   out.push(...sGauntlet(night));
   out.push(...sBBB(night));
   out.push(...sCTPE9(night));
-  out.push(...sFairway(night));
-  out.push(chapterCard('Act II', 'THE HONOURS', '🏅', IMG.trophy));
-  out.push(...sHonours(night));
+  // CYCLE 26 ORDER — the awards block comes BEFORE the team progression:
+  // fun awards first (Ron's order), then the night's honours, with the
+  // B's sub-crowns spliced in right after the BBB champion is crowned.
+  out.push(chapterCard('Act II', 'THE AWARDS', '🏆', IMG.trophy));
   out.push(...sFun(night, led.funWon));
+  const hon26 = sHonours(night);
+  const cr26 = sBBBCrowns(night);
+  if (cr26 && hon26.length >= 2) hon26.splice(2, 0, cr26);
+  out.push(...hon26);
   out.push(...sFirsts(night));
   out.push(...sTurn(night));
   out.push(...sBestNine(night));
@@ -2403,13 +2536,15 @@ function deckFor(night) {
   out.push(...sByPars(night));
   out.push(...sMoment(night, led));
   out.push(...sWildcard(night));
-  out.push(chapterCard('Act III', 'THE FINALE', '🏆', IMG.trophy));
-  out.push(...sTeamNight(night));
-  out.push(...sStandings(night));
-  out.push(...sIndRace(night));
-  out.push(...sComeback(night));
+  // CYCLE 26 — the team-by-team Fairway progression, then the ONE
+  // Clubhouse Board finale, then the week-story context boards and the
+  // single odds board. (sTeamNight, sStandings, sIndRace, sComeback and
+  // sRoad are retired — see cycle26-ledger.md.)
+  out.push(chapterCard('Act III', 'THE FAIRWAY', '⛳', IMG.hero));
+  out.push(...sFairway26(night));
+  out.push(...sClubhouse26(night));
+  if (night > 1) out.push(sStorySoFar(night));
   const od = sOdds(night); if (od) out.push(od);
-  const rd = sRoad(night); if (rd) out.push(rd);
   out.push(...sWeekLeaders(night));
   out.push(...sTopNights(night));
   out.push(...sWeekRecords(night));
@@ -2572,14 +2707,16 @@ function sOdds(night) {
   if (remaining <= 0) return null;
   const odds = winOdds(night), prev = night > 1 ? winOdds(night - 1) : null;
   const st = standings(night).slice().sort((a, b) => odds[b.team] - odds[a.team]);
-  return { ch: 'Act III · The Finale', snd: SND.bed, html:
+  const surge26 = prev ? st.map(s => ({ name: s.name, mv: odds[s.team] - prev[s.team] })).sort((a, b) => b.mv - a.mv)[0] : null;
+  return { ch: 'Act III · The Odds', snd: SND.bed, html:
     '<div class="kick">Act III · The Odds</div><h2>🎲 Who Lifts the Cup?</h2>' +
     '<div style="margin-top:2vmin;width:100%;">' + st.map(s => {
       const pct = odds[s.team]; const mv = prev ? pct - prev[s.team] : 0;
       const mvH = !prev ? '<span class="mv sm">—</span>' : Math.abs(mv) < 0.05 ? '<span class="mv sm">— flat</span>' : mv > 0 ? '<span class="mv up">▲ ' + mv.toFixed(1) + '</span>' : '<span class="mv dn">▼ ' + (-mv).toFixed(1) + '</span>';
-      return '<div class="oddsRow"><div class="who"><span style="color:' + s.color + '">●</span>' + esc(s.name) + '</div><div class="bar"><div class="fill" style="width:' + Math.max(1.5, pct) + '%;background:' + s.color + '"></div></div><div class="pc">' + pct.toFixed(1) + '%</div><div>' + mvH + '</div></div>';
+      return '<div class="oddsRow"><div class="who"><span style="color:' + s.color + '">●</span>' + esc(s.name) + '</div><div class="bar"><div class="fill" style="width:' + Math.max(1.5, pct) + '%;background:' + s.color + '"></div><span class="oball" style="left:' + Math.max(1.5, pct) + '%;">⚪</span></div><div class="pc">' + pct.toFixed(1) + '%</div><div>' + mvH + '</div></div>';
     }).join('') + '</div>' +
-    '<div class="sub" style="margin-top:2vmin;">10,000 simulated finishes of the remaining ' + remaining + ' night' + (remaining === 1 ? '' : 's') + ' — the scoring app’s own model. Movement is against last night.</div>' };
+    (surge26 && surge26.mv >= 0.05 ? '<div style="margin-top:1.6vmin;"><span class="pill" style="font-size:2.2vmin;">🚀 SURGE — ' + esc(surge26.name) + '’s Cup chance jumped ' + surge26.mv.toFixed(1) + ' points tonight</span></div>' : '') +
+    '<div class="sub" style="margin-top:2vmin;">10,000 simulated finishes of the remaining ' + remaining + ' night' + (remaining === 1 ? '' : 's') + ' — the scoring app’s own model. Movement is against last night. The ball sits where the week says the Cup is heading.</div>' };
 }
 function sRoad(night) {
   if (night < 2) return null;
