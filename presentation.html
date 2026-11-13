@@ -206,6 +206,39 @@
 .slamFlash { position: absolute; inset: 0; background: radial-gradient(circle at 50% 46%, rgba(255,215,94,.34), transparent 62%); animation: flashBg .8s ease both; pointer-events: none; }
 @keyframes coinPop { 0% { transform: scale(.4); opacity: 0; } 60% { transform: scale(1.14); opacity: 1; } 100% { transform: scale(1); } }
 @keyframes ringPulse { 0%,100% { transform: scale(1); opacity: .85; } 50% { transform: scale(1.09); opacity: 1; } }
+
+/* ===== cycle 28: the face-off — the house reveal style ===== */
+@keyframes foInL { 0% { transform: translateX(-56vmin); opacity: 0; } 55% { opacity: 1; } 100% { transform: translateX(0); opacity: 1; } }
+@keyframes foInR { 0% { transform: translateX(56vmin); opacity: 0; } 55% { opacity: 1; } 100% { transform: translateX(0); opacity: 1; } }
+@keyframes foVs { 0% { transform: scale(.3) rotate(-22deg); opacity: 0; } 100% { transform: scale(1) rotate(-8deg); opacity: 1; } }
+.foArena { display: flex; align-items: flex-start; justify-content: center; gap: 3.4vmin; width: 100%; margin-top: 1.4vmin; }
+.foSide { width: 34vmin; flex: none; text-align: center; position: relative; transition: filter .7s ease, opacity .7s ease; }
+.foSide .face img, .foSide .face .init { width: 20vmin; height: 20vmin; }
+.foInL { animation: foInL .95s cubic-bezier(.2,1.15,.3,1) backwards; }
+.foInR { animation: foInR .95s cubic-bezier(.2,1.15,.3,1) backwards; }
+.foVs { font-size: 6.2vmin; font-weight: 900; font-style: italic; color: var(--gold); text-shadow: 0 0 3.4vmin rgba(255,215,94,.5); animation: foVs .5s cubic-bezier(.2,1.8,.4,1) .5s both; align-self: center; flex: none; }
+.foTag { font-size: 1.85vmin; font-weight: 800; letter-spacing: .12em; color: var(--dim); margin-top: .9vmin; text-transform: uppercase; line-height: 1.35; }
+.foCrown { position: absolute; top: -4.4vmin; left: 50%; transform: translateX(-50%) rotate(-8deg) scale(.4); font-size: 5.2vmin; opacity: 0; transition: opacity .5s ease, transform .5s cubic-bezier(.2,1.6,.4,1); z-index: 3; pointer-events: none; }
+.foTape { width: min(96vmin, 92%); margin: 1.8vmin auto 0; }
+.foRow { display: grid; grid-template-columns: 1fr auto 1fr; gap: 1.4vmin; align-items: center; padding: .8vmin .4vmin; border-top: 1px solid #ffffff1f; font-size: 2.15vmin; }
+.foRow .fl { text-align: right; font-weight: 800; } .foRow .fr { text-align: left; font-weight: 800; }
+.foRow .flab { color: var(--dim); font-size: 1.45vmin; font-weight: 800; letter-spacing: .16em; text-align: center; }
+.foRow .hot { color: var(--gold); }
+.foStare { margin-top: 1.9vmin; font-size: 3.05vmin; font-weight: 900; letter-spacing: .05em; color: var(--cream); text-align: center; }
+.foResVals { display: flex; justify-content: center; gap: 3.4vmin; width: 100%; margin-top: 1.4vmin; }
+.foResVal { width: 34vmin; flex: none; text-align: center; }
+.foResVal .rv { font-weight: 900; font-size: 7.4vmin; line-height: 1; }
+.foVerdict { text-align: center; font-weight: 900; font-size: 3.3vmin; color: var(--gold); margin-top: 1.5vmin; line-height: 1.25; }
+.foStage:has(.foRes:not(.btOff)) .foLose { filter: grayscale(1); opacity: .4; }
+.foStage:has(.foRes:not(.btOff)) .foWin .face img, .foStage:has(.foRes:not(.btOff)) .foWin .face .init { box-shadow: 0 0 0 .55vmin var(--gold), 0 0 5vmin rgba(255,215,94,.55); }
+.foStage:has(.foRes:not(.btOff)) .foWin .foCrown { opacity: 1; transform: translateX(-50%) rotate(-8deg) scale(1); }
+.foStage:has(.foRes:not(.btOff)) .foWin .nm { color: var(--gold); }
+.foSide .foDuo .face img, .foSide .foDuo .face .init { width: 13.5vmin; height: 13.5vmin; }
+.foSide .foDuo .face .nm { font-size: 2.2vmin; }
+.foCardVs { display: flex; align-items: center; justify-content: center; gap: 1.1vmin; }
+.foWall { display: grid; grid-template-columns: repeat(3, auto); gap: 1.2vmin; justify-content: center; align-content: center; min-height: 20vmin; }
+.foLit { display: inline-block; position: relative; border-radius: 50%; box-shadow: 0 0 0 .55vmin var(--gold), 0 0 5vmin rgba(255,215,94,.5); line-height: 0; }
+@media (prefers-reduced-motion: reduce) { .foInL, .foInR, .foVs { animation: none !important; } }
 </style>
 </head>
 <body>
@@ -1048,12 +1081,26 @@ function sMatches(night) {
       const segR = feat.segment === 'front9' ? [0, 9] : feat.segment === 'back9' ? [9, 18] : [0, 18];
       const segLen = segR[1] - segR[0];
       const hw = i => { const n1 = A.nets[i], n2 = B.nets[i]; if (n1 !== n2 && Math.min(n1, n2) <= rrR.pars[i]) return n1 < n2 ? feat.res.p1 : feat.res.p2; return null; };
-      out.push({ ch: 'Act I · Match Play', dwell: 4500, snd: SND.nail, html:
-        '<div style="position:absolute;inset:0;z-index:-1;background:linear-gradient(90deg,' + tcolor(feat.res.p1) + '59 0 50%,' + tcolor(feat.res.p2) + '59 50% 100%);opacity:.55;"></div>' +
-        '<div class="kick">Match Play · ' + esc(feat.label) + (feat.segment !== 'full' ? ' · ' + (feat.segment === 'front9' ? 'FRONT 9' : 'BACK 9') : '') + '</div>' +
-        '<div class="faceRow" style="margin-top:2vmin;">' + face(feat.res.p1, true) + '<div class="vsBadge">VS</div>' + face(feat.res.p2, true) + '</div>' +
-        '<div style="display:flex;gap:12vmin;margin-top:.6vmin;font-size:2.4vmin;letter-spacing:.5vmin;"><div>' + formDots(feat.res.p1) + '</div><div>' + formDots(feat.res.p2) + '</div></div>' +
-        '<div style="font-size:8.5vmin;margin-top:2.2vmin;">🏎️</div>' });
+      // CYCLE 28 — the race intro is a FACE-OFF now, the mockup's exact
+      // beats: both men slide in (whoosh), the tape lands (form, bracket
+      // record, the stakes — golf-hit), the staredown holds (pulse),
+      // and only then does the Cycle 27 race run. No winner is lit here:
+      // the race still decides everything.
+      const lA = losses[feat.res.p1] || 0, lB = losses[feat.res.p2] || 0;
+      const recOf = pid => { const ch = playerPath(pid, night - 1); const w = ch.filter(x => x === 'W' || x === 'B').length, l = ch.filter(x => x === 'L').length; return w + ' WINS · ' + l + (l === 1 ? ' LOSS' : ' LOSSES'); };
+      const stakes28 = lA === 1 && lB === 1 ? 'LOSER GOES HOME' : lA === 1 ? pname(feat.res.p1).split(' ')[0].toUpperCase() + ' PLAYS FOR HIS WEEK' : lB === 1 ? pname(feat.res.p2).split(' ')[0].toUpperCase() + ' PLAYS FOR HIS WEEK' : 'WINNER ADVANCES';
+      const stare28 = lA === 1 && lB === 1 ? 'ONE LIFE LEFT — EACH. ONE OF THEM GOES HOME TONIGHT.' : (lA === 1 || lB === 1) ? 'ONE MAN PLAYS FOR HIS WEEK. THE OTHER PLAYS TO END IT.' : 'NO MORE TALK. THE RACE IS NEXT.';
+      out.push(foSlide({
+        ch: 'Act I · Match Play', kick: 'Match Play · ' + esc(feat.label) + (feat.segment !== 'full' ? ' · ' + (feat.segment === 'front9' ? 'FRONT 9' : 'BACK 9') : ''), bg: foBg(feat.res.p1, feat.res.p2),
+        head: '<h2>⚔️ ' + esc(feat.label) + '</h2>',
+        aHTML: foFighter(feat.res.p1, ''), bHTML: foFighter(feat.res.p2, ''),
+        tape: [
+          ['<span style="letter-spacing:.5vmin;">' + formDots(feat.res.p1) + '</span>', 'FORM · THE WEEK', '<span style="letter-spacing:.5vmin;">' + formDots(feat.res.p2) + '</span>', null],
+          [recOf(feat.res.p1), 'BRACKET', recOf(feat.res.p2), null],
+          [feat.segment === 'full' ? '18 HOLES' : feat.segment === 'front9' ? 'FRONT 9' : 'BACK 9', 'THE STAKES', stakes28, null]
+        ],
+        stare: stare28, dwell: 4500
+      }));
       let wA = 0, wB = 0;
       // CYCLE 27 — THE RACE STOPS AT THE DECISION: matchWalk finds the
       // hole where the winner's lead first beat the holes remaining, and
@@ -1211,14 +1258,21 @@ function sMatches(night) {
       raceInfo.sort((a, b) => (b.clinch - a.clinch) || (a.margin - b.margin) || (b.halved - a.halved) || (a.orderIx - b.orderIx));
       const best = raceInfo[0], bm = best.m, bd = bm.res.detail;
       out.push({ ch: 'Act I · Match Play', fx: 'confetti', fxCols: [tcolor(bm.res.winnerPid), '#ffd75e'], snd: SND.cheer, html:
-        '<div class="kick">Act I · Match Play · ' + esc(bm.label) + (bm.segment !== 'full' ? ' · ' + (bm.segment === 'front9' ? 'FRONT 9' : 'BACK 9') : '') + '</div>' +
+        // CYCLE 28 — Match of the Night wears the house style too: the
+        // two men slide in once more, and one click lands the verdict —
+        // the loser greys, the crown drops, the notation speaks.
+        '<div class="foStage" data-fo-win="' + bm.res.winnerPid + '" style="position:relative;width:100%;">' + foBg(bm.res.winnerPid, bm.res.loserPid) +
+        '<div style="position:relative;z-index:2;"><div class="kick">Act I · Match Play · ' + esc(bm.label) + (bm.segment !== 'full' ? ' · ' + (bm.segment === 'front9' ? 'FRONT 9' : 'BACK 9') : '') + '</div>' +
         '<h2>⭐ Match of the Night</h2>' +
-        '<div class="faceRow" style="margin-top:1.6vmin;">' +
-          '<div style="text-align:center;"><div style="font-size:3.6vmin;">👑</div>' + face(bm.res.winnerPid, true) + '</div>' +
-          '<div class="vsBadge">VS</div>' + face(bm.res.loserPid, true) + '</div>' +
-        '<div class="sub" style="margin-top:1.8vmin;font-size:2.5vmin;">Won ' + matchNotation(bd, bm.res.winnerPid, bm.res.p1) + ' — told in full in the races above.</div>' +
-        '<div style="margin-top:1.6vmin;"><span class="pill" style="font-size:2.4vmin;">' + (bd.note ? '🏁 ' + esc(bd.note) : 'DECIDED ON HOLE ' + best.holeNo) + '</span></div>' +
-        '<div class="sub" style="margin-top:1.4vmin;">' + bd.halved + ' holes halved · the last match alive tonight</div>' });
+        '<div class="foArena">' +
+          '<div class="foSide foInL foWin">' + foFighter(bm.res.winnerPid, '') + '</div>' +
+          '<div class="foVs">VS</div>' +
+          '<div class="foSide foInR foLose">' + foFighter(bm.res.loserPid, '') + '</div>' +
+        '</div>' +
+        '<div class="bt foRes" data-b="1"><div class="foVerdict">Won ' + matchNotation(bd, bm.res.winnerPid, bm.res.p1) + '</div>' +
+        '<div style="margin-top:1.2vmin;"><span class="pill" style="font-size:2.4vmin;">' + (bd.note ? '🏁 ' + esc(bd.note) : 'DECIDED ON HOLE ' + best.holeNo) + '</span></div>' +
+        '<div class="sub" style="margin-top:1.2vmin;">' + bd.halved + ' holes halved · the last match alive tonight</div></div>' +
+        '</div></div>' });
     }
     // CYCLE 26 — The Bracket Board is CUT: it re-listed every race result a
     // third time (races → advance cards → board). The advance cards carry
@@ -1375,9 +1429,270 @@ function nomSlide(title, top) {
     '<div class="nomRow">' + top.map(d => '<div class="nomCard">' + face(d.pid, false, true) + '</div>').join('') + '</div>' +
     '<div class="sub" style="margin-top:2.2vmin;">Three finalists. One honour. Whenever you’re ready…</div>' };
 }
+/* ═══ CYCLE 28 · THE FACE-OFF — THE HOUSE REVEAL STYLE ═══
+   Ron picked the Face-Off mockup as the show's base (Nov 13): two
+   faces slide in from opposite edges (whoosh), a VS clash, the tale
+   of the tape between them, a staredown hold — then the resolution:
+   the winner's side lights with his music, the loser's greys. Every
+   PEOPLE reveal in the show is now staged in that grammar:
+     entrance (render)  — faces slide in; enterSnd plays the whoosh
+                          (or the team's walkup in Act III);
+     beat 1 · THE TAPE  — supporting lines only, golf-hit on landing;
+                          the deciding number is NEVER on the tape;
+     beat 2 · STAREDOWN — one held line, the quiet pulse under it;
+     beat 3 · RESOLUTION — both deciding numbers land (the winner's
+                          in gold), :has() lights the winner and
+                          greys the loser, confetti + the winner's
+                          sound fire (the runtime holds a staged
+                          slide's snd/fx for its last beat).
+   Flash discipline (Ron's "too flashy" note): the energy is the
+   staredown and the tape — ONE impact moment per reveal, confetti
+   only on a resolution beat, no strobing, no repeated zooms. */
+function foFighter(pid, tag) {
+  return '<span class="foCrown">👑</span>' + face(pid, true) + (tag ? '<div class="foTag">' + tag + '</div>' : '');
+}
+function foTapeHtml(rows) {
+  return '<div class="bt foTape" data-b="1">' + rows.map(r =>
+    '<div class="foRow"><span class="fl' + (r[3] === 'a' ? ' hot' : '') + '">' + r[0] + '</span><span class="flab">' + r[1] + '</span><span class="fr' + (r[3] === 'b' ? ' hot' : '') + '">' + r[2] + '</span></div>').join('') + '</div>';
+}
+function foTapeCHtml(rows) {
+  // Single-column tape (a team vs the field): label left, value right.
+  return '<div class="bt foTape" data-b="1">' + rows.map(r =>
+    '<div class="foRow" style="grid-template-columns:auto 1fr;"><span class="flab" style="text-align:left;">' + r[0] + '</span><span style="font-weight:800;text-align:right;">' + r[1] + '</span></div>').join('') + '</div>';
+}
+function foResHtml(aVal, bVal, verdict, sub) {
+  return '<div class="foResVals"><div class="foResVal">' + aVal + '</div><div style="flex:none;width:6.2vmin;"></div><div class="foResVal">' + bVal + '</div></div>' +
+    (verdict ? '<div class="foVerdict">' + verdict + '</div>' : '') +
+    (sub ? '<div class="sub" style="text-align:center;margin-top:.8vmin;">' + sub + '</div>' : '');
+}
+function foSlide(o) {
+  // o: {ch, kick, head, aHTML, bHTML, winSide ('a'|'b'|null), tape, tapeC,
+  //     stare, res, snd, enterSnd, beatSnd, dwell, winPid, losePid, bg}
+  let bn = 0;
+  const tapeB = o.tape || o.tapeC ? ++bn : 0;
+  const stareB = o.stare ? ++bn : 0;
+  const resB = o.res ? ++bn : 0;
+  const bs = {};
+  if (tapeB) bs[tapeB] = SND.skins;               // the VS clash: a golf-hit
+  if (stareB) bs[stareB] = SND.pulse;             // the staredown runs quiet
+  Object.assign(bs, o.beatSnd || {});
+  const html = '<div class="foStage" style="position:relative;width:100%;"' +
+    (o.winPid ? ' data-fo-win="' + o.winPid + '"' : '') + (o.losePid ? ' data-fo-lose="' + o.losePid + '"' : '') + '>' +
+    (o.bg || '') +
+    '<div style="position:relative;z-index:2;">' +
+    '<div class="kick">' + o.kick + '</div>' + (o.head || '') +
+    '<div class="foArena">' +
+      '<div class="foSide foInL' + (o.winSide === 'a' ? ' foWin' : o.winSide === 'b' ? ' foLose' : '') + '">' + o.aHTML + '</div>' +
+      '<div class="foVs">VS</div>' +
+      '<div class="foSide foInR' + (o.winSide === 'b' ? ' foWin' : o.winSide === 'a' ? ' foLose' : '') + '">' + o.bHTML + '</div>' +
+    '</div>' +
+    (o.tape ? foTapeHtml(o.tape) : o.tapeC ? foTapeCHtml(o.tapeC) : '') +
+    (o.stare ? '<div class="bt foStare" data-b="' + stareB + '">' + o.stare + '</div>' : '') +
+    (o.res ? '<div class="bt foRes" data-b="' + resB + '">' + o.res + '</div>' : '') +
+    '</div></div>';
+  const sl = { ch: o.ch, html: html, dwell: o.dwell || 6500, beatDwell: 2100, enterSnd: o.enterSnd !== undefined ? o.enterSnd : SND.whoosh, beatSnd: bs };
+  if (o.snd) sl.snd = o.snd;
+  if (o.res) { sl.fx = 'confetti'; sl.fxCols = o.fxCols || ['#ffd75e', '#ffffff']; }
+  return sl;
+}
+function foBg(pidA, pidB) {
+  return '<div style="position:absolute;inset:0;z-index:0;background:linear-gradient(90deg,' + tcolor(pidA) + '59 0 50%,' + tcolor(pidB) + '59 50% 100%);opacity:.45;border-radius:2vmin;"></div>';
+}
+function cumCat(night, fn) {
+  // Cumulative per-player category totals, nights 1..night (tonight in).
+  const out = {};
+  DATA.players.forEach(p => { out[p.id] = 0; });
+  for (let n = 1; n <= night; n++) { if (!DATA.rounds[n - 1] || !DATA.rounds[n - 1].completed) continue; Object.values(RC(n).players).forEach(d => { out[d.pid] = (out[d.pid] || 0) + fn(d); }); }
+  return out;
+}
+function priorLNSet(night) {
+  // The Low Net prize winners of nights BEFORE this one (Cycle 17 law).
+  const won = new Set();
+  for (let m = 1; m < night; m++) { const pk = lowNetPrizePick(Object.values(RC(m).players), won); won.add(pk.prize.pid); }
+  return won;
+}
+function wlAgg(night) {
+  // CYCLE 28 — the Week's Leaders aggregates as full rankings, so each
+  // leader can be faced off against his nearest challenger. Mirrors
+  // weekLeaders() exactly (same sources, same tie-breaks: cumulative
+  // individual points, then name) — the harness asserts the leaders
+  // this returns are the very men weekLeaders() crowns.
+  const agg = {};
+  DATA.players.forEach(p => { agg[p.id] = { bbb: 0, ctp: 0, birds: 0, wins: 0 }; });
+  for (let n = 1; n <= night; n++) {
+    const r = DATA.rounds[n - 1]; if (!r || !r.completed) continue;
+    Object.values(RC(n).players).forEach(d => {
+      agg[d.pid].bbb += d.bbb.total; agg[d.pid].ctp += d.ctp;
+      const sc = (r.players[d.pid] || {}).scores || [];
+      sc.forEach((g, hi) => { if (g < r.pars[hi]) agg[d.pid].birds++; });
+    });
+    matchesForNight(n).forEach(m => { if (m.res && m.res.winnerPid && !m.res.walkover) agg[m.res.winnerPid].wins++; });
+  }
+  const inds = cumulative(night).inds;
+  const rank = key => Object.keys(agg).map(pid => ({ pid: pid, v: agg[pid][key] }))
+    .sort((a, b) => (b.v - a.v) || ((inds[b.pid] || 0) - (inds[a.pid] || 0)) || pname(a.pid).localeCompare(pname(b.pid)));
+  return { bbb: rank('bbb'), ctp: rank('ctp'), birds: rank('birds'), wins: rank('wins') };
+}
 function sHonours(night) {
   const h = honours(night); if (!h) return [];
-  const ln = h.lowNet, top = h.top;
+  const c = RC(night), ps = Object.values(c.players);
+  const hot2 = (av, bv) => av > bv ? 'a' : bv > av ? 'b' : null;
+  const hon = [];
+  /* ── BBB CHAMPION — the king vs the night's #2 on B's. The tape is
+        the three crowns themselves (how the B's were won); the totals
+        land only on the resolution beat. ── */
+  const bbbRank = ps.slice().sort((a, b) => (b.bbb.total - a.bbb.total) || pname(a.pid).localeCompare(pname(b.pid)));
+  const bW = h.bbbChamp, bC = bbbRank.find(d => d.pid !== bW.pid);
+  if (bC) {
+    const champLeft = night % 2 === 0;
+    const A = champLeft ? bW : bC, B = champLeft ? bC : bW;
+    const cumBbb = cumCat(night, d => d.bbb.total);
+    hon.push(foSlide({
+      ch: 'Act II · The Honours', kick: 'Honours · BBB Champion', bg: foBg(A.pid, B.pid),
+      head: '<h2>🖐 Bingo · Bango · Bongo</h2>',
+      aHTML: foFighter(A.pid, 'B’s all week · ' + cumBbb[A.pid]), bHTML: foFighter(B.pid, 'B’s all week · ' + cumBbb[B.pid]),
+      winSide: champLeft ? 'a' : 'b', winPid: bW.pid, losePid: bC.pid,
+      tape: [
+        [A.bbb.bingo, '🚩 BINGO · FIRST ON', B.bbb.bingo, hot2(A.bbb.bingo, B.bbb.bingo)],
+        [A.bbb.bango, '🎯 BANGO · CLOSEST', B.bbb.bango, hot2(A.bbb.bango, B.bbb.bango)],
+        [A.bbb.bongo, '🕳️ BONGO · FIRST IN', B.bbb.bongo, hot2(A.bbb.bongo, B.bbb.bongo)]
+      ],
+      stare: 'THREE B’S A HOLE. ONE KING. WHO TOOK THE NIGHT?',
+      res: foResHtml(
+        '<div class="rv' + (A.pid === bW.pid ? ' goldGrad' : '') + '" data-n="' + A.bbb.total + '">' + A.bbb.total + '</div><div class="foTag">B’s tonight</div>',
+        '<div class="rv' + (B.pid === bW.pid ? ' goldGrad' : '') + '" data-n="' + B.bbb.total + '">' + B.bbb.total + '</div><div class="foTag">B’s tonight</div>',
+        esc(pname(bW.pid)) + ' — Bingo · Bango · Bongo king',
+        bC.bbb.total === bW.bbb.total ? 'Level on B’s — the crown goes to the first man there.' : '🚩 ' + bW.bbb.bingo + ' &nbsp;·&nbsp; 🎯 ' + bW.bbb.bango + ' &nbsp;·&nbsp; 🕳️ ' + bW.bbb.bongo),
+      snd: SND.honey, fxCols: [tcolor(bW.pid), '#ffd75e']
+    }));
+  }
+  /* ── LOW NET — the prize winner vs the challenger. When the night's
+        true low net belongs to a prior winner, HE is the challenger,
+        wearing his INELIGIBLE tag (the Cycle 17 law, staged). The
+        tape carries gross, handicap and birdies — never the net. ── */
+  const lnW = h.lowNetPrize;
+  const lnC = h.lowNetIneligible || ps.slice().sort((a, b) => (a.net - b.net) || pname(a.pid).localeCompare(pname(b.pid))).find(d => d.pid !== lnW.pid);
+  if (lnC) {
+    const champLeft = (night + 1) % 2 === 0;
+    const A = champLeft ? lnW : lnC, B = champLeft ? lnC : lnW;
+    const inelig = !!h.lowNetIneligible, prior = priorLNSet(night);
+    const tagFor = d => d.pid === lnC.pid && inelig ? '⛔ Ineligible · already a winner' : d.pid === lnC.pid && prior.has(d.pid) ? 'Already a winner this week' : d.pid === lnW.pid && inelig ? 'Next in line' : '';
+    hon.push(foSlide({
+      ch: 'Act II · The Honours', kick: 'Honours · Low Net', bg: foBg(A.pid, B.pid),
+      head: '<h2>⛳ Low Net</h2>',
+      aHTML: foFighter(A.pid, tagFor(A)), bHTML: foFighter(B.pid, tagFor(B)),
+      winSide: champLeft ? 'a' : 'b', winPid: lnW.pid, losePid: lnC.pid,
+      tape: [
+        [A.gross, 'GROSS', B.gross, hot2(B.gross, A.gross)],
+        [A.hcp, 'COURSE HANDICAP', B.hcp, null],
+        [A.gb + A.ge, '🐦 BIRDIES & EAGLES', B.gb + B.ge, hot2(A.gb + A.ge, B.gb + B.ge)]
+      ],
+      stare: 'THE CARD IS IN. THE HANDICAPS ARE COUNTED. WHOSE NET STANDS?',
+      res: foResHtml(
+        '<div class="rv' + (A.pid === lnW.pid ? ' goldGrad' : '') + '" data-n="' + A.net + '">' + A.net + '</div><div class="foTag">Net</div>',
+        '<div class="rv' + (B.pid === lnW.pid ? ' goldGrad' : '') + '" data-n="' + B.net + '">' + B.net + '</div><div class="foTag">Net</div>',
+        esc(pname(lnW.pid)) + ' takes the Low Net prize',
+        inelig ? esc(pname(lnC.pid)) + ' shot the low net ' + lnC.net + ' — but the prize never repeats in a week, so it passes down.' : 'Gross ' + lnW.gross + ' · course handicap ' + lnW.hcp),
+      snd: SND.easy12, fxCols: [tcolor(lnW.pid), '#ffd75e']
+    }));
+  }
+  /* ── DE KAMPIOEN GOLFER VAN DE DAG — the night's top scorer vs the
+        runner-up, in the Dutch dressing. The tape is the supporting
+        game (birdies, B's, skins); the points land at the resolution,
+        under the champion song. ── */
+  const totRank = ps.slice().sort((a, b) => (b.total - a.total) || pname(a.pid).localeCompare(pname(b.pid)));
+  const kW = h.top, kC = totRank.find(d => d.pid !== kW.pid);
+  if (kC) {
+    const champLeft = night % 2 === 0;
+    const A = champLeft ? kW : kC, B = champLeft ? kC : kW;
+    hon.push(foSlide({
+      ch: 'Act II · The Honours', kick: 'Honours · De Kampioen Golfer van de Dag',
+      bg: '<div style="position:absolute;inset:0;background:radial-gradient(circle at 50% 42%,#ff7a1a38 0%,transparent 62%);border-radius:2vmin;"></div>' +
+        '<div style="position:absolute;top:6%;left:5%;font-size:4.6vmin;">🌷</div><div style="position:absolute;top:9%;right:6%;font-size:5.2vmin;">🌷</div><div style="position:absolute;bottom:10%;left:7%;font-size:4.2vmin;">🌷</div><div style="position:absolute;bottom:8%;right:8%;font-size:4.6vmin;">🌷</div>',
+      head: '<div style="font-size:4.2vmin;">🇳🇱</div>' +
+        '<div style="font-weight:900;font-size:5vmin;letter-spacing:.03em;color:#ff8c2e;margin-top:.4vmin;">DE KAMPIOEN GOLFER VAN DE DAG</div>' +
+        '<div class="sub" style="letter-spacing:.34em;font-size:1.55vmin;">CHAMPION GOLFER OF THE DAY</div>',
+      aHTML: foFighter(A.pid, 'Gross ' + A.gross), bHTML: foFighter(B.pid, 'Gross ' + B.gross),
+      winSide: champLeft ? 'a' : 'b', winPid: kW.pid, losePid: kC.pid,
+      tape: [
+        [A.gb + A.ge, '🐦 BIRDIES & EAGLES', B.gb + B.ge, hot2(A.gb + A.ge, B.gb + B.ge)],
+        [A.bbb.total, '🖐 THE B’S', B.bbb.total, hot2(A.bbb.total, B.bbb.total)],
+        [A.skins, '💰 SKINS', B.skins, hot2(A.skins, B.skins)]
+      ],
+      stare: 'THE WHOLE DAY, WEIGHED. ONE MAN STANDS ON TOP.',
+      res: foResHtml(
+        '<div class="rv' + (A.pid === kW.pid ? ' goldGrad' : '') + '" data-n="' + A.total + '">' + fmt(A.total) + '</div><div class="foTag">Points</div>',
+        '<div class="rv' + (B.pid === kW.pid ? ' goldGrad' : '') + '" data-n="' + B.total + '">' + fmt(B.total) + '</div><div class="foTag">Points</div>',
+        esc(pname(kW.pid)) + ' — ' + fmt(kW.total) + ' points',
+        'Strokes ' + fmt(kW.strokePts) + ' · B’s ' + fmt(kW.bbbPts) + ' · Skins ' + fmt(kW.skinsPts) + ' · CTP ' + fmt(kW.ctpPts) + ' · E9 ' + fmt(kW.e9Pts) + ' · Balls ' + fmt(kW.ballPts)),
+      snd: SND.champSong, fxCols: ['#ff8c2e', '#ffd75e', '#ffffff']
+    }));
+  }
+  /* ── PLAY OF THE DAY — the hero vs the field: every other man who
+        played the hole, walled up opposite. A dead tie after all four
+        tie-breaks shares the hero side (the engine's law). ── */
+  const potd = playOfDay(night);
+  if (potd && potd.winners.length) {
+    const w0 = potd.winners[0];
+    const winPids = potd.winners.map(w => w.pid);
+    const field = ps.filter(d => !winPids.includes(d.pid));
+    const bestOther = field.length ? Math.min.apply(null, field.map(d => d.nets[w0.hole - 1])) : null;
+    const emo = potd.diff <= -2 ? '🦅' : potd.diff === -1 ? '🐦' : potd.diff === 0 ? '➖' : potd.diff === 1 ? '❌' : '❌❌';
+    const multi = potd.winners.length > 1;
+    const aHTML = !multi ? foFighter(w0.pid, 'Hole ' + w0.hole + ' · Par ' + w0.par)
+      : '<div style="display:flex;gap:1.4vmin;justify-content:center;">' + potd.winners.map(w => fwFace(w.pid, tcolor(w.pid), 11)).join('') + '</div>' +
+        '<div style="font-weight:900;font-size:2.5vmin;margin-top:1vmin;">' + potd.winners.map(w => esc(pname(w.pid))).join(' &amp; ') + '</div><div class="foTag">Hole ' + w0.hole + ' · Par ' + w0.par + '</div>';
+    hon.push(foSlide({
+      ch: 'Act II · The Honours', kick: 'Act II · The Honours · Play of the Day', bg: foBg(w0.pid, field.length ? field[0].pid : w0.pid),
+      head: '<h2>💥 Play of the Day</h2>',
+      aHTML: aHTML,
+      bHTML: '<div class="foWall">' + field.map(d => fwFace(d.pid, tcolor(d.pid), 5.6)).join('') + '</div><div class="foTag">The field · ' + field.length + ' men played it</div>',
+      winSide: 'a', winPid: w0.pid,
+      tape: [
+        ['HOLE ' + w0.hole, 'THE STAGE', 'PAR ' + w0.par, null],
+        [emo, 'THE SHOT', bestOther != null ? 'FIELD’S BEST · NET ' + bestOther : '—', 'a']
+      ],
+      stare: 'TWELVE MEN PLAYED THE HOLE. ONE PLAYED IT BEST.',
+      res: '<div style="text-align:center;"><div class="goldGrad" style="font-weight:900;font-size:8.4vmin;line-height:1;">NET ' + w0.net + ' <span style="font-size:.42em;">(gross ' + w0.gross + ')</span></div>' +
+        '<div class="foVerdict">' + (multi ? potd.winners.map(w => esc(pname(w.pid))).join(' &amp; ') + ' — the same hole, the same number. Shared.' : esc(pname(w0.pid))) + '</div>' +
+        '<div class="sub" style="margin-top:.8vmin;">' + (potd.diff <= -2 ? 'A net eagle — the best single hole played tonight.' : potd.diff === -1 ? 'A net birdie — the best single hole played tonight.' : 'The best single hole played tonight.') + '</div></div>',
+      snd: SND.cheer, fxCols: potd.winners.map(w => tcolor(w.pid))
+    }));
+  }
+  /* ── SKINS KING — the night's king vs the night's #2, crowned on his
+        own slide now (off the Board — a king gets a face-off, not a
+        tile). The tape: skins points, biggest pot, the late holes. ── */
+  const skRank = ps.slice().sort((a, b) => (b.skins - a.skins) || pname(a.pid).localeCompare(pname(b.pid)));
+  const sW = h.skinsKing, sC = skRank.find(d => d.pid !== sW.pid);
+  if (sC) {
+    const champLeft = (night + 1) % 2 === 0;
+    const A = champLeft ? sW : sC, B = champLeft ? sC : sW;
+    const cumSkins = cumCat(night, d => d.skins);
+    const potOf = pid => { const ls = (c.skinsLog || []).filter(l => l.winner === pid); return ls.length ? Math.max.apply(null, ls.map(l => l.pot)) : 0; };
+    const lateOf = pid => (c.skinsLog || []).filter(l => l.winner === pid && l.hole >= 16).length;
+    const tmS = TEAM_OF[sW.pid] != null ? DATA.teams[TEAM_OF[sW.pid]] : null;
+    hon.push(foSlide({
+      ch: 'Act II · The Honours', kick: 'Honours · Skins King', bg: foBg(A.pid, B.pid),
+      head: '<h2>💰 Skins King</h2>',
+      aHTML: foFighter(A.pid, 'Week’s tally · ' + cumSkins[A.pid]), bHTML: foFighter(B.pid, 'Week’s tally · ' + cumSkins[B.pid]),
+      winSide: champLeft ? 'a' : 'b', winPid: sW.pid, losePid: sC.pid,
+      tape: [
+        [fmt(A.skinsPts), 'SKINS POINTS', fmt(B.skinsPts), hot2(A.skinsPts, B.skinsPts)],
+        [potOf(A.pid), 'BIGGEST POT', potOf(B.pid), hot2(potOf(A.pid), potOf(B.pid))],
+        [lateOf(A.pid), 'AT THE DEATH · HOLES 16–18', lateOf(B.pid), hot2(lateOf(A.pid), lateOf(B.pid))]
+      ],
+      stare: 'THE POTS ARE COUNTED. ONE MAN OWNS THEM.',
+      res: foResHtml(
+        '<div class="rv' + (A.pid === sW.pid ? ' goldGrad' : '') + '" data-n="' + A.skins + '">' + A.skins + '</div><div class="foTag">Skins tonight</div>',
+        '<div class="rv' + (B.pid === sW.pid ? ' goldGrad' : '') + '" data-n="' + B.skins + '">' + B.skins + '</div><div class="foTag">Skins tonight</div>',
+        esc(pname(sW.pid)) + ' — Skins King',
+        cumSkins[sW.pid] + ' skins on the week · +' + fmt(sW.skinsPts) + ' pts tonight'),
+      snd: (tmS && teamWalkupSnd(tmS.id)) || SND.cheer, fxCols: [tcolor(sW.pid), '#ffd75e']
+    }));
+  }
+  /* ── THE BOARD — what is left of it: Low Gross and the CTP champion.
+        The skins king has his face-off above; the board keeps the two
+        honours that close the night's account. ── */
   const tile = (lbl, pid, big, sub) => '<div class="c12Tile" style="flex:1;background:var(--card);border:1px solid var(--line);border-top:.6vmin solid ' + tcolor(pid) + ';border-radius:2vmin;padding:1.8vmin 1vmin 1.6vmin;">' +
     '<div style="font-weight:800;letter-spacing:.18em;font-size:1.6vmin;color:var(--gold);">' + lbl + '</div>' +
     '<div style="margin:1vmin 0 .4vmin;">' + face(pid, false, true) + '</div>' +
@@ -1391,71 +1706,50 @@ function sHonours(night) {
       '<div style="display:flex;flex-wrap:wrap;justify-content:center;gap:.8vmin;margin:1.2vmin 0 .6vmin;">' + h.ctpChamps.map(d => miniFace(d.pid)).join('') + '</div>' +
       '<div class="goldGrad" style="font-weight:900;font-size:5.6vmin;line-height:1;">' + ctpPins + '</div>' +
       '<div class="sub" style="font-size:1.9vmin;margin-top:.5vmin;">pin' + (ctpPins === 1 ? '' : 's') + ' each</div></div>';
-  const hon19 = [
-    nomSlide('Honours · BBB Champion', nominees(night, 'bbb')),
-    { ch: 'Act II · The Honours', fx: 'zoom', snd: SND.honey, html:
-      '<div class="revealFx"><div class="kick">Honours · BBB Champion</div>' + face(h.bbbChamp.pid, true, true) +
-      '<div class="big gold" data-n="' + h.bbbChamp.bbb.total + '" style="margin-top:1.6vmin;">' + h.bbbChamp.bbb.total + '</div>' +
-      '<h3>' + esc(pname(h.bbbChamp.pid)) + ' — Bingo · Bango · Bongo king</h3>' +
-      '<div class="sub">🚩 ' + h.bbbChamp.bbb.bingo + ' &nbsp;·&nbsp; 🎯 ' + h.bbbChamp.bbb.bango + ' &nbsp;·&nbsp; 🕳️ ' + h.bbbChamp.bbb.bongo + '</div>' + finStrip(nominees(night, 'bbb'), h.bbbChamp.pid, d => d.bbb.total) + '</div>' },
-    nomSlide('Honours · Low Net', nominees(night, 'net')),
-    { ch: 'Act II · The Honours', fx: 'zoom', snd: SND.easy12, html:
-      '<div class="revealFx"><div class="kick">Honours · Low Net</div>' + face(h.lowNetPrize.pid, true, true) +
-      '<div class="big gold" data-n="' + h.lowNetPrize.net + '" style="margin-top:1.6vmin;">' + h.lowNetPrize.net + '</div>' +
-      '<h3>' + esc(pname(h.lowNetPrize.pid)) + ' — net ' + h.lowNetPrize.net + '</h3><div class="sub">Gross ' + h.lowNetPrize.gross + ' · course handicap ' + h.lowNetPrize.hcp + '</div>' +
-      (h.lowNetIneligible ? '<div style="margin-top:2.2vmin;opacity:.62;filter:grayscale(1);">' + miniFace(h.lowNetIneligible.pid) + '</div><div style="margin-top:.8vmin;"><span class="pill" style="font-size:2.2vmin;">' + esc(pname(h.lowNetIneligible.pid)) + ' shot the low net ' + h.lowNetIneligible.net + ' — already a Low Net winner this week · INELIGIBLE</span></div>' : '') +
-      finStrip(nominees(night, 'net'), h.lowNetPrize.pid, d => 'net ' + d.net) + '</div>' },
-    nomSlide('Honours · De Kampioen Golfer van de Dag', nominees(night, 'points')),
-    { ch: 'Act II · The Honours', fx: 'zoom', snd: SND.godSave, html:
-      '<div style="position:absolute;inset:0;z-index:-1;background:radial-gradient(circle at 50% 42%,#ff7a1a38 0%,transparent 62%);"></div>' +
-      '<div style="position:absolute;top:8%;left:6%;font-size:4.6vmin;">🌷</div><div style="position:absolute;top:11%;right:7%;font-size:5.2vmin;">🌷</div><div style="position:absolute;bottom:13%;left:8%;font-size:4.2vmin;">🌷</div><div style="position:absolute;bottom:10%;right:9%;font-size:4.6vmin;">🌷</div>' +
-      '<div class="revealFx"><div style="font-size:4.2vmin;">🇳🇱</div>' +
-      '<div style="font-weight:900;font-size:5.2vmin;letter-spacing:.03em;color:#ff8c2e;margin-top:.6vmin;">DE KAMPIOEN GOLFER VAN DE DAG</div>' +
-      '<div class="sub" style="letter-spacing:.34em;font-size:1.6vmin;">CHAMPION GOLFER OF THE DAY</div>' +
-      '<div style="display:inline-block;border:.55vmin solid #ff7a1a;border-radius:50%;padding:.5vmin;box-shadow:0 0 5vmin #ff7a1a88;margin-top:1.4vmin;line-height:0;">' + face(top.pid, true, true) + '</div>' +
-      '<div class="big gold" data-n="' + top.total + '" style="margin-top:1.4vmin;">' + fmt(top.total) + '</div>' +
-      '<h3>' + esc(pname(top.pid)) + ' — ' + fmt(top.total) + ' points</h3>' +
-      '<div class="sub">Strokes ' + fmt(top.strokePts) + ' · B’s ' + fmt(top.bbbPts) + ' · Skins ' + fmt(top.skinsPts) + ' · CTP ' + fmt(top.ctpPts) + ' · E9 ' + fmt(top.e9Pts) + ' · Balls ' + fmt(top.ballPts) + '</div>' + finStrip(nominees(night, 'points'), top.pid, d => fmt(d.total)) + '</div>' },
-    { ch: 'Act II · The Honours', html:
-      '<div class="kick">Act II · The Honours Board</div><h2>🏅 Tonight’s Board</h2>' +
-      '<div style="display:flex;gap:2vmin;width:100%;margin-top:1.4vmin;">' +
-      tile('⛳ LOW GROSS', h.lowGross.pid, h.lowGross.gross, '') +
-      tile('💰 SKINS KING', h.skinsKing.pid, '<span style="font-size:3.4vmin;">' + '🪙'.repeat(Math.max(1, Math.min(5, h.skinsKing.skins))) + (h.skinsKing.skins > 5 ? '…' : '') + '</span>', fmt(h.skinsKing.skins) + ' skins · +' + fmt(h.skinsKing.skinsPts) + ' pts') +
-      ctpTile +
-      '</div>' }
-  ];
-  // CYCLE 19 · I1 — PLAY OF THE DAY rides right after the Dutch champion
-  // crown and before the Board: hero face, the hole + par big, the skins-
-  // style NET (gross) line, and the race-language result emoji for the hole.
-  // A dead tie after all four tie-breaks shares the slide (N2 does exactly
-  // this on the real data).
-  const potd19 = playOfDay(night);
-  if (potd19 && potd19.winners.length) {
-    const w0 = potd19.winners[0];
-    const emo19 = potd19.diff <= -2 ? '🦅' : potd19.diff === -1 ? '🐦' : potd19.diff === 0 ? '➖' : potd19.diff === 1 ? '❌' : '❌❌';
-    const multi19 = potd19.winners.length > 1;
-    hon19.splice(hon19.length - 1, 0, { ch: 'Act II · The Honours', fx: 'confetti', fxCols: potd19.winners.map(w => tcolor(w.pid)), snd: SND.cheer, html:
-      '<div class="kick">Act II · The Honours · Play of the Day</div><h2>💥 Play of the Day</h2>' +
-      '<div style="display:flex;align-items:center;justify-content:center;gap:5vmin;margin-top:1vmin;">' +
-        '<div><div style="font-weight:900;font-size:3.6vmin;color:var(--dim);letter-spacing:.24em;">HOLE</div>' +
-        '<div class="goldGrad" style="font-weight:900;font-size:11vmin;line-height:1;">' + w0.hole + '</div>' +
-        '<div class="sub" style="font-size:2.3vmin;">PAR ' + w0.par + '</div></div>' +
-        '<div style="font-size:6.4vmin;line-height:1;">' + emo19 + '</div>' +
-        (multi19
-          ? '<div style="display:flex;gap:2.6vmin;">' + potd19.winners.map(w => face(w.pid, true)).join('') + '</div>'
-          : '<div>' + face(w0.pid, true, true) + '</div>') +
-      '</div>' +
-      (multi19 ? '<h3 style="margin-top:1.4vmin;">' + potd19.winners.map(w => esc(pname(w.pid))).join(' &amp; ') + ' — the same hole, the same number. Shared.</h3>' : '<h3 style="margin-top:1.2vmin;">' + esc(pname(w0.pid)) + '</h3>') +
-      '<div class="big gold" style="margin-top:1vmin;">NET ' + w0.net + ' <span style="font-size:.42em;color:var(--cream);">(gross ' + w0.gross + ')</span></div>' +
-      '<div class="sub" style="margin-top:.8vmin;">' + (potd19.diff <= -2 ? 'A net eagle — the best single hole played tonight.' : potd19.diff === -1 ? 'A net birdie — the best single hole played tonight.' : 'The best single hole played tonight.') + '</div>' });
-  }
-  return hon19;
+  hon.push({ ch: 'Act II · The Honours', html:
+    '<div class="kick">Act II · The Honours Board</div><h2>🏅 Tonight’s Board</h2>' +
+    '<div style="display:flex;gap:2vmin;width:100%;margin-top:1.4vmin;">' +
+    tile('⛳ LOW GROSS', h.lowGross.pid, h.lowGross.gross, '') +
+    ctpTile +
+    '</div>' });
+  return hon;
 }
 function sFun(night, funWon) {
   const picks = pickFunAwards(night, funWon);
   const HINTS = { metronome: 'Most net pars tonight — never rushed, never rattled.', iceMan: 'Ice in the veins over the last three holes.', fastStart: 'Out of the gates fastest.', closer: 'The best back nine in the room.', bigBird: 'Birdies and better, in bunches.', photocopier: 'The same score, again and again and again.', rollercoaster: 'The wildest ride on the card.', vulture: 'Circling late — skins taken at the death.', honeyPot: 'Bingo. Bango. Bongo. All three.', streak: 'The longest hot streak of the night.', bomber: 'The par 5s, taken apart.', bounceBack: 'Off the canvas — disaster one hole, birdie the next.', rock: 'Barely a blemish all night.', pinMagnet: 'Closest to the pin, again and again.' };
+  const round = DATA.rounds[night - 1], ps = Object.values(RC(night).players);
   const out = [];
-  picks.forEach(f => {
+  picks.forEach((f, ix) => {
+    /* CYCLE 28 — where the award's own metric produces a clear
+       runner-up (a real #2, strictly behind the winner on the raw
+       metric), the award is staged as a FACE-OFF: both men slide in,
+       the tape is their golf cards (gross / net — never the award's
+       own deciding line), the hint is the staredown, and the award's
+       line lands only on the resolution beat. Where the metric gives
+       no clear runner-up (a prior winner holds the raw lead, a tie at
+       the top, or a field of one), the teaser→reveal stays — dressed
+       in the house style: the winner lit gold, crowned. */
+    const scored = ps.map(d => ({ pid: d.pid, v: f.award.metric(d, round), d: d })).filter(x => x.v > 0).sort((a, b) => b.v - a.v);
+    const winRaw = scored.find(x => x.pid === f.winner.pid);
+    const runner = scored.find(x => x.pid !== f.winner.pid);
+    if (winRaw && runner && runner.v < winRaw.v) {
+      const champLeft = (night + ix) % 2 === 0;
+      const A = champLeft ? winRaw : runner, B = champLeft ? runner : winRaw;
+      out.push(foSlide({
+        ch: 'Act II · Fun Awards', kick: 'Act II · The Fun Awards', bg: foBg(A.pid, B.pid),
+        head: '<div style="font-size:7.5vmin;line-height:1.1;">' + f.award.emo + '</div><h2 style="font-size:4.6vmin;">' + f.award.ttl + '</h2>',
+        aHTML: foFighter(A.pid, ''), bHTML: foFighter(B.pid, ''),
+        winSide: champLeft ? 'a' : 'b', winPid: f.winner.pid, losePid: runner.pid,
+        tape: [
+          [A.d.gross, 'GROSS', B.d.gross, hot2Fun(B.d.gross, A.d.gross)],
+          [A.d.net, 'NET', B.d.net, hot2Fun(B.d.net, A.d.net)]
+        ],
+        stare: (HINTS[f.award.key] || '') + ' — ONE OF THESE TWO.',
+        res: '<div class="foVerdict" style="font-size:3vmin;max-width:120vmin;margin-left:auto;margin-right:auto;">' + esc(f.line) + '</div>',
+        snd: AWARD_SND[f.award.key] || null, fxCols: [tcolor(f.winner.pid), '#ffd75e'], dwell: 6000
+      }));
+      return;
+    }
     out.push({ ch: 'Act II · Fun Awards', dwell: 2800, snd: SND.pulse, html:
       '<div class="kick">Act II · The Fun Awards</div>' +
       '<div style="font-size:9vmin;line-height:1.15;opacity:.92;">' + f.award.emo + '</div>' +
@@ -1464,14 +1758,16 @@ function sFun(night, funWon) {
       '<div style="display:flex;justify-content:center;gap:1vmin;margin-top:2.6vmin;flex-wrap:wrap;opacity:.45;">' + DATA.players.map(p => miniFace(p.id)).join('') + '</div>' +
       '<div class="sub" style="margin-top:2vmin;">Someone in this room. Who?</div>' });
     out.push({ ch: 'Act II · Fun Awards', snd: AWARD_SND[f.award.key] || null, dwell: 4600, html:
+      '<div style="position:absolute;inset:0;z-index:-1;background:radial-gradient(circle at 50% 40%,' + tcolor(f.winner.pid) + '40 0%,transparent 62%);"></div>' +
       '<div class="kick">Act II · The Fun Awards</div>' +
       '<div style="font-size:9vmin;line-height:1.15;">' + f.award.emo + '</div>' +
       '<div style="font-weight:900;font-size:5.2vmin;letter-spacing:.05em;">' + f.award.ttl + '</div>' +
-      '<div style="margin:1.4vmin 0;">' + face(f.winner.pid, true) + '</div>' +
+      '<div style="margin:1.4vmin 0;position:relative;display:inline-block;"><span class="foCrown" style="opacity:1;transform:translateX(-50%) rotate(-8deg);top:-3.4vmin;">👑</span><span class="foLit">' + face(f.winner.pid, true, true) + '</span></div>' +
       '<div class="sub" style="font-size:2.9vmin;max-width:105vmin;">' + esc(f.line) + '</div>' });
   });
   return out;
 }
+function hot2Fun(av, bv) { return av > bv ? 'a' : bv > av ? 'b' : null; }
 function sFirsts(night) {
   const c = RC(night), ps = Object.values(c.players);
   const cards = [];
@@ -1673,16 +1969,26 @@ function centurySlide(night, crossings) {
 }
 function sWeekLeaders(night) {
   // CYCLE 21 · I1 — THE WEEK'S LEADERS: cumulative category kings, nights ≥2.
+  // CYCLE 28 — each tile is a FACE-OFF CARD now: the holder against his
+  // nearest challenger, the challenger greyed by the size of the gap,
+  // both numbers on the card — the lead is a contest, not a coronation.
   if (night < 2) return [];
   const cats = weekLeaders(night); if (cats.length < 2) return [];
-  const tile = x => '<div class="c12Tile" style="flex:1;background:var(--card);border:1px solid var(--line);border-top:.6vmin solid ' + tcolor(x.d.pid) + ';border-radius:2vmin;padding:1.8vmin 1vmin 1.6vmin;">' +
+  const agg = wlAgg(night);
+  const keyFor = lbl => lbl.indexOf('PINS') >= 0 ? 'ctp' : lbl.indexOf('BIRDIES') >= 0 ? 'birds' : lbl.indexOf('MATCH') >= 0 ? 'wins' : 'bbb';
+  const tile = x => {
+    const rank = agg[keyFor(x.lbl)] || [];
+    const lead = rank[0] || x.d, chal = rank[1];
+    const gap = chal ? lead.v - chal.v : null;
+    return '<div class="c12Tile" style="flex:1;background:var(--card);border:1px solid var(--line);border-top:.6vmin solid ' + tcolor(lead.pid) + ';border-radius:2vmin;padding:1.8vmin 1vmin 1.6vmin;">' +
     '<div style="font-weight:800;letter-spacing:.18em;font-size:1.6vmin;color:var(--gold);">' + x.emo + ' ' + x.lbl + '</div>' +
-    '<div style="margin:1vmin 0 .4vmin;">' + face(x.d.pid, false, true) + '</div>' +
-    '<div class="goldGrad" style="font-weight:900;font-size:5.6vmin;line-height:1;">' + x.d.v + '</div>' +
-    '<div class="sub" style="font-size:1.9vmin;margin-top:.5vmin;">' + esc(pname(x.d.pid)) + '</div></div>';
+    '<div class="foCardVs" style="margin:1.1vmin 0 .5vmin;">' + miniFace(lead.pid) + '<span style="font-weight:900;font-style:italic;color:var(--gold);font-size:2.5vmin;">VS</span>' + (chal ? '<span style="' + (gap > 0 ? 'opacity:.45;filter:grayscale(1);' : '') + '">' + miniFace(chal.pid) + '</span>' : '<span style="font-size:2.2vmin;color:var(--dim);font-weight:800;">—</span>') + '</div>' +
+    '<div style="line-height:1;"><span class="goldGrad" style="font-weight:900;font-size:5.2vmin;">' + lead.v + '</span>' + (chal ? ' <span style="font-size:2.7vmin;font-weight:800;color:var(--dim);">· ' + chal.v + '</span>' : '') + '</div>' +
+    '<div class="sub" style="font-size:1.85vmin;margin-top:.5vmin;">' + esc(pname(lead.pid)) + (chal ? (gap > 0 ? ' — ' + gap + ' clear of ' + esc(pname(chal.pid)) : ' — level with ' + esc(pname(chal.pid))) : '') + '</div></div>';
+  };
   return [{ ch: 'Act III · The Week’s Leaders', snd: SND.field, html:
     '<div class="kick">Act III · The Week’s Leaders</div><h2>📚 The Week’s Leaders</h2>' +
-    '<div class="sub">Through Night ' + night + ' — who owns each corner of the game.</div>' +
+    '<div class="sub">Through Night ' + night + ' — every lead is a fight: holder vs the man chasing him.</div>' +
     '<div style="display:flex;gap:2vmin;width:100%;margin-top:1.4vmin;">' + cats.map(tile).join('') + '</div>' }];
 }
 function sIndRace(night) {
@@ -1840,20 +2146,40 @@ function sWeekRecords(night) {
   if (night < 2) return [];
   const R = weekRecords(night);
   if (!R.team || !R.player) return [];
-  const tile = (lbl, visual, big, who, when) => '<div class="c12Tile" style="flex:1;background:var(--card);border:1px solid var(--line);border-top:.6vmin solid var(--gold);border-radius:2vmin;padding:1.6vmin 1vmin 1.4vmin;text-align:center;">' +
+  // CYCLE 28 — every record is staged as a face-off: the holder against
+  // the man whose mark he beat (the best standing the night before the
+  // record fell, via the engine's own weekRecords at that horizon).
+  // Where there is no beaten man — the mark was set on Night 1, or a
+  // man raised his own — the opponent is THE MARK itself: the number
+  // on the other side of the VS.
+  const prevOf = (rec, key) => { if (!rec || rec.night <= 1) return null; const P = weekRecords(rec.night - 1); return P ? P[key] : null; };
+  const markDisc = (v, lbl) => '<div style="width:9.5vmin;height:9.5vmin;border-radius:50%;border:.35vmin dashed var(--gold);display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--gold);"><div style="font-weight:900;font-size:2.9vmin;line-height:1;">' + v + '</div><div style="font-size:1.15vmin;font-weight:800;letter-spacing:.1em;margin-top:.3vmin;">' + lbl + '</div></div>';
+  const tile = (lbl, holdVis, big, who, when, prevVis, prevLine) => '<div class="c12Tile" style="flex:1;background:var(--card);border:1px solid var(--line);border-top:.6vmin solid var(--gold);border-radius:2vmin;padding:1.6vmin 1vmin 1.4vmin;text-align:center;">' +
     '<div style="font-weight:800;letter-spacing:.16em;font-size:1.55vmin;color:var(--gold);">' + lbl + '</div>' +
-    '<div style="margin:1vmin 0 .3vmin;display:flex;justify-content:center;">' + visual + '</div>' +
+    '<div class="foCardVs" style="margin:1vmin 0 .3vmin;">' + holdVis + '<span style="font-weight:900;font-style:italic;color:var(--gold);font-size:2.5vmin;">VS</span>' + prevVis + '</div>' +
     '<div class="goldGrad" style="font-weight:900;font-size:5vmin;line-height:1;">' + big + '</div>' +
     '<div class="sub" style="font-size:1.8vmin;margin-top:.45vmin;">' + who + '</div>' +
-    '<div style="font-weight:800;font-size:1.5vmin;color:var(--dim);letter-spacing:.14em;margin-top:.2vmin;">' + when + '</div></div>';
-  const row1 = tile('🏆 BIGGEST TEAM NIGHT', teamLogo(DATA.teams[R.team.team].id, 9.5), fmt(R.team.v), esc(DATA.teams[R.team.team].name), 'NIGHT ' + R.team.night) +
-    tile('👤 BIGGEST PLAYER NIGHT', miniFace(R.player.pid), fmt(R.player.v), esc(pname(R.player.pid)), 'NIGHT ' + R.player.night) +
-    tile('⛳ LOWEST NET', miniFace(R.net.pid), '' + R.net.v, esc(pname(R.net.pid)), 'NIGHT ' + R.net.night);
-  const row2 = (R.skin ? tile('💰 BIGGEST SKIN', miniFace(R.skin.pid), R.skin.v + ' <span style="font-size:2.4vmin;">SKINS</span>', esc(pname(R.skin.pid)), 'NIGHT ' + R.skin.night + ' · HOLE ' + R.skin.hole) : '') +
-    (R.birds ? tile('🐦 MOST BIRDIES IN A ROUND', miniFace(R.birds.pid), R.birds.v + ' <span style="font-size:2.4vmin;">BIRDIES</span>', esc(pname(R.birds.pid)), 'NIGHT ' + R.birds.night) : '');
+    '<div style="font-weight:800;font-size:1.5vmin;color:var(--dim);letter-spacing:.12em;margin-top:.25vmin;">' + when + '</div>' +
+    (prevLine ? '<div style="font-size:1.55vmin;color:var(--dim);margin-top:.35vmin;">' + prevLine + '</div>' : '') + '</div>';
+  const pTeam = prevOf(R.team, 'team'), pPlayer = prevOf(R.player, 'player'), pNet = prevOf(R.net, 'net'), pSkin = R.skin ? prevOf(R.skin, 'skin') : null, pBirds = R.birds ? prevOf(R.birds, 'birds') : null;
+  const row1 = tile('🏆 BIGGEST TEAM NIGHT', teamLogo(DATA.teams[R.team.team].id, 9.5), fmt(R.team.v), esc(DATA.teams[R.team.team].name), 'NIGHT ' + R.team.night,
+      pTeam ? teamLogo(DATA.teams[pTeam.team].id, 9.5) : markDisc(fmt(R.team.v), 'THE MARK'),
+      pTeam ? 'The old mark · ' + fmt(pTeam.v) + ' · ' + esc(DATA.teams[pTeam.team].name) + ' · Night ' + pTeam.night : 'Set on Night 1 — nothing stood before it') +
+    tile('👤 BIGGEST PLAYER NIGHT', miniFace(R.player.pid), fmt(R.player.v), esc(pname(R.player.pid)), 'NIGHT ' + R.player.night,
+      pPlayer ? '<span style="' + (pPlayer.pid === R.player.pid ? '' : 'opacity:.45;filter:grayscale(1);') + '">' + miniFace(pPlayer.pid) + '</span>' : markDisc(fmt(R.player.v), 'THE MARK'),
+      pPlayer ? (pPlayer.pid === R.player.pid ? 'Raised his own mark · was ' + fmt(pPlayer.v) : 'The old mark · ' + fmt(pPlayer.v) + ' · ' + esc(pname(pPlayer.pid)) + ' · Night ' + pPlayer.night) : 'Set on Night 1 — nothing stood before it') +
+    tile('⛳ LOWEST NET', miniFace(R.net.pid), '' + R.net.v, esc(pname(R.net.pid)), 'NIGHT ' + R.net.night,
+      pNet ? '<span style="' + (pNet.pid === R.net.pid ? '' : 'opacity:.45;filter:grayscale(1);') + '">' + miniFace(pNet.pid) + '</span>' : markDisc('' + R.net.v, 'THE MARK'),
+      pNet ? (pNet.pid === R.net.pid ? 'Lowered his own mark · was ' + pNet.v : 'The old mark · ' + pNet.v + ' · ' + esc(pname(pNet.pid)) + ' · Night ' + pNet.night) : 'Set on Night 1 — nothing stood before it');
+  const row2 = (R.skin ? tile('💰 BIGGEST SKIN', miniFace(R.skin.pid), R.skin.v + ' <span style="font-size:2.4vmin;">SKINS</span>', esc(pname(R.skin.pid)), 'NIGHT ' + R.skin.night + ' · HOLE ' + R.skin.hole,
+      pSkin ? '<span style="' + (pSkin.pid === R.skin.pid ? '' : 'opacity:.45;filter:grayscale(1);') + '">' + miniFace(pSkin.pid) + '</span>' : markDisc(R.skin.v, 'THE MARK'),
+      pSkin ? (pSkin.pid === R.skin.pid ? 'Raised his own mark · was ' + pSkin.v : 'The old mark · ' + pSkin.v + ' · ' + esc(pname(pSkin.pid)) + ' · Night ' + pSkin.night) : 'Set on Night 1 — nothing stood before it') : '') +
+    (R.birds ? tile('🐦 MOST BIRDIES IN A ROUND', miniFace(R.birds.pid), R.birds.v + ' <span style="font-size:2.4vmin;">BIRDIES</span>', esc(pname(R.birds.pid)), 'NIGHT ' + R.birds.night,
+      pBirds ? '<span style="' + (pBirds.pid === R.birds.pid ? '' : 'opacity:.45;filter:grayscale(1);') + '">' + miniFace(pBirds.pid) + '</span>' : markDisc(R.birds.v, 'THE MARK'),
+      pBirds ? (pBirds.pid === R.birds.pid ? 'Raised his own mark · was ' + pBirds.v : 'The old mark · ' + pBirds.v + ' · ' + esc(pname(pBirds.pid)) + ' · Night ' + pBirds.night) : 'Set on Night 1 — nothing stood before it') : '');
   return [{ ch: 'Act III · Week Records', snd: SND.field, html:
     '<div class="kick">Act III · Week Records</div><h2>🏅 Week Records</h2>' +
-    '<div class="sub">The marks every night now has to beat.</div>' +
+    '<div class="sub">The marks every night now has to beat — and the men whose marks fell.</div>' +
     '<div style="display:flex;gap:2vmin;width:100%;margin-top:1.3vmin;">' + row1 + '</div>' +
     (row2 ? '<div style="display:flex;gap:2vmin;width:min(118vmin,80%);margin-top:2vmin;">' + row2 + '</div>' : '') }];
 }
@@ -2507,12 +2833,30 @@ function sFairway26(night) {
     const tm = DATA.teams[s.team], col = s.color;
     const isBest = ix === order.length - 1;
     const crossed = prevCum && Math.floor(s.total / 100) > Math.floor(prevCum.teams[s.team] / 100);
-    out.push({ ch: 'Act III · The Fairway', dwell: 3200, snd: teamWalkupSnd(tm.id) || SND.hop, html:
-      '<div class="kick">Act III · The Fairway · Team ' + (ix + 1) + ' of 6</div>' +
-      '<div style="margin-top:1.4vmin;">' + teamLogo(tm.id, 17) + '</div>' +
-      '<div style="font-weight:900;font-size:6.2vmin;color:' + col + ';line-height:1.05;margin-top:1vmin;">' + esc(s.name) + '</div>' +
-      '<div class="faceRow" style="margin-top:1.6vmin;">' + tm.players.map(pid => face(pid)).join('') + '</div>' +
-      '<div class="sub" style="margin-top:1.4vmin;">on the tee…</div>' });
+    // CYCLE 28 — ON THE TEE becomes a FACE-OFF: the duo (crest + both
+    // men) slides in on their walkup against a WALL of the other five
+    // crests. The tape is the night in profile — best category, the
+    // chase (the team one place above them on the board; for the
+    // leader, who is hunting them), rank movement — and NEVER the
+    // total: the BUILD and the SLAM still own the number, exactly as
+    // Cycle 27 built them.
+    const above28 = st.find(x => x.rank === s.rank - 1), below28 = st.find(x => x.rank === s.rank + 1);
+    const bestCat28 = FW_CATS.map(([emo, lbl, key]) => ({ emo: emo, lbl: lbl, v: fwTeamCat(c, s.team, key) })).sort((a, b) => b.v - a.v)[0];
+    const others28 = st.filter(x => x.team !== s.team);
+    out.push(foSlide({
+      ch: 'Act III · The Fairway', kick: 'Act III · The Fairway · Team ' + (ix + 1) + ' of 6',
+      bg: '<div style="position:absolute;inset:0;background:linear-gradient(90deg,' + col + '33,transparent 62%);border-radius:2vmin;"></div>',
+      head: '<div style="font-weight:900;font-size:5.6vmin;color:' + col + ';line-height:1.05;">' + esc(s.name) + '</div>',
+      aHTML: '<div>' + teamLogo(tm.id, 11) + '</div><div class="foDuo" style="display:flex;gap:1.8vmin;justify-content:center;margin-top:1.1vmin;">' + tm.players.map(pid => face(pid)).join('') + '</div>',
+      bHTML: '<div class="foWall" style="min-height:0;">' + others28.map(o => teamLogo(DATA.teams[o.team].id, 8.6)).join('') + '</div><div class="foTag">The field · five teams</div>',
+      tapeC: [
+        ['BEST CATEGORY', bestCat28.emo + ' ' + bestCat28.lbl],
+        above28 ? ['THE CHASE', esc(above28.name) + ' · ' + fmt(above28.total - s.total) + ' BACK'] : ['THE HUNTED', esc(below28.name) + ' · ' + fmt(s.total - below28.total) + ' BACK'],
+        ['RANK MOVEMENT', s.move > 0 ? '▲ ' + s.move + ' TONIGHT' : s.move < 0 ? '▼ ' + (-s.move) + ' TONIGHT' : '— HOLDS']
+      ],
+      stare: 'FIRST — HOW THE DAY WAS BUILT.',
+      enterSnd: teamWalkupSnd(tm.id) || SND.hop, dwell: 3200
+    }));
     const bars = FW_CATS.map(([emo, lbl, key]) => {
       const va = (c.players[tm.players[0]] || {})[key] || 0, vb = (c.players[tm.players[1]] || {})[key] || 0;
       const tot = va + vb;
@@ -2601,7 +2945,7 @@ function deckFor(night) {
   out.push(...sFun(night, led.funWon));
   const hon26 = sHonours(night);
   const cr26 = sBBBCrowns(night);
-  if (cr26 && hon26.length >= 2) hon26.splice(2, 0, cr26);
+  if (cr26 && hon26.length >= 1) hon26.splice(1, 0, cr26); // CYCLE 28 — hon26[0] is the BBB face-off; the sub-crowns still ride immediately after the champion is crowned.
   out.push(...hon26);
   out.push(...sFirsts(night));
   out.push(...sTurn(night));
@@ -2893,7 +3237,7 @@ function render(dir) {
   if (!slidesEl.querySelector('.bt') || dir < 0) {
     if (s.fx === 'confetti' && !RM) burst(s.fxCols);
     stopSound(); if (s.snd) setTimeout(() => playSnd(s.snd), 80);
-  } else stopSound();
+  } else { stopSound(); if (s.enterSnd) setTimeout(() => playSnd(s.enterSnd), 60); } // CYCLE 28 — a staged slide may still SOUND its entrance (the face-off slide-in whoosh / a team's walkup); its celebration stays held for the last beat, as Cycle 27 ruled.
   dirSchedule(); loopSchedule();
 }
 
