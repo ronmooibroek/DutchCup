@@ -459,6 +459,7 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
         <span class="save-status" id="save-status" style="display:none;"></span>
         <button class="hdr-btn hdr-icon" id="camera-btn" style="display:none;" onclick="document.getElementById('photo-file-input').click()" aria-label="Take or add a photo">📷</button>
         <button class="hdr-btn hdr-icon" id="gallery-btn" style="display:none;" onclick="window.__openPhotos && window.__openPhotos()" aria-label="View round photos">🖼️</button>
+        <button class="hdr-btn hdr-icon" id="share-btn" onclick="window.__openShare && window.__openShare()" aria-label="Share the scoring app by email">✉️</button>
         <button class="hdr-btn hdr-icon" id="extra9-btn" style="display:none;font-weight:900;" onclick="window.__openExtra9 && window.__openExtra9()" aria-label="Extra 9 winners">9</button>
         <button class="hdr-btn" id="switch-btn" style="display:none;" onclick="window.__switchPlayer && window.__switchPlayer()">Switch player</button>
     </div>
@@ -670,7 +671,7 @@ document.addEventListener('visibilitychange', () => {
     try { if (document.visibilityState === 'hidden' && hasPendingEdits()) flushPendingEdits(); } catch (e) {}
 });
 
-const SE_VERSION = '2.41.0'; // haptic tick on score taps and point awards (vibrate where supported; iOS switch-toggle fallback)
+const SE_VERSION = '2.42.0'; // ✉️ Share button: email the scoring app link to picked players (addresses from the players doc)
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
@@ -688,6 +689,8 @@ const state = {
     photos: false,             // round-photos view open (header gallery icon)
     extra9: false,             // extra-9 winner chooser open (header "9" icon)
     extra9Pick: [],            // player ids picked so far in the chooser (max 4)
+    sharePick: [],             // player ids picked in the ✉️ Share picker
+    shareInit: false,          // Share picker defaulted to all emailable players once
     editGroups: false,         // group editor open (from the player picker)
     groupDraft: null,          // { assignments: {pid: group# (0 = unassigned)}, groups: [..] }
     groupPick: null,           // player id picked up in the group editor
@@ -1610,6 +1613,133 @@ window.__openExtra9 = function() {
     state.extra9 = true;
     if (state.finished) renderRoundFinished(); else renderScoreEntry();
 };
+
+// ─── Share the scoring app by email (header ✉️ button) ──────────────────
+// Ron (2026-11-13): share the app from the app itself, to people he picks.
+// Addresses live on the player records (admin → Edit Player); the players
+// doc is already loaded into state.leaguePlayers, email field included.
+// Sending is a mailto: hand-off to the device's mail app — nothing is sent
+// from inside the page.
+const SHARE_APP_URL = 'https://ronmooibroek.github.io/DutchCup/score-entry.html';
+
+function sharePlayerList() {
+    const list = (typeof state !== 'undefined' && Array.isArray(state.leaguePlayers)) ? state.leaguePlayers : [];
+    return list
+        .filter(p => p && p.name)
+        .map(p => ({ id: idStr(p.id), name: String(p.name), email: String(p.email || '').trim() }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function buildShareMailto(emails) {
+    const to = (emails || []).filter(e => e && e.indexOf('@') > 0).join(',');
+    const subject = 'DutchCup scoring app';
+    const body = 'Hi!\n\nHere\'s the Dutch Cup scoring app — we use it to keep score for our Dutch Cup rounds:\n\n'
+        + SHARE_APP_URL
+        + '\n\nOpen it on your phone or tablet, pick your name, and enter scores hole by hole.\n';
+    return 'mailto:' + to + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+}
+
+function shareSelectedEmails() {
+    const picked = new Set((state.sharePick || []).map(idStr));
+    return sharePlayerList().filter(p => picked.has(p.id) && p.email).map(p => p.email);
+}
+
+function toggleSharePick(pid) {
+    const id = idStr(pid);
+    const i = (state.sharePick || []).findIndex(x => idStr(x) === id);
+    if (i >= 0) state.sharePick.splice(i, 1); else state.sharePick.push(id);
+    renderSharePicker();
+}
+
+function closeSharePicker() {
+    const o = document.getElementById('share-overlay');
+    if (o) o.remove();
+}
+
+function openSharePicker() {
+    const players = sharePlayerList();
+    if (!state.shareInit) {
+        // First open: default to everyone who has an email address.
+        state.sharePick = players.filter(p => p.email).map(p => p.id);
+        state.shareInit = true;
+    }
+    renderSharePicker();
+}
+
+function renderSharePicker() {
+    closeSharePicker();
+    const players = sharePlayerList();
+    const picked = new Set((state.sharePick || []).map(idStr));
+    const sendCount = shareSelectedEmails().length;
+
+    const overlay = el('div', {
+        id: 'share-overlay',
+        style: 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:2000;display:flex;align-items:flex-start;justify-content:center;padding:16px;overflow-y:auto;'
+    });
+    const card = el('div', { class: 'card', style: 'max-width:520px;width:100%;margin-top:20px;' });
+    card.appendChild(el('div', { style: 'font-size:20px;font-weight:800;margin-bottom:4px;' }, '✉️ Share the scoring app'));
+    card.appendChild(el('div', { class: 'muted', style: 'margin-bottom:12px;font-size:14px;' },
+        'Tap to choose who gets the link. It opens in your mail app, ready to send.'));
+
+    const shortcuts = el('div', { style: 'display:flex;gap:8px;margin-bottom:10px;' });
+    shortcuts.appendChild(el('button', {
+        class: 'foot-btn', type: 'button', style: 'flex:1;min-height:40px;',
+        onclick: () => { state.sharePick = sharePlayerList().filter(p => p.email).map(p => p.id); renderSharePicker(); }
+    }, 'Select all'));
+    shortcuts.appendChild(el('button', {
+        class: 'foot-btn', type: 'button', style: 'flex:1;min-height:40px;',
+        onclick: () => { state.sharePick = []; renderSharePicker(); }
+    }, 'Clear'));
+    card.appendChild(shortcuts);
+
+    const list = el('div', {});
+    players.forEach(p => {
+        const hasEmail = !!p.email;
+        const on = hasEmail && picked.has(p.id);
+        const row = el('button', {
+            type: 'button',
+            style: 'display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:12px;margin-bottom:6px;'
+                + 'border:2px solid ' + (on ? 'var(--fairway)' : '#d1d5db') + ';border-radius:10px;background:'
+                + (on ? '#f0fdf4' : 'white') + ';' + (hasEmail ? '' : 'opacity:0.55;'),
+            onclick: hasEmail ? () => toggleSharePick(p.id) : undefined
+        },
+            el('span', { style: 'font-size:20px;flex:0 0 26px;' }, hasEmail ? (on ? '☑️' : '⬜') : '🚫'),
+            el('span', { style: 'flex:1;' },
+                el('span', { style: 'display:block;font-weight:700;font-size:15px;' }, p.name),
+                el('span', { style: 'display:block;font-size:12px;color:#6b7280;' }, hasEmail ? p.email : 'no email yet — add it in Admin → Players')));
+        list.appendChild(row);
+    });
+    if (players.length === 0) {
+        list.appendChild(el('div', { class: 'muted', style: 'padding:12px;font-size:14px;' },
+            'Player list is still loading — try again in a moment.'));
+    }
+    card.appendChild(list);
+
+    const actions = el('div', { style: 'display:flex;gap:8px;margin-top:12px;' });
+    actions.appendChild(el('button', {
+        class: 'foot-btn prev', type: 'button', style: 'flex:1;min-height:48px;',
+        onclick: () => closeSharePicker()
+    }, 'Cancel'));
+    actions.appendChild(el('button', {
+        class: 'foot-btn next', type: 'button',
+        style: 'flex:2;min-height:48px;' + (sendCount ? '' : 'opacity:0.5;'),
+        onclick: () => sendShareEmail()
+    }, sendCount ? `✉️ Send email (${sendCount})` : '✉️ Send email'));
+    card.appendChild(actions);
+
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+}
+
+function sendShareEmail() {
+    const emails = shareSelectedEmails();
+    if (!emails.length) return;
+    const href = buildShareMailto(emails);
+    closeSharePicker();
+    window.location.href = href;
+}
+
+window.__openShare = function() { openSharePicker(); };
 
 // ═══════════════════════════════════════════════════════════════════════
 // SCORE ENTRY VIEW
