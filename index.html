@@ -778,7 +778,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = 'v2026.11.01.59';
+        const APP_VERSION = 'v2026.11.13.60';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -1533,7 +1533,7 @@
                     const roundsShape = differentials.slice(0, 20).map(d => ({
                         overPar: d.differential, // repurposed for display
                         date: d.date,
-                        courseName: d.source === 'historic' ? 'Historic' : '(round)',
+                        courseName: d.source === 'historic' ? 'Historic' : d.source === 'seed' ? 'Seeded start' : '(round)',
                         grossScore: null,
                         par: null,
                         handicap: null,
@@ -2852,6 +2852,36 @@
                 });
             });
             
+            // Seeded starting handicap (Ron, 2026-11-13): a player with a
+            // seedIndex carries seedWeight pseudo-differentials EQUAL to the
+            // seed. They are dated oldest (date 0) so they sit at the tail of
+            // the newest-first pool: while real rounds are few they fill the
+            // last-20 window and anchor the Index near the seed; each real
+            // round pushes one pseudo out of the window, so the seed's weight
+            // fades exactly like real rounds ageing out. Unseeded players
+            // (seedIndex null/absent) never enter this branch — their pool is
+            // byte-for-byte what it was before seeds existed.
+            const seedIdx = (player && typeof player.seedIndex === 'number' && isFinite(player.seedIndex)) ? player.seedIndex : null;
+            const seedW = (player && Number.isInteger(player.seedWeight) && player.seedWeight > 0) ? player.seedWeight : 0;
+            if (seedIdx !== null && seedW > 0) {
+                for (let i = 0; i < seedW; i++) {
+                    differentials.push({
+                        date: 0,
+                        differential: seedIdx,
+                        source: 'seed',
+                        roundId: null,
+                        courseId: null,
+                        teeId: null,
+                        gross: null,
+                        slope: USGA_DEFAULT_SLOPE,
+                        rating: USGA_DEFAULT_RATING,
+                        courseName: 'Seeded start',
+                        teeName: null,
+                        usedDefaults: true
+                    });
+                }
+            }
+
             // Sort newest first
             differentials.sort((a, b) => (b.date || 0) - (a.date || 0));
             return differentials;
@@ -4112,7 +4142,23 @@
                             <label style="display:block;margin-bottom:8px;font-weight:600;">Email (optional):</label>
                             <input type="email" id="playerEmail" placeholder="e.g., john@example.com"
                                    style="width:100%;padding:12px;border:2px solid #d1d5db;border-radius:8px;font-size:16px;">
-                            <small style="color:#6b7280;font-size:12px;">For league summary emails</small>
+                            <small style="color:#6b7280;font-size:12px;">Used by the scoring app's Share button and for league summary emails</small>
+                        </div>
+                        <div style="margin-bottom:16px;background:#fffbeb;border:2px solid #f59e0b;border-radius:8px;padding:12px;">
+                            <label style="display:block;margin-bottom:8px;font-weight:600;">🌱 Seeded starting handicap (optional):</label>
+                            <div style="display:flex;gap:12px;flex-wrap:wrap;">
+                                <div style="flex:1;min-width:140px;">
+                                    <label style="display:block;margin-bottom:6px;font-size:12px;font-weight:600;color:#6b7280;">Seed index:</label>
+                                    <input type="number" id="playerSeedIndex" step="0.1" min="0" max="54" placeholder="e.g., 16.0"
+                                           style="width:100%;padding:12px;border:2px solid #d1d5db;border-radius:8px;font-size:16px;">
+                                </div>
+                                <div style="flex:1;min-width:140px;">
+                                    <label style="display:block;margin-bottom:6px;font-size:12px;font-weight:600;color:#6b7280;">Counts as (rounds):</label>
+                                    <input type="number" id="playerSeedWeight" step="1" min="1" max="20" value="10"
+                                           style="width:100%;padding:12px;border:2px solid #d1d5db;border-radius:8px;font-size:16px;">
+                                </div>
+                            </div>
+                            <small style="color:#6b7280;font-size:12px;">Starts the player's index at the seed, weighted like that many past rounds, so early rounds move it slowly. Leave the seed index blank for a regular new player.</small>
                         </div>
                         <p style="color:#6b7280;font-size:14px;margin-bottom:16px;">
                             Handicap will be calculated automatically after adding historic scores or playing rounds.
@@ -4188,7 +4234,24 @@
                             <label style="display:block;margin-bottom:8px;font-weight:600;">Email (optional):</label>
                             <input type="email" id="playerEmail" value="${player.email || ''}" placeholder="e.g., john@example.com"
                                    style="width:100%;padding:12px;border:2px solid #d1d5db;border-radius:8px;font-size:16px;">
-                            <small style="color:#6b7280;font-size:12px;">For league summary emails</small>
+                            <small style="color:#6b7280;font-size:12px;">Used by the scoring app's Share button and for league summary emails</small>
+                        </div>
+
+                        <div style="margin-bottom:16px;background:#fffbeb;border:2px solid #f59e0b;border-radius:8px;padding:12px;">
+                            <label style="display:block;margin-bottom:8px;font-weight:600;">🌱 Seeded starting handicap (optional):</label>
+                            <div style="display:flex;gap:12px;flex-wrap:wrap;">
+                                <div style="flex:1;min-width:140px;">
+                                    <label style="display:block;margin-bottom:6px;font-size:12px;font-weight:600;color:#6b7280;">Seed index:</label>
+                                    <input type="number" id="playerSeedIndex" step="0.1" min="0" max="54" value="${(player.seedIndex != null && isFinite(player.seedIndex)) ? player.seedIndex : ''}" placeholder="e.g., 16.0"
+                                           style="width:100%;padding:12px;border:2px solid #d1d5db;border-radius:8px;font-size:16px;">
+                                </div>
+                                <div style="flex:1;min-width:140px;">
+                                    <label style="display:block;margin-bottom:6px;font-size:12px;font-weight:600;color:#6b7280;">Counts as (rounds):</label>
+                                    <input type="number" id="playerSeedWeight" step="1" min="1" max="20" value="${Number.isInteger(player.seedWeight) ? player.seedWeight : 10}"
+                                           style="width:100%;padding:12px;border:2px solid #d1d5db;border-radius:8px;font-size:16px;">
+                                </div>
+                            </div>
+                            <small style="color:#6b7280;font-size:12px;">For a new player: their index starts at the seed and the seed counts like that many past rounds, so early rounds move it slowly. Real rounds gradually replace the seed. Clear the seed index to remove it.</small>
                         </div>
                         
                         <div style="margin-bottom:16px;">
@@ -29919,6 +29982,11 @@ ${(() => {
                     return;
                 }
                 
+                const seedIdxEl = document.getElementById('playerSeedIndex');
+                const seedWEl = document.getElementById('playerSeedWeight');
+                const seedIdxVal = seedIdxEl ? parseFloat(seedIdxEl.value) : NaN;
+                const seedWVal = seedWEl ? parseInt(seedWEl.value, 10) : NaN;
+
                 const newPlayer = {
                     id: Date.now(),
                     name: name,
@@ -29926,6 +29994,13 @@ ${(() => {
                     handicap: 0,  // Default starting handicap - will be calculated from historic scores
                     historicScores: []
                 };
+                if (isFinite(seedIdxVal)) {
+                    // Seeded start: index begins at the seed (see collectPlayerDifferentials)
+                    newPlayer.seedIndex = seedIdxVal;
+                    newPlayer.seedWeight = (Number.isInteger(seedWVal) && seedWVal > 0) ? Math.min(20, seedWVal) : 10;
+                    newPlayer.handicapIndex = seedIdxVal;
+                    newPlayer.handicap = Math.max(0, Math.min(54, Math.round(seedIdxVal)));
+                }
                 
                 save('players', [...state.players, newPlayer]);
                 notify('✅ Player added!');
@@ -29958,18 +30033,35 @@ ${(() => {
                     return;
                 }
                 
-                // Calculate new handicap
-                const newHandicap = calculatePlayerHandicap(playerId);
-                
+                // Seeded starting handicap: blank seed index clears the seed
+                const seedIdxEl = document.getElementById('playerSeedIndex');
+                const seedWEl = document.getElementById('playerSeedWeight');
+                const seedIdxVal = seedIdxEl ? parseFloat(seedIdxEl.value) : NaN;
+                const seedWVal = seedWEl ? parseInt(seedWEl.value, 10) : NaN;
+
                 const updatedPlayers = state.players.map(p => {
                     if (p.id === playerId) {
-                        return {
+                        const merged = {
                             ...p,
                             name: name,
                             email: email || '',
-                            handicap: newHandicap,
                             defaultTeeName: defaultTeeName || null
                         };
+                        if (isFinite(seedIdxVal)) {
+                            merged.seedIndex = seedIdxVal;
+                            merged.seedWeight = (Number.isInteger(seedWVal) && seedWVal > 0) ? Math.min(20, seedWVal) : 10;
+                        } else {
+                            delete merged.seedIndex;
+                            delete merged.seedWeight;
+                        }
+                        // Recalculate from the merged record so a seed (or tee)
+                        // change takes effect on this save, not the next one.
+                        const details = calculatePlayerHandicapDetails(merged);
+                        merged.handicap = details.handicap;
+                        if (typeof merged.seedIndex === 'number' && typeof details.handicapIndex === 'number') {
+                            merged.handicapIndex = details.handicapIndex;
+                        }
+                        return merged;
                     }
                     return p;
                 });
