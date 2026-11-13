@@ -881,7 +881,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = 'v2026.11.13.61';
+        const APP_VERSION = 'v2026.11.13.62';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -9125,6 +9125,7 @@ ${(() => {
             // Quick health signals so the page tells you whether anything needs attention
             // (shared with the home Doctors tile via computeDoctorHealth)
             const { conflicted, scoredScheduled, orphanEvents, hsSuspect, hcMismatch } = computeDoctorHealth();
+            const curEvent = (state.events || []).find(e => String(e.id) === String(state.currentEventId));
 
             const card = (icon, title, desc, action, colour, issues) => `
                 <div class="list-item" onclick="${action}" style="cursor:pointer;border-left:5px solid ${colour};">
@@ -9166,6 +9167,13 @@ ${(() => {
                         <div style="flex:1;">
                             <strong style="font-size:17px;">💾 Export / Import — Data Care</strong><br>
                             <small style="color:#6b7280;">Back up or restore all league data</small>
+                        </div>
+                        <div style="font-size:22px;color:#9ca3af;">→</div>
+                    </div>
+                    <div class="list-item" onclick="resetEvent()" style="cursor:pointer;border-left:5px solid #dc2626;">
+                        <div style="flex:1;">
+                            <strong style="font-size:17px;">🔄 Reset Event — start over</strong><br>
+                            <small style="color:#6b7280;">Return every round of ${curEvent ? curEvent.name : 'the current event'} to a fresh fixture — scores, awards, match results and handicap history cleared</small>
                         </div>
                         <div style="font-size:22px;color:#9ca3af;">→</div>
                     </div>
@@ -32300,6 +32308,162 @@ ${(() => {
             }
         };
 
+        // ─── Fixture-shape round reset (shared by Reset Round + Reset Event) ───
+        // Returns a copy of `round` stripped back to a fresh fixture, in the shape
+        // of the event's own untouched scheduled rounds: no scores, no BBB/CTP
+        // logs, no winner lists, not completed, not started. Identity, course,
+        // pars, stroke indexes, photos, the teams structure and group
+        // assignments are kept. `fixtureHcp` maps playerId → the handicap
+        // snapshot the pristine fixtures carry (null → keep existing snapshot).
+        const buildFixtureRound = (round, fixtureHcp) => {
+            const out = { ...round };
+            ['bbbAwards', 'bbbWinners', 'bounceBackWinners', 'clutchWinners', 'ctpChampions',
+             'ctpLog', 'ctpMeta', 'netWinners', 'wildCardWinners', 'winProbabilitiesSnapshot',
+             'completed', 'completedAt'].forEach(k => delete out[k]);
+            out.active = false;
+            out.ctpWinners = [];
+            out.extra9Winners = [];
+            out.teams = (round.teams || []).map(t => ({
+                ...t,
+                players: (t.players || []).map(p => {
+                    const np = {
+                        id: p.id,
+                        name: p.name,
+                        handicap: (fixtureHcp && fixtureHcp[p.id] != null) ? fixtureHcp[p.id] : p.handicap,
+                        scores: Array(18).fill(''),
+                        bbbTotal: 0,
+                        ballsRemaining: 0
+                    };
+                    if (p.groupNumber !== undefined) np.groupNumber = p.groupNumber;
+                    return np;
+                })
+            }));
+            return out;
+        };
+
+        // Handicap snapshots from an event's pristine fixtures — rounds that were
+        // never played (not completed, no BBB awards, no group assignments, no
+        // scores). The untouched rounds of an event agree on these values, so the
+        // earliest one is a safe source. Returns null when no pristine fixture
+        // exists (callers then keep each player's existing snapshot).
+        const fixtureHandicapsForEvent = (eventId) => {
+            const pristine = (state.rounds || []).filter(r => {
+                if (!r || String(r.eventId) !== String(eventId)) return false;
+                if (r.completed === true || (r.bbbAwards || []).length > 0) return false;
+                return (r.teams || []).every(t => (t.players || []).every(p =>
+                    p.groupNumber == null && !(p.scores || []).some(s => s !== '' && s != null)));
+            }).sort((a, b) => (a.timestamp || a.id || 0) - (b.timestamp || b.id || 0));
+            if (!pristine.length) return null;
+            const map = {};
+            (pristine[0].teams || []).forEach(t => (t.players || []).forEach(p => { map[p.id] = p.handicap; }));
+            return map;
+        };
+
+        // Player side of a round reset: drop the reset rounds' historic-score
+        // copies (saveRoundData mirrors every completed round into
+        // player.historicScores keyed by the round's timestamp/id) and recompute
+        // handicaps. MUST be called after the reset rounds are in state.rounds
+        // (saveRoundsMerged updates state synchronously) so the recompute no
+        // longer counts them — otherwise the "reset" rounds keep feeding indexes.
+        const resetPlayersForRounds = (roundsReset) => {
+            const tsKeys = new Set();
+            roundsReset.forEach(r => { tsKeys.add(r.timestamp || r.id); tsKeys.add(r.id); });
+            const affected = new Set();
+            roundsReset.forEach(r => (r.teams || []).forEach(t => (t.players || []).forEach(p => affected.add(p.id))));
+            const updatedPlayers = (state.players || []).map(p => {
+                const before = (p.historicScores || []).length;
+                const hs = (p.historicScores || []).filter(h => !tsKeys.has(h.date));
+                if (!affected.has(p.id) && hs.length === before) return p;
+                const tmp = { ...p, historicScores: hs };
+                const details = calculatePlayerHandicapDetails(tmp);
+                return {
+                    ...tmp,
+                    handicap: details.handicap,
+                    handicapIndex: (details.handicapIndex !== undefined) ? details.handicapIndex : (p.handicapIndex || null)
+                };
+            });
+            save('players', updatedPlayers);
+        };
+
+        // ─── Reset Event (Doctors → Data Care) ─────────────────────────────
+        // Start the CURRENT event over: every round back to a fresh fixture.
+        // The bracket document is deliberately NOT written — match results are
+        // derived from the rounds (computeMatchFromRound) and the stored
+        // matches sit at 'pending' in the locked seed structure, so clearing
+        // the rounds clears the results. The post-save bracket auto-resolve
+        // can't re-decide anything either: fixture rounds are active === false,
+        // and its resolver only reads active rounds.
+        window.resetEvent = () => {
+            try {
+                if (state.readOnly) { notify('🔒 Admin mode is required to reset an event'); return; }
+                const event = (state.events || []).find(e => String(e.id) === String(state.currentEventId));
+                if (!event) { showError('No current event selected!'); return; }
+                const evRounds = (state.rounds || []).filter(r => String(r.eventId) === String(event.id));
+                if (!evRounds.length) { showError('This event has no rounds to reset!'); return; }
+                let scoreCells = 0;
+                evRounds.forEach(r => (r.teams || []).forEach(t => (t.players || []).forEach(p =>
+                    (p.scores || []).forEach(s => { if (s !== '' && s != null) scoreCells++; }))));
+                const playedCount = evRounds.filter(r => r.completed === true).length;
+
+                const modal = document.createElement('div');
+                modal.id = 'reset-event-modal';
+                modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
+                modal.innerHTML = `
+                    <div style="background:white;border-radius:16px;max-width:520px;width:100%;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.4);">
+                        <h3 style="margin:0 0 6px 0;font-size:22px;">🔄 Reset ${event.name}?</h3>
+                        <p style="color:#374151;margin:0 0 14px 0;">
+                            <strong>${evRounds.length} rounds</strong> will be reset and
+                            <strong>${scoreCells} recorded scores</strong> cleared
+                            (${playedCount} of the rounds ${playedCount === 1 ? 'is' : 'are'} currently completed).
+                        </p>
+                        <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:12px 14px;margin-bottom:16px;">
+                            <strong style="color:#991b1b;">What happens:</strong>
+                            <ul style="margin:8px 0 0 18px;padding:0;color:#374151;line-height:1.55;">
+                                <li>Every round returns to a fresh fixture — scores, BBB &amp; CTP awards and winner lists are cleared</li>
+                                <li>Match-play results clear — they're worked out from the rounds (the bracket keeps its seeds and stays locked)</li>
+                                <li>The rounds are removed from handicap history and handicaps are recalculated</li>
+                                <li>Other events and league settings are not touched</li>
+                            </ul>
+                        </div>
+                        <div style="display:flex;gap:10px;justify-content:flex-end;">
+                            <button id="reset-event-cancel" class="btn-secondary" style="padding:12px 18px;">Cancel</button>
+                            <button id="reset-event-confirm" class="btn-primary" style="padding:12px 18px;background:#dc2626;">Reset ${event.name}</button>
+                        </div>
+                    </div>`;
+                document.body.appendChild(modal);
+                const close = () => modal.remove();
+                modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+                document.getElementById('reset-event-cancel').onclick = close;
+                document.getElementById('reset-event-confirm').onclick = () => { close(); window.confirmResetEvent(); };
+                document.getElementById('reset-event-cancel').focus();
+            } catch (err) {
+                console.error('Reset event open error:', err);
+                showError('Failed to open reset: ' + err.message);
+            }
+        };
+
+        window.confirmResetEvent = () => {
+            try {
+                const event = (state.events || []).find(e => String(e.id) === String(state.currentEventId));
+                if (!event) { showError('No current event selected!'); return; }
+                const fixtureHcp = fixtureHandicapsForEvent(event.id);
+                const evRounds = (state.rounds || []).filter(r => String(r.eventId) === String(event.id));
+                const resetById = {};
+                evRounds.forEach(r => { resetById[String(r.id)] = buildFixtureRound(r, fixtureHcp); });
+                const nextRounds = (state.rounds || []).map(r => resetById[String(r.id)] || r);
+                // Save the rounds FIRST — saveRoundsMerged puts them in state
+                // synchronously, so the handicap recompute in resetPlayersForRounds
+                // no longer counts the rounds being reset.
+                saveRoundsMerged(nextRounds, evRounds.map(r => r.id));
+                resetPlayersForRounds(evRounds);
+                notify(`🔄 ${event.name} reset — ${evRounds.length} rounds back to fresh fixtures`);
+                navigate('doctors');
+            } catch (err) {
+                console.error('Reset event error:', err);
+                showError('Reset event failed: ' + err.message);
+            }
+        };
+
         window.resetRound = (roundIndex) => {
             try {
                 const round = state.rounds[roundIndex];
@@ -32308,66 +32472,18 @@ ${(() => {
                     return;
                 }
                 
-                if (!confirm(`Reset "${round.courseName}" back to scheduled status?\n\nThis will:\n• Clear all scores\n• Remove from completed rounds\n• Return to scheduled rounds list\n• Keep date, teams, and groups`)) {
+                if (!confirm(`Reset "${round.courseName}" back to scheduled status?\n\nThis will:\n• Clear all scores, BBB/CTP awards and winner lists\n• Remove from completed rounds\n• Return to scheduled rounds list\n• Keep date, teams, and groups`)) {
                     return;
                 }
                 
-                // Create scheduled version of round
-                const scheduledRound = {
-                    ...round,
-                    active: false, // Mark as scheduled
-                    teams: round.teams.map(team => ({
-                        teamId: team.teamId,
-                        teamName: team.teamName,
-                        groupNumber: team.groupNumber,
-                        players: team.players.map(player => ({
-                            id: player.id,
-                            name: player.name,
-                            handicap: player.handicap,
-                            groupNumber: player.groupNumber,
-                            scores: [], // Clear scores
-                            bbbTotal: 0,
-                            ballsRemaining: 0 // Reset balls (scorers add what's left on 18)
-                        }))
-                    })),
-                    ctpWinners: [],
-                    extra9Winners: []
-                };
-                
-                // Remove historic scores for this round from all players
-                const roundTimestamp = round.timestamp || round.id;
-                const updatedPlayers = state.players.map(p => {
-                    const updatedHistoricScores = (p.historicScores || []).filter(hs => {
-                        return hs.date !== roundTimestamp && hs.date !== round.id;
-                    });
-                    return { ...p, historicScores: updatedHistoricScores };
-                });
-                
-                // Recalculate handicaps for all affected players
-                const playersInRound = new Set();
-                round.teams.forEach(team => {
-                    team.players.forEach(player => playersInRound.add(player.id));
-                });
-                
-                const finalPlayers = updatedPlayers.map(p => {
-                    if (playersInRound.has(p.id)) {
-                        const hcDetails = calculatePlayerHandicapDetails(p);
-                        const newHandicap = hcDetails.handicap;
-                        return {
-                            ...p,
-                            handicap: newHandicap,
-                            handicapIndex: (hcDetails.handicapIndex !== undefined) ? hcDetails.handicapIndex : (p.handicapIndex || null)
-                        };
-                    }
-                    return p;
-                });
-                
-                // Replace completed round with scheduled version
+                // Same fixture shape + save ordering as Reset Event: the round is
+                // saved back FIRST so the handicap recompute no longer counts it,
+                // and every result field (awards, winners, completed flags) is
+                // stripped — the old version spread ...round and left them behind.
                 const updatedRounds = [...state.rounds];
-                updatedRounds[roundIndex] = scheduledRound;
-                
+                updatedRounds[roundIndex] = buildFixtureRound(round, fixtureHandicapsForEvent(round.eventId));
                 saveRoundsMerged(updatedRounds, [round.id]);   // merge-safe
-                save('players', finalPlayers);
+                resetPlayersForRounds([round]);
                 
                 notify('✅ Round reset to scheduled status!');
                 navigate('leaderboard');
