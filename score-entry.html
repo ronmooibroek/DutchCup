@@ -670,7 +670,7 @@ document.addEventListener('visibilitychange', () => {
     try { if (document.visibilityState === 'hidden' && hasPendingEdits()) flushPendingEdits(); } catch (e) {}
 });
 
-const SE_VERSION = '2.40.0'; // extra 9 winners now stored as position strings (the admin app's format — ids were invisible to it)
+const SE_VERSION = '2.41.0'; // haptic tick on score taps and point awards (vibrate where supported; iOS switch-toggle fallback)
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
@@ -733,6 +733,44 @@ function el(tag, attrs, ...children) {
 
 const idStr = v => (v == null ? '' : String(v));
 const idsEqual = (a, b) => idStr(a) === idStr(b);
+
+// ─── Haptics ────────────────────────────────────────────────────────────
+// A tiny tick so the scorer FEELS a tap land (Ron, 2026-11-13). Android
+// Chrome vibrates via navigator.vibrate; iOS Safari has no vibrate at
+// all — there (17.4+) the only web route to a haptic is toggling a
+// native <input type="checkbox" switch> from inside the tap handler.
+// Where neither exists this is a silent no-op, and the try/catch means a
+// haptic can never break scoring. Call ONLY from real tap handlers —
+// never from auto-fill, loads, or re-renders.
+function hapticTap(ms) {
+    try {
+        if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+            navigator.vibrate(ms || 10);
+            return;
+        }
+        // iOS fallback state lives on the function itself:
+        // undefined = untried · false = no switch support · else the input.
+        if (hapticTap._sw === undefined) {
+            hapticTap._sw = false;
+            if (typeof document !== 'undefined' && document.createElement && document.body) {
+                const sw = document.createElement('input');
+                sw.type = 'checkbox';
+                sw.setAttribute('switch', '');
+                if ('switch' in sw) {
+                    // Live but invisible and untappable — NOT display:none:
+                    // Safari only ticks for a switch it actually renders.
+                    sw.style.cssText = 'position:fixed;left:-60px;top:0;width:52px;height:32px;opacity:0.01;pointer-events:none;margin:0;padding:0;';
+                    sw.setAttribute('aria-hidden', 'true');
+                    sw.tabIndex = -1;
+                    document.body.appendChild(sw);
+                    hapticTap._sw = sw;
+                }
+            }
+        }
+        if (hapticTap._sw) hapticTap._sw.click();
+    } catch (e) { /* garnish — never let it break a tap */ }
+}
+window.hapticTap = hapticTap;
 
 function setStatus(text, cls) {
     const elt = $('#save-status');
@@ -1679,6 +1717,7 @@ function holeStatus(round, groupPlayers, holeIdx) {
 const pointDrag = { selected: null, suppressClick: false };
 
 function assignPoint(playerId, slotKey) {
+    hapticTap(15);   // felt confirmation: the award tap landed
     if (slotKey === 'ctp') tapCTP(playerId);
     else tapBBBSlot(playerId, slotKey);
 }
@@ -1940,6 +1979,7 @@ function scoreChipValues(par) {
 // One tap on a score chip: record it in place. No sheet, no advancing —
 // the scorer stays on the same card and taps the next player's chip.
 function setScoreInline(playerId, value) {
+    hapticTap(10);   // felt confirmation: the tap landed
     const pid = idStr(playerId);
     if (!state.pendingEdits.scores[pid]) state.pendingEdits.scores[pid] = {};
     state.pendingEdits.scores[pid][state.currentHole] = String(value);
@@ -1990,6 +2030,7 @@ function tapBBBSlot(playerId, slotKey) {
 function clearBBBForPlayer(playerId) {
     const round = getRoundById(state.selectedRoundId);
     if (!round) return;
+    hapticTap(15);   // felt confirmation: the take-back tap landed
     const pid = idStr(playerId);
     const slots = { ...effectiveBBB(round, state.currentHole) };
     ['bingo', 'bango', 'bongo'].forEach(k => { if (idStr(slots[k]) === pid) slots[k] = ''; });
@@ -2082,6 +2123,7 @@ function buildScoreSheet(round, groupPlayers) {
 // One tap: record the score, then move the sheet to the next unscored player,
 // or close it when everyone on the hole has a score.
 function setScoreTap(playerId, value) {
+    hapticTap(10);   // felt confirmation: the tap landed
     const pid = idStr(playerId);
     const val = value == null ? '' : String(value);
 
