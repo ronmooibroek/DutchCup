@@ -197,6 +197,15 @@
   [style*="color:#000000"] { text-shadow: 0 0 .9vmin rgba(255,255,255,.9), 0 0 .35vmin rgba(255,255,255,.9); }
   svg path[stroke="#000000"], svg polyline[stroke="#000000"], svg circle[fill="#000000"] { filter: drop-shadow(0 0 5px rgba(255,255,255,.85)); }
   @media (prefers-reduced-motion: reduce) { .c16line { animation:none !important; stroke-dashoffset:0; } }
+/* ===== cycle 27: beats, slam, skins chips, ctp pulse ===== */
+.bt { transition: opacity .38s ease, transform .38s cubic-bezier(.2,.8,.3,1); }
+.btOff { opacity: 0; transform: translateY(16px) scale(.97); pointer-events: none; }
+@keyframes slamIn { 0% { transform: scale(2.7); opacity: 0; filter: blur(7px); } 55% { transform: scale(.93); opacity: 1; filter: blur(0); } 74% { transform: scale(1.05); } 100% { transform: scale(1); } }
+.slamNum { animation: slamIn .55s cubic-bezier(.2,.8,.3,1) both; }
+@keyframes flashBg { from { opacity: 1; } to { opacity: 0; } }
+.slamFlash { position: absolute; inset: 0; background: radial-gradient(circle at 50% 46%, rgba(255,215,94,.34), transparent 62%); animation: flashBg .8s ease both; pointer-events: none; }
+@keyframes coinPop { 0% { transform: scale(.4); opacity: 0; } 60% { transform: scale(1.14); opacity: 1; } 100% { transform: scale(1); } }
+@keyframes ringPulse { 0%,100% { transform: scale(1); opacity: .85; } 50% { transform: scale(1.09); opacity: 1; } }
 </style>
 </head>
 <body>
@@ -228,8 +237,9 @@
   </div>
 </div>
 <div id="help"><div class="box"><h3>Presenter controls</h3>
-<b>→ / Space / tap right</b> — next slide &nbsp;·&nbsp; <b>← / tap left</b> — back<br>
+<b>→ / Space / tap</b> — next reveal: every tap steps ONE beat, so a staged slide gives up its next reveal before the show moves on &nbsp;·&nbsp; <b>← / tap the far left</b> — one beat back<br>
 <b>1–7</b> — jump to a night &nbsp;·&nbsp; <b>O</b> — all slides at a glance &nbsp;·&nbsp; <b>D</b> — director mode (auto-advance; nominee slides still wait for you) &nbsp;·&nbsp; <b>F</b> — fullscreen &nbsp;·&nbsp; <b>M</b> — sound on/off &nbsp;·&nbsp; <b>H</b> — this help<br>
+<b>The control bars stay hidden while you present</b> — they never pop up when you tap. Summon them only on purpose: press <b>H</b>, tap-and-hold anywhere on the stage, or tap the stage’s top-right corner. They fade again on their own.<br>
 <b>Nominee slides</b> are your beat: the room guesses, then advance to crown the winner.<br>
 Sound comes from the app's own library, played from this site. The first tap or keypress wakes the audio.<br>
 This page reads the live scores straight from the same database the scoring app writes to — nothing to regenerate. Tap ⬇ DOWNLOAD SHOW (top bar) to save a fully offline copy of tonight's show.
@@ -901,51 +911,57 @@ function sShape(night) {
     '<div style="text-align:left;font-size:2.7vmin;font-weight:800;line-height:1.9;"><div><span style="color:#ffd75e;">■</span> Under par — ' + under + ' holes (' + Math.round(pU) + '%)</div><div><span style="color:#5ee07d;">■</span> Net par — ' + par + ' (' + Math.round(pP) + '%)</div><div><span style="color:#ff7a6b;">■</span> Over par — ' + over + ' (' + Math.round(100 - pU - pP) + '%)</div><div class="sub" style="font-size:2.2vmin;">Net scores, all 12 cards. Gold is where the room gasps.</div></div></div>' };
 }
 function sSkins(night) {
+  // CYCLE 27 — WORDLESS SKINS (Ron's ruling: "we all know — just use fun
+  // and exciting graphics to roll out the results"). No sentences
+  // anywhere: the 18 holes tick off in RUNS — each run of tied holes
+  // rolls the pot bigger until one hole pays it out. One slide per run
+  // (6–8 a night; the old hole-by-hole roll took 36 slides and ~164s):
+  // hole chips on top (tied = dimmed with a red ✗, the paying hole in
+  // gold), the pot as a coin pile that swells with the run, then the
+  // winner's face pops with the winning NET as the numeral that matters.
+  // The skins king is still crowned exactly once, in the Honours.
   const c = RC(night); if (!c.skinsEnabled) return [];
   const r = DATA.rounds[night - 1], log = c.skinsLog;
-  const won = log.filter(l => l.winner);
   const out = [];
-  const bigPot = log.reduce((m, l) => Math.max(m, l.pot), 0);
-  out.push({ ch: 'Act I · Skins', snd: SND.skins, html:
+  const chip = (l, state) => '<div style="position:relative;flex:none;width:5.6vmin;height:5.6vmin;border-radius:1.2vmin;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:2.5vmin;' +
+    (state === 'win' ? 'background:linear-gradient(180deg,#fff3b0,#c99612);color:#241a02;box-shadow:0 0 2.4vmin #ffd75e88;' :
+     state === 'tied' ? 'background:#ffffff14;color:#ff9d9d;border:1px solid #ff6b6b55;' :
+     'background:#ffffff1c;color:var(--cream);border:1px solid var(--line);') + '">' + l.hole +
+    (state === 'tied' ? '<span style="position:absolute;top:-1.2vmin;right:-.9vmin;font-size:2vmin;">✗</span>' : '') + '</div>';
+  const chipsRow = run => '<div style="display:flex;gap:.9vmin;justify-content:center;flex-wrap:wrap;max-width:124vmin;">' + run.map(l => chip(l, l.winner ? 'win' : 'tied')).join('') + '</div>';
+  const coins = pot => pot <= 0 ? '' : '<div style="font-size:' + (pot >= 7 ? 4.6 : pot >= 4 ? 4 : 3.4) + 'vmin;letter-spacing:-.7vmin;line-height:1.1;animation:coinPop .5s cubic-bezier(.2,.8,.3,1) both;">' + '🪙'.repeat(Math.min(pot, 9)) + (pot > 9 ? '<span style="letter-spacing:0;font-size:3vmin;font-weight:900;color:var(--gold);">&nbsp;×' + pot + '</span>' : '') + '</div>';
+  out.push({ ch: 'Act I · Skins', dwell: 3000, snd: SND.skins, html:
     bgImg(IMG.coins, .30) +
     '<div style="position:relative;z-index:3;"><div class="kick">Act I · The Skins Game</div>' +
-    '<div style="font-size:10vmin;line-height:1.1;">🎬</div>' +
-    '<h2 style="font-size:6.6vmin;">All Eighteen Holes. In Order.</h2>' +
-    '<div class="sub">' + won.length + ' skins paid tonight · one pot reached ' + bigPot + '. Hole by hole — did it stand, or was it tied?</div></div>' });
-  let stake = 0;
-  log.forEach(l => {
-    stake += 1;
-    const holders = (l.tied && l.tied.length) ? l.tied : (l.winner ? [l.winner] : []);
-    if (!holders.length) { if (l.winner) stake = 0; return; }
-    const hero = l.winner || holders[0];
-    const lowNet = c.players[hero].nets[l.hole - 1];
-    const gross = lowNet + strokesOn(c.players[hero].hcp, r.sis[l.hole - 1]);
-    const myStake = stake;
-    const hot = myStake >= 4, hotter = myStake >= 7;
-    out.push({ ch: 'Act I · Skins', dwell: hotter ? 5200 : hot ? 4400 : 3600, snd: SND.pulse, html:
-      (hot ? bgImg(IMG.coins, hotter ? .42 : .28) : '') +
-      '<div style="position:relative;z-index:3;"><div class="kick">The Skins Game · Hole ' + l.hole + ' of 18 · Par ' + r.pars[l.hole - 1] + '</div>' +
-      '<div style="margin:.6vmin 0;">' + face(hero, true) + '</div>' +
-      '<div style="display:flex;align-items:baseline;justify-content:center;gap:1.6vmin;"><div class="goldGrad" style="font-weight:900;font-size:' + (hotter ? '13vmin' : '11vmin') + ';line-height:1;">NET ' + lowNet + '</div><div class="sub" style="font-size:3.2vmin;">(gross ' + gross + ')</div></div>' +
-      (hot ? '<div style="font-size:3.2vmin;letter-spacing:.4vmin;margin-top:.8vmin;">' + '🪙'.repeat(Math.min(myStake, 9)) + '</div>' : '') +
-      '<div class="sub" style="margin-top:1.2vmin;">' + esc(pname(hero)) + ' posted it. Pot on the line: <b style="color:var(--gold);">' + myStake + '</b> — if nobody matched it, the skin is his.</div></div>' });
-    if (l.winner) {
-      out.push({ ch: 'Act I · Skins', fx: 'confetti', fxCols: [tcolor(l.winner)], snd: SND.cheer, dwell: 4600, html:
-        '<div class="kick">The Skins Game · Hole ' + l.hole + '</div>' +
-        '<div style="font-size:7.5vmin;line-height:1.1;">💰</div>' +
-        '<div style="font-weight:900;font-size:6.2vmin;">IT STANDS!</div>' +
-        '<div style="margin:.8vmin 0;">' + face(l.winner) + '</div>' +
-        '<div class="sub">' + esc(pname(l.winner)) + ' takes the pot of ' + myStake + '.</div>' });
-      stake = 0;
+    '<div style="font-size:9vmin;line-height:1.15;">💰</div>' +
+    '<h2 style="font-size:7vmin;">SKINS</h2>' +
+    '<div style="display:flex;gap:.9vmin;justify-content:center;flex-wrap:wrap;max-width:124vmin;margin-top:2.2vmin;">' + log.map(l => chip(l, 'open')).join('') + '</div>' +
+    '<div style="margin-top:2.2vmin;font-size:4.2vmin;">🪙</div></div>' });
+  const runs = [];
+  let runStart = 0;
+  log.forEach((l, ix) => { if (l.winner) { runs.push(log.slice(runStart, ix + 1)); runStart = ix + 1; } });
+  if (runStart < log.length) runs.push(log.slice(runStart));
+  runs.forEach(run => {
+    const lastL = run[run.length - 1];
+    const span = run.length === 1 ? 'HOLE ' + run[0].hole : 'HOLES ' + run[0].hole + '–' + lastL.hole;
+    if (lastL.winner) {
+      const net = c.players[lastL.winner].nets[lastL.hole - 1];
+      out.push({ ch: 'Act I · Skins', dwell: 3300, fx: 'confetti', fxCols: [tcolor(lastL.winner)], snd: SND.cheer, html:
+        (lastL.pot >= 4 ? bgImg(IMG.coins, .3) : '') +
+        '<div style="position:relative;z-index:3;"><div class="kick">Skins · ' + span + '</div>' +
+        '<div style="margin:1.6vmin 0 1.6vmin;">' + chipsRow(run) + '</div>' +
+        coins(lastL.pot) +
+        '<div class="goldGrad" style="font-weight:900;font-size:6.2vmin;line-height:1.1;">POT ' + lastL.pot + '</div>' +
+        '<div style="margin:1.1vmin 0 .3vmin;animation:popIn .55s cubic-bezier(.2,.8,.3,1) .3s both;">' + face(lastL.winner, true) + '</div>' +
+        '<div style="animation:popIn .55s cubic-bezier(.2,.8,.3,1) .55s both;"><span class="goldGrad" style="font-weight:900;font-size:8.6vmin;line-height:1;">NET ' + net + '</span></div></div>' });
     } else {
-      const matchers = holders.filter(pid => pid !== hero);
-      const names = matchers.map(pid => pname(pid).split(' ')[0]);
-      const nameTxt = names.length <= 3 ? names.join(', ') : names.slice(0, 3).join(', ') + ' and ' + (names.length - 3) + ' more';
-      out.push({ ch: 'Act I · Skins', snd: SND.ooh, dwell: 3400, html:
-        '<div class="kick">The Skins Game · Hole ' + l.hole + '</div>' +
-        '<div style="font-weight:900;font-size:6.2vmin;color:#ff9d9d;">TIED!</div>' +
-        '<div style="display:flex;flex-wrap:wrap;justify-content:center;gap:1.2vmin;margin:1.2vmin 0;max-width:120vmin;">' + matchers.slice(0, 6).map(pid => miniFace(pid)).join('') + '</div>' +
-        '<div class="sub">' + esc(nameTxt) + ' matched it. No skin — the pot rolls on, now worth ' + (myStake + 1) + '.</div>' });
+      const pot = c.leftoverPot || 0;
+      out.push({ ch: 'Act I · Skins', dwell: 2800, snd: SND.ooh, html:
+        '<div class="kick">Skins · ' + span + '</div>' +
+        '<div style="margin:1.6vmin 0 1.6vmin;">' + chipsRow(run) + '</div>' +
+        '<div style="font-weight:900;font-size:6.2vmin;color:#ff9d9d;">TIED</div>' +
+        coins(pot) +
+        (pot > 0 ? '<div style="margin-top:1.1vmin;"><span class="pill" style="font-size:2.4vmin;">🪙 ROLLS ON ➜</span></div>' : '') });
     }
   });
   const skinSum = sSkinsSummary(night); if (skinSum) out.push(skinSum);
@@ -961,8 +977,8 @@ function sSkinsSummary(night) {
   const river = '<div style="display:flex;gap:.5vmin;align-items:flex-end;width:100%;margin:1.4vmin 0 .6vmin;">' + c.skinsLog.map(l => {
     if (l.winner) return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:.4vmin;"><div style="width:100%;height:' + (2.5 + l.pot * 2.2) + 'vmin;background:linear-gradient(180deg,#fff3b0,#c99612);border-radius:.7vmin .7vmin 0 0;transform-origin:bottom;animation:growUp .7s cubic-bezier(.2,.8,.3,1) both;animation-delay:' + (l.hole * 45) + 'ms;"></div><div style="font-size:1.45vmin;font-weight:800;">' + l.hole + '</div><div style="font-size:1.35vmin;color:var(--gold);font-weight:800;">' + initials(pname(l.winner)) + '</div></div>';
     return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:.4vmin;"><div style="width:100%;height:1.6vmin;background:#ffffff2e;border-radius:.7vmin .7vmin 0 0;"></div><div style="font-size:1.45vmin;font-weight:800;">' + l.hole + '</div><div style="font-size:1.35vmin;color:var(--dim);">×' + (l.tied ? l.tied.length : 0) + '</div></div>';
-  }).join('') + '</div><div class="sub" style="font-size:1.9vmin;margin-bottom:1.6vmin;">Gold = pot taken · grey = rolled over (× = tied it)</div>';
-  return { ch: 'Act I · Skins', snd: SND.skins, html:
+  }).join('') + '</div>';
+  return { ch: 'Act I · Skins', dwell: 5000, snd: SND.skins, html:
     '<div class="kick">Side Game · Skins</div><h2>💰 The Skins Game</h2>' +
     river +
     (c.kingOfTies ? '<div style="margin-top:2vmin;"><span class="pill" style="font-size:2.3vmin;">👑 KING OF TIES — ' + c.kingOfTies.map(pname).join(' · ') + ' · the last pot split by the house rule</span></div>' : '') };
@@ -980,6 +996,30 @@ function sBigPot(night) {
     '<div class="big gold" data-n="' + big.pot + '">' + big.pot + ' SKINS</div>' +
     '<div style="margin:1.6vmin 0;">' + face(big.winner, true) + '</div>' +
     '<div class="sub">' + esc(pname(big.winner)) + ' takes the lot — net ' + (big.netDiff <= -1 ? (-big.netDiff) + ' under par' : big.netDiff === 0 ? 'par' : '+' + big.netDiff) + '. The room felt that one.</div></div>' };
+}
+/* CYCLE 27 — MATCH NOTATION (Ron's ruling: "Matches are won 4&3, 2&1
+   etc, not 8-7"). Pure presentation math over computeMatch's per-hole
+   record: walk the holes from the winner's side; the first hole after
+   which his lead beats the holes remaining is where the match ENDED —
+   that gives "L&R". Going the distance gives "N UP"; all square is the
+   countback the engine already notes. The races stop at the same hole
+   (the old Cycle 19 sealedK walk was the same mathematics). */
+function matchWalk(d, winnerPid, p1) {
+  const wIs1 = winnerPid === p1, len = d.res.length;
+  let lead = 0, decK = len - 1;
+  for (let k = 0; k < len; k++) {
+    const r = d.res[k];
+    if (r !== 'halved') lead += ((r === 'slot1') === wIs1) ? 1 : -1;
+    const rem = len - (k + 1);
+    if (rem > 0 && lead > rem) { decK = k; break; }
+  }
+  return { decK, lead, early: decK < len - 1 };
+}
+function matchNotation(d, winnerPid, p1) {
+  const w = matchWalk(d, winnerPid, p1), len = d.res.length;
+  if (w.early) return w.lead + '&' + (len - (w.decK + 1));
+  if (w.lead > 0) return w.lead + ' UP';
+  return 'ON COUNTBACK';
 }
 function sMatches(night) {
   const ms = matchesForNight(night).filter(m => m.res || (m.s1.pid && m.s2.pid));
@@ -1015,14 +1055,12 @@ function sMatches(night) {
         '<div style="display:flex;gap:12vmin;margin-top:.6vmin;font-size:2.4vmin;letter-spacing:.5vmin;"><div>' + formDots(feat.res.p1) + '</div><div>' + formDots(feat.res.p2) + '</div></div>' +
         '<div style="font-size:8.5vmin;margin-top:2.2vmin;">🏎️</div>' });
       let wA = 0, wB = 0;
-      // CYCLE 19 · I4 — CLINCH MARKER: the hole where this match became
-      // mathematically decided — the same winner-relative walk Match of the
-      // Night uses (first hole after which the winner's lead beats the holes
-      // left). Only an EARLY seal is recorded: decided on the final hole or
-      // by countback, the finish line is the story and there is no marker.
-      const segLenR = d.res.length, wIs1R = feat.res.winnerPid === feat.res.p1;
-      let sWR = 0, sLR = 0, sealedK = -1;
-      for (let k = 0; k < segLenR; k++) { const rk = d.res[k]; if (rk !== 'halved') { if ((rk === 'slot1') === wIs1R) sWR++; else sLR++; } if (sWR - sLR > segLenR - (k + 1)) { if (k < segLenR - 1) sealedK = k; break; } }
+      // CYCLE 27 — THE RACE STOPS AT THE DECISION: matchWalk finds the
+      // hole where the winner's lead first beat the holes remaining, and
+      // the race plays only to that hole — after it, the match is
+      // declared over (the result slide flies the 🏁 MATCH OVER kick).
+      const wWalk27 = matchWalk(d, feat.res.winnerPid, feat.res.p1);
+      const lastK = wWalk27.decK;
       // CYCLE 18 · FIX 1 — the popped chip is an EMOJI for the net result vs
       // par (Ron's call — Cycle 17's scorecard-notation shapes are gone):
       // 🦅 eagle or better, 🐦 birdie, ➖ par (a line), ❌ bogey, ❌❌ double
@@ -1032,44 +1070,64 @@ function sMatches(night) {
         const glyph = diff <= -2 ? '🦅' : diff === -1 ? '🐦' : diff === 0 ? '➖' : diff === 1 ? '❌' : '❌❌';
         const dbl = diff >= 2;
         return '<div style="position:absolute;top:-6.3vmin;left:50%;translate:-50% 0;background:' + (gold ? '#2a2003f5' : '#141830f2') + ';border-radius:99vmin;padding:.65vmin 1.15vmin;box-shadow:0 .8vmin 2vmin #000a' + (gold ? ',0 0 0 .4vmin var(--gold),0 0 2.6vmin #ffd75e88' : '') + ';animation:popIn .45s cubic-bezier(.2,.8,.3,1) both;z-index:3;line-height:1.15;font-size:' + (dbl ? '3.5vmin' : '4.8vmin') + ';letter-spacing:' + (dbl ? '-.5vmin' : '0') + ';white-space:nowrap;' + (gold ? '' : 'opacity:.92;') + '">' + glyph + '</div>'; };
-      const lane = (pid, won, played, net, par, gold, atFlag) => '<div style="position:relative;height:11.5vmin;background:linear-gradient(90deg,#175430,#2e7d46);border-radius:99vmin;margin:2.8vmin 0 1.1vmin;">' +
-        '<div style="position:absolute;top:50%;left:' + (atFlag ? 84 : played / segLen * 30 + won / segLen * 54) + '%;transform:translate(0,-50%);z-index:2;"><div style="position:relative;border-radius:50%;box-shadow:0 0 0 .55vmin #fff,0 1vmin 2.4vmin #0009;line-height:0;">' + miniFace(pid) + badge(net, par, gold) + '</div></div>' +
+      // CYCLE 27 · SPACING (Ron's ruling: "the spacing is not used
+      // properly when moving people toward the finish line"). The pair
+      // travels as one story: their shared centre marches to the flag
+      // as the holes run out (5% → 84% of the track), and the LEAD pries
+      // the carts apart — wider the later it gets. A tight match bunches
+      // at the line late; a rout is strung out early. The old formula
+      // (30% for holes played + 54% for holes won) parked even an 8–7
+      // finish mid-track, winner at 54%. The winner ends ON the flag.
+      const posFor = (won, lost, played) => {
+        const centre = 5 + 79 * (played / segLen);
+        return Math.max(2, Math.min(88, centre + (won - lost) * (3.1 + 4.4 * played / segLen)));
+      };
+      const lane = (pid, posPct, net, par, gold, atFlag) => '<div style="position:relative;height:11.5vmin;background:linear-gradient(90deg,#175430,#2e7d46);border-radius:99vmin;margin:2.8vmin 0 1.1vmin;">' +
+        '<div style="position:absolute;top:50%;left:' + (atFlag ? 90 : posPct.toFixed(1)) + '%;transform:translate(0,-50%);z-index:2;"><div style="position:relative;border-radius:50%;box-shadow:0 0 0 .55vmin #fff,0 1vmin 2.4vmin #0009;line-height:0;">' + miniFace(pid) + badge(net, par, gold) + '</div></div>' +
         '<div style="position:absolute;right:2.2vmin;top:50%;transform:translateY(-50%);font-size:3.4vmin;">🏁</div></div>';
-      // CYCLE 22 · PACING — the race breathes like a race, not a metronome:
-      // a halved hole is a shrug (1300), a routine won hole moves (1500), the
-      // last two holes lean in (2100), a lead change is a gasp (2300), and
-      // the hole that seals the match gets the longest beat of all (2600).
+      // CYCLE 22 · PACING (kept) — the race breathes like a race, not a
+      // metronome: a halved hole is a shrug (1300), a routine won hole
+      // moves (1500), the last two holes OF THE RACE lean in (2100), a
+      // lead change is a gasp (2300), and the hole that seals the match
+      // gets the longest beat of all (2600). Cycle 27: the loop runs
+      // k = 0..lastK only — holes after the decision are never shown,
+      // and their pips sit dark on the strip: the match is over.
       let prevLeader = null;
-      for (let i = segR[0]; i < segR[1]; i++) {
+      for (let k = 0; k <= lastK; k++) {
+        const i = segR[0] + k;
         const w = hw(i); if (w === feat.res.p1) wA++; else if (w === feat.res.p2) wB++;
         const leaderNow = wA === wB ? 'AS' : (wA > wB ? '1' : '2');
-        const holeDwell = (i - segR[0]) === sealedK ? 2600
+        const isDecider = k === lastK && wWalk27.early;
+        const holeDwell = isDecider ? 2600
           : (prevLeader !== null && leaderNow !== prevLeader) ? 2300
-          : i >= segR[1] - 2 ? 2100
+          : k >= lastK - 1 ? 2100
           : !w ? 1300 : 1500;
         prevLeader = leaderNow;
-        const isLast = i === segR[1] - 1;
-        const pips = []; for (let j = segR[0]; j < segR[1]; j++) { const wj = j <= i ? hw(j) : undefined; pips.push('<div style="flex:1;height:1.7vmin;border-radius:.5vmin;background:' + (j > i ? '#ffffff14' : wj === feat.res.p1 ? tcolor(feat.res.p1) : wj === feat.res.p2 ? tcolor(feat.res.p2) : '#ffffff2b') + (j === i ? ';box-shadow:0 0 0 .3vmin var(--gold)' : '') + ';"></div>'); }
+        const isLast = k === lastK;
+        const played = k + 1, rem = segLen - played;
+        const pips = []; for (let j = segR[0]; j < segR[1]; j++) { const jk = j - segR[0]; const wj = jk <= k ? hw(j) : undefined; pips.push('<div style="flex:1;height:1.7vmin;border-radius:.5vmin;background:' + (jk > lastK ? '#ffffff0a' : jk > k ? '#ffffff14' : wj === feat.res.p1 ? tcolor(feat.res.p1) : wj === feat.res.p2 ? tcolor(feat.res.p2) : '#ffffff2b') + (jk === k ? ';box-shadow:0 0 0 .3vmin var(--gold)' : '') + ';"></div>'); }
         const score = wA === wB ? 'ALL SQUARE' : (wA > wB ? pname(feat.res.p1).split(' ')[0].toUpperCase() + ' ' + (wA - wB) + ' UP' : pname(feat.res.p2).split(' ')[0].toUpperCase() + ' ' + (wB - wA) + ' UP');
+        const dormie = rem > 0 && Math.abs(wA - wB) === rem;
         out.push({ ch: 'Act I · Match Play', dwell: holeDwell, snd: w ? SND.skins : SND.hop, html:
           '<div class="kick">Match Play · ' + esc(feat.label) + '</div>' +
           '<div style="display:flex;align-items:baseline;justify-content:center;gap:2vmin;"><div style="font-weight:900;font-size:5.4vmin;">HOLE ' + (i + 1) + '</div><div class="sub" style="font-size:2.6vmin;">PAR ' + rrR.pars[i] + '</div></div>' +
-          '<div style="width:min(132vmin,94%);margin-top:1.8vmin;">' + lane(feat.res.p1, wA, i - segR[0] + 1, A.nets[i], rrR.pars[i], w === feat.res.p1 || (isLast && feat.res.winnerPid === feat.res.p1), isLast && feat.res.winnerPid === feat.res.p1) + lane(feat.res.p2, wB, i - segR[0] + 1, B.nets[i], rrR.pars[i], w === feat.res.p2 || (isLast && feat.res.winnerPid === feat.res.p2), isLast && feat.res.winnerPid === feat.res.p2) +
+          '<div style="width:min(132vmin,94%);margin-top:1.8vmin;">' + lane(feat.res.p1, posFor(wA, wB, played), A.nets[i], rrR.pars[i], w === feat.res.p1 || (isLast && feat.res.winnerPid === feat.res.p1), isLast && feat.res.winnerPid === feat.res.p1) + lane(feat.res.p2, posFor(wB, wA, played), B.nets[i], rrR.pars[i], w === feat.res.p2 || (isLast && feat.res.winnerPid === feat.res.p2), isLast && feat.res.winnerPid === feat.res.p2) +
           '<div style="display:flex;gap:.45vmin;margin-top:1.4vmin;">' + pips.join('') + '</div></div>' +
           (w ? '' : '<div style="margin-top:1.6vmin;"><span class="pill" style="font-size:2.3vmin;">HALVED</span></div>') +
           '<div class="goldGrad" style="font-weight:900;font-size:5.6vmin;margin-top:' + (w ? '2.2vmin' : '1.2vmin') + ';">' + score + '</div>' +
-          ((i - segR[0]) === sealedK ? '<div style="margin-top:1.3vmin;animation:popIn .5s cubic-bezier(.2,.8,.3,1) .3s both;"><span class="pill" style="font-size:2.4vmin;">🔒 SEALED IT</span></div>' : '') });
+          (dormie ? '<div style="margin-top:1.1vmin;"><span class="pill" style="font-size:2.3vmin;">DORMIE</span></div>' : '') +
+          (isDecider ? '<div style="margin-top:1.3vmin;animation:popIn .5s cubic-bezier(.2,.8,.3,1) .3s both;"><span class="pill" style="font-size:2.4vmin;">🔒 SEALED IT</span></div>' : '') });
       }
       losses[feat.res.loserPid]++;
       const elim = losses[feat.res.loserPid] >= 2;
       out.push({ ch: 'Act I · Match Play', fx: 'confetti', fxCols: [tcolor(feat.res.winnerPid)], dwell: 8000, snd: elim ? SND.elim : SND.matchWin, html:
-        '<div class="kick">Match Play · ' + esc(feat.label) + '</div>' +
+        '<div class="kick">Match Play · ' + esc(feat.label) + (wWalk27.early ? ' · 🏁 MATCH OVER' : '') + '</div>' +
         '<div style="display:flex;gap:6vmin;align-items:center;justify-content:center;width:100%;">' +
           '<div style="text-align:center;"><div style="font-size:4.4vmin;">👑</div>' + face(feat.res.winnerPid, true, true) + '<div style="font-weight:900;font-size:3.4vmin;color:var(--gold);letter-spacing:.14em;margin-top:.6vmin;">WINNER</div></div>' +
           '<div style="text-align:center;position:relative;"><div style="opacity:.45;filter:grayscale(1);">' + face(feat.res.loserPid, false, true) + '</div>' +
           (elim ? '<div style="position:absolute;top:44%;left:50%;transform:translate(-50%,-50%) rotate(-9deg);border:.55vmin solid #ff6b6b;color:#ff8585;font-weight:900;font-size:3.6vmin;letter-spacing:.1em;padding:.5vmin 1.6vmin;border-radius:.8vmin;background:#1a0d16d9;white-space:nowrap;">ELIMINATED</div>' : '') + '</div>' +
         '</div>' +
-        '<h2 style="margin-top:1.6vmin;">' + esc(pname(feat.res.winnerPid)) + ' wins ' + Math.max(d.w1, d.w2) + ' – ' + Math.min(d.w1, d.w2) + '</h2>' +
+        '<h2 style="margin-top:1.6vmin;">' + esc(pname(feat.res.winnerPid)) + ' wins ' + matchNotation(d, feat.res.winnerPid, feat.res.p1) + '</h2>' +
         '<div class="sub">' + d.halved + ' holes halved' + (d.note ? ' · ' + esc(d.note) : '') + (elim ? ' · ' + esc(pname(feat.res.loserPid)) + ' is out of the bracket' : '') + '</div>' });
       // ---- CYCLE 18 · FIX 2 — BRACKET STRUCTURE after every race (replaces
       // Cycle 17's 30-match grid, which Ron rejected as too much): the bracket
@@ -1098,7 +1156,7 @@ function sMatches(night) {
         const vsSep = '<div style="font-weight:900;font-size:2.6vmin;color:var(--cream);">VS</div>';
         const arrowB = '<div style="font-size:5vmin;color:var(--gold);font-weight:900;padding:0 .8vmin;">➜</div>';
         // LEFT — the match just won: winner crowned and ringed, loser greyed.
-        const wonInner = faceSlot(feat.res.winnerPid, { crown: true, ring: true }) + '<div style="font-weight:900;font-size:3.4vmin;color:var(--gold);">' + Math.max(d.w1, d.w2) + '–' + Math.min(d.w1, d.w2) + '</div>' + faceSlot(feat.res.loserPid, { grey: true });
+        const wonInner = faceSlot(feat.res.winnerPid, { crown: true, ring: true }) + '<div style="font-weight:900;font-size:3.4vmin;color:var(--gold);">' + matchNotation(d, feat.res.winnerPid, feat.res.p1) + '</div>' + faceSlot(feat.res.loserPid, { grey: true });
         // CENTRE — the next level: the winner slid into their slot; the other
         // slot is a face when legitimately known, else a ghost + its source.
         let nextCard;
@@ -1158,7 +1216,7 @@ function sMatches(night) {
         '<div class="faceRow" style="margin-top:1.6vmin;">' +
           '<div style="text-align:center;"><div style="font-size:3.6vmin;">👑</div>' + face(bm.res.winnerPid, true) + '</div>' +
           '<div class="vsBadge">VS</div>' + face(bm.res.loserPid, true) + '</div>' +
-        '<div class="sub" style="margin-top:1.8vmin;font-size:2.5vmin;">Final score ' + Math.max(bd.w1, bd.w2) + ' – ' + Math.min(bd.w1, bd.w2) + ' — told in full in the races above.</div>' +
+        '<div class="sub" style="margin-top:1.8vmin;font-size:2.5vmin;">Won ' + matchNotation(bd, bm.res.winnerPid, bm.res.p1) + ' — told in full in the races above.</div>' +
         '<div style="margin-top:1.6vmin;"><span class="pill" style="font-size:2.4vmin;">' + (bd.note ? '🏁 ' + esc(bd.note) : 'DECIDED ON HOLE ' + best.holeNo) + '</span></div>' +
         '<div class="sub" style="margin-top:1.4vmin;">' + bd.halved + ' holes halved · the last match alive tonight</div>' });
     }
@@ -1242,11 +1300,11 @@ function sBBB(night) {
   // CYCLE 26 — the BBB crowns live in the Awards block now (the honours
   // sequence + sBBBCrowns crown the champion and the three sub-crowns
   // exactly once), and the B's Race duplicated Week's Leaders, so Act I
-  // keeps only the Full House sweep — a fact with no other home.
+  // keeps only the Honey Pot sweep — a fact with no other home.
   const sweeps = (DATA.rounds[night - 1].bbbAwards || []).filter(a => a.bingo && a.bingo === a.bango && a.bango === a.bongo);
   if (!sweeps.length) return [];
   return [{ ch: 'Act I · Bingo Bango Bongo', snd: SND.honey, html:
-    '<div class="kick">Side Game · Bingo Bango Bongo</div><h2>🍯 Full House</h2>' +
+    '<div class="kick">Side Game · Bingo Bango Bongo</div><h2>🍯 The Honey Pot</h2>' +
     '<div class="faceRow" style="margin-top:1.2vmin;">' + sweeps.slice(0, 3).map(a => face(a.bingo)).join('') + '</div>' +
     '<div style="margin-top:1.8vmin;"><span class="pill" style="font-size:2.3vmin;">🍯 ' + sweeps.slice(0, 2).map(a => esc(pname(a.bingo)) + ' swept all three B’s on hole ' + (a.holeIdx + 1)).join(' · ') + (sweeps.length > 2 ? ' · +' + (sweeps.length - 2) + ' more tonight' : '') + '</span></div>' +
     '<div class="sub" style="margin-top:1.4vmin;">First on, closest to the pin, first in the hole — all three B’s on one hole.</div>' }];
@@ -1265,21 +1323,32 @@ function sBBBCrowns(night) {
     '<div class="sub" style="margin-top:1.6vmin;">First on the green, nearest the pin, first in the hole — the counts fly on the flags.</div>' };
 }
 function sCTPE9(night) {
-  // CYCLE 17 · D4 — CTP is now a hole-by-hole reveal (like the skins beats):
-  // the hole number lands big, then the winner's face pops in. One beat per
-  // par-3 hole with a winner, in hole order. Extra 9 gets its OWN slide.
+  // CYCLE 27 — CTP GETS THE DRAMA SKINS GAVE UP (Ron's ruling: "we
+  // typically do prizes for each one so we need to pause on that").
+  // Each CTP hole is now TWO clicks: (1) a suspense card — the hole,
+  // huge, under a slowly pulsing target, NO name anywhere; (2) the
+  // prize reveal — the winner's face pops with a 🏆 PRIZE WINNER pill
+  // and the points. Auto dwell is 3400 + 6200 per pin (the old single
+  // beat whipped by at 3600 with the face already on it). Distance is
+  // NOT shown: the data carries none (ctpMeta is empty) and none is
+  // invented. Extra 9 keeps its own slide after every pin (Cycle 17).
   const r = DATA.rounds[night - 1], c = RC(night);
   const ctps = (r.ctp || []).slice().sort((a, b) => a.hole - b.hole);
   const e9 = Object.values(c.players).filter(d => d.e9);
   const out = [];
   if (ctps.length) ctps.forEach((x, ix) => {
-    out.push({ ch: 'Act I · Closest to the Pin', dwell: 3600, snd: ix === 0 ? SND.swoosh : SND.hop, html:
+    out.push({ ch: 'Act I · Closest to the Pin', dwell: 3400, snd: SND.pulse, html:
       '<div class="kick">Side Games · Closest to the Pin · ' + (ix + 1) + ' of ' + ctps.length + '</div>' +
-      '<div style="font-weight:900;font-size:4.2vmin;color:var(--dim);letter-spacing:.24em;">HOLE</div>' +
-      '<div class="goldGrad" style="font-weight:900;font-size:15vmin;line-height:1;">' + x.hole + '</div>' +
-      '<div class="sub" style="font-size:2.4vmin;">PAR ' + r.pars[x.hole - 1] + '</div>' +
-      '<div style="animation:popIn .55s cubic-bezier(.2,.8,.3,1) .45s both;margin-top:2vmin;">' + face(x.pid, true, true) + '</div>' +
-      '<div style="margin-top:1.2vmin;animation:popIn .55s cubic-bezier(.2,.8,.3,1) .8s both;"><span class="pill" style="font-size:2.3vmin;">📍 +' + fmt(SET.ctpPoints) + ' pts</span></div>' });
+      '<div style="margin-top:2.4vmin;animation:ringPulse 1.6s ease-in-out infinite;font-size:8vmin;line-height:1;">🎯</div>' +
+      '<div style="font-weight:900;font-size:4.2vmin;color:var(--dim);letter-spacing:.24em;margin-top:1.4vmin;">HOLE</div>' +
+      '<div class="goldGrad" style="font-weight:900;font-size:16vmin;line-height:1;">' + x.hole + '</div>' +
+      '<div class="sub" style="font-size:2.6vmin;">PAR ' + r.pars[x.hole - 1] + ' · 📍 THE PIN</div>' +
+      '<div class="sub" style="font-size:2.2vmin;margin-top:2.4vmin;opacity:.75;">…who stuck it closest?</div>' });
+    out.push({ ch: 'Act I · Closest to the Pin', dwell: 6200, fx: 'confetti', fxCols: [tcolor(x.pid)], snd: SND.cheer, html:
+      '<div class="kick">Side Games · Closest to the Pin · Hole ' + x.hole + '</div>' +
+      '<div style="margin-top:1vmin;animation:popIn .55s cubic-bezier(.2,.8,.3,1) both;">' + face(x.pid, true) + '</div>' +
+      '<div style="margin-top:1.4vmin;animation:popIn .55s cubic-bezier(.2,.8,.3,1) .25s both;"><span class="pill" style="font-size:2.8vmin;border-color:var(--gold);">🏆 PRIZE WINNER</span></div>' +
+      '<div style="margin-top:1.2vmin;animation:popIn .55s cubic-bezier(.2,.8,.3,1) .45s both;"><span class="pill" style="font-size:2.3vmin;">📍 +' + fmt(SET.ctpPoints) + ' pts</span></div>' });
   });
   else out.push({ ch: 'Act I · Closest to the Pin', html: '<div class="kick">Side Games</div><h2>📍 Closest to the Pin</h2><div class="sub">No pins recorded tonight.</div>' });
   if (e9.length) out.push({ ch: 'Act I · Extra 9', snd: SND.sparkle, html:
@@ -2111,7 +2180,7 @@ function sDuel(night) {
   for (let n = 1; n <= night; n++) matchesForNight(n).forEach(x => {
     if (x.res && x.res.detail && ((x.res.p1 === A && x.res.p2 === B) || (x.res.p1 === B && x.res.p2 === A))) {
       const dd = x.res.detail;
-      hist19.push({ n, winner: x.res.winnerPid, aH: x.res.p1 === A ? dd.w1 : dd.w2, bH: x.res.p1 === A ? dd.w2 : dd.w1 });
+      hist19.push({ n, winner: x.res.winnerPid, not: matchNotation(dd, x.res.winnerPid, x.res.p1) });
     }
   });
   const aW19 = hist19.filter(x => x.winner === A).length, bW19 = hist19.length - aW19;
@@ -2119,7 +2188,7 @@ function sDuel(night) {
   const histHtml19 = !hist19.length
     ? '<div style="margin-top:2.6vmin;"><span class="pill" style="font-size:2.3vmin;">🤝 FIRST MEETING THIS WEEK</span></div>'
     : '<div style="margin-top:2.6vmin;"><div style="font-weight:800;letter-spacing:.16em;font-size:1.75vmin;color:var(--dim);">MET ' + hist19.length + ' TIME' + (hist19.length === 1 ? '' : 'S') + ' THIS WEEK · SERIES — ' + esc(pname(A).split(' ')[0].toUpperCase()) + ' ' + aW19 + '–' + bW19 + ' ' + esc(pname(B).split(' ')[0].toUpperCase()) + '</div>' +
-      '<div style="display:flex;justify-content:center;gap:1.3vmin;margin-top:1.1vmin;flex-wrap:wrap;">' + hist19.map(x => '<div style="display:flex;align-items:center;gap:.8vmin;background:var(--card);border:1px solid var(--line);border-radius:99vmin;padding:.45vmin 1.3vmin .45vmin .45vmin;">' + tf19(x.winner) + '<div style="text-align:left;line-height:1.15;"><div style="font-weight:900;font-size:1.95vmin;">' + Math.max(x.aH, x.bH) + '–' + Math.min(x.aH, x.bH) + '</div><div style="font-size:1.35vmin;color:var(--dim);">NIGHT ' + x.n + ' · ' + esc(pname(x.winner).split(' ')[0]) + '</div></div></div>').join('') + '</div></div>';
+      '<div style="display:flex;justify-content:center;gap:1.3vmin;margin-top:1.1vmin;flex-wrap:wrap;">' + hist19.map(x => '<div style="display:flex;align-items:center;gap:.8vmin;background:var(--card);border:1px solid var(--line);border-radius:99vmin;padding:.45vmin 1.3vmin .45vmin .45vmin;">' + tf19(x.winner) + '<div style="text-align:left;line-height:1.15;"><div style="font-weight:900;font-size:1.95vmin;">' + x.not + '</div><div style="font-size:1.35vmin;color:var(--dim);">NIGHT ' + x.n + ' · ' + esc(pname(x.winner).split(' ')[0]) + '</div></div></div>').join('') + '</div></div>';
   const rows = [
     ['WEEK', wk, Math.max(wk(A), wk(B), 1)],
     ['TONIGHT', tn, Math.max(tn(A), tn(B), 1)],
@@ -2407,60 +2476,65 @@ function fwStrip(o) {
   return h + '</div>';
 }
 function sFairway26(night) {
-  // THE FAIRWAY — six team chapters, weakest card first, the night's best
-  // saved for last. Borrowed from the OLD in-app Team Dial (the fairway
-  // Ron loved): a literal striped fairway with the pin beyond the field,
-  // rival markers planted on the hole, big methods struck as full shots
-  // and small ones as putts, and pacing that lets each shot land. Made
-  // better: the scale is tonight-only (cumulative totals belong to the
-  // Clubhouse Board), both players stand at the tee and the bigger
-  // contributor in each category plays that shot, resting balls stay on
-  // the hole so every chapter visibly chases the ones before it, and the
-  // night's total is revealed ONCE — written on the hole's scorecard
-  // card at the green, never counted up.
+  // CYCLE 27 — THE FAIRWAY, REBUILT FROM THE GROUND UP (Ron: "totally
+  // awful now, just random text on the screen. We need dramatic score
+  // reveals. This needs a total rethink"). The striped hole, the
+  // category shots, the yardage stones and the paper scorecard are
+  // GONE (fwStrip stays in the file as a retiree, like its ancestors).
+  // Each team chapter is now THREE clicks on a dark stage:
+  //   1 · ON THE TEE — crest, name, both players, the walkup stinger.
+  //       Nothing scored yet; the room settles.
+  //   2 · THE BUILD — the day as six graphic bars, one per scoring way,
+  //       each split between the two players with the bigger
+  //       contributor's face on the row. NO numerals anywhere: you see
+  //       the SHAPE of the day, never its size.
+  //   3 · THE SLAM — the night's total alone, enormous, hitting the
+  //       screen with a flash (slamIn). Revealed exactly once — never
+  //       counted up, never assembled from category pieces.
+  // Weakest card first, the night's best holed last (settled order),
+  // and cumulative totals still live ONLY on the Clubhouse Board.
   const c = RC(night); if (!c) return [];
   const st = standings(night);
   const order = st.slice().sort((a, b) => (a.tonight - b.tonight) || (a.total - b.total) || a.name.localeCompare(b.name));
-  const scale = Math.max.apply(null, st.map(s => s.tonight).concat([1])) * 1.14;
   const prevCum = night > 1 ? cumulative(night - 1) : null;
+  const maxCat = {};
+  FW_CATS.forEach(([emo, lbl, key]) => { maxCat[key] = Math.max(1, ...order.map(s => fwTeamCat(c, s.team, key))); });
   const out = [{ ch: 'Act III · The Fairway', dwell: 3400, snd: SND.fairy, html:
-    '<div class="kick">Act III · The Fairway</div><h2>⛳ Team by Team Down the Fairway</h2>' +
-    '<div class="sub" style="max-width:118vmin;">Six teams, one hole. Weakest card first, the night’s best saved for last — every team’s day told shot by shot: strokes, the B’s, balls, pins, the Extra 9 and the skins. The farther the ball travels, the bigger the day. The stones along the fringe carry the scale.</div>' +
+    '<div class="kick">Act III · The Fairway</div><h2>⛳ Team by Team</h2>' +
+    '<div class="sub" style="max-width:110vmin;">Six teams — weakest card first, the night’s best saved for last.</div>' +
     '<div style="display:flex;justify-content:center;gap:2.6vmin;margin-top:2.6vmin;">' + order.map(s => '<div style="text-align:center;">' + teamLogo(DATA.teams[s.team].id, 8) + '<div style="font-size:1.7vmin;font-weight:800;margin-top:.5vmin;">' + esc(s.name) + '</div></div>').join('') + '</div>' }];
-  const rests = [];
   order.forEach((s, ix) => {
     const tm = DATA.teams[s.team], col = s.color;
-    const cats = FW_CATS.map(([emo, lbl, key, kind]) => ({ emo, lbl, key, kind, v: fwTeamCat(c, s.team, key) }));
-    const total = cats.reduce((a, x) => a + x.v, 0);
-    const strikerFor = key => { const a = tm.players[0], b = tm.players[1]; const va = (c.players[a] || {})[key] || 0, vb = (c.players[b] || {})[key] || 0; return vb > va ? b : a; };
-    out.push({ ch: 'Act III · The Fairway', dwell: 3400, snd: teamWalkupSnd(tm.id) || SND.hop, html:
-      '<div class="kick">Act III · The Fairway · Team ' + (ix + 1) + ' of 6</div>' +
-      '<div style="display:flex;align-items:center;justify-content:center;gap:4vmin;margin-top:.4vmin;">' + teamLogo(tm.id, 16) +
-      '<div style="text-align:left;"><div style="font-weight:900;font-size:5.4vmin;color:' + col + ';line-height:1.05;">' + esc(s.name) + '</div><div class="sub">on the tee — how was their day built?</div></div></div>' +
-      '<div class="faceRow" style="margin-top:1.2vmin;">' + tm.players.map(pid => face(pid)).join('') + '</div>' +
-      '<div class="fwWrap">' + fwStrip({ scale, rests, cur: { color: col, v: 0, from: 0, cls: '' }, striker: tm.players[0] }) + '</div>' });
-    let run = 0; const passedSet = new Set();
-    cats.forEach((cat, ci) => {
-      const from = run; run += cat.v;
-      const newly = rests.filter(r => !passedSet.has(r.ti) && run > r.v);
-      newly.forEach(r => passedSet.add(r.ti));
-      const stk = strikerFor(cat.key);
-      out.push({ ch: 'Act III · The Fairway', dwell: cat.v > 0 ? 1500 : 1200, snd: cat.v > 0 ? (cat.kind === 'shot' ? SND.skins : SND.hop) : null, html:
-        '<div class="kick">Act III · The Fairway · ' + esc(s.name) + '</div>' +
-        '<div style="font-weight:900;font-size:4.3vmin;">' + cat.emo + ' ' + cat.lbl + (cat.v > 0 ? ' — <span style="color:var(--gold);">+' + fmt(cat.v) + '</span>' : ' — <span style="color:var(--dim);">no joy</span>') + '</div>' +
-        '<div class="fwWrap">' + fwStrip({ scale, rests, cur: { color: col, v: run, from, cls: cat.v > 0 ? (cat.kind === 'shot' ? 'fwShotA' : 'fwRollA') : '' }, striker: stk }) + '</div>' +
-        '<div class="sub" style="margin-top:1.3vmin;">' + esc(pname(stk)) + ' plays it' + (cat.v > 0 ? (ci === cats.length - 1 ? ' — and the ball is on the green…' : ' — watch it run.') : ' — nothing doing; the ball stays where it was.') + '</div>' +
-        (cat.v > 0 && newly.length ? '<div style="margin-top:1vmin;"><span class="pill" style="font-size:2.2vmin;">🏌️ ROLLS PAST ' + newly.map(r => esc(DATA.teams[r.ti].name)).join(' · ') + '</span></div>' : '') });
-    });
     const isBest = ix === order.length - 1;
     const crossed = prevCum && Math.floor(s.total / 100) > Math.floor(prevCum.teams[s.team] / 100);
-    out.push({ ch: 'Act III · The Fairway', dwell: isBest ? 7500 : 6000, fx: isBest ? 'confetti' : undefined, fxCols: [col, '#ffd75e', '#ffffff'], snd: SND.nail, html:
-      '<div class="kick">Act III · The Fairway · ' + esc(s.name) + ' · The Green</div>' +
-      '<div class="fwWrap">' + fwStrip({ scale, rests, cur: { color: col, v: total, from: total, cls: '' }, striker: null }) + '</div>' +
-      '<div style="margin-top:2vmin;animation:dropIn .8s cubic-bezier(.2,.8,.3,1) .3s both;"><span class="fwCard"><span class="fwCardTop">' + esc(s.name) + ' · TONIGHT</span><span class="fwCardNum">' + fmt(total) + '</span></span></div>' +
-      (crossed ? '<div style="margin-top:1.3vmin;"><span class="pill" style="font-size:2.2vmin;">💯 THROUGH ' + (Math.floor(s.total / 100) * 100) + ' ON THE WEEK</span></div>' : '') +
-      '<div class="sub" style="margin-top:1.2vmin;">' + (isBest ? '👑 TEAM OF THE NIGHT — the best card of the day, holed last. What it does to the Cup, the Clubhouse Board is about to say.' : 'The ball is home. For now, that is the score the rest must fly past to take the night.') + '</div>' });
-    rests.push({ ti: s.team, v: total });
+    out.push({ ch: 'Act III · The Fairway', dwell: 3200, snd: teamWalkupSnd(tm.id) || SND.hop, html:
+      '<div class="kick">Act III · The Fairway · Team ' + (ix + 1) + ' of 6</div>' +
+      '<div style="margin-top:1.4vmin;">' + teamLogo(tm.id, 17) + '</div>' +
+      '<div style="font-weight:900;font-size:6.2vmin;color:' + col + ';line-height:1.05;margin-top:1vmin;">' + esc(s.name) + '</div>' +
+      '<div class="faceRow" style="margin-top:1.6vmin;">' + tm.players.map(pid => face(pid)).join('') + '</div>' +
+      '<div class="sub" style="margin-top:1.4vmin;">on the tee…</div>' });
+    const bars = FW_CATS.map(([emo, lbl, key]) => {
+      const va = (c.players[tm.players[0]] || {})[key] || 0, vb = (c.players[tm.players[1]] || {})[key] || 0;
+      const tot = va + vb;
+      const bigPid = vb > va ? tm.players[1] : tm.players[0];
+      return '<div style="display:flex;align-items:center;gap:1.6vmin;width:min(118vmin,94%);margin:.85vmin 0;">' +
+        '<div style="width:23vmin;text-align:right;font-weight:800;font-size:2.2vmin;">' + emo + ' ' + lbl + '</div>' +
+        '<div style="flex:1;display:flex;background:#ffffff10;border-radius:99vmin;height:3.2vmin;overflow:hidden;">' +
+          (tot > 0 ? '<div style="width:' + (va / maxCat[key] * 100).toFixed(1) + '%;background:' + col + ';animation:growBar 1s cubic-bezier(.2,.8,.3,1) both;"></div><div style="width:' + (vb / maxCat[key] * 100).toFixed(1) + '%;background:' + col + '57;animation:growBar 1s cubic-bezier(.2,.8,.3,1) .12s both;"></div>' : '<div style="width:100%;text-align:center;font-size:1.8vmin;color:var(--dim);font-weight:800;line-height:3.2vmin;">—</div>') +
+        '</div>' +
+        '<div style="width:5.5vmin;">' + (tot > 0 ? fwFace(bigPid, col, 4.4) : '') + '</div></div>';
+    }).join('');
+    out.push({ ch: 'Act III · The Fairway', dwell: 3000, snd: SND.hop, html:
+      '<div class="kick">Act III · The Fairway · ' + esc(s.name) + '</div>' +
+      '<div style="font-weight:900;font-size:4vmin;margin-bottom:1.2vmin;">How the day was built</div>' + bars });
+    out.push({ ch: 'Act III · The Fairway', dwell: isBest ? 7500 : 5500, fx: isBest ? 'confetti' : undefined, fxCols: [col, '#ffd75e', '#ffffff'], snd: SND.nail, html:
+      '<div class="slamFlash"></div>' +
+      '<div style="position:relative;z-index:3;"><div class="kick">Act III · The Fairway · ' + esc(s.name) + ' · Tonight</div>' +
+      '<div style="margin-top:1.2vmin;">' + teamLogo(tm.id, 10) + '</div>' +
+      '<div class="slamNum goldGrad" style="font-weight:900;font-size:20vmin;line-height:1;">' + fmt(s.tonight) + '</div>' +
+      '<div style="font-weight:900;font-size:3.6vmin;color:' + col + ';letter-spacing:.12em;">' + esc(s.name).toUpperCase() + ' · TONIGHT</div>' +
+      (crossed ? '<div style="margin-top:1.4vmin;"><span class="pill" style="font-size:2.2vmin;">💯 THROUGH ' + (Math.floor(s.total / 100) * 100) + ' ON THE WEEK</span></div>' : '') +
+      (isBest ? '<div style="margin-top:1.4vmin;"><span class="pill" style="font-size:2.5vmin;">👑 TEAM OF THE NIGHT</span></div>' : '') + '</div>' });
   });
   return out;
 }
@@ -2473,11 +2547,11 @@ function sClubhouse26(night) {
   const st = standings(night), inds = indStandings(night);
   const final = night === DATA.event.nights;
   const lead = st[0], tmLead = DATA.teams[lead.team];
-  const teamBoard = { ch: 'Act III · The Clubhouse Board', dwell: 12000, fx: 'confetti', fxCols: [lead.color, '#ffd75e', '#ffffff'], snd: teamWalkupSnd(tmLead.id) || SND.first, html:
+  const teamBoard = { ch: 'Act III · The Clubhouse Board', dwell: 12000, beatDwell: 2100, fx: 'confetti', fxCols: [lead.color, '#ffd75e', '#ffffff'], snd: teamWalkupSnd(tmLead.id) || SND.first, html:
     bgImg(IMG.trophy, .16) +
     '<div style="position:relative;z-index:3;width:100%;"><div class="kick">Act III · The Clubhouse Board</div><h2>' + (final ? '🏆 The Final Board' : '🏆 The Board After Night ' + night) + '</h2>' +
     '<div style="width:min(118vmin,94%);margin:1vmin auto 0;">' + st.map(s =>
-      '<div class="cbRow' + (s.rank === 1 ? ' cbFirst' : '') + '" style="--d:' + ((st.length - s.rank) * 0.55).toFixed(2) + 's;">' +
+      '<div class="cbRow bt' + (s.rank === 1 ? ' cbFirst' : '') + '" data-b="' + (st.length - s.rank + 1) + '" style="--d:0s;">' +
       '<div class="cbRank">' + s.rank + '</div>' + teamLogo(DATA.teams[s.team].id, 6) +
       '<div style="flex:1;"><span style="font-weight:900;font-size:2.9vmin;color:' + s.color + ';">' + esc(s.name) + '</span>' + (s.rank === 1 ? ' <span style="font-size:2.4vmin;">👑</span>' : '') + '<div style="font-size:1.8vmin;color:var(--dim);">+' + fmt(s.tonight) + ' tonight</div></div>' +
       moveHtml(s.move) +
@@ -2768,8 +2842,9 @@ addEventListener('resize', fit);
 const RM = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
 function countUps(root) {
   root.querySelectorAll('.dialArc').forEach(el => { el.style.strokeDasharray = el.getAttribute('data-d'); });
-  if (RM) { root.querySelectorAll('[data-n]').forEach(el => { const tv = parseFloat(el.getAttribute('data-n')); if (isFinite(tv)) el.textContent = fmt(tv); }); return; }
+  if (RM) { root.querySelectorAll('[data-n]').forEach(el => { if (el.closest('.btOff')) return; const tv = parseFloat(el.getAttribute('data-n')); if (isFinite(tv)) el.textContent = fmt(tv); }); return; }
   root.querySelectorAll('[data-n]').forEach(el => {
+    if (el.closest('.btOff')) return; // CYCLE 27 — a hidden beat's numbers wait for their click
     const target = parseFloat(el.getAttribute('data-n'));
     if (!isFinite(target)) return;
     const t0 = performance.now(), dur = 900;
@@ -2809,10 +2884,60 @@ function render(dir) {
   const ai = actIndex(s);
   document.querySelectorAll('#actDots .adot').forEach((el, ix) => { el.classList.toggle('on', ix === ai); el.classList.toggle('done', ai >= 0 && ix < ai); });
   $('#progFill').style.width = ((cur.i + 1) / cur.slides.length * 100) + '%';
+  initBeats(dir);
   countUps(slidesEl);
-  if (s.fx === 'confetti' && !RM) burst(s.fxCols);
-  stopSound(); if (s.snd) setTimeout(() => playSnd(s.snd), 80);
+  // CYCLE 27 — a STAGED slide (one carrying .bt beat groups) holds its
+  // sound and confetti until the LAST beat lands: nothing pre-shown,
+  // nothing pre-celebrated. Stepping BACK onto a staged slide lands it
+  // complete, sound and all.
+  if (!slidesEl.querySelector('.bt') || dir < 0) {
+    if (s.fx === 'confetti' && !RM) burst(s.fxCols);
+    stopSound(); if (s.snd) setTimeout(() => playSnd(s.snd), 80);
+  } else stopSound();
   dirSchedule(); loopSchedule();
+}
+
+/* ═══ CYCLE 27 · THE BEAT MODEL — MANUAL-FIRST NAVIGATION ═══
+   Ron runs this show by hand: "each click needs to be a meaningful
+   reveal." A slide may carry staged reveal groups (class "bt", data-b
+   in reveal order). advance() — the ONE forward step behind the tap,
+   the NEXT button and the arrow keys — first gives up the current
+   slide's next hidden beat; only when no beat is left does it move to
+   the next slide. retreat() hides the last-shown beat before stepping
+   back a slide, and stepping back ONTO a staged slide lands it fully
+   revealed (initBeats with dir < 0), so state never corrupts. */
+function initBeats(dir) {
+  slidesEl.querySelectorAll('.bt').forEach(el => el.classList.toggle('btOff', dir >= 0));
+}
+function pendingBeat() {
+  let best = null, bn = 1e9;
+  slidesEl.querySelectorAll('.bt.btOff').forEach(el => { const b = parseInt(el.getAttribute('data-b') || '1', 10); if (b < bn) { bn = b; best = el; } });
+  return best;
+}
+function advance() {
+  hideChrome();
+  const s = cur.slides[cur.i];
+  const nx = pendingBeat();
+  if (nx) {
+    nx.classList.remove('btOff');
+    countUps(nx);
+    const b = parseInt(nx.getAttribute('data-b') || '1', 10);
+    if (s.beatSnd && s.beatSnd[b]) playSnd(s.beatSnd[b]);
+    if (!pendingBeat()) {
+      if (s.fx === 'confetti' && !RM) burst(s.fxCols);
+      if (s.snd) playSnd(s.snd);
+    }
+    dirSchedule();
+    return;
+  }
+  go(1);
+}
+function retreat() {
+  hideChrome();
+  let lastEl = null, bn = -1;
+  slidesEl.querySelectorAll('.bt:not(.btOff)').forEach(el => { const b = parseInt(el.getAttribute('data-b') || '1', 10); if (b > bn) { bn = b; lastEl = el; } });
+  if (lastEl) { lastEl.classList.add('btOff'); dirSchedule(); return; }
+  go(-1);
 }
 function go(d) {
   const n = cur.i + d;
@@ -2825,10 +2950,29 @@ function pills() {
   document.querySelectorAll('#nights .nbtn').forEach(b => b.addEventListener('click', () => build(parseInt(b.getAttribute('data-night'), 10))));
 }
 function build(night) { cur.night = night; cur.slides = deckFor(night); cur.i = 0; pills(); render(1); }
-$('#nextBtn').addEventListener('click', () => go(1));
-$('#prevBtn').addEventListener('click', () => go(-1));
-$('#tapR').addEventListener('click', () => go(1));
-$('#tapL').addEventListener('click', () => go(-1));
+$('#nextBtn').addEventListener('click', () => advance());
+$('#prevBtn').addEventListener('click', () => retreat());
+/* CYCLE 27 — ONE input law for the stage: a tap anywhere on the stage
+   is a presenter step (the edge strips #tapL/#tapR are covered by the
+   same coordinates) — it steps ONE beat and it NEVER summons the
+   chrome. The far-left 14% steps back; everywhere else steps forward.
+   Two summons live here by design: a tap in the TOP-RIGHT CORNER, and
+   a tap-and-hold (≈650ms) anywhere — the hold swallows the tap that
+   follows it, so summoning never jumps the show. */
+let suppressTap = false, summonTimer = null;
+stage.addEventListener('pointerdown', () => {
+  clearTimeout(summonTimer);
+  summonTimer = setTimeout(() => { suppressTap = true; summonChrome(); }, 650);
+});
+['pointerup', 'pointercancel'].forEach(ev => stage.addEventListener(ev, () => clearTimeout(summonTimer)));
+stage.addEventListener('click', e => {
+  if (suppressTap) { suppressTap = false; return; }
+  if (e.target.closest('#topbar, #botbar, #grid, #help, button, a')) return;
+  const r = stage.getBoundingClientRect();
+  const x = e.clientX - r.left, y = e.clientY - r.top;
+  if (x > r.width - r.height * 0.14 && y < r.height * 0.14) { summonChrome(); return; }
+  if (x < r.width * 0.14) retreat(); else advance();
+});
 $('#fsBtn').addEventListener('click', () => {
   if (document.fullscreenElement) document.exitFullscreen();
   else document.documentElement.requestFullscreen && document.documentElement.requestFullscreen();
@@ -2843,12 +2987,12 @@ addEventListener('touchstart', e => { tx = e.touches[0].clientX; }, { passive: t
 addEventListener('touchend', e => {
   if (tx == null) return;
   const dx = e.changedTouches[0].clientX - tx;
-  if (Math.abs(dx) > 60) go(dx < 0 ? 1 : -1);
+  if (Math.abs(dx) > 60) { suppressTap = true; if (dx < 0) advance(); else retreat(); }
   tx = null;
 }, { passive: true });
 addEventListener('keydown', e => {
-  if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); go(1); }
-  else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp') { e.preventDefault(); go(-1); }
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); advance(); }
+  else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp') { e.preventDefault(); retreat(); }
   else if (e.key === 'Home') { cur.i = 0; render(-1); }
   else if (e.key === 'End') { cur.i = cur.slides.length - 1; render(1); }
   else if (e.key === 'f' || e.key === 'F') $('#fsBtn').click();
@@ -2876,15 +3020,23 @@ function dataCheck() {
   return { issues, scores, rounds };
 }
 
-/* ---- cinema chrome: the bars fade away while the show runs ---- */
+/* ---- cinema chrome: ON DEMAND ONLY (Cycle 27 — Ron's ruling: "I
+   need that to happen only on a specific ask and not every time I
+   touch the screen"). The bars — night picker, slide counter,
+   progress, buttons — NEVER appear on an advance tap, a keypress, a
+   swipe or a mouse wiggle. They come only when summoned: H (help), O
+   (overview), a tap-and-hold on the stage, or a tap in the stage's
+   top-right corner — and they fade again on their own. One courtesy:
+   they show once when the show loads (so the presenter sees the
+   picker), then hide until summoned. ---- */
 let idleTimer = null;
-function wakeChrome() {
+function summonChrome(ms) {
   stage.classList.remove('chromeOff');
   clearTimeout(idleTimer);
-  idleTimer = setTimeout(() => stage.classList.add('chromeOff'), 3500);
+  idleTimer = setTimeout(hideChrome, ms || 4500);
 }
-['pointermove', 'pointerdown', 'keydown', 'touchstart'].forEach(ev => addEventListener(ev, wakeChrome, { passive: true }));
-wakeChrome();
+function hideChrome() { clearTimeout(idleTimer); stage.classList.add('chromeOff'); }
+stage.classList.add('chromeOff');
 
 /* ---- overview grid: every slide at a glance, tap to jump ---- */
 function slideHeadline(s) {
@@ -2924,7 +3076,16 @@ $('#grid').addEventListener('click', e => { if (e.target.id === 'grid') toggleGr
    draft picks 3000, captains 4300 · standings reveals 8500, winner keeps
    the Finale 12000. The untouched defaults (dense boards 9500, photo
    slides 8000) are reading time, not crawl — the measurement that proved
-   it is in the Cycle 22 progress entry. */
+   it is in the Cycle 22 progress entry.
+   CYCLE 27 · THE MANUAL PASS (Ron's rulings, Nov 13): the presenter
+   drives — every tap steps ONE beat; Director steps beats at
+   beatDwell (default 2300) and holds only on fully-revealed hold
+   slides. Skins collapsed from 36 hole slides ≈164s to one slide per
+   pot run ≈28s a night, wordless. CTP inverted: suspense 3400 +
+   prize reveal 6200 per pin. Races end AT the decision hole and
+   report in match notation. The Fairway is tee 3200 / build 3000 /
+   slam 5500 (best 7500) per team. The Clubhouse Board deals its rows
+   one click at a time (beatDwell 2100), leader last. */
 let dirOn = false, dirTimer = null;
 function dwellFor(s) {
   if (!s) return 9000;
@@ -2937,9 +3098,19 @@ function dwellFor(s) {
 function dirSchedule() {
   clearTimeout(dirTimer);
   if (!dirOn) return;
-  const d = dwellFor(cur.slides[cur.i]);
+  const s = cur.slides[cur.i];
+  // CYCLE 27 — Director steps BEATS too: a staged slide gives up one
+  // beat per beatDwell, then its full dwell, then the show moves on.
+  // A hold slide still waits for the presenter — but only once fully
+  // revealed.
+  const pending = !!pendingBeat();
+  if (s.hold && !pending) return;
+  const d = pending ? (s.beatDwell || 2300) : dwellFor(s);
   if (d < 0) return;
-  dirTimer = setTimeout(() => { if (cur.i < cur.slides.length - 1) go(1); else setDirector(false); }, d);
+  dirTimer = setTimeout(() => {
+    if (!pendingBeat() && cur.i >= cur.slides.length - 1) { setDirector(false); return; }
+    advance();
+  }, d);
 }
 /* ---- closing slideshow: cycles on its own until the presenter navigates away ---- */
 let loopTimer = null;
@@ -2948,7 +3119,7 @@ function loopSchedule() {
   const s = cur.slides[cur.i];
   if (!s || !s.loop) return;
   loopTimer = setTimeout(() => {
-    if (cur.i < cur.slides.length - 1 && cur.slides[cur.i + 1].loop) { go(1); return; }
+    if (cur.i < cur.slides.length - 1 && cur.slides[cur.i + 1].loop) { advance(); return; }
     const first = cur.slides.findIndex(x => x.loop);
     if (first >= 0 && first !== cur.i) { cur.i = first; render(1); }
   }, s.dwell || 5200);
@@ -2964,6 +3135,7 @@ fit();
 let startNight = 1;
 DATA.rounds.forEach((r, i) => { if (r.completed) startNight = i + 1; });
 build(startNight);
+summonChrome(5200); // Cycle 27 — shown once at load, then only on demand
 try { const DC = dataCheck(); const el = document.querySelector('#dataCheck'); if (el) el.textContent = DC.issues.length ? '⚠️ Data checks: ' + DC.issues.join(' · ') : '✓ Data checks passed — ' + DC.rounds + ' rounds · ' + DC.scores + ' scores · every total cross-footed against the scoring model.'; } catch (e) {}
 </script>
 
