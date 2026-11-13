@@ -767,6 +767,13 @@
         .hx-wd.next{border:2px solid #10b981;background:#ecfdf5;color:#123c23;}
         .hx-wd.live{border:2px solid #f59e0b;background:#fffbeb;}
         .hx-wd .st{float:right;}
+        .hx-roundrow.sel{border:2px solid #10b981;background:#ecfdf5;}
+        .hx-roundrow.sel.live{border-color:#f59e0b;background:#fffbeb;}
+        .hx-selchip{display:inline-block;background:#10b981;color:#fff;font-size:11px;font-weight:800;letter-spacing:.4px;border-radius:999px;padding:2px 9px;}
+        .hx-roundrow.sel.live .hx-selchip{background:#f59e0b;color:#451a03;}
+        .hx-rowacts{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start;margin-top:12px;}
+        .hx-rowacts .btn-primary,.hx-rowacts .btn-secondary{min-height:44px;}
+        .hx-tapcue{color:#94a3b8;font-size:22px;font-weight:700;padding-left:6px;}
         .hx-grid{display:grid;gap:12px;}
         .hx-g2{grid-template-columns:1fr 1fr;}
         .hx-g4{grid-template-columns:repeat(4,1fr);}
@@ -881,7 +888,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = 'v2026.11.13.62';
+        const APP_VERSION = 'v2026.11.13.63';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -3494,6 +3501,15 @@
             el.style.display = show ? 'block' : 'none';
         };
 
+        // Game Day merged rounds list: tapping a round selects it, and the
+        // Start / Groups / More actions apply to the selected round. The
+        // selection survives re-renders by round id.
+        window.selectHomeRound = (id) => {
+            window.__homeSelRoundId = id;
+            if (window.__rerenderKeepScroll) window.__rerenderKeepScroll();
+            else render();
+        };
+
         // Re-render the current view without losing the scroll position —
         // used by controls that save in place (settings toggles, milestones).
         window.__rerenderKeepScroll = () => {
@@ -3547,7 +3563,15 @@
             const liveRounds = eventRoundsAll.filter(r => r.active !== false && r.completed !== true);
             const scheduledRounds = eventRoundsAll.filter(r => r.active === false && r.completed !== true);
             const heroRound = scheduledRounds.length ? scheduledRounds[0] : null;
-            const restScheduled = scheduledRounds.slice(1);
+            // Merged Game Day list: every unplayed round (live + scheduled)
+            // appears once, in date order. Completed rounds stay out — their
+            // home is All Rounds. Default selection = the next unplayed
+            // round (the old hero), falling back to a live round.
+            const playRounds = eventRoundsAll.filter(r => r.completed !== true);
+            const selRound = (() => {
+                const stored = playRounds.find(r => String(r.id) === String(window.__homeSelRoundId));
+                return stored || scheduledRounds[0] || liveRounds[0] || null;
+            })();
             if (liveRounds.length) {
                 chips.push(`<span class="hx-chip next">⛳ In progress · ${liveRounds[0].courseName}</span>`);
             } else if (heroRound) {
@@ -3558,15 +3582,6 @@
             }
             const hasGroupsOf = (round) => (round.teams || []).some(team => (team.players || []).some(player => player.groupNumber));
             const roundNoOf = (round) => eventRoundsAll.indexOf(round) + 1;
-            const weekStrip = (marks) => `
-                <div class="hx-week">
-                    ${eventRoundsAll.map((r, i) => {
-                        const d = new Date(r.timestamp || r.id);
-                        const cls = r.completed === true ? 'done' : (marks.live === r ? 'live' : (marks.next === r ? 'next' : ''));
-                        const st = r.completed === true ? '✓' : (marks.live === r ? '⛳' : (marks.next === r ? '▶' : ''));
-                        return `<div class="hx-wd ${cls}"><span class="st">${st}</span><b>R${i + 1} · ${d.toLocaleDateString('en-US', { weekday: 'short' })} ${d.getDate()}</b><span class="cn">${r.courseName}</span></div>`;
-                    }).join('')}
-                </div>`;
 
             app.innerHTML = `
                 <div class="hx-hdr">
@@ -3581,133 +3596,97 @@
                 <div class="hx-sec">
                     <div class="hx-sec-h"><h2>🎯 Game Day</h2><span>today's round &amp; where things stand</span></div>
 
-                    ${liveRounds.length ? `
-                        <div class="hx-card" style="background:#fffbeb;border:2px solid #f59e0b;">
-                            <h2 style="font-size:22px;margin-bottom:6px;">⛳ Rounds In Progress (${liveRounds.length})</h2>
-                            <p style="font-size:13px;color:#92400e;margin:0 0 12px;">Scoring is open on all devices. Complete a round to lock it.</p>
-                            ${liveRounds.map(round => {
+                    ${playRounds.length ? `
+                        <div class="hx-card hx-roundcard">
+                            <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;">
+                                <span style="font-size:20px;font-weight:800;">📅 Rounds</span>
+                                <span style="font-size:13px;color:#64748b;font-weight:600;">${playRounds.length} to play${liveRounds.length ? ` · ${liveRounds.length} in progress` : ''}</span>
+                            </div>
+                            <p style="font-size:13px;color:#64748b;margin:6px 0 12px;">Tap a round to select it — Start, groups and more apply to the selected round.${liveRounds.length ? ' Scoring is open on in-progress rounds on all devices.' : ''}</p>
+                            ${playRounds.map(round => {
                                 const idx = state.rounds.indexOf(round);
+                                const isLive = round.active !== false;
+                                const sel = selRound === round;
                                 const d = new Date(round.timestamp || round.id);
                                 const dateStr = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-                                let filled = 0, total = 0;
-                                (round.teams || []).forEach(t => (t.players || []).forEach(p => {
-                                    total += 18;
-                                    filled += (p.scores || []).filter(s => s !== '' && s != null).length;
-                                }));
-                                const pct = total > 0 ? Math.round((filled / total) * 100) : 0;
-                                return `
-                                    <div class="list-item" style="background:white;margin-bottom:12px;">
-                                        <div style="flex:1;">
-                                            <strong style="color:#92400e;">${round.courseName}</strong>
-                                            <div style="font-size:14px;color:#6b7280;margin-top:4px;">${dateStr} · ${pct}% scored</div>
-                                            <div style="height:6px;background:#f3f4f6;border-radius:3px;margin-top:6px;overflow:hidden;">
-                                                <div style="height:100%;width:${pct}%;background:#f59e0b;"></div>
-                                            </div>
-                                        </div>
-                                        ${!state.readOnly ? `
-                                            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start;">
-                                                <button onclick="continueRound(${idx})" class="btn-primary" style="padding:8px 16px;background:#10b981;">▶️ Continue</button>
-                                                <span class="hx-menuwrap">
-                                                    <button onclick="toggleHomeMenu('hxmenu-live-${idx}')" class="btn-secondary" style="padding:8px 12px;">•••</button>
-                                                    <span class="hx-menu" id="hxmenu-live-${idx}" style="display:none;">
-                                                        <button onclick="completeRoundByIndex(${idx})">🔒 Complete round</button>
-                                                        <button onclick="resetRound(${idx})">↩️ Reset scores</button>
-                                                        <button class="danger" onclick="deleteScheduledRound(${idx})">🗑️ Delete round</button>
-                                                    </span>
-                                                </span>
-                                            </div>
-                                        ` : ''}
-                                    </div>`;
-                            }).join('')}
-                        </div>
-                    ` : ''}
-
-                    ${heroRound ? (() => {
-                        const idx = state.rounds.indexOf(heroRound);
-                        const d = new Date(heroRound.timestamp || heroRound.id);
-                        const dateStr = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-                        const timeStr = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-                        const hasGroups = hasGroupsOf(heroRound);
-                        const nPlayers = (heroRound.teams || []).reduce((n, t) => n + (t.players || []).length, 0);
-                        return `
-                            <div class="hx-card hx-roundcard">
-                                <div class="hx-rc-top">
-                                    <div class="hx-rc-main">
-                                        <div class="hx-rc-kicker">Round ${roundNoOf(heroRound)} · ${dateStr}</div>
-                                        <div class="hx-rc-course">${heroRound.courseName}</div>
-                                        <div class="hx-rc-meta">Tee time ${timeStr} · ${heroRound.teams.length} teams · ${nPlayers} players</div>
-                                        ${hasGroups
-                                            ? '<span class="hx-rc-ok">✓ Groups set</span>'
-                                            : '<span class="hx-rc-warn">👥 Groups not set yet</span>'}
-                                    </div>
-                                    <div class="hx-rc-actions">
-                                        ${!state.readOnly ? `
-                                            <button onclick="activateRound(${idx})" class="btn-primary" style="background:linear-gradient(135deg,#059669,#10b981);font-size:16px;padding:13px 18px;">▶️ Start Round</button>
-                                            <button onclick="editScheduledGroups(${idx})" class="btn-secondary" style="padding:10px 14px;">👥 ${hasGroups ? 'Edit Groups' : 'Set Groups'}</button>
-                                            <span class="hx-menuwrap">
-                                                <button onclick="toggleHomeMenu('hxmenu-hero')" class="btn-secondary" style="padding:8px 12px;width:100%;">••• More</button>
-                                                <span class="hx-menu" id="hxmenu-hero" style="display:none;">
-                                                    <button onclick="editScheduledRound(${idx})">📅 Change date</button>
-                                                    <button class="danger" onclick="deleteScheduledRound(${idx})">🗑️ Delete round</button>
-                                                </span>
-                                            </span>
-                                        ` : (hasGroups ? `
-                                            <button onclick="viewScheduledGroups(${idx})" class="btn-secondary" style="padding:10px 14px;">👁️ View Groups</button>
-                                        ` : '')}
-                                    </div>
-                                </div>
-                                ${weekStrip({ next: heroRound, live: liveRounds[0] || null })}
-                            </div>`;
-                    })() : (standings.total > 0 ? `
-                            <div class="hx-card">
-                                <div style="font-weight:800;font-size:16px;margin-bottom:4px;">📅 The Week</div>
-                                ${weekStrip({ next: null, live: liveRounds[0] || null })}
-                            </div>
-                    ` : '')}
-
-                    ${restScheduled.length ? `
-                        <div class="hx-card" style="background:#f0fdf4;border:2px solid #10b981;">
-                            <h2 style="font-size:22px;margin-bottom:10px;">📅 Also Scheduled (${restScheduled.length})</h2>
-                            ${restScheduled.map(round => {
-                                const idx = state.rounds.indexOf(round);
-                                const roundDate = new Date(round.timestamp || round.id);
-                                const isPast = roundDate < new Date();
-                                const dateStr = roundDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-                                const timeStr = roundDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+                                const timeStr = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+                                const isPast = !isLive && d < new Date();
                                 const hasGroups = hasGroupsOf(round);
+                                const nPlayers = (round.teams || []).reduce((n, t) => n + (t.players || []).length, 0);
+                                let pct = 0;
+                                if (isLive) {
+                                    let filled = 0, totalCells = 0;
+                                    (round.teams || []).forEach(t => (t.players || []).forEach(p => {
+                                        totalCells += 18;
+                                        filled += (p.scores || []).filter(s => s !== '' && s != null).length;
+                                    }));
+                                    pct = totalCells > 0 ? Math.round((filled / totalCells) * 100) : 0;
+                                }
                                 return `
-                                    <div class="list-item" style="background:white;margin-bottom:12px;">
-                                        <div style="flex:1;">
-                                            <strong style="color:#065f46;">${round.courseName}</strong>
+                                    <div class="list-item hx-roundrow ${sel ? 'sel' : ''} ${isLive ? 'live' : ''}" onclick="selectHomeRound('${round.id}')">
+                                        <div style="flex:1;min-width:0;">
+                                            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                                                <span style="font-size:11.5px;font-weight:800;letter-spacing:1px;color:var(--color-grass);">R${roundNoOf(round)}</span>
+                                                <strong style="font-size:16px;color:${isLive ? '#92400e' : '#065f46'};">${round.courseName}</strong>
+                                                ${isLive ? '<span class="hx-rc-warn" style="margin-top:0;">⛳ In progress</span>' : ''}
+                                                ${sel ? '<span class="hx-selchip">✓ Selected</span>' : ''}
+                                            </div>
                                             <div style="font-size:14px;color:#6b7280;margin-top:4px;">
-                                                ${dateStr} at ${timeStr}
+                                                ${dateStr} at ${timeStr} · ${round.teams.length} team${round.teams.length === 1 ? '' : 's'} · ${nPlayers} players
                                                 ${isPast ? '<span style="color:#ef4444;font-weight:600;"> • Overdue</span>' : ''}
                                             </div>
-                                            <div style="font-size:12px;color:#6b7280;margin-top:4px;">
-                                                ${round.teams.length} team${round.teams.length === 1 ? '' : 's'}
-                                                ${hasGroups ? '<span style="color:#10b981;font-weight:600;"> • ✓ Groups set</span>' : '<span style="color:#f59e0b;"> • Groups not set</span>'}
+                                            <div>
+                                                ${hasGroups
+                                                    ? '<span class="hx-rc-ok">✓ Groups set</span>'
+                                                    : '<span class="hx-rc-warn">👥 Groups not set yet</span>'}
                                             </div>
-                                        </div>
-                                        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start;">
-                                            ${hasGroups && state.readOnly ? `
-                                                <button onclick="viewScheduledGroups(${idx})" class="btn-secondary" style="padding:6px 10px;font-size:12px;">👁️ View Groups</button>
+                                            ${isLive ? `
+                                                <div style="font-size:13px;color:#92400e;margin-top:6px;">${pct}% scored</div>
+                                                <div style="height:6px;background:#f3f4f6;border-radius:3px;margin-top:4px;overflow:hidden;">
+                                                    <div style="height:100%;width:${pct}%;background:#f59e0b;"></div>
+                                                </div>
                                             ` : ''}
-                                            ${!state.readOnly ? `
-                                                <button onclick="activateRound(${idx})" class="btn-primary" style="padding:8px 16px;background:#10b981;">▶️ Start</button>
-                                                <button onclick="editScheduledGroups(${idx})" class="btn-secondary" style="padding:6px 10px;font-size:12px;">👥 ${hasGroups ? 'Edit' : 'Set'} Groups</button>
-                                                <span class="hx-menuwrap">
-                                                    <button onclick="toggleHomeMenu('hxmenu-sched-${idx}')" class="btn-secondary" style="padding:6px 10px;font-size:12px;">•••</button>
-                                                    <span class="hx-menu" id="hxmenu-sched-${idx}" style="display:none;">
-                                                        <button onclick="editScheduledRound(${idx})">📅 Change date</button>
-                                                        <button class="danger" onclick="deleteScheduledRound(${idx})">🗑️ Delete round</button>
-                                                    </span>
-                                                </span>
+                                            ${sel ? `
+                                                <div class="hx-rowacts" onclick="event.stopPropagation()">
+                                                    ${isLive ? `
+                                                        ${!state.readOnly ? `
+                                                            <button onclick="continueRound(${idx})" class="btn-primary" style="padding:10px 18px;background:#10b981;">▶️ Continue</button>
+                                                            <span class="hx-menuwrap">
+                                                                <button onclick="toggleHomeMenu('hxmenu-sel-live')" class="btn-secondary" style="padding:10px 14px;">•••</button>
+                                                                <span class="hx-menu" id="hxmenu-sel-live" style="display:none;">
+                                                                    <button onclick="completeRoundByIndex(${idx})">🔒 Complete round</button>
+                                                                    <button onclick="resetRound(${idx})">↩️ Reset scores</button>
+                                                                    <button class="danger" onclick="deleteScheduledRound(${idx})">🗑️ Delete round</button>
+                                                                </span>
+                                                            </span>
+                                                        ` : ''}
+                                                    ` : (!state.readOnly ? `
+                                                            <button onclick="activateRound(${idx})" class="btn-primary" style="background:linear-gradient(135deg,#059669,#10b981);font-size:16px;padding:12px 18px;">▶️ Start Round</button>
+                                                            <button onclick="editScheduledGroups(${idx})" class="btn-secondary" style="padding:10px 14px;">👥 ${hasGroups ? 'Edit Groups' : 'Set Groups'}</button>
+                                                            <span class="hx-menuwrap">
+                                                                <button onclick="toggleHomeMenu('hxmenu-sel-sched')" class="btn-secondary" style="padding:10px 14px;">••• More</button>
+                                                                <span class="hx-menu" id="hxmenu-sel-sched" style="display:none;">
+                                                                    <button onclick="editScheduledRound(${idx})">📅 Change date</button>
+                                                                    <button class="danger" onclick="deleteScheduledRound(${idx})">🗑️ Delete round</button>
+                                                                </span>
+                                                            </span>
+                                                        ` : (hasGroups ? `
+                                                            <button onclick="viewScheduledGroups(${idx})" class="btn-secondary" style="padding:10px 14px;">👁️ View Groups</button>
+                                                        ` : ''))
+                                                    }
+                                                </div>
                                             ` : ''}
                                         </div>
+                                        ${sel ? '' : '<div class="hx-tapcue">›</div>'}
                                     </div>`;
                             }).join('')}
                         </div>
-                    ` : ''}
+                    ` : (standings.total > 0 ? `
+                        <div class="hx-card">
+                            <div style="font-weight:800;font-size:16px;">🏁 All ${standings.total} rounds played</div>
+                            <div style="color:#6b7280;font-size:14px;margin-top:4px;">That's the full week — every round of this event is in the books.</div>
+                        </div>
+                    ` : '')}
 
                     ${!currentEvent ? `
                         <div class="hx-card" style="background:#fee2e2;border:2px solid #ef4444;">
