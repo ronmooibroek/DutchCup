@@ -732,6 +732,109 @@
             0%   { transform: scale(1) translate(0, 0); }
             100% { transform: scale(1.1) translate(-1.5%, -1%); }
         }
+
+        /* ═══ Home UX overhaul (v2026.11.13.61) — card-group home ═══ */
+        .hx-hdr{background:linear-gradient(150deg,#123c23 0%,var(--color-grass-dark) 55%,var(--color-grass) 100%);border:1px solid rgba(255,255,255,.18);border-radius:20px;padding:18px 20px;color:#fff;box-shadow:0 14px 30px rgba(0,0,0,.28);margin-bottom:6px;}
+        .hx-hdr-top{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
+        .hx-hdr .flag{font-size:34px;line-height:1;}
+        .hx-hdr h1{font-family:var(--font-display);font-size:32px;font-weight:800;letter-spacing:.2px;flex:1;min-width:200px;color:#fff;margin:0;}
+        .hx-hdr h1 small{display:block;font-family:var(--font-body);font-size:13px;font-weight:600;color:#cfe6d4;letter-spacing:.4px;margin-top:2px;}
+        .hx-adminpill{border:2px solid rgba(255,255,255,.55);background:rgba(255,255,255,.12);color:#fff;border-radius:999px;padding:8px 14px;font-weight:700;font-size:13px;cursor:pointer;font-family:var(--font-body);}
+        .hx-adminpill:active{transform:scale(.97);}
+        .hx-chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;}
+        .hx-chip{background:rgba(255,255,255,.13);border:1px solid rgba(255,255,255,.22);border-radius:999px;padding:6px 12px;font-size:13px;font-weight:600;color:#eef7f0;}
+        .hx-chip.gold{background:rgba(212,160,84,.25);border-color:rgba(244,197,94,.55);color:#ffe9bb;}
+        .hx-chip.next{background:#fff;color:#123c23;border-color:#fff;}
+        .hx-sec{margin-top:22px;}
+        .hx-sec-h{display:flex;align-items:baseline;gap:10px;margin:0 2px 10px;color:#fff;flex-wrap:wrap;}
+        .hx-sec-h h2{font-family:var(--font-body);font-size:15px;font-weight:800;letter-spacing:1.6px;text-transform:uppercase;color:#fff;margin:0;}
+        .hx-sec-h span{font-size:12.5px;color:#cfe6d4;font-weight:500;}
+        .hx-card{background:var(--color-cream);border-radius:18px;box-shadow:0 10px 22px rgba(0,0,0,.18);border:1px solid rgba(255,255,255,.35);padding:16px 18px;margin-bottom:12px;}
+        .hx-roundcard{border-left:6px solid #10b981;}
+        .hx-rc-top{display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;}
+        .hx-rc-main{flex:1;min-width:230px;}
+        .hx-rc-kicker{font-size:11.5px;font-weight:800;letter-spacing:1.4px;color:var(--color-grass);text-transform:uppercase;}
+        .hx-rc-course{font-family:var(--font-display);font-size:26px;font-weight:800;margin:2px 0;color:var(--color-text-primary);}
+        .hx-rc-meta{font-size:14px;color:#4a5568;font-weight:600;}
+        .hx-rc-warn{display:inline-block;margin-top:8px;background:#fef3c7;color:#92400e;font-size:12.5px;font-weight:700;border-radius:999px;padding:4px 10px;}
+        .hx-rc-ok{display:inline-block;margin-top:8px;background:#dcfce7;color:#166534;font-size:12.5px;font-weight:700;border-radius:999px;padding:4px 10px;}
+        .hx-rc-actions{display:flex;flex-direction:column;gap:8px;min-width:168px;}
+        .hx-week{display:flex;gap:6px;margin-top:14px;flex-wrap:wrap;}
+        .hx-wd{flex:1;min-width:86px;background:#fff;border:1px solid #e7e2d6;border-radius:10px;padding:7px 9px;font-size:11px;color:#64748b;font-weight:600;overflow:hidden;}
+        .hx-wd b{display:block;font-size:12px;color:var(--color-text-primary);white-space:nowrap;}
+        .hx-wd .cn{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+        .hx-wd.done{border-color:#bbf7d0;background:#f0fdf4;}
+        .hx-wd.next{border:2px solid #10b981;background:#ecfdf5;color:#123c23;}
+        .hx-wd.live{border:2px solid #f59e0b;background:#fffbeb;}
+        .hx-wd .st{float:right;}
+        .hx-grid{display:grid;gap:12px;}
+        .hx-g2{grid-template-columns:1fr 1fr;}
+        .hx-g4{grid-template-columns:repeat(4,1fr);}
+        .hx-tile{background:var(--color-cream);border-radius:18px;box-shadow:0 10px 22px rgba(0,0,0,.18);border:1px solid rgba(255,255,255,.35);padding:16px;cursor:pointer;text-align:left;font-family:var(--font-body);width:100%;transition:transform .08s ease;color:var(--color-text-primary);}
+        .hx-tile:active{transform:scale(.98);}
+        .hx-tile .ic{font-size:30px;line-height:1;}
+        .hx-tile .tt{font-size:17px;font-weight:800;margin-top:8px;color:var(--color-text-primary);}
+        .hx-tile .ts{font-size:13px;color:#64748b;font-weight:600;margin-top:2px;}
+        .hx-tile .badge{display:inline-block;margin-top:9px;font-size:12px;font-weight:800;border-radius:999px;padding:3px 10px;background:#dcfce7;color:#166534;}
+        .hx-tile .badge.warn{background:#fee2e2;color:#991b1b;}
+        .hx-tile.hero{background:linear-gradient(135deg,#d97706,#f59e0b);color:#fff;border:none;display:flex;align-items:center;gap:16px;padding:18px 20px;box-shadow:0 12px 26px rgba(217,119,6,.4);text-decoration:none;box-sizing:border-box;}
+        .hx-tile.hero .ic{font-size:40px;background:rgba(255,255,255,.22);width:64px;height:64px;border-radius:16px;display:flex;align-items:center;justify-content:center;flex:none;}
+        .hx-tile.hero .tt{color:#fff;font-size:21px;margin-top:0;}
+        .hx-tile.hero .ts{color:#ffedd5;display:block;}
+        .hx-tile.hero .go{margin-left:auto;font-size:26px;flex:none;}
+        .hx-tile.indigo{background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border:none;}
+        .hx-tile.indigo .tt{color:#fff;} .hx-tile.indigo .ts{color:#e0e7ff;}
+        .hx-sec.quiet .hx-tile{padding:13px 14px;box-shadow:0 6px 14px rgba(0,0,0,.14);}
+        .hx-sec.quiet .hx-tile .ic{font-size:24px;}
+        .hx-sec.quiet .hx-tile .tt{font-size:15px;margin-top:6px;}
+        .hx-sec.quiet .hx-tile .ts{font-size:12px;}
+        .hx-srow{display:flex;align-items:center;gap:10px;padding:9px 2px;border-bottom:1px solid #e7e2d6;font-size:15px;}
+        .hx-srow:last-of-type{border-bottom:none;}
+        .hx-srow .rk{font-weight:800;color:#64748b;width:22px;}
+        .hx-dot{width:13px;height:13px;border-radius:4px;flex:none;border:1px solid rgba(0,0,0,.18);}
+        .hx-srow .nm{font-weight:700;flex:1;}
+        .hx-srow .pt{font-weight:800;font-variant-numeric:tabular-nums;}
+        .hx-srow .gap{font-size:12px;color:#64748b;font-weight:700;width:70px;text-align:right;}
+        .hx-seg{flex:1;min-width:110px;text-align:center;background:#fff;border:2px solid var(--color-grass-dark);color:var(--color-grass-dark);border-radius:11px;padding:9px 6px;font-weight:700;font-size:14px;cursor:pointer;font-family:var(--font-body);}
+        .hx-seg:active{transform:scale(.97);}
+        .hx-seg.on{background:var(--color-grass-dark);color:#fff;}
+        .hx-menuwrap{position:relative;display:inline-block;}
+        .hx-menu{position:absolute;right:0;top:calc(100% + 6px);background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 14px 30px rgba(0,0,0,.22);padding:6px;z-index:60;min-width:170px;}
+        .hx-menu button{display:block;width:100%;text-align:left;background:none;border:none;padding:9px 12px;font-size:14px;font-weight:600;cursor:pointer;border-radius:8px;font-family:var(--font-body);color:var(--color-text-primary);}
+        .hx-menu button:hover{background:#f3f4f6;}
+        .hx-menu button.danger{color:#991b1b;}
+        /* Players: expand-in-place cards */
+        .hx-pcard{background:var(--color-cream);border-radius:16px;box-shadow:0 8px 18px rgba(0,0,0,.16);overflow:hidden;border:1px solid rgba(255,255,255,.35);margin-bottom:10px;}
+        .hx-phead{display:flex;align-items:center;gap:12px;padding:13px 16px;cursor:pointer;width:100%;background:none;border:none;font-family:var(--font-body);text-align:left;flex-wrap:wrap;}
+        .hx-phead:active{background:#f3efe3;}
+        .hx-phead .nm{font-size:16.5px;font-weight:800;color:var(--color-text-primary);flex:1;min-width:150px;}
+        .hx-phead .nm small{display:block;font-size:12.5px;color:#64748b;font-weight:600;}
+        .hx-pill{font-size:12px;font-weight:800;border-radius:999px;padding:4px 10px;background:#f0fdf4;color:#059669;white-space:nowrap;}
+        .hx-pill.seed{background:#fef3c7;color:#92400e;}
+        .hx-chev{color:#9ca3af;font-size:18px;transition:transform .2s;}
+        .hx-pcard.open .hx-chev{transform:rotate(180deg);}
+        .hx-pbody{padding:4px 16px 16px;border-top:1px solid #e7e2d6;background:var(--color-cream);}
+        .hx-frow{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;}
+        .hx-fld{flex:1;min-width:150px;}
+        .hx-fld label{display:block;font-size:12px;font-weight:700;color:#4a5568;margin-bottom:5px;}
+        .hx-fld input,.hx-fld select{width:100%;padding:11px;border:2px solid #d1d5db;border-radius:9px;font-size:16px;font-family:var(--font-body);background:#fff;color:var(--color-text-primary);}
+        .hx-pfoot{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;align-items:center;}
+        .hx-savedtag{display:none;font-size:13px;font-weight:800;color:#059669;}
+        .hx-savedtag.show{display:inline;}
+        .hx-btnlink{background:none;border:none;color:#4338ca;font-weight:700;font-size:13.5px;cursor:pointer;font-family:var(--font-body);padding:8px 4px;}
+        /* Settings sticky save bar */
+        .hx-savebar{position:sticky;bottom:10px;z-index:50;display:flex;gap:8px;flex-wrap:wrap;background:rgba(250,248,243,.97);border:2px solid var(--color-grass-dark);border-radius:14px;padding:10px;box-shadow:0 12px 28px rgba(0,0,0,.25);margin-top:16px;}
+        .hx-foot{margin-top:20px;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;color:#cfe6d4;font-size:12.5px;font-weight:600;}
+        @media (max-width:760px){
+            .hx-g4{grid-template-columns:1fr 1fr;}
+            .hx-hdr h1{font-size:26px;}
+            .hx-rc-actions{flex-direction:row;min-width:0;width:100%;}
+            .hx-rc-actions .btn-primary,.hx-rc-actions .btn-secondary{flex:1;}
+        }
+        @media (max-width:430px){
+            .hx-g2{grid-template-columns:1fr;}
+            .hx-tile.hero .tt{font-size:19px;}
+        }
     </style>
 </head>
 <body>
@@ -778,7 +881,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = 'v2026.11.13.60';
+        const APP_VERSION = 'v2026.11.13.61';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -3325,32 +3428,167 @@
             render();
         };
 
+        // ═══ Home UX overhaul helpers (v2026.11.13.61) ═══
+        const fmtPts = (n) => String(Math.round((n || 0) * 100) / 100);
+
+        // Doctor health signals — the same computation the Doctors landing uses,
+        // factored out so the home Doctors tile can carry the health badge too.
+        const computeDoctorHealth = () => {
+            const rounds = state.rounds || [];
+            const conflicted = rounds.filter(r => r.completed === true && r.active === false).length;
+            const scoredScheduled = rounds.filter(r => {
+                if (r.active !== false) return false;
+                return (r.teams || []).some(t => (t.players || []).some(p =>
+                    (p.scores || []).some(s => s !== '' && s != null)));
+            }).length;
+            const orphanEvents = (() => {
+                const ids = new Set((state.events || []).map(e => String(e.id)));
+                return rounds.filter(r => !ids.has(String(r.eventId))).length;
+            })();
+            let hsSuspect = 0;
+            try { hsSuspect = window.__hsAudit().flatMap(r => r.entries)
+                .filter(e => e.orphan || e.duplicate || e.future).length; } catch (e) {}
+            let hcMismatch = 0;
+            try {
+                const usgaOn = !!(state.settings && state.settings.useUSGAHandicap);
+                (state.players || []).forEach(p => {
+                    const a = window.__hcAnalyze(p);
+                    const val = usgaOn
+                        ? (a.usga ? Math.max(0, Math.min(54, Math.round(a.usga.index))) : null)
+                        : (a.dutch ? a.dutch.handicap : null);
+                    if (val != null && parseInt(p.handicap, 10) !== val) hcMismatch++;
+                });
+            } catch (e) {}
+            return { conflicted, scoredScheduled, orphanEvents, hsSuspect, hcMismatch,
+                     total: conflicted + scoredScheduled + orphanEvents + hsSuspect + hcMismatch };
+        };
+
+        // Event standings for the home header chips + top-3 card. Population:
+        // the event's completed rounds — the same rounds the nightly show
+        // counts. (Completed rounds in the data carry active === false, so
+        // the Leaderboard screen's active !== false filter is NOT reused
+        // here; totals still come from computeTeamRoundTotal.)
+        const homeStandings = () => {
+            const eventRounds = state.rounds.filter(r => r.eventId === state.currentEventId && r.completed === true);
+            const totals = {};
+            eventRounds.forEach(r => {
+                (r.teams || []).forEach((t, tIdx) => {
+                    const cur = state.teams.find(team => team.id === t.teamId);
+                    const id = t.teamId;
+                    if (!totals[id]) totals[id] = { id, name: cur ? cur.name : t.teamName, color: (cur && cur.color) || '#3b82f6', points: 0 };
+                    totals[id].points += computeTeamRoundTotal(r, t, tIdx);
+                });
+            });
+            const rows = Object.values(totals).sort((a, b) => (b.points - a.points) || String(a.name).localeCompare(String(b.name)));
+            const completed = state.rounds.filter(r => r.eventId === state.currentEventId && r.completed === true).length;
+            const total = state.rounds.filter(r => r.eventId === state.currentEventId).length;
+            return { rows, completed, total };
+        };
+
+        // ••• menus on home round rows (button diet): one open at a time.
+        window.toggleHomeMenu = (id) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            const show = el.style.display === 'none';
+            document.querySelectorAll('.hx-menu').forEach(m => { m.style.display = 'none'; });
+            el.style.display = show ? 'block' : 'none';
+        };
+
+        // Re-render the current view without losing the scroll position —
+        // used by controls that save in place (settings toggles, milestones).
+        window.__rerenderKeepScroll = () => {
+            const y = window.scrollY || window.pageYOffset || 0;
+            render();
+            requestAnimationFrame(() => { try { window.scrollTo(0, y); } catch (e) {} });
+        };
+
         const renderHome = () => {
             const app = document.getElementById('app');
             const currentEvent = state.events.find(e => e.id === state.currentEventId);
-            const currentEventRounds = state.rounds.filter(r => r.eventId === state.currentEventId);
-            
+            const eventRoundsAll = state.rounds.filter(r => r.eventId === state.currentEventId)
+                .slice().sort((a, b) => (a.timestamp || a.id) - (b.timestamp || b.id));
+            const standings = homeStandings();
+            const showPill = (!state.settings || state.settings.requireAdminPassword !== false);
+            const pillHTML = showPill ? `
+                <button class="hx-adminpill" onclick="toggleAdminMode()" type="button">${state.readOnly ? '🔒 Read-only — tap for admin' : '🔓 Admin on — tap to exit'}</button>` : '';
+
+            // ── Header facts, all computed from live state ──
+            let hdrSmall = '';
+            if (currentEvent) {
+                const stamps = eventRoundsAll.map(r => r.timestamp || r.id).filter(Boolean);
+                if (stamps.length) {
+                    const d1 = new Date(Math.min(...stamps)), d2 = new Date(Math.max(...stamps));
+                    const m1 = d1.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
+                    const m2 = d2.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
+                    hdrSmall = (m1 === m2)
+                        ? `${m1} ${d1.getDate()}–${d2.getDate()} · ${d1.getFullYear()}`
+                        : `${m1} ${d1.getDate()} – ${m2} ${d2.getDate()} · ${d2.getFullYear()}`;
+                } else if (currentEvent.startDate) {
+                    hdrSmall = String(currentEvent.startDate);
+                }
+                if (currentEvent.description) hdrSmall = (hdrSmall ? hdrSmall + ' · ' : '') + currentEvent.description;
+            } else {
+                hdrSmall = 'No event selected yet';
+            }
+            const chips = [];
+            if (currentEvent && standings.total > 0) chips.push(`<span class="hx-chip">⛳ ${standings.completed} of ${standings.total} rounds played</span>`);
+            if (standings.rows.length >= 2 && standings.rows[0].points > 0) {
+                const gap = standings.rows[0].points - standings.rows[1].points;
+                chips.push(`<span class="hx-chip gold">${gap > 0
+                    ? `🏆 ${standings.rows[0].name} lead ${standings.rows[1].name} by ${fmtPts(gap)}`
+                    : `🏆 ${standings.rows[0].name} &amp; ${standings.rows[1].name} tied at ${fmtPts(standings.rows[0].points)}`}</span>`);
+            } else if (standings.rows.length === 1 && standings.rows[0].points > 0) {
+                chips.push(`<span class="hx-chip gold">🏆 ${standings.rows[0].name} lead on ${fmtPts(standings.rows[0].points)}</span>`);
+            } else if (standings.rows.length >= 2) {
+                chips.push(`<span class="hx-chip gold">🏆 No points on the board yet</span>`);
+            }
+
+            // ── Round sets (same populations as the old home cards) ──
+            const liveRounds = eventRoundsAll.filter(r => r.active !== false && r.completed !== true);
+            const scheduledRounds = eventRoundsAll.filter(r => r.active === false && r.completed !== true);
+            const heroRound = scheduledRounds.length ? scheduledRounds[0] : null;
+            const restScheduled = scheduledRounds.slice(1);
+            if (liveRounds.length) {
+                chips.push(`<span class="hx-chip next">⛳ In progress · ${liveRounds[0].courseName}</span>`);
+            } else if (heroRound) {
+                const hd = new Date(heroRound.timestamp || heroRound.id);
+                chips.push(`<span class="hx-chip next">Next up · ${hd.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} · ${heroRound.courseName} · ${hd.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span>`);
+            } else if (currentEvent && standings.total > 0 && standings.completed === standings.total) {
+                chips.push(`<span class="hx-chip next">🏁 All ${standings.total} rounds played</span>`);
+            }
+            const hasGroupsOf = (round) => (round.teams || []).some(team => (team.players || []).some(player => player.groupNumber));
+            const roundNoOf = (round) => eventRoundsAll.indexOf(round) + 1;
+            const weekStrip = (marks) => `
+                <div class="hx-week">
+                    ${eventRoundsAll.map((r, i) => {
+                        const d = new Date(r.timestamp || r.id);
+                        const cls = r.completed === true ? 'done' : (marks.live === r ? 'live' : (marks.next === r ? 'next' : ''));
+                        const st = r.completed === true ? '✓' : (marks.live === r ? '⛳' : (marks.next === r ? '▶' : ''));
+                        return `<div class="hx-wd ${cls}"><span class="st">${st}</span><b>R${i + 1} · ${d.toLocaleDateString('en-US', { weekday: 'short' })} ${d.getDate()}</b><span class="cn">${r.courseName}</span></div>`;
+                    }).join('')}
+                </div>`;
+
             app.innerHTML = `
-                ${(() => {
-                    // ── IN PROGRESS: started but not completed ──
-                    // These used to be invisible: not scheduled (active !== false) and not
-                    // completed, so neither list showed them. Every created round must be
-                    // reachable — continue, complete, reset, or delete.
-                    const liveRounds = state.rounds.filter(r =>
-                        r.eventId === state.currentEventId && r.active !== false && r.completed !== true);
-                    if (liveRounds.length === 0) return '';
-                    liveRounds.sort((a, b) => (a.timestamp || a.id) - (b.timestamp || b.id));
-                    return `
-                        <div class="card" style="background:#fffbeb;border:2px solid #f59e0b;">
-                            <h2>⛳ Rounds In Progress (${liveRounds.length})</h2>
-                            <p style="font-size:13px;color:#92400e;margin:0 0 12px;">
-                                Scoring is open on all devices. Complete a round to lock it.
-                            </p>
+                <div class="hx-hdr">
+                    <div class="hx-hdr-top">
+                        <div class="flag">🇳🇱</div>
+                        <h1>${currentEvent ? currentEvent.name : 'Golf League'}<small>${hdrSmall}</small></h1>
+                        ${pillHTML}
+                    </div>
+                    ${chips.length ? `<div class="hx-chips">${chips.join('')}</div>` : ''}
+                </div>
+
+                <div class="hx-sec">
+                    <div class="hx-sec-h"><h2>🎯 Game Day</h2><span>today's round &amp; where things stand</span></div>
+
+                    ${liveRounds.length ? `
+                        <div class="hx-card" style="background:#fffbeb;border:2px solid #f59e0b;">
+                            <h2 style="font-size:22px;margin-bottom:6px;">⛳ Rounds In Progress (${liveRounds.length})</h2>
+                            <p style="font-size:13px;color:#92400e;margin:0 0 12px;">Scoring is open on all devices. Complete a round to lock it.</p>
                             ${liveRounds.map(round => {
                                 const idx = state.rounds.indexOf(round);
                                 const d = new Date(round.timestamp || round.id);
                                 const dateStr = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-                                // How far along are we?
                                 let filled = 0, total = 0;
                                 (round.teams || []).forEach(t => (t.players || []).forEach(p => {
                                     total += 18;
@@ -3367,42 +3605,76 @@
                                             </div>
                                         </div>
                                         ${!state.readOnly ? `
-                                            <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                                                <button onclick="continueRound(${idx})" class="btn-primary"
-                                                        style="padding:8px 16px;background:#10b981;">▶️ Continue</button>
-                                                <button onclick="completeRoundByIndex(${idx})" class="btn-secondary"
-                                                        style="padding:6px 10px;font-size:12px;background:#b45309;color:white;">🔒 Complete</button>
-                                                <button onclick="resetRound(${idx})" class="btn-secondary"
-                                                        style="padding:6px 10px;font-size:12px;">↩️ Reset</button>
-                                                <button onclick="deleteScheduledRound(${idx})" class="btn-secondary"
-                                                        style="padding:6px 10px;font-size:12px;background:#fee2e2;color:#991b1b;">🗑️ Delete</button>
+                                            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start;">
+                                                <button onclick="continueRound(${idx})" class="btn-primary" style="padding:8px 16px;background:#10b981;">▶️ Continue</button>
+                                                <span class="hx-menuwrap">
+                                                    <button onclick="toggleHomeMenu('hxmenu-live-${idx}')" class="btn-secondary" style="padding:8px 12px;">•••</button>
+                                                    <span class="hx-menu" id="hxmenu-live-${idx}" style="display:none;">
+                                                        <button onclick="completeRoundByIndex(${idx})">🔒 Complete round</button>
+                                                        <button onclick="resetRound(${idx})">↩️ Reset scores</button>
+                                                        <button class="danger" onclick="deleteScheduledRound(${idx})">🗑️ Delete round</button>
+                                                    </span>
+                                                </span>
                                             </div>
                                         ` : ''}
                                     </div>`;
                             }).join('')}
-                        </div>`;
-                })()}
-                ${(() => {
-                    const scheduledRounds = state.rounds.filter(r => r.eventId === state.currentEventId && r.active === false);
-                    if (scheduledRounds.length === 0) return '';
-                    
-                    // Sort by timestamp (upcoming first)
-                    scheduledRounds.sort((a, b) => (a.timestamp || a.id) - (b.timestamp || b.id));
-                    
-                    return `
-                        <div class="card" style="background:#f0fdf4;border:2px solid #10b981;">
-                            <h2>📅 Scheduled Rounds (${scheduledRounds.length})</h2>
-                            ${scheduledRounds.map(round => {
+                        </div>
+                    ` : ''}
+
+                    ${heroRound ? (() => {
+                        const idx = state.rounds.indexOf(heroRound);
+                        const d = new Date(heroRound.timestamp || heroRound.id);
+                        const dateStr = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                        const timeStr = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+                        const hasGroups = hasGroupsOf(heroRound);
+                        const nPlayers = (heroRound.teams || []).reduce((n, t) => n + (t.players || []).length, 0);
+                        return `
+                            <div class="hx-card hx-roundcard">
+                                <div class="hx-rc-top">
+                                    <div class="hx-rc-main">
+                                        <div class="hx-rc-kicker">Round ${roundNoOf(heroRound)} · ${dateStr}</div>
+                                        <div class="hx-rc-course">${heroRound.courseName}</div>
+                                        <div class="hx-rc-meta">Tee time ${timeStr} · ${heroRound.teams.length} teams · ${nPlayers} players</div>
+                                        ${hasGroups
+                                            ? '<span class="hx-rc-ok">✓ Groups set</span>'
+                                            : '<span class="hx-rc-warn">👥 Groups not set yet</span>'}
+                                    </div>
+                                    <div class="hx-rc-actions">
+                                        ${!state.readOnly ? `
+                                            <button onclick="activateRound(${idx})" class="btn-primary" style="background:linear-gradient(135deg,#059669,#10b981);font-size:16px;padding:13px 18px;">▶️ Start Round</button>
+                                            <button onclick="editScheduledGroups(${idx})" class="btn-secondary" style="padding:10px 14px;">👥 ${hasGroups ? 'Edit Groups' : 'Set Groups'}</button>
+                                            <span class="hx-menuwrap">
+                                                <button onclick="toggleHomeMenu('hxmenu-hero')" class="btn-secondary" style="padding:8px 12px;width:100%;">••• More</button>
+                                                <span class="hx-menu" id="hxmenu-hero" style="display:none;">
+                                                    <button onclick="editScheduledRound(${idx})">📅 Change date</button>
+                                                    <button class="danger" onclick="deleteScheduledRound(${idx})">🗑️ Delete round</button>
+                                                </span>
+                                            </span>
+                                        ` : (hasGroups ? `
+                                            <button onclick="viewScheduledGroups(${idx})" class="btn-secondary" style="padding:10px 14px;">👁️ View Groups</button>
+                                        ` : '')}
+                                    </div>
+                                </div>
+                                ${weekStrip({ next: heroRound, live: liveRounds[0] || null })}
+                            </div>`;
+                    })() : (standings.total > 0 ? `
+                            <div class="hx-card">
+                                <div style="font-weight:800;font-size:16px;margin-bottom:4px;">📅 The Week</div>
+                                ${weekStrip({ next: null, live: liveRounds[0] || null })}
+                            </div>
+                    ` : '')}
+
+                    ${restScheduled.length ? `
+                        <div class="hx-card" style="background:#f0fdf4;border:2px solid #10b981;">
+                            <h2 style="font-size:22px;margin-bottom:10px;">📅 Also Scheduled (${restScheduled.length})</h2>
+                            ${restScheduled.map(round => {
+                                const idx = state.rounds.indexOf(round);
                                 const roundDate = new Date(round.timestamp || round.id);
                                 const isPast = roundDate < new Date();
-                                const dateStr = roundDate.toLocaleDateString('en-US', {weekday: 'short', month: 'short', day: 'numeric'});
-                                const timeStr = roundDate.toLocaleTimeString('en-US', {hour: 'numeric', minute: '2-digit'});
-                                
-                                // Check if groups are assigned
-                                const hasGroups = round.teams.some(team => 
-                                    team.players.some(player => player.groupNumber)
-                                );
-                                
+                                const dateStr = roundDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                                const timeStr = roundDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+                                const hasGroups = hasGroupsOf(round);
                                 return `
                                     <div class="list-item" style="background:white;margin-bottom:12px;">
                                         <div style="flex:1;">
@@ -3416,221 +3688,136 @@
                                                 ${hasGroups ? '<span style="color:#10b981;font-weight:600;"> • ✓ Groups set</span>' : '<span style="color:#f59e0b;"> • Groups not set</span>'}
                                             </div>
                                         </div>
-                                        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                                        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start;">
                                             ${hasGroups && state.readOnly ? `
-                                                <button onclick="viewScheduledGroups(${state.rounds.indexOf(round)})" 
-                                                        class="btn-secondary" 
-                                                        style="padding:6px 10px;font-size:12px;">
-                                                    👁️ View Groups
-                                                </button>
+                                                <button onclick="viewScheduledGroups(${idx})" class="btn-secondary" style="padding:6px 10px;font-size:12px;">👁️ View Groups</button>
                                             ` : ''}
                                             ${!state.readOnly ? `
-                                                <button onclick="editScheduledRound(${state.rounds.indexOf(round)})" 
-                                                        class="btn-secondary" 
-                                                        style="padding:6px 10px;font-size:12px;">
-                                                    📅 Date
-                                                </button>
-                                                <button onclick="editScheduledGroups(${state.rounds.indexOf(round)})" 
-                                                        class="btn-secondary" 
-                                                        style="padding:6px 10px;font-size:12px;">
-                                                    👥 ${hasGroups ? 'Edit' : 'Set'} Groups
-                                                </button>
-                                                <button onclick="deleteScheduledRound(${state.rounds.indexOf(round)})" 
-                                                        class="btn-secondary" 
-                                                        style="padding:6px 10px;font-size:12px;background:#fee2e2;color:#991b1b;">
-                                                    🗑️ Delete
-                                                </button>
-                                                <button onclick="activateRound(${state.rounds.indexOf(round)})" 
-                                                        class="btn-primary" 
-                                                        style="padding:8px 16px;background:#10b981;">
-                                                    ▶️ Start
-                                                </button>
+                                                <button onclick="activateRound(${idx})" class="btn-primary" style="padding:8px 16px;background:#10b981;">▶️ Start</button>
+                                                <button onclick="editScheduledGroups(${idx})" class="btn-secondary" style="padding:6px 10px;font-size:12px;">👥 ${hasGroups ? 'Edit' : 'Set'} Groups</button>
+                                                <span class="hx-menuwrap">
+                                                    <button onclick="toggleHomeMenu('hxmenu-sched-${idx}')" class="btn-secondary" style="padding:6px 10px;font-size:12px;">•••</button>
+                                                    <span class="hx-menu" id="hxmenu-sched-${idx}" style="display:none;">
+                                                        <button onclick="editScheduledRound(${idx})">📅 Change date</button>
+                                                        <button class="danger" onclick="deleteScheduledRound(${idx})">🗑️ Delete round</button>
+                                                    </span>
+                                                </span>
                                             ` : ''}
                                         </div>
-                                    </div>
-                                `;
+                                    </div>`;
                             }).join('')}
                         </div>
-                    `;
-                })()}
-                
-                ${!state.readOnly ? `
-                    <div class="card">
-                        <h2>⛳ Quick Actions</h2>
-                        ${!state.currentEventId ? `
-                            <div style="background:#fee2e2;padding:12px;border-radius:8px;color:#991b1b;margin-bottom:12px;">
-                                <strong>Create an event first!</strong>
+                    ` : ''}
+
+                    ${!currentEvent ? `
+                        <div class="hx-card" style="background:#fee2e2;border:2px solid #ef4444;">
+                            <strong style="color:#991b1b;">Create an event first!</strong>
+                            <div style="color:#991b1b;font-size:14px;margin-top:4px;">Rounds, standings and the show all hang off an event.</div>
+                        </div>
+                    ` : (standings.total === 0 && !liveRounds.length && !scheduledRounds.length ? `
+                        <div class="hx-card">
+                            <strong>No rounds yet for ${currentEvent.name}.</strong>
+                            <div style="color:#6b7280;font-size:14px;margin-top:4px;">Schedule rounds from Events, or start one now.</div>
+                        </div>
+                    ` : '')}
+
+                    <div class="hx-card">
+                        <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;">
+                            <span style="font-size:18px;font-weight:800;">🏆 Standings</span>
+                            <span style="font-size:13px;color:#64748b;font-weight:600;">${standings.completed > 0 ? `after Round ${standings.completed}` : 'no rounds counted yet'}</span>
+                        </div>
+                        ${standings.rows.length ? `
+                            <div style="margin-top:6px;">
+                                ${standings.rows.slice(0, 3).map((t, i) => `
+                                    <div class="hx-srow">
+                                        <span class="rk">${i + 1}</span>
+                                        <span class="hx-dot" style="background:${t.color};"></span>
+                                        <span class="nm">${t.name}</span>
+                                        <span class="pt">${fmtPts(t.points)}</span>
+                                        <span class="gap">${i === 0 || standings.rows[0].points === t.points ? '—' : fmtPts(standings.rows[0].points - t.points) + ' back'}</span>
+                                    </div>`).join('')}
                             </div>
+                            ${standings.completed > 0 && standings.rows[0].points === 0 ? `
+                                <p style="color:#92400e;font-size:13px;margin-top:8px;">Rounds are played, but no team points are recorded in the app's scoring fields yet — the Doctors can see these rounds flagged.</p>
+                            ` : ''}
+                        ` : `
+                            <p style="color:#6b7280;font-size:14px;margin-top:8px;">No team points on the board yet — the first completed round puts them here.</p>
+                        `}
+                        <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
+                            <button class="hx-seg on" onclick="navigate('leaderboard')">🏆 Leaderboard</button>
+                            <button class="hx-seg" onclick="navigate('bracket')">🎯 Match Play</button>
+                            <button class="hx-seg" onclick="navigate('stats')">📈 Player Stats</button>
+                        </div>
+                    </div>
+
+                    ${!state.readOnly ? `
+                        <div class="hx-grid hx-g2">
+                            <button class="hx-tile" onclick="${state.currentEventId ? 'navigate(\'newRound\')' : 'navigate(\'events\')'}" type="button">
+                                <div class="ic">➕</div><div class="tt">New Round</div>
+                                <div class="ts">${state.currentEventId ? 'Start scoring a new round' : 'Create an event first'}</div>
+                            </button>
+                            ${state.activeRound ? `
+                                <button class="hx-tile" onclick="navigate('scoreEntry')" type="button" style="background:#fef3c7;">
+                                    <div class="ic">📝</div><div class="tt">Continue Round</div>
+                                    <div class="ts">${state.activeRound.courseName}</div>
+                                </button>
+                            ` : ''}
+                        </div>
+                    ` : ''}
+                </div>
+
+                <div class="hx-sec">
+                    <div class="hx-sec-h"><h2>🎬 Tonight's Show</h2><span>shape it, then launch it — one tap from home</span></div>
+                    <a class="hx-tile hero" href="presentation.html" target="_blank" rel="noopener">
+                        <span class="ic">▶</span>
+                        <span><span class="tt">Nightly Presentation</span><span class="ts">Tonight's show, live from the scores${standings.completed ? ` · Night ${standings.completed} ready` : ''}</span></span>
+                        <span class="go">→</span>
+                    </a>
+                    <div class="hx-grid hx-g2" style="margin-top:12px;">
+                        ${!state.readOnly ? `
+                            <button class="hx-tile" onclick="navigate('runsheet')" type="button">
+                                <div class="ic">🎬</div><div class="tt">Tonight's Run Sheet</div>
+                                <div class="ts">Pick the storylines and the order they're told</div>
+                            </button>
                         ` : ''}
-                        <div class="list-item" onclick="${state.currentEventId ? 'navigate(\'newRound\')' : 'navigate(\'events\')'}" style="${!state.currentEventId ? 'opacity:0.5;' : ''}">
-                            <div>
-                                <strong>➕ New Round</strong><br>
-                                <small>Start scoring a new round</small>
-                            </div>
-                            <span style="font-size:24px;">→</span>
-                        </div>
-                        ${state.activeRound ? `
-                            <div class="list-item" onclick="navigate('scoreEntry')" style="background:#fef3c7;">
-                                <div>
-                                    <strong>📝 Continue Round</strong><br>
-                                    <small>${state.activeRound.courseName}</small>
-                                </div>
-                                <span style="font-size:24px;">→</span>
-                            </div>
-                        ` : ''}
-                    </div>
-                ` : ''}
-                
-                <div class="card">
-                    <h2>📊 Data</h2>
-                    <div class="list-item" onclick="navigate('leaderboard')">
-                        <div>
-                            <strong>🏆 Leaderboard</strong><br>
-                            <small>${currentEventRounds.length} rounds in current event</small>
-                        </div>
-                        <span style="font-size:24px;">→</span>
-                    </div>
-                    <div class="list-item" onclick="navigate('bracket')">
-                        <div>
-                            <strong>🏆 Match Play Bracket</strong><br>
-                            <small>${(() => {
-                                const ev = state.events.find(e => e.id === state.currentEventId);
-                                if (!ev || !ev.bracket) return 'No bracket for this event';
-                                return `${ev.bracket.status === 'setup' ? 'Seeding in progress' : ev.bracket.status === 'complete' ? 'Event complete' : 'Bracket live'}`;
-                            })()}</small>
-                        </div>
-                        <span style="font-size:24px;">→</span>
-                    </div>
-                    <div class="list-item" onclick="navigate('stats')">
-                        <div>
-                            <strong>📈 Player Stats</strong><br>
-                            <small>Individual performance</small>
-                        </div>
-                        <span style="font-size:24px;">→</span>
+                        <button class="hx-tile indigo" onclick="openPresentationMode()" type="button">
+                            <div class="ic">📊</div><div class="tt">Presentation Mode</div>
+                            <div class="ts">The in-app show, built into the admin app</div>
+                        </button>
                     </div>
                 </div>
-                
+
                 ${!state.readOnly ? `
-                    <div class="card">
-                        <h2>👥 League Setup</h2>
-                        <p style="color:#6b7280;font-size:13px;margin:0 0 10px;">Who plays, where, and in what teams.</p>
-                        <div class="list-item" onclick="navigate('players')">
-                            <div>
-                                <strong>👥 Players</strong><br>
-                                <small>${state.players.length} players · handicaps &amp; photos</small>
-                            </div>
-                            <span style="font-size:24px;">→</span>
-                        </div>
-                        <div class="list-item" onclick="navigate('teams')">
-                            <div>
-                                <strong>👫 Teams</strong><br>
-                                <small>${state.teams.length} teams · names, colours &amp; logos</small>
-                            </div>
-                            <span style="font-size:24px;">→</span>
-                        </div>
-                        <div class="list-item" onclick="navigate('courses')">
-                            <div>
-                                <strong>🏌️ Courses</strong><br>
-                                <small>${state.courses.length} courses · pars, stroke index &amp; tees</small>
-                            </div>
-                            <span style="font-size:24px;">→</span>
+                    <div class="hx-sec">
+                        <div class="hx-sec-h"><h2>👥 League</h2><span>who plays, where, and in what teams</span></div>
+                        <div class="hx-grid hx-g4">
+                            <button class="hx-tile" onclick="navigate('players')" type="button"><div class="ic">👥</div><div class="tt">Players</div><div class="ts">${state.players.length} players · handicaps &amp; photos</div></button>
+                            <button class="hx-tile" onclick="navigate('teams')" type="button"><div class="ic">👫</div><div class="tt">Teams</div><div class="ts">${state.teams.length} teams · colours &amp; logos</div></button>
+                            <button class="hx-tile" onclick="navigate('courses')" type="button"><div class="ic">🏌️</div><div class="tt">Courses</div><div class="ts">${state.courses.length} courses · pars, stroke index &amp; tees</div></button>
+                            <button class="hx-tile" onclick="navigate('events')" type="button"><div class="ic">📅</div><div class="tt">Events</div><div class="ts">${currentEvent ? currentEvent.name + ' is active' : state.events.length + ' events'}</div></button>
                         </div>
                     </div>
 
-                    <div class="card">
-                        <h2>🏆 Competition</h2>
-                        <p style="color:#6b7280;font-size:13px;margin:0 0 10px;">Events, rounds and how points are scored.</p>
-                        <div class="list-item" onclick="navigate('events')">
-                            <div>
-                                <strong>📅 Events &amp; Rounds</strong><br>
-                                <small>${state.events.length} event${state.events.length === 1 ? '' : 's'} · ${state.rounds.length} round${state.rounds.length === 1 ? '' : 's'} · schedules &amp; brackets</small>
-                            </div>
-                            <span style="font-size:24px;">→</span>
+                    <div class="hx-sec quiet">
+                        <div class="hx-sec-h"><h2>🧰 Setup &amp; Care</h2><span>rarely touched — here when you need it</span></div>
+                        <div class="hx-grid hx-g4">
+                            <button class="hx-tile" onclick="navigate('settings')" type="button"><div class="ic">⚙️</div><div class="tt">Scoring &amp; Settings</div><div class="ts">Point values · handicap method · milestones · access</div></button>
+                            <button class="hx-tile" onclick="navigate('soundstudio')" type="button"><div class="ic">🎚️</div><div class="tt">Sound Studio</div><div class="ts">Assign a sound to every moment — test files here too</div></button>
+                            <button class="hx-tile" onclick="navigate('doctors')" type="button"><div class="ic">🩺</div><div class="tt">Doctors</div><div class="ts">Diagnose &amp; repair rounds, scores and handicaps</div>${(() => { const h = computeDoctorHealth(); return h.total === 0
+                                ? '<span class="badge">✅ All clear</span>'
+                                : `<span class="badge warn">⚠️ ${h.total} to check</span>`; })()}</button>
+                            <button class="hx-tile" onclick="navigate('export')" type="button"><div class="ic">💾</div><div class="tt">Export / Import</div><div class="ts">Back up or restore all league data</div></button>
                         </div>
-                        <div class="list-item" onclick="navigate('milestones')">
-                            <div>
-                                <strong>🏅 Milestones</strong><br>
-                                <small>Thresholds that trigger an announcement</small>
-                            </div>
-                            <span style="font-size:24px;">→</span>
-                        </div>
-                        <div class="list-item" onclick="navigate('runsheet')">
-                            <div>
-                                <strong>🎬 Tonight's Run Sheet</strong><br>
-                                <small>Pick the storylines and the order they're told</small>
-                            </div>
-                            <span style="font-size:24px;">→</span>
-                        </div>
-                        <div class="list-item" onclick="navigate('settings')">
-                            <div>
-                                <strong>⚙️ Scoring &amp; Settings</strong><br>
-                                <small>Point values, handicap method, access</small>
-                            </div>
-                            <span style="font-size:24px;">→</span>
-                        </div>
-                    </div>
-
-                    <div class="card">
-                        <h2>🛠️ Data &amp; Tools</h2>
-                        <p style="color:#6b7280;font-size:13px;margin:0 0 10px;">Check the numbers, fix problems, back things up.</p>
-                        <div class="list-item" onclick="navigate('doctors')">
-                            <div>
-                                <strong>🩺 Doctors</strong><br>
-                                <small>Diagnose &amp; repair rounds, scores and handicaps</small>
-                            </div>
-                            <span style="font-size:24px;">→</span>
-                        </div>
-                        <div class="list-item" onclick="navigate('export')">
-                            <div>
-                                <strong>💾 Export / Import</strong><br>
-                                <small>Backup &amp; restore data</small>
-                            </div>
-                            <span style="font-size:24px;">→</span>
-                        </div>
-                        <div class="list-item" onclick="navigate('soundstudio')">
-                            <div>
-                                <strong>🎚️ Sound Studio</strong><br>
-                                <small>Assign a sound to every moment · synth stings, URLs or files</small>
-                            </div>
-                            <span style="font-size:24px;">→</span>
-                        </div>
-                        <div class="list-item" onclick="navigate('soundtest')">
-                            <div>
-                                <strong>🔊 Sound Test</strong><br>
-                                <small>Test MP3 files in the Sounds/ folder</small>
-                            </div>
-                            <span style="font-size:24px;">→</span>
-                        </div>
-                    </div>
-                ` : (state.settings && state.settings.requireAdminPassword === false ? '' : `
-                    <div class="card" style="background:#fef3c7;border:2px solid #f59e0b;">
-                        <h2>👁️ Read-Only Mode</h2>
-                        <p style="color:#92400e;font-size:14px;margin-bottom:12px;">
-                            You're viewing in read-only mode. Need to make changes?
-                        </p>
-                        <button onclick="toggleAdminMode()" 
-                                class="btn-primary" 
-                                style="width:100%;background:#ef4444;padding:12px;font-weight:600;">
-                            🔒 Enable Admin Mode
-                        </button>
-                    </div>
-                `)}
-                
-                ${!state.readOnly && (!state.settings || state.settings.requireAdminPassword !== false) ? `
-                    <div class="card" style="background:#dcfce7;border:2px solid #10b981;">
-                        <h2>✅ Admin Mode Active</h2>
-                        <p style="color:#065f46;font-size:14px;margin-bottom:12px;">
-                            You have full editing access. Click below to return to read-only mode.
-                        </p>
-                        <button onclick="toggleAdminMode()" 
-                                class="btn-secondary" 
-                                style="width:100%;background:#ef4444;color:white;padding:12px;font-weight:600;">
-                            🔓 Exit Admin Mode
-                        </button>
                     </div>
                 ` : ''}
+
+                <div class="hx-foot">
+                    ${pillHTML}
+                    <span>⛳ DutchCup ${APP_VERSION}</span>
+                </div>
             `;
         };
+
 
         const renderEvents = () => {
             const app = document.getElementById('app');
@@ -4122,6 +4309,22 @@
             `;
         };
 
+        // ── Players: expand-in-place editing (v2026.11.13.61) ──
+        // Tapping a player in the list expands the card in place; the inline
+        // form reuses the full editor's field ids, so Save goes through the
+        // existing updatePlayer() path verbatim (incl. seed-aware recalc).
+        window.togglePlayerCard = (playerId) => {
+            state.expandedPlayerId = (state.expandedPlayerId === playerId) ? null : playerId;
+            render();
+        };
+        window.__savePlayerInline = (playerId) => {
+            const nameEl = document.getElementById('playerName');
+            if (nameEl && !nameEl.value.trim()) { updatePlayer(playerId); return; } // let updatePlayer show its own error; stay expanded
+            window.__playerSavedFlash = playerId;
+            state.expandedPlayerId = null; // collapse on the post-save render; inputs are read first
+            updatePlayer(playerId);
+        };
+
         const renderPlayers = () => {
             const app = document.getElementById('app');
             
@@ -4445,28 +4648,55 @@
                 return;
             }
             
+            const savedFlashId = window.__playerSavedFlash || null;
+            window.__playerSavedFlash = null;
             app.innerHTML = `
                 <button class="back-btn" onclick="navigate('home')">← Back</button>
                 <div class="card">
                     <h2>👥 Players</h2>
                     <button onclick="state.view='players-add'; render();" class="btn-primary" style="width:100%;margin-bottom:16px;">➕ Add Player</button>
-                    ${state.players.map(p => `
-                        <div class="list-item">
-                            <div style="display:flex;align-items:center;gap:12px;flex:1;">
-                                ${renderAvatar(p, 40)}
-                                <div>
-                                    <strong>${p.name}</strong>
-                                    <span style="margin-left:8px;padding:4px 8px;background:#f0fdf4;color:#059669;border-radius:4px;font-size:12px;font-weight:600;">
-                                        HC: ${p.handicap || 0}
-                                    </span>
+                    <p style="color:#6b7280;font-size:13px;margin:-4px 0 12px;">Tap a player to edit them right here — name, email, handicap seed and default tee. Historic scores and the full handicap audit live inside the card.</p>
+                    ${state.players.map(p => {
+                        const open = state.expandedPlayerId === p.id;
+                        const idxTxt = (typeof p.handicapIndex === 'number' && isFinite(p.handicapIndex)) ? `Index ${p.handicapIndex.toFixed(1)}` : `HC: ${p.handicap || 0}`;
+                        const seeded = (p.seedIndex != null && isFinite(p.seedIndex));
+                        return `
+                        <div class="hx-pcard${open ? ' open' : ''}">
+                            <button class="hx-phead" onclick="togglePlayerCard(${p.id})" type="button">
+                                ${renderAvatar(p, 44)}
+                                <span class="nm">${p.name}<small>${p.email ? p.email : 'No email on file'}</small></span>
+                                ${savedFlashId === p.id ? '<span class="hx-savedtag show">✓ Saved</span>' : ''}
+                                <span class="hx-pill">${idxTxt}</span>
+                                ${seeded ? `<span class="hx-pill seed">🌱 Seed ${p.seedIndex} · ${Number.isInteger(p.seedWeight) ? p.seedWeight : 10} rds</span>` : ''}
+                                <span class="hx-chev">▾</span>
+                            </button>
+                            ${open ? `
+                            <div class="hx-pbody">
+                                <div class="hx-frow">
+                                    <div class="hx-fld"><label>Player name</label><input type="text" id="playerName" value="${(p.name || '').replace(/"/g, '&quot;')}"></div>
+                                    <div class="hx-fld"><label>Email — used by the scoring app's Share button</label><input type="email" id="playerEmail" value="${(p.email || '').replace(/"/g, '&quot;')}" placeholder="Add an email"></div>
                                 </div>
-                            </div>
-                            <div style="display:flex;gap:8px;">
-                                <button onclick="editPlayer(${p.id})" style="padding:8px 16px;background:#3b82f6;color:white;border:none;border-radius:8px;cursor:pointer;">Edit</button>
-                                <button onclick="deletePlayer(${p.id})" style="padding:8px 16px;background:#ef4444;color:white;border:none;border-radius:8px;cursor:pointer;">Delete</button>
-                            </div>
-                        </div>
-                    `).join('')}
+                                <div class="hx-frow">
+                                    <div class="hx-fld"><label>🌱 Seed index (new players)</label><input type="number" id="playerSeedIndex" step="0.1" min="0" max="54" value="${seeded ? p.seedIndex : ''}" placeholder="Not seeded"></div>
+                                    <div class="hx-fld"><label>Seed counts as (rounds)</label><input type="number" id="playerSeedWeight" step="1" min="1" max="20" value="${Number.isInteger(p.seedWeight) ? p.seedWeight : 10}"></div>
+                                    <div class="hx-fld"><label>🏁 Default tee</label>
+                                        <select id="playerDefaultTeeName">
+                                            <option value="" ${!p.defaultTeeName ? 'selected' : ''}>— No default —</option>
+                                            ${CANONICAL_TEE_NAMES.map(n => `<option value="${n}" ${p.defaultTeeName === n ? 'selected' : ''}>${n}</option>`).join('')}
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="hx-pfoot">
+                                    <button onclick="__savePlayerInline(${p.id})" class="btn-primary" style="padding:11px 20px;">✅ Save</button>
+                                    <span style="flex:1;"></span>
+                                    <button class="hx-btnlink" onclick="navigate('players-historic-${p.id}')">📊 Historic scores →</button>
+                                    <button class="hx-btnlink" onclick="navigate('handicapPlayer-${p.id}')">🩻 Full handicap audit →</button>
+                                    <button class="hx-btnlink" onclick="editPlayer(${p.id})">✏️ Full editor →</button>
+                                    <button class="hx-btnlink" style="color:#991b1b;" onclick="deletePlayer(${p.id})">🗑️ Delete</button>
+                                </div>
+                            </div>` : ''}
+                        </div>`;
+                    }).join('')}
                     ${state.players.length === 0 ? '<p style="color:#6b7280;">No players yet. Click "Add Player" to create your first player.</p>' : ''}
                 </div>
             `;
@@ -6539,28 +6769,7 @@ ${(() => {
                 <div class="card">
                     <h2>⚙️ Settings</h2>
                     
-                    ${state.events.length > 0 ? `
-                        <div style="background:#f0f9ff;border:2px solid #0ea5e9;border-radius:12px;padding:16px;margin-bottom:24px;">
-                            <h3 style="margin:0 0 12px;color:#0369a1;">🎯 Current Event</h3>
-                            <div style="background:white;padding:12px;border-radius:8px;margin-bottom:12px;">
-                                <strong style="font-size:16px;color:#0c4a6e;">${currentEvent ? currentEvent.name : 'No Event Selected'}</strong>
-                                ${currentEvent && currentEvent.description ? `<br><small style="color:#6b7280;">${currentEvent.description}</small>` : ''}
-                                <br><small style="color:#6b7280;font-weight:600;">${currentEventRounds.length} round${currentEventRounds.length === 1 ? '' : 's'} played</small>
-                            </div>
-                            <button onclick="navigate('events')" class="btn-secondary" style="width:100%;background:#0ea5e9;color:white;">
-                                🗂️ Manage Events
-                            </button>
-                        </div>
-                    ` : `
-                        <div style="background:#fef3c7;border:2px solid #f59e0b;border-radius:12px;padding:16px;margin-bottom:24px;">
-                            <p style="color:#92400e;margin-bottom:12px;"><strong>⚠️ No Events Yet</strong></p>
-                            <p style="color:#6b7280;margin-bottom:12px;font-size:14px;">Create an event to organize your rounds into tournaments or seasons.</p>
-                            <button onclick="navigate('events')" class="btn-primary" style="width:100%;background:#f59e0b;">
-                                ➕ Create First Event
-                            </button>
-                        </div>
-                    `}
-                    
+                    <!-- Current Event panel removed (v2026.11.13.61): it duplicated Events; the home header carries event status now. -->
                     <h3 style="margin:20px 0 12px;">Stroke Play Points</h3>
                     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px;">
                         <div>
@@ -6641,6 +6850,7 @@ ${(() => {
                         <label style="display:flex;align-items:center;gap:12px;cursor:pointer;background:white;padding:12px;border-radius:8px;">
                             <input type="checkbox" 
                                    id="useUSGAHandicapToggle" 
+                                   onchange="saveToggleSetting('useUSGAHandicap', this.checked)"
                                    ${state.settings.useUSGAHandicap ? 'checked' : ''}
                                    style="width:20px;height:20px;cursor:pointer;">
                             <div style="flex:1;">
@@ -6652,7 +6862,7 @@ ${(() => {
                         </label>
                         <div style="background:#fef3c7;border-left:3px solid #f59e0b;padding:10px;border-radius:6px;margin-top:12px;">
                             <small style="color:#92400e;">
-                                ⏳ <strong>Coming in a future update</strong> — tees data being collected now. Toggle will activate USGA calculations once implemented.
+                                This toggle <strong>saves itself</strong> the moment you flip it — no need to tap Save Settings.
                             </small>
                         </div>
                     </div>
@@ -6663,6 +6873,7 @@ ${(() => {
                             <label style="display:flex;align-items:center;gap:12px;cursor:pointer;background:white;padding:12px;border-radius:8px;">
                                 <input type="checkbox" 
                                        id="requireAdminPasswordToggle" 
+                                       onchange="saveToggleSetting('requireAdminPassword', this.checked)"
                                        ${state.settings.requireAdminPassword ? 'checked' : ''}
                                        style="width:20px;height:20px;cursor:pointer;">
                                 <div style="flex:1;">
@@ -6682,9 +6893,7 @@ ${(() => {
                         </div>
                     ` : ''}
                     
-                    <button onclick="saveSettings()" class="btn-primary" style="width:100%;margin-bottom:8px;">💾 Save Settings</button>
-                    <button onclick="resetSettings()" class="btn-secondary" style="width:100%;margin-bottom:8px;">🔄 Reset to Defaults</button>
-                    
+
                     ${state.rounds.length > 0 ? `
                         <div style="background:#e0e7ff;padding:16px;border-radius:8px;margin-top:16px;">
                             <strong style="display:block;margin-bottom:8px;color:#3730a3;">⚠️ Recalculate Existing Rounds</strong>
@@ -6697,6 +6906,16 @@ ${(() => {
                             </button>
                         </div>
                     ` : ''}
+
+                    <div style="margin-top:24px;border-top:2px solid #e5e7eb;padding-top:16px;">
+                        <h3 style="margin:0 0 6px;">🏅 Milestones</h3>
+                        <p style="color:#6b7280;font-size:13px;margin:0 0 12px;">Achievements worth stopping the room for. Each one crossed earns its own reveal slide in the show and can have its own sound in Sound Studio. Changes here save themselves — no need to tap Save.</p>
+                    </div>
+                </div>
+                ${window.milestoneCardsHTML()}
+                <div class="hx-savebar">
+                    <button onclick="saveSettings()" class="btn-primary" style="flex:1;">💾 Save Settings</button>
+                    <button onclick="resetSettings()" class="btn-secondary">🔄 Reset to Defaults</button>
                 </div>
                 <div style="text-align:center;color:#9ca3af;font-size:11px;margin-top:16px;padding:8px;">
                     App version: ${APP_VERSION}
@@ -6742,8 +6961,10 @@ ${(() => {
             window.testPlaySound(inp ? inp.value : '');
         };
         
-        const renderSoundTest = () => {
-            const app = document.getElementById('app');
+        // The Sound Test widget (v2026.11.13.61): one builder, two hosts — the
+        // Sound Studio screen (a test strip at the top) and the standalone
+        // 'soundtest' view, kept working for old links.
+        const soundTestWidgetHTML = () => {
             // Gather the distinct filenames the app already references, so Ron can confirm those load.
             const known = new Set();
             try {
@@ -6753,18 +6974,7 @@ ${(() => {
             const knownList = Array.from(known).sort();
             // Some common filenames Ron might be uploading — editable starting points.
             const suggestions = ['applause.mp3', 'cheer.mp3', 'drumroll.mp3', 'airhorn.mp3', 'fanfare.mp3', 'sad-trombone.mp3'];
-            
-            app.innerHTML = `
-                <button class="back-btn" onclick="stopTestSound(); navigate('home')">← Back</button>
-                <div class="card">
-                    <h2>🔊 Sound Test</h2>
-                    <p style="color:#6b7280;margin-bottom:16px;">
-                        Test MP3 files you've uploaded to the <code>Sounds/</code> folder on GitHub before wiring
-                        them into the presentation. Type a filename and tap Play. A bare name like
-                        <code>applause.mp3</code> is looked up in <code>Sounds/</code> automatically; you can also
-                        paste a full path or URL.
-                    </p>
-                    
+            return `
                     <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
                         <input id="soundTestInput" type="text" placeholder="applause.mp3"
                                style="flex:1;min-width:200px;padding:12px;border:2px solid #d1d5db;border-radius:8px;font-size:16px;"
@@ -6796,11 +7006,26 @@ ${(() => {
                         <strong>Tips:</strong> filenames are case-sensitive and must match exactly what's in GitHub.
                         If a file won't play, confirm it's committed to <code>Sounds/</code> and the page has been
                         refreshed. Some browsers need one tap on the page before audio is allowed — tapping Play counts.
-                    </div>
+                    </div>`;
+        };
+        
+        const renderSoundTest = () => {
+            const app = document.getElementById('app');
+            app.innerHTML = `
+                <button class="back-btn" onclick="stopTestSound(); navigate('home')">← Back</button>
+                <div class="card">
+                    <h2>🔊 Sound Test</h2>
+                    <p style="color:#6b7280;margin-bottom:16px;">
+                        Test MP3 files you've uploaded to the <code>Sounds/</code> folder on GitHub before wiring
+                        them into the presentation. This now lives at the top of the
+                        <strong onclick="navigate('soundstudio')" style="color:#4338ca;cursor:pointer;text-decoration:underline;">Sound Studio</strong> —
+                        the standalone page stays for old links.
+                    </p>
+                    ${soundTestWidgetHTML()}
                 </div>
             `;
         };
-        
+
         const renderExport = () => {
             const app = document.getElementById('app');
             const totalRecords = state.players.length + state.courses.length + state.teams.length + state.events.length + state.rounds.length;
@@ -7847,20 +8072,16 @@ ${(() => {
         // Each team gets its own walk-up track, keyed by team id so it survives renames.
         window.teamWalkupSlot = (teamId) => 'TEAM WALKUP:' + teamId;
 
-        window.showMilestoneSettings = () => {
-            const app = document.getElementById('app');
+        // Milestones live in two hosts now (v2026.11.13.61): the standalone
+        // 'milestones' view and a section of Scoring & Settings. The cards are
+        // built once, here; the save handlers re-render whichever host is open.
+        window.__milestonesRerender = () => {
+            if (state.view === 'settings') window.__rerenderKeepScroll();
+            else showMilestoneSettings();
+        };
+        window.milestoneCardsHTML = () => {
             const cfg = window.getMilestoneConfig();
-            app.innerHTML = `
-                <button class="back-btn" onclick="navigate('home')">← Back</button>
-                <div class="card">
-                    <h2>🏅 Milestones</h2>
-                    <p style="color:#6b7280;margin-bottom:10px;">
-                        Achievements worth stopping the room for. Set the thresholds that matter
-                        to your group — each one that gets crossed earns its own reveal slide and
-                        can have its own sound in Sound Studio.
-                    </p>
-                </div>
-                ${window.MILESTONE_DEFS.map(d => {
+            return window.MILESTONE_DEFS.map(d => {
                     const s = cfg[d.key];
                     return `
                         <div class="card" style="${s.on ? '' : 'opacity:0.6;'}">
@@ -7894,13 +8115,28 @@ ${(() => {
                                     </div>
                                 </div>`}
                         </div>`;
-                }).join('')}`;
+                }).join('');
+        };
+        window.showMilestoneSettings = () => {
+            const app = document.getElementById('app');
+            app.innerHTML = `
+                <button class="back-btn" onclick="navigate('home')">← Back</button>
+                <div class="card">
+                    <h2>🏅 Milestones</h2>
+                    <p style="color:#6b7280;margin-bottom:10px;">
+                        Achievements worth stopping the room for. Set the thresholds that matter
+                        to your group — each one that gets crossed earns its own reveal slide and
+                        can have its own sound in Sound Studio.
+                    </p>
+                    <p style="color:#6b7280;font-size:13px;margin-bottom:0;">These also live under ⚙️ Scoring &amp; Settings → Milestones.</p>
+                </div>
+                ${window.milestoneCardsHTML()}`;
         };
         window.toggleMilestone = (key) => {
             const cfg = window.getMilestoneConfig();
             cfg[key].on = !cfg[key].on;
             save('settings', { ...state.settings, milestoneConfig: cfg });
-            showMilestoneSettings();
+            window.__milestonesRerender();
         };
         window.saveMilestoneThresholds = (key) => {
             const el = document.getElementById('ms_' + key);
@@ -7912,14 +8148,14 @@ ${(() => {
             cfg[key].thresholds = vals.sort((a, b) => a - b);
             save('settings', { ...state.settings, milestoneConfig: cfg });
             notify('✅ Thresholds saved');
-            showMilestoneSettings();
+            window.__milestonesRerender();
         };
         window.resetMilestoneThresholds = (key) => {
             const def = window.MILESTONE_DEFS.find(d => d.key === key);
             const cfg = window.getMilestoneConfig();
             cfg[key].thresholds = def.defaults.slice();
             save('settings', { ...state.settings, milestoneConfig: cfg });
-            showMilestoneSettings();
+            window.__milestonesRerender();
         };
 
         window.showSoundStudio = () => {
@@ -8008,6 +8244,15 @@ ${(() => {
                             <span style="color:#6b7280;margin-left:8px;">${window.getGhToken() ? 'Uploads enabled on this device' : 'Needed once before uploading'}</span>
                         </div>
                     </div>
+                </div>
+
+                <div class="card">
+                    <details>
+                        <summary style="cursor:pointer;font-weight:800;font-size:16px;">🔊 Test an MP3 file <span style="font-weight:600;color:#6b7280;font-size:13px;">— the old Sound Test, built in. Check a file plays here, then assign it below.</span></summary>
+                        <div style="margin-top:14px;">
+                            ${soundTestWidgetHTML()}
+                        </div>
+                    </details>
                 </div>
 
                 <div class="card">
@@ -8878,31 +9123,8 @@ ${(() => {
         window.renderDoctors = () => {
             const app = document.getElementById('app');
             // Quick health signals so the page tells you whether anything needs attention
-            const rounds = state.rounds || [];
-            const conflicted = rounds.filter(r => r.completed === true && r.active === false).length;
-            const scoredScheduled = rounds.filter(r => {
-                if (r.active !== false) return false;
-                return (r.teams || []).some(t => (t.players || []).some(p =>
-                    (p.scores || []).some(s => s !== '' && s != null)));
-            }).length;
-            const orphanEvents = (() => {
-                const ids = new Set((state.events || []).map(e => String(e.id)));
-                return rounds.filter(r => !ids.has(String(r.eventId))).length;
-            })();
-            let hsSuspect = 0;
-            try { hsSuspect = window.__hsAudit().flatMap(r => r.entries)
-                .filter(e => e.orphan || e.duplicate || e.future).length; } catch (e) {}
-            let hcMismatch = 0;
-            try {
-                const usgaOn = !!(state.settings && state.settings.useUSGAHandicap);
-                (state.players || []).forEach(p => {
-                    const a = window.__hcAnalyze(p);
-                    const val = usgaOn
-                        ? (a.usga ? Math.max(0, Math.min(54, Math.round(a.usga.index))) : null)
-                        : (a.dutch ? a.dutch.handicap : null);
-                    if (val != null && parseInt(p.handicap, 10) !== val) hcMismatch++;
-                });
-            } catch (e) {}
+            // (shared with the home Doctors tile via computeDoctorHealth)
+            const { conflicted, scoredScheduled, orphanEvents, hsSuspect, hcMismatch } = computeDoctorHealth();
 
             const card = (icon, title, desc, action, colour, issues) => `
                 <div class="list-item" onclick="${action}" style="cursor:pointer;border-left:5px solid ${colour};">
@@ -8940,20 +9162,15 @@ ${(() => {
                         'Audit the score history that feeds handicaps — orphans, duplicates and future-dated entries — and rebuild it from completed rounds.',
                         "navigate('historicDoctor')", '#0891b2',
                         hsSuspect ? `${hsSuspect} suspect entr${hsSuspect === 1 ? 'y' : 'ies'}` : '')}
+                    <div class="list-item" onclick="navigate('export')" style="cursor:pointer;border-left:5px solid #fb923c;">
+                        <div style="flex:1;">
+                            <strong style="font-size:17px;">💾 Export / Import — Data Care</strong><br>
+                            <small style="color:#6b7280;">Back up or restore all league data</small>
+                        </div>
+                        <div style="font-size:22px;color:#9ca3af;">→</div>
+                    </div>
                 </div>
-                <div class="card">
-                    <h3 style="margin:0 0 10px;">Related</h3>
-                    <div class="list-item" onclick="navigate('export')" style="cursor:pointer;">
-                        <div style="flex:1;"><strong>💾 Export / Import</strong><br>
-                        <small style="color:#6b7280;">Back up or restore all league data</small></div>
-                        <div style="font-size:22px;color:#9ca3af;">→</div>
-                    </div>
-                    <div class="list-item" onclick="navigate('soundtest')" style="cursor:pointer;">
-                        <div style="flex:1;"><strong>🔊 Sound Test</strong><br>
-                        <small style="color:#6b7280;">Check the presentation audio</small></div>
-                        <div style="font-size:22px;color:#9ca3af;">→</div>
-                    </div>
-                </div>`;
+`;
         };
 
         window.showRoundsDebug = () => {
@@ -32703,6 +32920,21 @@ ${(() => {
             }
         };
 
+        // Toggles on the Settings screen save themselves (v2026.11.13.61):
+        // commit just the one key, preserving everything else in the settings
+        // doc (point values, milestoneConfig, soundSlots), then re-render in
+        // place so the "Currently:" labels stay truthful.
+        window.saveToggleSetting = (key, checked) => {
+            try {
+                save('settings', { ...state.settings, [key]: !!checked });
+                notify(key === 'useUSGAHandicap' ? '✅ Handicap method saved' : '✅ Access setting saved');
+                window.__rerenderKeepScroll();
+            } catch (err) {
+                console.error('Toggle save error:', err);
+                showError('Failed to save setting: ' + err.message);
+            }
+        };
+
         window.saveSettings = () => {
             try {
                 const parseOrDefault = (id, defaultValue) => {
@@ -32710,7 +32942,11 @@ ${(() => {
                     return isNaN(value) ? defaultValue : value;
                 };
                 
+                // Spread the existing settings first: the doc carries keys this
+                // form doesn't show (milestoneConfig, soundSlots) and a form
+                // save must never drop them.
                 state.settings = {
+                    ...state.settings,
                     albatrossPoints: parseOrDefault('albatrossPoints', 10),
                     eaglePoints: parseOrDefault('eaglePoints', 7),
                     birdiePoints: parseOrDefault('birdiePoints', 5),
