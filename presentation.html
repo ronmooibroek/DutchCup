@@ -260,8 +260,8 @@ const PL = {}; DATA.players.forEach(p => { PL[p.id] = p; });
 const TEAM_OF = {}; DATA.teams.forEach((t, ti) => t.players.forEach(pid => { TEAM_OF[pid] = ti; }));
 const SET = DATA.settings;
 const pname = pid => (PL[pid] ? PL[pid].name : '—');
-const tname = pid => DATA.teams[TEAM_OF[pid]].name;
-const tcolor = pid => DATA.teams[TEAM_OF[pid]].color || '#888';
+const tname = pid => { const t = DATA.teams[TEAM_OF[pid]]; return t ? t.name : 'Free agent'; };
+const tcolor = pid => { const t = DATA.teams[TEAM_OF[pid]]; return (t && t.color) || '#888'; };
 
 function courseHcp(pid, round) {
   const rp = round.players[pid]; if (!rp) return 0;
@@ -397,7 +397,7 @@ function cumulative(night) {
   for (let n = 1; n <= night; n++) {
     const r = DATA.rounds[n - 1]; if (!r || !r.completed) continue;
     const c = RC(n);
-    Object.values(c.players).forEach(d => { inds[d.pid] += d.total; teams[TEAM_OF[d.pid]] += d.total; });
+    Object.values(c.players).forEach(d => { inds[d.pid] += d.total; const ti = TEAM_OF[d.pid]; if (ti != null) teams[ti] += d.total; });
   }
   return { teams, inds };
 }
@@ -2869,7 +2869,8 @@ function dataCheck() {
     ps.forEach(d => { scores += ((r.players[d.pid] || {}).scores || []).length; if (!isFinite(d.total)) issues.push('Night ' + (i + 1) + ': ' + pname(d.pid) + ' has no computable total'); });
     if (c.skinsLog.length !== 18) issues.push('Night ' + (i + 1) + ': skins record incomplete');
     const teamSum = standings(i + 1).reduce((s, x) => s + x.total, 0);
-    const indSum = Object.values(cumulative(i + 1).inds).reduce((s, x) => s + x, 0);
+    const inds = cumulative(i + 1).inds;
+    const indSum = Object.keys(inds).reduce((s, pid) => s + (TEAM_OF[pid] != null ? inds[pid] : 0), 0);
     if (Math.abs(teamSum - indSum) > .01) issues.push('Night ' + (i + 1) + ': team and player totals disagree');
   });
   return { issues, scores, rounds };
