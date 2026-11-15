@@ -2456,7 +2456,7 @@ function sStandings(night) {
     bgImg(IMG.trophy, .30) +
     '<div class="kick">Act III · The Finale</div><div style="font-size:9vmin;">🏆</div>' +
     '<h1>' + (final ? 'THE FINAL STANDINGS' : 'THE STANDINGS') + '</h1>' +
-    '<div class="sub">After Night ' + night + ' — win probability from 10,000 simulated finishes.</div>' +
+    '<div class="sub">After Night ' + night + ' — the win probability, as it stands.</div>' +
     (night < DATA.event.nights ? '<div class="sub" style="margin-top:1.4vmin;">≈<b style="color:var(--gold)">' + fmt(Math.round(st.reduce((s, x) => s + x.total, 0) / night * (DATA.event.nights - night))) + ' points</b> still in play · ' + (DATA.event.nights - night) + ' night' + (DATA.event.nights - night > 1 ? 's' : '') + ' to go. Nobody is safe.</div>' : '') +
     ((st[0].total - st[1].total) <= 15 ? '<div style="margin-top:1.8vmin;"><span class="pill" style="font-size:2.3vmin;">⚡ ' + fmt(st[0].total - st[1].total) + ' points separate the top two</span></div>' : '') +
     '<div class="dials">' + st.slice().sort((a, b) => odds[b.team] - odds[a.team]).map(s => '<div class="dial">' + dialSvg(s.color, odds[s.team]) + '<div class="pct" style="color:' + s.color + '">' + Math.round(odds[s.team]) + '%</div><div class="tn">' + esc(s.name) + '</div>' + oddsDeltaHtml(s.team, odds, prevOdds) + (s.team === surgeTeam19 ? '<div style="margin-top:.6vmin;"><span class="pill" style="font-size:1.8vmin;">📈 SURGE</span></div>' : '') + '</div>').join('') + '</div>' });
@@ -3565,6 +3565,15 @@ function awardChat29(night, key, winner, round, c, h) {
     const sweep = (round.bbbAwards || []).some(a => a.bingo === winner.pid && a.bingo === a.bango && a.bango === a.bongo);
     if (sweep) return { text: 'All three B’s on one hole — the sweep. The rarest trick in this league.', sub };
   }
+  if (key === 'par3') {
+    // CYCLE 32 — the Wizard's own chatter: his par 3s set against the
+    // rest of his round, per hole. Programmatic contrast only; when
+    // the contrast isn't there, the margin card below speaks instead.
+    let v3 = 0, n3 = 0, vO = 0, nO = 0;
+    winner.nets.forEach((net, i) => { if (round.pars[i] === 3) { v3 += net - 3; n3++; } else { vO += net - round.pars[i]; nO++; } });
+    if (n3 && nO && (vO / nO - v3 / n3) >= 0.75)
+      return { text: 'The par 3s: ' + fmtNP(v3) + '. The other ' + nO + ' holes: ' + fmtNP(vO) + '. The short holes are where he lives.', sub };
+  }
   // the margin card: the runner-up is always derivable
   const award = FUN_AWARDS.find(a => a.key === key);
   let scored = null;
@@ -3741,6 +3750,16 @@ function sTomorrow29(night) {
   const gap = st[0].total - st[1].total;
   const par = r.pars ? r.pars.reduce((s, p) => s + p, 0) : 0;
   const left = DATA.event.nights - night;
+  // CYCLE 32 — tomorrow's groups live in the Tomorrow context now
+  // (Ron, Nov 15: "Add tomorrow groups here"). Where the slide can
+  // hold them — one fixture row — one press brings the foursomes up
+  // as a beat on THIS slide. A taller fixture list (measured at show
+  // scale: two fixture rows already push the groups 5px past the
+  // stage's edge, four rows by ~150px) puts them on the immediately
+  // following slide under the same Tomorrow header instead. Either
+  // way the groups have exactly one home, inside Tomorrow.
+  const fxRows = Math.ceil(tms.length / 2);
+  const gh = groupsHtml(tm);
   out.push({ ch: 'Tomorrow', snd: SND.nail, html:
     bgImg(courseImg(r.course) || IMG.hero, .45) +
     '<div style="position:relative;z-index:2;"><div class="kick">Tomorrow · Night ' + tm + ' of ' + DATA.event.nights + '</div>' +
@@ -3749,9 +3768,12 @@ function sTomorrow29(night) {
     weatherHtml() +
     (heads.length ? '<div style="margin-top:2vmin;display:flex;gap:1.2vmin;justify-content:center;flex-wrap:wrap;">' + heads.join('') + '</div>' : '') +
     '<div style="margin-top:1.8vmin;"><span class="pill" style="font-size:2.2vmin;">' + esc(st[0].name) + ' lead ' + esc(st[1].name) + ' by ' + fmt(gap) + ' · ' + left + ' night' + (left === 1 ? '' : 's') + ' to play</span></div>' +
-    '<div style="margin-top:1.6vmin;">' + fixtureChips(tm) + '</div></div>' });
-  const gh = groupsHtml(tm);
-  if (gh) out.push({ ch: 'Tomorrow', snd: SND.bed, html: p29bg() + '<div style="position:relative;z-index:2;width:100%;">' + gh + '</div>' });
+    '<div style="margin-top:1.6vmin;">' + fixtureChips(tm) + '</div>' +
+    (fxRows <= 1 ? '<div class="bt" data-b="1" style="width:100%;">' + gh + '</div>' : '') + '</div>' });
+  if (fxRows > 1) out.push({ ch: 'Tomorrow', snd: SND.bed, html:
+    bgImg(courseImg(r.course) || IMG.hero, .45) +
+    '<div style="position:relative;z-index:2;width:100%;"><div class="kick">Tomorrow · Night ' + tm + ' of ' + DATA.event.nights + '</div>' +
+    '<h2 class="p29serif" style="font-size:5.2vmin;">' + esc(r.course) + '</h2>' + gh + '</div>' });
   if (tm === DATA.event.nights) out.push({ ch: 'Tomorrow', dwell: 6000, snd: SND.nail, html:
     bgImg(IMG.trophy, .5) + '<div style="position:relative;z-index:3;"><div class="kick">The Dutch Cup</div>' +
     '<div class="p29serif" style="font-weight:900;font-size:8.6vmin;line-height:1.08;">TOMORROW NIGHT.<br>ONE CUP.</div>' +
@@ -4333,6 +4355,77 @@ function sRaces30(night) {
   return [...sBBBReveal30(night), ...sTallyRace30(night, 'bbb'), ...sTallyRace30(night, 'ctp')];
 }
 
+/* ---------- CYCLE 32 · LOW NET — the countdown reveal ----------
+   Ron (Nov 15): Low Net leaves the undercard and gets a proper
+   reveal. Act IV opens with it: a title card, then an AUTO-PLAYING
+   COUNTDOWN through the field's actual nets, worst to best, with
+   intervals that GROW as the count nears the winning number — the
+   count decelerates onto it. The landing celebrates the REAL low
+   net man, whoever he is. The no-repeat law (Cycle 17) stands: if
+   he already banked this prize on an earlier night, a third slide
+   passes the prize to the eligible man — the lowest net among the
+   men who haven't won it — crowned PRIZE WINNER there. If the real
+   winner is eligible, the landing itself crowns him and there is
+   no pass-down slide. Pressing mid-count finishes it instantly;
+   stepping back onto it lands it complete (the Cycle 30 idiom). */
+function lowNetWinNight32(night, pid) {
+  // the night (before `night`) on which pid banked the Low Net prize, or 0
+  const won = new Set(); let found = 0;
+  for (let m = 1; m < night; m++) {
+    const pk = lowNetPrizePick(Object.values(RC(m).players), won);
+    if (String(pk.prize.pid) === String(pid)) found = m;
+    won.add(pk.prize.pid);
+  }
+  return found;
+}
+function sLowNet32(night) {
+  const CH = 'Act IV · Low Net';
+  const h = honours(night); if (!h || !h.lowNet) return [];
+  const values = Object.values(RC(night).players).map(d => d.net).sort((a, b) => b - a);
+  if (!values.length) return [];
+  const n = values.length;
+  // the decelerating schedule: first tick at 300 ms, then gaps that
+  // grow quadratically (140 ms → ~1,020 ms) — total ≈ 6.4 s for 12 men
+  const delays = [300];
+  for (let k = 1; k < n; k++) { const t = k / (n - 1); delays.push(delays[k - 1] + Math.round(140 + 880 * t * t)); }
+  const totalMs = delays[n - 1] + 950;
+  const real = h.lowNet, prize = h.lowNetPrize, inel = h.lowNetIneligible;
+  const out = [];
+  out.push({ ch: CH, snd: SND.pulse, html:
+    p29bg() + '<div class="kick">' + CH + '</div>' +
+    '<div style="font-size:7vmin;line-height:1.1;">🏅</div>' +
+    '<h2 class="p29serif" style="font-size:6.6vmin;">Low Net</h2>' +
+    '<div class="sub" style="font-size:2.5vmin;">Twelve men. Twelve nets. We count down to the lowest —<br>and the prize can only be banked once a week.</div>' });
+  out.push({ ch: CH, count32: { values, delays, totalMs, fxCols: [tcolor(real.pid), '#ffd75e'] }, html:
+    '<div class="c32" data-c32-count="' + values.join(',') + '" data-c32-delays="' + delays.join(',') + '" data-c32-real="' + real.pid + '" data-c32-prize="' + prize.pid + '">' +
+    p29bg() + '<div class="kick">' + CH + ' · The Countdown</div>' +
+    '<div class="sub" style="font-size:2.2vmin;letter-spacing:.14em;font-weight:800;">THE FIELD’S NETS — COUNTING DOWN</div>' +
+    '<div class="c32num">' + values[0] + '</div>' +
+    '<div>' + values.map(() => '<span class="c32dot"></span>').join('') + '</div>' +
+    '<div class="c32land">' +
+      '<div style="margin-top:1.4vmin;">' + face(real.pid, true) + '</div>' +
+      '<div class="p29serif" style="font-weight:900;font-size:5.6vmin;color:var(--gold);margin-top:.6vmin;">NET ' + real.net + '</div>' +
+      '<div style="margin-top:1vmin;"><span class="pill" style="font-size:2.4vmin;">' + (inel ? 'THE REAL LOW NET OF THE NIGHT' : '🏆 PRIZE WINNER — THE LOW NET OF THE NIGHT') + '</span></div>' +
+      '<div class="sub" style="font-size:2.3vmin;margin-top:1vmin;">' + (inel ? 'The best number anyone posted tonight. Nobody takes that away from him.' : 'The lowest net of the night — and the prize is his.') + '</div>' +
+    '</div></div>' });
+  if (inel) {
+    const wonNight = lowNetWinNight32(night, real.pid);
+    out.push({ ch: CH, fx: 'confetti', fxCols: [tcolor(prize.pid), '#ffd75e'], snd: SND.first, html:
+      p29bg() + '<div class="kick">' + CH + ' · The Prize</div>' +
+      '<h2 class="p29serif" style="font-size:5.2vmin;">But the prize moves on</h2>' +
+      '<div style="display:flex;align-items:center;justify-content:center;gap:2.4vmin;margin-top:2.2vmin;opacity:.55;filter:grayscale(1);">' + face(real.pid, false, true) +
+      '<div style="text-align:left;"><div style="font-weight:900;font-size:3vmin;">' + esc(pname(real.pid)) + ' — net ' + real.net + '</div>' +
+      '<div class="sub" style="font-size:2.2vmin;">He took the Low Net prize on Night ' + wonNight + '. It can’t be won twice.</div></div></div>' +
+      '<div style="font-size:4.4vmin;margin:1vmin 0;">⬇️</div>' +
+      '<div>' + face(prize.pid, true) + '</div>' +
+      '<div class="p29serif" style="font-weight:900;font-size:5.2vmin;color:var(--gold);margin-top:.6vmin;">NET ' + prize.net + '</div>' +
+      '<div style="margin-top:1vmin;"><span class="pill" style="font-size:2.4vmin;">🏆 PRIZE WINNER</span></div>' +
+      '<div class="sub" style="font-size:2.3vmin;margin-top:1vmin;">The lowest net among the men who haven’t banked it — the prize is ' + esc(sname(prize.pid)) + '’s.</div>' +
+      '<span style="display:none;" data-c32-passdown="' + prize.pid + '"></span>' });
+  }
+  return out;
+}
+
 /* ---------- D · Act IV: the fun awards, enlarged ---------- */
 function pickFunAwards30(night, funWonState) {
   // The engine's rotation, verbatim — one change: the headline cap is
@@ -4368,6 +4461,9 @@ function sFun30(night, funWon) {
     '<div style="font-size:8vmin;line-height:1.1;">🏆</div>' +
     '<h1 class="p29serif" style="font-size:8vmin;">The Fun Awards</h1>' +
     '<div class="sub" style="font-size:2.6vmin;">Not for points. For glory — and for the room.</div>' }];
+  // CYCLE 32 — Low Net opens the act with its own countdown reveal
+  // (it left the undercard; it lives here and nowhere else).
+  out.push(...sLowNet32(night));
   const headlined = new Set();
   const awardSlide = (key, emo, ttl, winnerPid, line, snd, opts) => {
     opts = opts || {};
@@ -4390,14 +4486,36 @@ function sFun30(night, funWon) {
     if (chat) out.push(chat29(CH, chat.text, chat.sub, SND.bed));
   };
   picks.forEach(p => awardSlide(p.award.key, p.award.emo, p.award.ttl, p.winner.pid, p.line, AWARD_SND[p.award.key]));
-  // the By-The-Pars family HEADLINES whenever it fires (Cycle 30) —
-  // still never over a man already headlined, never a tie, and the
-  // Par 5 Monster never shares a night with the same man's Vulture.
   const bp = byPars(night);
   const vulturePick = picks.find(p => p.award.key === 'vulture');
   const demotedPars = [];
-  [{ par: 3, key: 'par3', emo: '🧙', ttl: 'PAR 3 WIZARD' },
-   { par: 5, key: 'par5', emo: '🐉', ttl: 'PAR 5 MONSTER' },
+  // CYCLE 32 — PAR 3 WIZARD is a first-class award now (Ron, Nov 15):
+  // it leaves the By-The-Pars family and headlines with full staging
+  // EVERY night byPars gives it a single winner — it is not demoted
+  // when its man was already headlined by a rotation pick (N2 Neil,
+  // N4 Sam both were). Its evidence is his par-3 hole strip: the
+  // house pop for each hole (net), the gross, the net. A TIE follows
+  // byPars' existing behaviour — the winners array holds every tied
+  // man and the honour is shared on the undercard, as ties always
+  // were in the family. The math is byPars' own, promoted not copied.
+  const bp3 = bp.find(x => x.par === 3);
+  if (bp3 && bp3.winners.length === 1) {
+    const wz = bp3.winners[0], wd = c.players[wz];
+    const wscores = ((round.players[wz] || {}).scores) || [];
+    const ev = wd ? holeChips29(round.pars.map((p, i) => ({ p, i })).filter(x => x.p === 3).map(x => {
+      const net = wd.nets[x.i], diff = net - 3, gross = wscores[x.i];
+      const pop = diff <= -2 ? '🦅' : diff === -1 ? '🐦' : diff === 0 ? '➖' : diff === 1 ? '❌' : '❌❌';
+      return { m: pop + ' ' + (typeof gross === 'number' ? gross : net), s: 'HOLE ' + (x.i + 1) + ' · NET ' + net, hot: diff < 0 };
+    })) : '';
+    awardSlide('par3', '🧙', 'PAR 3 WIZARD', wz, 'Net ' + fmtNP(bp3.v) + ' across the par 3s tonight', SND.fairy, ev ? { ev } : {});
+  } else if (bp3 && bp3.winners.length > 1) {
+    demotedPars.push({ emo: '🧙', ttl: 'PAR 3 WIZARD', par: 3, entry: bp3 });
+  }
+  // the rest of the By-The-Pars family HEADLINES whenever it fires
+  // (Cycle 30) — still never over a man already headlined, never a
+  // tie, and the Par 5 Monster never shares a night with the same
+  // man's Vulture.
+  [{ par: 5, key: 'par5', emo: '🐉', ttl: 'PAR 5 MONSTER' },
    { par: 4, key: 'par4', emo: '👑', ttl: 'PAR 4 KING' }].forEach(pd => {
     const entry = bp.find(x => x.par === pd.par);
     if (!entry || !entry.winners.length) return;
@@ -4427,7 +4545,9 @@ function undercard30(night, demotedPars, includePotd) {
   const items = [];
   const add = (emo, ttl, pid, line) => { if (pid && line) items.push({ emo, ttl, pid, line }); };
   if (h) {
-    add('🏅', 'LOW NET', h.lowNetPrize.pid, 'Net ' + h.lowNetPrize.net + ' takes the prize' + (h.lowNetIneligible ? ' — ' + sname(h.lowNetIneligible.pid) + ' shot ' + h.lowNetIneligible.net + ', but the prize can’t repeat' : ''));
+    // CYCLE 32 — LOW NET is no longer an undercard fact: it has its
+    // own countdown segment at the top of Act IV (sLowNet32), and a
+    // fact appears in exactly one home per deck. LOW GROSS stays.
     add('⛳', 'LOW GROSS', h.lowGross.pid, 'Gross ' + h.lowGross.gross + ' — the best raw score of the night');
   }
   if (includePotd) {
@@ -4518,6 +4638,31 @@ function later30(fn, ms) { autoTimers30.push(setTimeout(fn, ms)); }
 function startAuto30(s, dir) {
   if (s.race) startRace30(s, dir);
   else if (s.tally) startTally30(s, dir);
+  else if (s.count32) startCount32(s, dir);
+}
+/* CYCLE 32 — the Low Net countdown runs itself on the race idiom:
+   ticks land on the schedule baked into the slide (decelerating),
+   a press mid-count finishes it instantly, stepping back onto it
+   lands it complete. The finisher reveals the landing and, when the
+   real winner is eligible, the celebration is his prize moment. */
+function startCount32(s, dir) {
+  const root = slidesEl.querySelector('.c32');
+  if (!root) { s._autoDone = true; return; }
+  const C = s.count32, last = C.values.length - 1;
+  const numEl = root.querySelector('.c32num');
+  const dots = root.querySelectorAll('.c32dot');
+  let applied = -1;
+  const apply = k => { if (k <= applied) return; applied = k;
+    numEl.textContent = C.values[k];
+    dots.forEach((dEl, i) => dEl.classList.toggle('off', i < k));
+  };
+  const fin = celebrate => { apply(last); root.classList.add('c32done'); s._autoDone = true; autoFinish30 = null;
+    window.__count32 = { doneAt: performance.now() };
+    if (celebrate) { if (!RM) burst(C.fxCols); playSnd(SND.first); } };
+  if (dir < 0 || RM) { apply(last); root.classList.add('c32done'); s._autoDone = true; return; }
+  autoFinish30 = () => fin(true);
+  C.values.forEach((v, k) => later30(() => apply(k), C.delays[k]));
+  later30(() => fin(true), C.totalMs);
 }
 function startRace30(s, dir) {
   const root = slidesEl.querySelector('.r30');
@@ -4693,8 +4838,7 @@ function weatherHtml() {
     '<div style="font-size:6.4vmin;">' + m[0] + '</div>' +
     '<div style="text-align:left;"><div style="font-weight:900;font-size:3.6vmin;">' + Math.round(w.tMax) + '° / ' + Math.round(w.tMin) + '°F</div>' +
     '<div class="sub" style="font-size:2vmin;">' + m[1] + ' · Little River, SC</div></div>' +
-    '<div style="margin-left:auto;text-align:right;font-size:2.2vmin;font-weight:700;line-height:1.5;">💨 ' + Math.round(w.wind) + ' mph<br>🌧️ ' + w.precip + '% rain</div></div>' +
-    '<div class="sm" style="margin-top:.8vmin;">Forecast pulled ' + w.pulled + ' — the app’s own method.</div>';
+    '<div style="margin-left:auto;text-align:right;font-size:2.2vmin;font-weight:700;line-height:1.5;">💨 ' + Math.round(w.wind) + ' mph<br>🌧️ ' + w.precip + '% rain</div></div>';
 }
 function groupsHtml(night) {
   const r = DATA.rounds[night - 1]; if (!r) return '';
@@ -4761,7 +4905,7 @@ function sOdds(night) {
       return '<div class="oddsRow"><div class="who"><span style="color:' + s.color + '">●</span>' + esc(s.name) + '</div><div class="bar"><div class="fill" style="width:' + Math.max(1.5, pct) + '%;background:' + s.color + '"></div><span class="oball" style="left:' + Math.max(1.5, pct) + '%;">⚪</span></div><div class="pc">' + pct.toFixed(1) + '%</div><div>' + mvH + '</div></div>';
     }).join('') + '</div>' +
     (surge26 && surge26.mv >= 0.05 ? '<div style="margin-top:1.6vmin;"><span class="pill" style="font-size:2.2vmin;">🚀 SURGE — ' + esc(surge26.name) + '’s Cup chance jumped ' + surge26.mv.toFixed(1) + ' points tonight</span></div>' : '') +
-    '<div class="sub" style="margin-top:2vmin;">10,000 simulated finishes of the remaining ' + remaining + ' night' + (remaining === 1 ? '' : 's') + ' — the scoring app’s own model. Movement is against last night. The ball sits where the week says the Cup is heading.</div>' };
+    '<div class="sub" style="margin-top:2vmin;">Movement is against last night. The ball sits where the week says the Cup is heading.</div>' };
 }
 function sRoad(night) {
   if (night < 2) return null;
