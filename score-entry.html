@@ -727,7 +727,7 @@ document.addEventListener('visibilitychange', () => {
     try { if (document.visibilityState === 'hidden' && hasPendingEdits()) flushPendingEdits(); } catch (e) {}
 });
 
-const SE_VERSION = '2.45.0'; // Extra 9 groups fix: the groups save now writes a Firestore-legal shape (array of { players } maps — 2.43's array-of-arrays was rejected by Firestore, so every live save failed); the draft-order strip is gone (groups only), players can be dragged group to group (tap-swap kept), and tiles show gross · net · hcp with the draft's tie-break pills (hcp tie-break / 🪙 coin flip)
+const SE_VERSION = '2.46.0'; // Player-switch save fix: flushPendingEdits now captures the group/player context with its edits snapshot (the transaction reads them after an await, and __switchPlayer reset them synchronously — a bare switch silently dropped unflushed scores/balls and wrote BBB under groupNumber null, then cleared the on-device queue); __switchPlayer also defers its reset while a save is in flight so the save chain drains first
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
@@ -1647,6 +1647,12 @@ async function saveGroupAssignments() {
 }
 
 window.__switchPlayer = function() {
+    // A save already in flight may not cover the latest taps, and the flush
+    // this switch is about to trigger would only reschedule behind it. Never
+    // reset the group context or the edit queue under an in-flight save —
+    // wait for the save chain to drain (it flushes the remaining taps itself,
+    // under the group that made them), then switch.
+    if (state.saving) { state.pendingTimer = setTimeout(window.__switchPlayer, 400); return; }
     if (state.pendingTimer) clearTimeout(state.pendingTimer);
     if (hasPendingEdits()) flushPendingEdits();
     try { localStorage.removeItem('dcScoreMe'); } catch (e) {}
@@ -4521,6 +4527,13 @@ async function flushPendingEdits() {
     // state.pendingEdits (so effective* keeps showing them) and get their own flush.
     // On success we prune only the keys whose values match this snapshot.
     const edits = JSON.parse(JSON.stringify(state.pendingEdits));
+    // The edits were all made under the CURRENT group/player context, so capture
+    // that with the snapshot. The transaction below runs after an await, and a
+    // caller like the player switch resets state.groupNumber/currentPlayerId
+    // synchronously in the meantime — the write must still land under the
+    // group that made the edits, never against the reset (null) context.
+    const flushGroupNumber = state.groupNumber;
+    const flushPlayerId = state.currentPlayerId;
     state.saving = true;
     state.pendingTimer = null;
 
@@ -4548,10 +4561,10 @@ async function flushPendingEdits() {
                 round.startedAt = round.startedAt || Date.now();
             }
 
-            // 1) Scores + balls (per-player edits within current group)
+            // 1) Scores + balls (per-player edits within the group that made them)
             (round.teams || []).forEach(team => {
                 (team.players || []).forEach(player => {
-                    if (player.groupNumber !== state.groupNumber) return;
+                    if (player.groupNumber !== flushGroupNumber) return;
                     const pid = idStr(player.id);
 
                     if (edits.scores[pid]) {
@@ -4611,7 +4624,7 @@ async function flushPendingEdits() {
 
                 if (!round.ctpMeta || typeof round.ctpMeta !== 'object') round.ctpMeta = {};
                 if (!Array.isArray(round.ctpLog)) round.ctpLog = [];
-                const setterName = nameOf(state.currentPlayerId) || 'Course';
+                const setterName = nameOf(flushPlayerId) || 'Course';
 
                 Object.keys(edits.ctpWinners).forEach(hStr => {
                     const holeIdx = parseInt(hStr, 10);
@@ -4639,20 +4652,20 @@ async function flushPendingEdits() {
             // 3) BBB edits (replace any entry for the hole)
             if (Object.keys(edits.bbb).length > 0) {
                 if (!Array.isArray(round.bbbAwards)) round.bbbAwards = [];
-                const myIds = currentGroupPlayerIds(round);
+                const myIds = getGroupPlayers(round, flushGroupNumber).map(p => idStr(p.id));
                 Object.keys(edits.bbb).forEach(hStr => {
                     const holeIdx = parseInt(hStr, 10);
                     const slots = edits.bbb[hStr];
                     // Drop only THIS group's entry for the hole; other groups keep theirs.
                     round.bbbAwards = round.bbbAwards.filter(a => {
                         if (!a || a.holeIdx !== holeIdx) return true;
-                        if (a.groupNumber != null) return a.groupNumber !== state.groupNumber;
+                        if (a.groupNumber != null) return a.groupNumber !== flushGroupNumber;
                         return !bbbEntryIsForGroup(a, myIds);
                     });
                     if (slots.bingo || slots.bango || slots.bongo) {
                         round.bbbAwards.push({
                             holeIdx,
-                            groupNumber: state.groupNumber,   // makes ownership explicit going forward
+                            groupNumber: flushGroupNumber,   // makes ownership explicit going forward
                             bingo: slots.bingo || '',
                             bango: slots.bango || '',
                             bongo: slots.bongo || ''
