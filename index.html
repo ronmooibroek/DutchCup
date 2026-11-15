@@ -896,7 +896,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = 'v2026.11.15.65';
+        const APP_VERSION = 'v2026.11.15.66';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -32048,16 +32048,11 @@ ${(() => {
                     save('players', updatedPlayers);
                     notify('✅ Round updated!');
                     
-                    // Clear active round but DON'T navigate yet - wait for user to close handicap modal
+                    // Clear active round and go straight to the leaderboard.
+                    // Handicap popup removed 2026-11-15 (Ron: save it for the presentation);
+                    // handicaps are still recalculated and saved above exactly as before.
                     state.activeRound = null;
-                    
-                    // Show handicap changes if any
-                    if (handicapChanges.length > 0) {
-                        setTimeout(() => showHandicapSummary(handicapChanges), 300);
-                    } else {
-                        // If no handicap changes, navigate immediately
-                        navigate('leaderboard');
-                    }
+                    navigate('leaderboard');
                 } else {
                     // Calculate BEFORE handicaps for all players in this round
                     const handicapChanges = [];
@@ -32207,16 +32202,11 @@ ${(() => {
                     
                     save('players', updatedPlayers);
                     
-                    // Clear active round but DON'T navigate yet - wait for user to close handicap modal
+                    // Clear active round and go straight to the leaderboard.
+                    // Handicap popup removed 2026-11-15 (Ron: save it for the presentation);
+                    // handicaps are still recalculated and saved above exactly as before.
                     state.activeRound = null;
-                    
-                    // Show handicap change summary BEFORE navigation, let user close it
-                    if (handicapChanges.length > 0 && handicapChanges.some(hc => hc.afterHandicap !== null)) {
-                        setTimeout(() => showHandicapSummary(handicapChanges), 100);
-                    } else {
-                        // If no handicap changes, navigate immediately
-                        navigate('leaderboard');
-                    }
+                    navigate('leaderboard');
                 }
                 
             } catch (err) {
