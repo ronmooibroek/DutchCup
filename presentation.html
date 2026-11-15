@@ -605,18 +605,37 @@ function matchesForNight(night) {
   });
   return out;
 }
-/* ---- the Extra 9 snake draft — the app's own logic (presentationAnalytics):
-   tomorrow's three Extra 9 teams are drafted off TONIGHT's scores. Sort all
-   12 players by gross (low first), net breaks ties, then snake-draft into
-   3 teams of 4: Team 1 gets picks 1, 6, 7, 12; Team 2 gets 2, 5, 8, 11;
-   Team 3 gets 3, 4, 9, 10. Each team's first pick is its captain. ---- */
+/* ---- the Extra 9 snake draft. CYCLE 33 — the scoring app (SE 2.45.0)
+   now drafts the groups itself off TONIGHT's scores and SAVES them on the
+   round (extra9Groups, in tee order). When the saved groups are there,
+   the show uses them VERBATIM — saved tee order, each group's first
+   player its captain, coin-flip players (extra9CoinFlips) marked 🪙, and
+   the saved first tee time / course shown as content. Otherwise the show
+   drafts with the app's own rule: sort all 12 by gross (low first), the
+   LOWER handicap index breaks ties, DATA player order last (a computed
+   draft never invents a coin flip), then snake into 3 teams of 4:
+   Team 1 gets picks 1, 6, 7, 12; Team 2 gets 2, 5, 8, 11; Team 3 gets
+   3, 4, 9, 10. Each team's first pick is its captain. ---- */
 function extra9Draft(night) {
   const c = RC(night); if (!c) return null;
+  const r = DATA.rounds[night - 1];
+  if (r && Array.isArray(r.extra9Groups) && r.extra9Groups.length === 3 &&
+      r.extra9Groups.every(g => g && Array.isArray(g.players) && g.players.length === 4)) {
+    const flips = new Set((r.extra9CoinFlips || []).map(String));
+    const saved = r.extra9Groups.map(g => g.players.map(rawPid => {
+      const pid = String(rawPid), d = c.players[pid];
+      return { pid, gross: d ? d.gross : null, net: d ? d.net : null, flip: flips.has(pid) };
+    }));
+    saved.saved = { teeTime: r.extra9TeeTime || '', course: r.extra9Course || '', flips: [...flips] };
+    return saved;
+  }
   const order = [];
   DATA.teams.forEach(tm => tm.players.forEach(pid => { if (c.players[pid]) order.push(pid); }));
   Object.keys(c.players).forEach(pid => { if (order.indexOf(pid) < 0) order.push(pid); });
-  const list = order.map(pid => ({ pid, gross: c.players[pid].gross, net: c.players[pid].net }));
-  list.sort((a, b) => (a.gross - b.gross) || (a.net - b.net));
+  const dataOrd = {}; DATA.players.forEach((p, i) => { dataOrd[p.id] = i; });
+  const list = order.map(pid => ({ pid, gross: c.players[pid].gross, net: c.players[pid].net,
+    idx: (PL[pid] && typeof PL[pid].index === 'number') ? PL[pid].index : 999, ord: dataOrd[pid] }));
+  list.sort((a, b) => (a.gross - b.gross) || (a.idx - b.idx) || (a.ord - b.ord));
   const teams = [[], [], []];
   list.forEach((p, idx) => {
     const round = Math.floor(idx / 3), pos = idx % 3;
@@ -2667,9 +2686,18 @@ function sGroups(tomorrowNight) {
     const PAT = [0, 1, 2, 2, 1, 0, 0, 1, 2, 2, 1, 0];
     const STINGS = [SND.hop, SND.sparkle, SND.whoosh, SND.fairy];
     const taken = [[], [], []];
+    // CYCLE 33 — saved groups (draft.saved) render the app's own groups:
+    // no pick numbers are claimed, coin-flip players carry 🪙, and the
+    // saved first tee time / course appear as a content line.
+    const saved33 = draft.saved || null;
+    const teeTxt33 = saved33 ? [saved33.teeTime ? 'First tee ' + saved33.teeTime : '', saved33.course || ''].filter(Boolean).join(' · ') : '';
+    const teeLine33 = teeTxt33 ? '<div style="font-size:2.7vmin;font-weight:800;margin-top:1.6vmin;">⛳ ' + esc(teeTxt33) + '</div>' : '';
     out.push({ ch: 'Tomorrow · The Extra 9 Draft', snd: SND.nail, html:
       '<div class="kick">Tomorrow · The Draft</div><h2>🎲 The Extra 9 Draft</h2>' +
-      '<div class="sub">Off tonight’s card — low gross picks first, snake order.<br>Twelve picks. Three teams. Captains first.</div>' +
+      (saved33
+        ? '<div class="sub">Off tonight’s card — the groups are set.<br>Three teams. Captains first.</div>'
+        : '<div class="sub">Off tonight’s card — low gross picks first, snake order.<br>Twelve picks. Three teams. Captains first.</div>') +
+      teeLine33 +
       '<div style="display:flex;justify-content:center;gap:1.1vmin;margin-top:2.6vmin;flex-wrap:wrap;opacity:.75;">' + draft.flat().map(p => miniFace(p.pid)).join('') + '</div>' });
     PAT.forEach((tm, k) => {
       const pick = draft[tm][taken[tm].length];
@@ -2678,22 +2706,25 @@ function sGroups(tomorrowNight) {
       const boardNow = taken.map((list, i) => '<div style="flex:1;border-top:.5vmin solid ' + DCOLORS[i] + ';padding-top:.7vmin;text-align:center;"><div style="font-weight:900;font-size:1.7vmin;color:' + DCOLORS[i] + ';letter-spacing:.14em;">TEAM ' + (i + 1) + '</div><div style="display:flex;justify-content:center;gap:.6vmin;margin-top:.5vmin;min-height:9.5vmin;">' + list.map(x => miniFace(x.pid)).join('') + '</div></div>').join('');
       out.push({ ch: 'Tomorrow · The Extra 9 Draft', dwell: isCap ? 4300 : 3000, snd: isCap ? SND.cheer : STINGS[k % 4], html:
         '<div style="position:absolute;inset:0;z-index:-1;background:radial-gradient(ellipse at 50% 30%,' + DCOLORS[tm] + '38,transparent 70%);"></div>' +
-        '<div class="kick">The Extra 9 Draft · Pick ' + (k + 1) + ' of 12</div>' +
+        '<div class="kick">The Extra 9 Draft · ' + (saved33 ? '' : 'Pick ') + (k + 1) + ' of 12</div>' +
         '<div style="font-weight:900;font-size:4.6vmin;color:' + DCOLORS[tm] + ';">TEAM ' + (tm + 1) + (isCap ? ' · 👑 CAPTAIN' : '') + '</div>' +
         '<div class="revealFx" style="margin:.8vmin 0;">' + face(pick.pid, true, true) + '</div>' +
-        '<h3 style="font-size:4.2vmin;">' + esc(pname(pick.pid)) + '</h3>' +
-        '<div class="sub">Gross ' + pick.gross + ' · Net ' + pick.net + '</div>' +
+        '<h3 style="font-size:4.2vmin;">' + esc(pname(pick.pid)) + (pick.flip ? ' 🪙' : '') + '</h3>' +
+        '<div class="sub">' + [pick.gross != null ? 'Gross ' + pick.gross + ' · Net ' + pick.net : '', pick.flip ? '🪙 settled by a coin flip' : ''].filter(Boolean).join(' · ') + '</div>' +
         '<div style="display:flex;gap:2vmin;width:min(120vmin,94%);margin-top:2.2vmin;">' + boardNow + '</div>' });
     });
     out.push({ ch: 'Tomorrow · The Extra 9 Draft', html:
       '<div class="kick">Tomorrow · The Extra 9</div><h2>🐍 The Snake Draft</h2>' +
-      '<div class="sub">Drafted off tonight’s scores — low gross picks first.</div>' +
+      (saved33
+        ? '<div class="sub">The groups are set — in tee order.</div>'
+        : '<div class="sub">Drafted off tonight’s scores — low gross picks first.</div>') +
       '<div style="display:flex;gap:2vmin;width:100%;margin-top:1.6vmin;">' + draft.map((tm, i) =>
         '<div style="flex:1;background:var(--card);border:2px solid ' + DCOLORS[i] + ';border-radius:2vmin;padding:1.8vmin 1.2vmin;">' +
-        '<div style="font-weight:900;font-size:2.6vmin;color:' + DCOLORS[i] + ';">TEAM ' + (i + 1) + '</div>' +
+        '<div style="font-weight:900;font-size:2.6vmin;color:' + DCOLORS[i] + ';">TEAM ' + (i + 1) + (saved33 ? ' · ' + ['1ST OFF', '2ND OFF', '3RD OFF'][i] : '') + '</div>' +
         '<div style="display:flex;flex-wrap:wrap;justify-content:center;gap:1vmin;margin-top:1.2vmin;">' + tm.map((p, ix) =>
-          '<div style="text-align:center;">' + miniFace(p.pid) + '<div style="font-size:1.6vmin;margin-top:.2vmin;">' + (ix === 0 ? '👑 captain' : '&nbsp;') + '</div></div>').join('') + '</div></div>').join('') + '</div>' +
-      '<div class="sub" style="margin-top:1.6vmin;">👑 = captain, each team’s first pick.</div>' });
+          '<div style="text-align:center;">' + miniFace(p.pid) + '<div style="font-size:1.6vmin;margin-top:.2vmin;">' + ([ix === 0 ? '👑 captain' : '', p.flip ? '🪙' : ''].filter(Boolean).join(' ') || '&nbsp;') + '</div></div>').join('') + '</div></div>').join('') + '</div>' +
+      teeLine33 +
+      '<div class="sub" style="margin-top:1.6vmin;">👑 = captain, each team’s first pick.' + (saved33 && saved33.flips.length ? ' 🪙 = settled by a coin flip.' : '') + '</div>' });
   }
   return out;
 }
@@ -5379,7 +5410,7 @@ try { const DC = dataCheck(); const el = document.querySelector('#dataCheck'); i
       else if (e != null) pid = String(e);
       if (pid) ex9.push(String(pid));
     });
-    return {
+    var out = {
       date: v.date, course: v.courseName, completed: !!v.completed,
       ts: (v.timestamp || v.id || 0), // CYCLE 31 — the handicap funnel's round timestamp (app: timestamp || id || 0)
       pars: v.pars, sis: v.handicaps, players: pmap,
@@ -5390,6 +5421,13 @@ try { const DC = dataCheck(); const el = document.querySelector('#dataCheck'); i
       photos: (v.photos || []).filter(function (ph) { return ph && ph.url; })
         .map(function (ph) { return { src: ph.url, playerIds: (ph.playerIds || []).map(String) }; })
     };
+    // CYCLE 33 — the scoring app's persisted Extra 9 groups (SE 2.45.0),
+    // carried ONLY when the round actually has them (mirrors gen_data.py).
+    if (Array.isArray(v.extra9Groups) && v.extra9Groups.length) out.extra9Groups = v.extra9Groups.map(function (g) { return { players: ((g && g.players) || []).map(String) }; });
+    if (Array.isArray(v.extra9CoinFlips) && v.extra9CoinFlips.length) out.extra9CoinFlips = v.extra9CoinFlips.map(String);
+    if (v.extra9TeeTime) out.extra9TeeTime = String(v.extra9TeeTime);
+    if (v.extra9Course) out.extra9Course = String(v.extra9Course);
+    return out;
   }
   function nyISO(offsetDays) {
     var d = new Date(Date.now() + offsetDays * 864e5);
