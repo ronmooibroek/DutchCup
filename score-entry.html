@@ -242,6 +242,29 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
     box-shadow: 0 8px 20px rgba(30,42,32,0.35); transform: translate(-50%, -50%);
 }
 .score-row.drop-hint { outline: 3px solid var(--fairway); outline-offset: 1px; }
+/* ── Live skins banner: sits under the tee sign on the scoring screen ── */
+.skins-banner {
+    background: #FFF8E1; border: 2px solid #E3A93E; border-radius: 12px;
+    padding: 8px 12px; margin-bottom: 8px;
+}
+.skins-banner.settled { background: #EDF4EE; border-color: var(--fairway); }
+.skins-pot { font-size: 15px; font-weight: 800; color: #7A5200; }
+.skins-line { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 14.5px; }
+.skins-banner.settled .skins-line { margin-top: 0; font-size: 15.5px; }
+.skins-sub { margin-top: 3px; font-size: 13.5px; font-weight: 600; color: var(--ink-soft); }
+.skins-ico { font-size: 20px; line-height: 1; }
+.skins-face { width: 30px; height: 30px; border-radius: 999px; overflow: hidden; flex-shrink: 0; position: relative; display: inline-block; background: #e5e7eb; }
+.skins-face .player-avatar { width: 100%; height: 100%; font-size: 14px; }
+.skins-face .avatar-wrap { position: absolute; inset: 0; display: block; }
+.skins-face .avatar-wrap .player-avatar { width: 100%; height: 100%; }
+.skins-face .avatar-wrap img.player-avatar-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.skin-won-card { animation: skinPop 0.35s ease-out; }
+@keyframes skinPop { from { transform: scale(0.85); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.skin-won-face { width: 84px; height: 84px; border-radius: 999px; overflow: hidden; margin: 10px auto 8px; position: relative; box-shadow: 0 4px 14px rgba(30,42,32,0.3); background: #e5e7eb; }
+.skin-won-face .player-avatar { width: 100%; height: 100%; font-size: 34px; }
+.skin-won-face .avatar-wrap { position: absolute; inset: 0; display: block; }
+.skin-won-face .avatar-wrap .player-avatar { width: 100%; height: 100%; }
+.skin-won-face .avatar-wrap img.player-avatar-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .avatar-panel .avatar-wrap { position: absolute; inset: 0; display: block; }
 .player-avatar { display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; }
 .bbb-badge { border: 2px solid var(--sand); border-radius: 999px; padding: 1px 8px; font-size: 13px; line-height: 1.4; cursor: pointer; }
@@ -701,7 +724,7 @@ document.addEventListener('visibilitychange', () => {
     try { if (document.visibilityState === 'hidden' && hasPendingEdits()) flushPendingEdits(); } catch (e) {}
 });
 
-const SE_VERSION = '2.43.0'; // Extra 9 groups: the "9" screen opens on a snake-draft groups view (gross, lower-handicap tie-break, coin flip) with tap swaps, tee order, first tee time + course
+const SE_VERSION = '2.44.0'; // Live skins: the hole scoring screen carries a skins banner (pot + standing skin / score to beat) and a congratulations when the last group beats the standing skin to win it
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
@@ -723,6 +746,7 @@ const state = {
     e9gDraft: null,            // Extra 9 groups draft { groups, teeTime, course, coinFlips, ranked, note }
     e9gSel: null,              // player id picked up for a swap in the groups view
     e9gCourseCustom: false,    // groups view: the "Another course…" chip is engaged
+    skinCheers: {},            // 'roundId:holeIdx' keys whose skin-win congratulations already fired this session
     sharePick: [],             // player ids picked in the ✉️ Share picker
     shareInit: false,          // Share picker defaulted to all emailable players once
     editGroups: false,         // group editor open (from the player picker)
@@ -1805,6 +1829,8 @@ function renderScoreEntry() {
     const appEl = $('#app');
     appEl.innerHTML = '';
     appEl.appendChild(buildHoleNav(round, groupPlayers));
+    const skinsBanner = buildSkinsBanner(round);
+    if (skinsBanner) appEl.appendChild(skinsBanner);
     appEl.appendChild(buildScoresList(round, groupPlayers));
     // Scores + BBB both live on each player's card now (chips + icon buttons) — no separate cards.
 
@@ -2149,12 +2175,15 @@ function scoreChipValues(par) {
 // the scorer stays on the same card and taps the next player's chip.
 function setScoreInline(playerId, value) {
     hapticTap(10);   // felt confirmation: the tap landed
+    const skinRound = getRoundById(state.selectedRoundId);
+    const skinBefore = skinRound ? skinCompletionSnapshot(skinRound, state.currentHole) : null;
     const pid = idStr(playerId);
     if (!state.pendingEdits.scores[pid]) state.pendingEdits.scores[pid] = {};
     state.pendingEdits.scores[pid][state.currentHole] = String(value);
     markUnsaved();
     renderScoreEntry();
     maybeCelebrateHoleComplete();
+    if (skinRound) maybeCongratulateSkin(skinRound, state.currentHole, skinBefore);
 }
 
 // ─── BBB helpers: per-player counts derived from the stored 3 slots ───
@@ -2293,6 +2322,8 @@ function buildScoreSheet(round, groupPlayers) {
 // or close it when everyone on the hole has a score.
 function setScoreTap(playerId, value) {
     hapticTap(10);   // felt confirmation: the tap landed
+    const skinRound = getRoundById(state.selectedRoundId);
+    const skinBefore = skinRound ? skinCompletionSnapshot(skinRound, state.currentHole) : null;
     const pid = idStr(playerId);
     const val = value == null ? '' : String(value);
 
@@ -2311,6 +2342,7 @@ function setScoreTap(playerId, value) {
     state.padExpanded = false;
     renderScoreEntry();
     maybeCelebrateHoleComplete();
+    if (skinRound) maybeCongratulateSkin(skinRound, state.currentHole, skinBefore);
 }
 
 // The hole is DONE when every player has a score AND all 3 BBB points are given.
@@ -2334,6 +2366,230 @@ function maybeCelebrateHoleComplete() {
     setStatus(`Hole ${state.currentHole + 1} done \u2713 \u2014 tap Next when ready`, 'saved');
 }
 
+
+// ─── LIVE SKINS on the scoring screen (Ron, 2026-11-15) ────────────────
+// Skins are NET, won by the UNIQUE lowest net on the hole; a tie at the
+// lowest net wins nothing and the pot carries (+1 per tied hole) — the
+// admin app's computeSkins semantics, mirrored live. Everything here is
+// derived from effectiveScore (saved scores + pending edits) on every
+// render, using the same stroke allocation as the screen's net shading.
+// The King of Ties split (a tied 18th at round settlement) is NOT shown
+// here — the banner never crowns a split winner.
+function skinsEnabled(round) {
+    if (!round || !Array.isArray(round.teams)) return false;
+    return (round.skins || {}).enabled !== false;
+}
+
+function skinNetForHole(round, p, holeIdx) {
+    const s = effectiveScore(round, p.id, holeIdx);
+    if (s === '' || s == null) return null;
+    const n = parseInt(s, 10);
+    if (isNaN(n) || n <= 0) return null;
+    const hc = seHandicapForRound(round, p);
+    return n - strokesOnHole(hc, (round.handicaps || [])[holeIdx]);
+}
+
+// Posted state of one hole across the whole round:
+// { total, postedCount, allIn, standing (unique low-net holder|null), bestNet }
+function skinsHoleLive(round, holeIdx) {
+    const players = getAllRoundPlayers(round);
+    const posted = [];
+    players.forEach(p => {
+        const net = skinNetForHole(round, p, holeIdx);
+        if (net != null) posted.push({ pid: idStr(p.id), name: p.name, net, player: p });
+    });
+    let standing = null, bestNet = null;
+    if (posted.length) {
+        bestNet = Math.min.apply(null, posted.map(c => c.net));
+        const leaders = posted.filter(c => c.net === bestNet);
+        if (leaders.length === 1) standing = leaders[0];
+    }
+    return {
+        total: players.length, postedCount: posted.length,
+        allIn: players.length > 0 && posted.length === players.length,
+        standing, bestNet
+    };
+}
+
+// Skins up for grabs on a hole: 1 + the settled tied holes immediately
+// before it. The walk stops at the first hole with a unique winner and
+// at the first hole that isn't fully scored yet.
+function skinsPotForHole(round, holeIdx) {
+    let pot = 1;
+    if ((round.skins || {}).carryover === false) return pot;
+    for (let i = holeIdx - 1; i >= 0; i--) {
+        const st = skinsHoleLive(round, i);
+        if (!st.allIn || st.standing) break;
+        pot += 1;
+    }
+    return pot;
+}
+
+// What the banner should say for a hole, or null when skins are off.
+function skinsBannerInfo(round, holeIdx) {
+    if (!skinsEnabled(round)) return null;
+    const pot = skinsPotForHole(round, holeIdx);
+    const st = skinsHoleLive(round, holeIdx);
+    if (st.allIn) {
+        if (st.standing) return { pot, mode: 'won', bestNet: st.bestNet, holder: st.standing };
+        return { pot, mode: 'tied-settled', bestNet: st.bestNet, holder: null };
+    }
+    if (!st.postedCount) return { pot, mode: 'open', bestNet: null, holder: null };
+    if (st.standing) return { pot, mode: 'standing', bestNet: st.bestNet, holder: st.standing };
+    return { pot, mode: 'tied', bestNet: st.bestNet, holder: null };
+}
+
+function skinFaceEl(holder) {
+    const face = el('span', { class: 'skins-face' });
+    if (holder && holder.player) face.appendChild(buildPanelAvatar(holder.player));
+    return face;
+}
+
+function buildSkinsBanner(round) {
+    const info = skinsBannerInfo(round, state.currentHole);
+    if (!info) return null;
+    const settled = info.mode === 'won' || info.mode === 'tied-settled';
+    const wrap = el('div', { class: 'skins-banner' + (settled ? ' settled' : ''), id: 'skins-banner' });
+    if (info.mode === 'won') {
+        const row = el('div', { class: 'skins-line' });
+        row.appendChild(el('span', { class: 'skins-ico' }, '\u{1F3C6}'));
+        row.appendChild(skinFaceEl(info.holder));
+        const txt = el('span', null);
+        txt.appendChild(el('strong', null, info.holder.name));
+        txt.appendChild(document.createTextNode(` wins ${info.pot} skin${info.pot === 1 ? '' : 's'} \u00B7 net ${info.bestNet}`));
+        row.appendChild(txt);
+        wrap.appendChild(row);
+        return wrap;
+    }
+    if (info.mode === 'tied-settled') {
+        wrap.appendChild(el('div', { class: 'skins-line' },
+            `Tied at net ${info.bestNet} \u2014 no winner` +
+            (state.currentHole < 17 ? ` \u00B7 ${info.pot + 1} skins up for grabs on the next hole` : '')));
+        return wrap;
+    }
+    wrap.appendChild(el('div', { class: 'skins-pot' },
+        `\u{1F3B2} ${info.pot} skin${info.pot === 1 ? '' : 's'} up for grabs on this hole`));
+    if (info.mode === 'standing') {
+        const row = el('div', { class: 'skins-line' });
+        row.appendChild(skinFaceEl(info.holder));
+        const txt = el('span', null);
+        txt.appendChild(el('strong', null, info.holder.name));
+        txt.appendChild(document.createTextNode(` \u00B7 net ${info.bestNet} \u2014 the score to beat`));
+        row.appendChild(txt);
+        wrap.appendChild(row);
+    } else if (info.mode === 'tied') {
+        wrap.appendChild(el('div', { class: 'skins-sub' }, `Tied at net ${info.bestNet} \u2014 no skin standing`));
+    }
+    return wrap;
+}
+
+// ── Skin-won congratulations ────────────────────────────────────────────
+// The last group out is the highest groupNumber in the round. A snapshot
+// taken BEFORE a score tap is compared with the state after it: the tap
+// must COMPLETE the last group's scores on the hole, the last group's
+// best net must strictly beat the unique standing holder the other
+// groups had before the tap, and that best net must be unique inside
+// the last group. Anything else (a tie, a worse net, no prior standing,
+// a top tie inside the group, an edit to an already-complete group)
+// just updates the banner — no celebration.
+function skinLastGroup(round) {
+    let last = null;
+    getAllRoundPlayers(round).forEach(p => {
+        const g = Number(p.groupNumber);
+        if (isFinite(g) && g >= 1 && (last === null || g > last)) last = g;
+    });
+    return last;
+}
+
+function skinGroupNets(round, holeIdx, group) {
+    const out = [];
+    getAllRoundPlayers(round).forEach(p => {
+        if (Number(p.groupNumber) !== group) return;
+        const net = skinNetForHole(round, p, holeIdx);
+        if (net != null) out.push({ pid: idStr(p.id), name: p.name, net, player: p });
+    });
+    return out;
+}
+
+function skinCompletionSnapshot(round, holeIdx) {
+    if (!skinsEnabled(round)) return null;
+    const lastGroup = skinLastGroup(round);
+    if (lastGroup === null) return null;
+    const players = getAllRoundPlayers(round);
+    const inLast = players.filter(p => Number(p.groupNumber) === lastGroup);
+    const lastComplete = inLast.length > 0 &&
+        inLast.every(p => skinNetForHole(round, p, holeIdx) != null);
+    const others = [];
+    players.forEach(p => {
+        if (Number(p.groupNumber) === lastGroup) return;
+        const net = skinNetForHole(round, p, holeIdx);
+        if (net != null) others.push({ pid: idStr(p.id), name: p.name, net, player: p });
+    });
+    let otherStanding = null;
+    if (others.length) {
+        const best = Math.min.apply(null, others.map(c => c.net));
+        const leaders = others.filter(c => c.net === best);
+        if (leaders.length === 1) otherStanding = leaders[0];
+    }
+    return { lastGroup, lastComplete, otherStanding };
+}
+
+function skinSettleOutcome(round, holeIdx, before) {
+    if (!before) return null;
+    const after = skinCompletionSnapshot(round, holeIdx);
+    if (!after || after.lastGroup !== before.lastGroup) return null;
+    if (before.lastComplete || !after.lastComplete) return null;
+    if (!before.otherStanding) return null;
+    const lg = skinGroupNets(round, holeIdx, after.lastGroup);
+    if (!lg.length) return null;
+    const best = Math.min.apply(null, lg.map(c => c.net));
+    const leaders = lg.filter(c => c.net === best);
+    if (leaders.length !== 1) return null;
+    if (!(best < before.otherStanding.net)) return null;
+    return { winner: leaders[0], pot: skinsPotForHole(round, holeIdx), beatNet: before.otherStanding.net };
+}
+
+function maybeCongratulateSkin(round, holeIdx, before) {
+    const outcome = skinSettleOutcome(round, holeIdx, before);
+    if (!outcome) return;
+    const cheers = state.skinCheers || (state.skinCheers = {});
+    const key = idStr(round.id) + ':' + holeIdx;
+    if (cheers[key]) return;   // one cheer per hole per session — later edits never re-fire
+    cheers[key] = true;
+    hapticTap(40);   // a longer buzz for the win, still inside the score tap's gesture chain
+    showSkinWonOverlay(round, holeIdx, outcome);
+}
+
+function closeSkinWonOverlay() {
+    const o = document.getElementById('skin-won-overlay');
+    if (o) o.remove();
+}
+
+function showSkinWonOverlay(round, holeIdx, outcome) {
+    closeSkinWonOverlay();
+    const w = outcome.winner;
+    const overlay = el('div', {
+        id: 'skin-won-overlay',
+        style: 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:2100;display:flex;align-items:center;justify-content:center;padding:16px;'
+    });
+    const card = el('div', { class: 'card skin-won-card', style: 'max-width:420px;width:100%;text-align:center;padding:26px 20px;margin-bottom:0;' });
+    card.appendChild(el('div', { style: 'font-size:52px;line-height:1;' }, '\u{1F3C6}'));
+    card.appendChild(el('div', { style: 'font-size:26px;font-weight:900;margin:8px 0 2px;' }, 'Skin won!'));
+    const face = el('div', { class: 'skin-won-face' });
+    face.appendChild(buildPanelAvatar(w.player));
+    card.appendChild(face);
+    card.appendChild(el('div', { style: 'font-size:20px;font-weight:800;' }, w.name));
+    card.appendChild(el('div', { class: 'muted', style: 'margin:4px 0 2px;' }, `Hole ${holeIdx + 1} \u00B7 net ${w.net}`));
+    card.appendChild(el('div', { style: 'font-size:17px;font-weight:800;color:var(--fairway-dk);margin-bottom:14px;' },
+        `Wins ${outcome.pot} skin${outcome.pot === 1 ? '' : 's'} \u{1F389}`));
+    card.appendChild(el('button', {
+        class: 'foot-btn next', type: 'button', style: 'width:100%;min-height:48px;',
+        onclick: () => closeSkinWonOverlay()
+    }, 'Nice! \u{1F389}'));
+    overlay.addEventListener('click', e => { if (e.target === overlay) closeSkinWonOverlay(); });
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+}
 
 // ─── Balls card (hole 18 only) ─────────────────────────────────────────
 function buildBallsCard(round, groupPlayers) {
