@@ -816,6 +816,141 @@ function pickFunAwards(night, funWonState) {
   }
   return picks;
 }
+/* ═══ CYCLE 31 · THE HANDICAP FUNNEL — the app's WHS maths, ported ═══
+   The admin app computes every handicap through one funnel:
+   collectPlayerDifferentials + calculateHandicapIndex +
+   calculatePlayerHandicapDetails (index.html, USGA branch). That
+   funnel is ported here exactly, so the show's Handicap Moves page
+   agrees with the app's own save-time popup to the tenth.
+   Pool, per player: differentials from completed rounds (gross from
+   the card, slope/rating from the round player's tee snapshot,
+   defaults 113/72.0) + historicScores (slope/rating resolved through
+   the courses' tees: the entry's own tee → the player's default tee
+   name → his last tee → the course's first tee → defaults) + seed
+   pseudo-differentials (seedIndex × seedWeight, dated 0 = oldest).
+   Rounds are deduped against historic by timestamp — a completed
+   round's historic mirror never counts twice. The deck replays the
+   event night by night: BEFORE night n counts DATA.rounds[0..n-2],
+   AFTER counts [0..n-1]; historic mirrors of the event's own rounds
+   are held out of the base pool (the app's popup filters the saved
+   round's mirror the same way) so each round enters exactly when its
+   night arrives. Window = newest 20; index per the WHS best-N table;
+   displayed handicap = Math.round(index), clamped 0–54. */
+const DIFF31 = (gross, slope, rating) => {
+  const g = parseFloat(gross), s = parseFloat(slope), r = parseFloat(rating);
+  if (!isFinite(g) || !isFinite(s) || !isFinite(r) || s <= 0) return null;
+  return Math.round(((113 / s) * (g - r)) * 10) / 10;
+};
+function hcapIndex31(diffs) {
+  if (!Array.isArray(diffs) || diffs.length < 3) return null;
+  const recent = diffs.slice(0, 20);
+  const n = recent.length;
+  let useCount, adjust;
+  if (n === 3) { useCount = 1; adjust = -2.0; }
+  else if (n === 4) { useCount = 1; adjust = -1.0; }
+  else if (n === 5) { useCount = 1; adjust = 0; }
+  else if (n === 6) { useCount = 2; adjust = -1.0; }
+  else if (n <= 8) { useCount = 2; adjust = 0; }
+  else if (n <= 11) { useCount = 3; adjust = 0; }
+  else if (n <= 14) { useCount = 4; adjust = 0; }
+  else if (n <= 16) { useCount = 5; adjust = 0; }
+  else if (n <= 18) { useCount = 6; adjust = 0; }
+  else if (n === 19) { useCount = 7; adjust = 0; }
+  else { useCount = 8; adjust = 0; }
+  const withIdx = recent.map((d, i) => ({ i, v: d.differential }));
+  withIdx.sort((a, b) => a.v - b.v);
+  const picked = withIdx.slice(0, useCount);
+  const avg = picked.reduce((s, p) => s + p.v, 0) / useCount;
+  return Math.round((avg + adjust) * 10) / 10;
+}
+const EVENT_TS31 = new Set(DATA.rounds.map(r => r.ts || 0));
+function hcapPool31(player, upto) {
+  const diffs = [];
+  const roundTs = new Set();
+  for (let k = 0; k < upto && k < DATA.rounds.length; k++) {
+    const r = DATA.rounds[k];
+    if (!r || !r.completed) continue;
+    const rp = (r.players || {})[player.id];
+    if (!rp) continue;
+    const gross = (rp.scores || []).reduce((s, x) => s + (parseInt(x) || 0), 0);
+    if (gross <= 0) continue;
+    const diff = DIFF31(gross, rp.teeSlope || 113, rp.teeRating || 72.0);
+    if (diff === null) continue;
+    const ts = r.ts || 0;
+    roundTs.add(ts);
+    diffs.push({ date: ts, differential: diff, source: 'round', roundIdx: k, key: 'r' + k });
+  }
+  (player.historic || []).forEach((h, hi) => {
+    if (!h || !h.g) return;
+    const date = h.d || 0;
+    if (roundTs.has(date) || EVENT_TS31.has(date)) return; // a round's mirror never counts twice
+    const tees = (DATA.courses && DATA.courses[h.c]) || [];
+    let tee = null;
+    if (tees.length) {
+      if (h.t) tee = tees.find(t => String(t.id) === String(h.t)) || null;
+      if (!tee && player.defTee) tee = tees.find(t => t.name === player.defTee) || null;
+      if (!tee && player.lastTee) tee = tees.find(t => String(t.id) === String(player.lastTee)) || null;
+      if (!tee) tee = tees[0];
+    }
+    const slope = (tee && parseFloat(tee.slope)) || 113;
+    const rating = (tee && parseFloat(tee.rating)) || 72.0;
+    const diff = DIFF31(h.g, slope, rating);
+    if (diff === null) return;
+    diffs.push({ date, differential: diff, source: 'historic', key: 'h' + hi });
+  });
+  const seedIdx = (typeof player.seed === 'number' && isFinite(player.seed)) ? player.seed : null;
+  const seedW = (Number.isInteger(player.seedW) && player.seedW > 0) ? player.seedW : 0;
+  if (seedIdx !== null && seedW > 0) {
+    for (let i = 0; i < seedW; i++) diffs.push({ date: 0, differential: seedIdx, source: 'seed', key: 's' + i });
+  }
+  diffs.sort((a, b) => (b.date || 0) - (a.date || 0));
+  return diffs;
+}
+function hcapValue31(player, upto) {
+  const pool = hcapPool31(player, upto);
+  const idx = hcapIndex31(pool);
+  if (idx === null) return { hcp: player.hcp || 0, index: null, pool };
+  return { hcp: Math.max(0, Math.min(54, Math.round(idx))), index: idx, pool };
+}
+const MON31 = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function fmtDay31(ms) {
+  const d = new Date(ms);
+  return MON31[d.getUTCMonth()] + ' ' + d.getUTCDate() + ', ' + d.getUTCFullYear();
+}
+function fmtDiff31(x) { return (Math.round(x * 10) / 10).toFixed(1); }
+function fmtRoundDay31(k) {
+  const p = String((DATA.rounds[k] || {}).date || '').split('-').map(Number);
+  if (p.length !== 3 || !p[0]) return '';
+  return MON31[p[1] - 1] + ' ' + p[2] + ', ' + p[0];
+}
+/* The night's handicap moves: who moved, from what to what, and the
+   true why — tonight's differential going in, and the differential
+   (or seed score) it pushed out of the 20-window, if any. */
+function handicapMoves31(night) {
+  const movers = [];
+  DATA.players.forEach((p, pi) => {
+    const before = hcapValue31(p, night - 1);
+    const after = hcapValue31(p, night);
+    if (before.hcp === after.hcp) return;
+    const added = after.pool.find(d => d.source === 'round' && d.roundIdx === night - 1) || null;
+    const bw = before.pool.slice(0, 20), aw = after.pool.slice(0, 20);
+    const awKeys = {}; aw.forEach(d => { awKeys[d.key] = (awKeys[d.key] || 0) + 1; });
+    let dropped = null;
+    for (const d of bw) { if (awKeys[d.key]) { awKeys[d.key]--; } else { dropped = d; break; } }
+    let why = '';
+    if (added) {
+      if (dropped && dropped.source === 'seed') why = 'A seed score dropped out · added today’s ' + fmtDiff31(added.differential);
+      else if (dropped) why = 'Dropped a ' + fmtDiff31(dropped.differential) + ' from ' + (dropped.source === 'round' ? fmtRoundDay31(dropped.roundIdx) : fmtDay31(dropped.date)) + ' · added today’s ' + fmtDiff31(added.differential);
+      else why = 'Added today’s ' + fmtDiff31(added.differential) + ' · no score dropped yet (' + after.pool.length + ' counting scores)';
+    }
+    movers.push({ pid: p.id, name: p.name, before: before.hcp, after: after.hcp, delta: after.hcp - before.hcp,
+      beforeIdx: before.index, afterIdx: after.index, added: added ? added.differential : null,
+      dropped: dropped ? { differential: dropped.differential, source: dropped.source, date: dropped.date } : null, why, _ord: pi });
+  });
+  movers.sort((a, b) => (Math.abs(b.delta) - Math.abs(a.delta)) || (a._ord - b._ord));
+  movers.forEach(m => { delete m._ord; });
+  return movers;
+}
 </script>
 <script id="show" type="text/dc-deferred">
 /* ════════════════════════════════════════════════════════════════════
@@ -3643,6 +3778,47 @@ function sHolding29(night) {
 }
 
 
+/* ---------- Cycle 31 · Handicap Moves — the admin app's save-time
+   "Handicap Updates" popup, retired into the show (Ron, Nov 15: "I
+   don't need this handicap change popup in the admin side anymore.
+   Save this for the presentation… including a short description of
+   why it changes"). One page in the Close, after Tomorrow and before
+   the final table: title beat, then one beat per mover (biggest move
+   first), each with BEFORE → AFTER exactly as the popup printed them
+   (the rounded handicap) and the funnel's true why-line. A night
+   with no movers still gets its page — one line, so the rhythm of
+   the Close never skips a beat. ---------- */
+function sHandicap31(night) {
+  const mv = handicapMoves31(night);
+  const head = p29bg() + '<div class="kick">Handicap Moves · After Night ' + night + '</div>' +
+    '<h2 class="p29serif" style="font-size:5.4vmin;">📈 Handicap Moves</h2>' +
+    '<div class="sub" style="margin-top:.4vmin;">The indexes, recalculated on tonight’s cards.</div>';
+  if (!mv.length) return [{ ch: 'Handicap Moves', snd: SND.bed, html: head +
+    '<div class="sub" style="margin-top:3.2vmin;font-size:3.1vmin;">No handicap moves tonight — every index holds.</div>' }];
+  const dense = mv.length > 6;
+  const av = dense ? 6.5 : 8, nmF = dense ? 2.8 : 3.2, whyF = dense ? 2.1 : 2.3,
+        fromF = dense ? 4.0 : 4.6, toF = dense ? 4.8 : 5.6, pad = dense ? '1vmin 2vmin' : '1.5vmin 2.2vmin', mt = dense ? 1 : 1.4;
+  const tface = (pid, size) => { const p = PL[pid]; if (!p) return ''; return p.photo
+    ? '<img src="' + p.photo + '" style="width:' + size + 'vmin;height:' + size + 'vmin;border-radius:50%;object-fit:cover;border:.3vmin solid ' + tcolor(pid) + ';flex:none;">'
+    : '<div style="width:' + size + 'vmin;height:' + size + 'vmin;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:' + (size * 0.36).toFixed(1) + 'vmin;background:#2a2560;color:var(--cream);border:.3vmin solid ' + tcolor(pid) + ';flex:none;">' + initials(p.name) + '</div>'; };
+  const rows = mv.map((m, i) => {
+    const up = m.delta > 0;
+    const badge = '<span style="font-weight:900;font-size:3vmin;color:' + (up ? '#ff9a8a' : '#7ae2a8') + ';white-space:nowrap;">' + (up ? '▲ +' + m.delta : '▼ −' + Math.abs(m.delta)) + '</span>';
+    return '<div class="bt" data-b="' + (i + 1) + '" style="width:100%;">' +
+      '<div style="display:flex;align-items:center;gap:2.2vmin;width:100%;background:#ffffff10;border:1px solid #ffffff1c;border-radius:2vmin;padding:' + pad + ';margin-top:' + mt + 'vmin;">' +
+      tface(m.pid, av) +
+      '<div style="flex:1;text-align:left;min-width:0;"><div style="font-weight:800;font-size:' + nmF + 'vmin;">' + esc(pname(m.pid)) + '</div>' +
+      (m.why ? '<div style="font-size:' + whyF + 'vmin;color:#e8e2d0b3;margin-top:.3vmin;">' + esc(m.why) + '</div>' : '') + '</div>' +
+      '<div style="display:flex;align-items:center;gap:1.4vmin;flex:none;"><span style="font-size:' + fromF + 'vmin;font-weight:700;color:#e8e2d0;">' + m.before + '</span>' +
+      '<span style="font-size:3vmin;">➡️</span>' +
+      '<span class="p29serif" style="font-size:' + toF + 'vmin;font-weight:900;color:var(--gold);">' + m.after + '</span>' + badge + '</div>' +
+      '</div></div>';
+  }).join('');
+  const foot = mv.length < DATA.players.length
+    ? '<div class="bt" data-b="' + (mv.length + 1) + '"><div class="sub" style="margin-top:2vmin;">Everyone else: no change.</div></div>' : '';
+  return [{ ch: 'Handicap Moves', snd: SND.bed, html: head + rows + foot }];
+}
+
 /* ---------- Act II matches, Cycle 29 form: results in notation + ONE
    featured race. The design budgets Act II at ~12 beats and makes the
    fun awards the headline act (~32% of beats); a full hole-by-hole
@@ -4417,6 +4593,7 @@ function deckFor(night) {
   if (night === DATA.event.nights) out.push(...sWeekAwards30(night));
   else { const fw30 = {}; for (let n = 1; n < night; n++) if (DATA.rounds[n - 1] && DATA.rounds[n - 1].completed) pickFunAwards30(n, fw30); out.push(...sFun30(night, fw30)); }
   out.push(...sTomorrow29(night));
+  out.push(...sHandicap31(night));
   out.push(sFinalBoard29(night));
   out.push(sHolding29(night));
   return out;
@@ -4669,7 +4846,7 @@ function actIndex(s) {
   if (c.indexOf('Act III') === 0) return 2;
   if (c.indexOf('Act II') === 0) return 1;
   if (c.indexOf('Act I') === 0) return 0;
-  if (/Tomorrow|Champion|Wrap|Cast|Final Table|Holding/.test(c)) return 4;
+  if (/Tomorrow|Champion|Wrap|Cast|Final Table|Holding|Handicap/.test(c)) return 4;
   return -1;
 }
 function render(dir) {
@@ -5060,6 +5237,7 @@ try { const DC = dataCheck(); const el = document.querySelector('#dataCheck'); i
     });
     return {
       date: v.date, course: v.courseName, completed: !!v.completed,
+      ts: (v.timestamp || v.id || 0), // CYCLE 31 — the handicap funnel's round timestamp (app: timestamp || id || 0)
       pars: v.pars, sis: v.handicaps, players: pmap,
       bbbAwards: (v.bbbAwards || []).map(function (a) {
         return { holeIdx: (a.holeIdx != null ? a.holeIdx : null), bingo: a.bingo ? String(a.bingo) : null, bango: a.bango ? String(a.bango) : null, bongo: a.bongo ? String(a.bongo) : null };
@@ -5086,9 +5264,9 @@ try { const DC = dataCheck(); const el = document.querySelector('#dataCheck'); i
     }).catch(function () { return null; });
   }
   function buildData() {
-    return Promise.all([fsDoc('settings'), fsDoc('players'), fsDoc('teams'), fsDoc('events'), fsDoc('currentEventId'), fsRounds(), fetchWeather()])
+    return Promise.all([fsDoc('settings'), fsDoc('players'), fsDoc('teams'), fsDoc('events'), fsDoc('currentEventId'), fsRounds(), fetchWeather(), fsDoc('courses')])
       .then(function (docs) {
-        var settings = docs[0], players = docs[1], teams = docs[2], events = docs[3], ceid = docs[4], roundDocs = docs[5], weather = docs[6];
+        var settings = docs[0], players = docs[1], teams = docs[2], events = docs[3], ceid = docs[4], roundDocs = docs[5], weather = docs[6], courses = docs[7];
         var event = null;
         (events || []).forEach(function (e) { if (String(e.id) === String(ceid)) event = e; });
         if (!event) throw new Error('Current event not found');
@@ -5121,12 +5299,24 @@ try { const DC = dataCheck(); const el = document.querySelector('#dataCheck'); i
           },
           event: { nights: 7 },
           players: (players || []).map(function (p) {
-            return { id: String(p.id), name: p.name, index: (p.handicapIndex != null ? p.handicapIndex : null), hcp: (p.handicap != null ? p.handicap : null), photo: p.photoUrl || null };
+            return { id: String(p.id), name: p.name, index: (p.handicapIndex != null ? p.handicapIndex : null), hcp: (p.handicap != null ? p.handicap : null), photo: p.photoUrl || null,
+              // CYCLE 31 — the handicap funnel's inputs: historic scores in stored order + seed + tee-resolution fields.
+              historic: (p.historicScores || []).map(function (hs) {
+                return { d: hs.date || 0, g: (hs.grossScore != null ? hs.grossScore : null), c: (hs.courseId != null ? String(hs.courseId) : null), t: (hs.teeId != null ? String(hs.teeId) : null) };
+              }),
+              seed: (typeof p.seedIndex === 'number' && isFinite(p.seedIndex) ? p.seedIndex : null),
+              seedW: (Number.isInteger(p.seedWeight) && p.seedWeight > 0 ? p.seedWeight : 0),
+              defTee: p.defaultTeeName || null, lastTee: (p.lastTeeId != null ? String(p.lastTeeId) : null) };
           }),
           teams: (teams || []).map(function (tm) {
             return { id: String(tm.id), name: tm.name, color: tm.color || '#888', logo: tm.logo || null, players: (tm.players || []).map(String) };
           }),
           rounds: rounds,
+          // CYCLE 31 — course tee tables, for the funnel's historic tee resolution.
+          courses: (courses || []).reduce(function (acc, c) {
+            acc[String(c.id)] = (c.tees || []).map(function (t) { return { id: String(t.id), name: t.name, slope: t.slope, rating: t.rating }; });
+            return acc;
+          }, {}),
           bracket: event.bracket || null,
           sounds: { files: files, slots: settings.soundSlots || {} }
         };
