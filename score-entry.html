@@ -390,6 +390,36 @@ button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
 .e9-avatar img.player-avatar-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .e9-name { font-size: 12.5px; font-weight: 800; line-height: 1.2; }
 .e9-check { position: absolute; top: 4px; right: 6px; width: 22px; height: 22px; border-radius: 50%; background: var(--fairway); color: #fff; font-size: 14px; font-weight: 900; line-height: 22px; text-align: center; }
+/* Extra 9 groups (snake draft) */
+.e9g-tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+.e9g-tab { flex: 1; min-height: 48px; font-family: inherit; font-size: 16px; font-weight: 800; border: 2px solid var(--line); border-radius: 12px; background: var(--card); color: var(--ink-soft); cursor: pointer; }
+.e9g-tab.on { border-color: var(--fairway); background: #EDF7F1; color: var(--ink); }
+.e9g-note { color: #8a6d1a; background: #FFF3D6; border-radius: 10px; padding: 8px 10px; font-size: 13.5px; font-weight: 600; }
+.e9g-rankrow { display: flex; align-items: center; gap: 10px; padding: 7px 2px; border-bottom: 1px solid var(--line); }
+.e9g-rankrow:last-child { border-bottom: none; }
+.e9g-rank { font-weight: 900; font-size: 14px; color: var(--ink-soft); width: 30px; flex: none; }
+.e9g-avatar { width: 40px; height: 40px; border-radius: 50%; overflow: hidden; position: relative; flex: none; }
+.e9g-avatar .avatar-wrap { position: absolute; inset: 0; display: block; }
+.e9g-avatar .player-avatar { width: 100%; height: 100%; border-radius: 0; font-size: 17px; }
+.e9g-avatar img.player-avatar-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.e9g-rname { font-weight: 700; font-size: 15px; }
+.e9g-rmeta { margin-left: auto; font-size: 12.5px; color: var(--ink-soft); text-align: right; }
+.e9g-ghead { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.e9g-gdot { width: 14px; height: 14px; border-radius: 50%; flex: none; }
+.e9g-gtitle { font-size: 14px; font-weight: 800; letter-spacing: 0.6px; text-transform: uppercase; color: var(--fairway-dk); }
+.e9g-move { margin-left: auto; display: flex; gap: 6px; }
+.e9g-mvbtn { width: 44px; height: 44px; border-radius: 10px; border: 2px solid var(--sand); background: white; font-size: 15px; cursor: pointer; color: var(--ink); font-family: inherit; }
+.e9g-mvbtn:disabled { opacity: 0.3; }
+.e9g-prow { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: white; border: 2px solid var(--sand); border-radius: 12px; padding: 8px 10px; margin-top: 8px; cursor: pointer; font-family: inherit; min-height: 56px; }
+.e9g-prow.selected { border-color: var(--fairway); background: #F4FAF6; box-shadow: 0 0 0 2px rgba(46,125,79,0.35); }
+.e9g-pname { font-size: 16px; font-weight: 700; color: var(--ink); }
+.e9g-capt { font-size: 11.5px; font-weight: 800; background: #FFF3D6; color: #8a6d1a; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.e9g-pmeta { margin-left: auto; font-size: 13px; font-weight: 600; color: var(--ink-soft); white-space: nowrap; }
+.e9g-time, .e9g-course { width: 100%; min-height: 52px; font-size: 17px; font-weight: 700; border: 2px solid var(--sand); border-radius: 12px; background: white; color: var(--ink); padding: 10px 12px; font-family: inherit; box-sizing: border-box; }
+.e9g-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.e9g-chip { flex: 1; min-height: 48px; min-width: 100px; font-family: inherit; font-size: 15px; font-weight: 800; border: 2px solid var(--sand); border-radius: 999px; background: white; color: var(--ink); cursor: pointer; }
+.e9g-chip.on { border-color: var(--fairway); background: #EDF7F1; }
+.e9g-course { margin-top: 10px; }
 @media (orientation: landscape) {
     .sc-nines { flex-direction: row; }
     .sc-nines > * { flex: 1; }
@@ -671,7 +701,7 @@ document.addEventListener('visibilitychange', () => {
     try { if (document.visibilityState === 'hidden' && hasPendingEdits()) flushPendingEdits(); } catch (e) {}
 });
 
-const SE_VERSION = '2.42.0'; // ✉️ Share button: email the scoring app link to picked players (addresses from the players doc)
+const SE_VERSION = '2.43.0'; // Extra 9 groups: the "9" screen opens on a snake-draft groups view (gross, lower-handicap tie-break, coin flip) with tap swaps, tee order, first tee time + course
 console.log('Dutch Cup Score Entry v' + SE_VERSION);
 
 // ─── State ──────────────────────────────────────────────────────────────
@@ -689,6 +719,10 @@ const state = {
     photos: false,             // round-photos view open (header gallery icon)
     extra9: false,             // extra-9 winner chooser open (header "9" icon)
     extra9Pick: [],            // player ids picked so far in the chooser (max 4)
+    extra9Tab: 'groups',       // Extra 9 screen tab: 'groups' (snake draft) | 'winners' (chooser)
+    e9gDraft: null,            // Extra 9 groups draft { groups, teeTime, course, coinFlips, ranked, note }
+    e9gSel: null,              // player id picked up for a swap in the groups view
+    e9gCourseCustom: false,    // groups view: the "Another course…" chip is engaged
     sharePick: [],             // player ids picked in the ✉️ Share picker
     shareInit: false,          // Share picker defaulted to all emailable players once
     editGroups: false,         // group editor open (from the player picker)
@@ -1594,6 +1628,7 @@ window.__switchPlayer = function() {
     state.editGroups = false; state.groupDraft = null; state.groupPick = null;
     state.cardPlayerId = null;
     state.extra9 = false; state.extra9Pick = [];
+    state.extra9Tab = 'groups'; state.e9gDraft = null; state.e9gSel = null; state.e9gCourseCustom = false;
     state.pendingEdits = { scores: {}, ctpWinners: {}, balls: {}, bbb: {} };
     setStatus('', '');
     renderPlayerPicker();
@@ -1610,6 +1645,10 @@ window.__openExtra9 = function() {
     if (!round || !roundFullyScored(round)) return;
     state.board = null;
     state.extra9Pick = currentExtra9Pick(round);
+    // The "9" screen now lands on the snake-draft GROUPS view; the winners
+    // chooser lives one tap away on its tab (Ron, 2026-11-15).
+    state.extra9Tab = 'groups';
+    initExtra9GroupsDraft(round);
     state.extra9 = true;
     if (state.finished) renderRoundFinished(); else renderScoreEntry();
 };
@@ -3035,6 +3074,14 @@ function buildPlayerCard(round, p) {
 // build their option values from positions and its presentation counts
 // filter on positions, so player ids there would be invisible to both
 // (the .24 build wrote ids; fixed in .25). Worth BONUS.extra9 pts each.
+//
+// The "9" screen also carries the day's extra-9 GROUPS (Ron, 2026-11-15):
+// a snake draft off the round's gross scores — level gross broken by the
+// LOWER handicap ranking higher, then a coin flip — dealt into 3 groups
+// of 4 in tee order, with tap-to-swap adjustments, a first tee time and
+// a course (name, or "Front nine" / "Back nine"). Saved on the round as
+// extra9Groups / extra9TeeTime / extra9Course / extra9CoinFlips. The
+// screen lands on the groups view; the winners chooser is its other tab.
 // ═══════════════════════════════════════════════════════════════════════
 function roundFullyScored(round) {
     if (!round) return false;
@@ -3138,10 +3185,24 @@ function renderExtra9View(round) {
     $('#extra9-btn').style.display = 'none';
     const appEl = $('#app');
     appEl.innerHTML = '';
-    appEl.appendChild(buildExtra9View(round));
+    // Tabs: the snake-draft groups view ⇄ the winners chooser.
+    const tabs = el('div', { class: 'e9g-tabs' });
+    const tabBtn = (key, label) => el('button', {
+        class: 'e9g-tab' + (state.extra9Tab === key ? ' on' : ''), type: 'button',
+        onclick: () => {
+            if (state.extra9Tab === key) return;
+            state.extra9Tab = key; state.e9gSel = null;
+            hapticTap(10);
+            renderExtra9View(round);
+        }
+    }, label);
+    tabs.appendChild(tabBtn('groups', '👥 Groups'));
+    tabs.appendChild(tabBtn('winners', '🏆 Winners'));
+    appEl.appendChild(tabs);
+    appEl.appendChild(state.extra9Tab === 'groups' ? buildExtra9GroupsView(round) : buildExtra9View(round));
     appEl.appendChild(el('button', {
         class: 'foot-btn prev', type: 'button', style: 'width:100%;margin-top:8px;',
-        onclick: () => { state.extra9 = false; state.extra9Pick = []; if (state.finished) renderRoundFinished(); else renderScoreEntry(); }
+        onclick: () => { state.extra9 = false; state.extra9Pick = []; state.e9gSel = null; if (state.finished) renderRoundFinished(); else renderScoreEntry(); }
     }, '← Back'));
 }
 
@@ -3191,6 +3252,422 @@ async function saveExtra9Winners() {
     state.extra9Pick = [];
     setStatus('Extra 9 saved ✓', 'saved');
     if (state.finished) renderRoundFinished(); else renderScoreEntry();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// EXTRA 9 GROUPS — the snake draft (Ron, 2026-11-15). Ranking rule, in
+// order: gross ascending → the LOWER handicap ranks higher → a coin flip
+// for anyone still exactly level (same gross AND same handicap). That
+// rule supersedes the old net tie-break used by the admin §11 analytics
+// and the nightly show; those still use net — a known divergence, and
+// this screen follows Ron's rule as stated for the draft. The ranked
+// field snakes into 3 groups (ranks 1/6/7/12 · 2/5/8/11 · 3/4/9/10);
+// each group's first player is its captain.
+// ═══════════════════════════════════════════════════════════════════════
+function extra9HcpKey(hcp) {
+    return (hcp == null || isNaN(Number(hcp))) ? Infinity : Number(hcp);
+}
+
+// Tag each ranked entry with how it was separated from the player above:
+// 'gross' (worse gross), 'hcp' (level gross, higher handicap), 'flip'
+// (level on both — the coin decided). Rank 1 gets null.
+function annotateExtra9Ranked(ordered) {
+    return ordered.map((e, i) => {
+        let via = null;
+        if (i > 0) {
+            const prev = ordered[i - 1];
+            if (e.gross === prev.gross && extra9HcpKey(e.hcp) === extra9HcpKey(prev.hcp)) via = 'flip';
+            else if (e.gross === prev.gross) via = 'hcp';
+            else via = 'gross';
+        }
+        return { id: e.id, gross: e.gross, hcp: e.hcp, rank: i + 1, via };
+    });
+}
+
+// Pure draft: entries [{ id, gross, hcp }] → { ranked, groups, coinFlips }.
+// groups are player-id arrays in TEE ORDER (groups[0] tees off first);
+// coinFlips lists the ids whose rank the flip decided. rng is injectable
+// so tests can stub the flip both ways.
+function computeExtra9Draft(entries, rng) {
+    const rand = typeof rng === 'function' ? rng : Math.random;
+    const norm = (entries || []).map(e => ({
+        id: idStr(e.id),
+        gross: Number(e.gross) || 0,
+        hcp: (e.hcp == null || isNaN(Number(e.hcp))) ? null : Number(e.hcp)
+    }));
+    const sorted = norm.slice().sort((a, b) =>
+        (a.gross - b.gross) || (extra9HcpKey(a.hcp) - extra9HcpKey(b.hcp)));
+    // Coin-flip each still-tied subgroup (same gross AND same handicap):
+    // a Fisher–Yates shuffle driven by the injected rng.
+    const ordered = [];
+    let i = 0;
+    while (i < sorted.length) {
+        let j = i + 1;
+        while (j < sorted.length && sorted[j].gross === sorted[i].gross
+            && extra9HcpKey(sorted[j].hcp) === extra9HcpKey(sorted[i].hcp)) j++;
+        const sub = sorted.slice(i, j);
+        for (let k = sub.length - 1; k > 0; k--) {
+            const m = Math.floor(rand() * (k + 1));
+            const t = sub[k]; sub[k] = sub[m]; sub[m] = t;
+        }
+        sub.forEach(e => ordered.push(e));
+        i = j;
+    }
+    const ranked = annotateExtra9Ranked(ordered);
+    const coinFlips = ranked.filter(r => r.via === 'flip').map(r => r.id);
+    const groups = [[], [], []];
+    ranked.forEach((r, k) => {
+        const row = Math.floor(k / 3), pos = k % 3;
+        groups[(row % 2 === 0) ? pos : (2 - pos)].push(r.id);
+    });
+    return { ranked, groups, coinFlips };
+}
+
+// View-layer inputs for the draft: gross = the sum of the player's 18
+// scores (pending edits included, like everywhere else); handicap =
+// handicapIndex off the league record, falling back to the round's
+// stored handicap for the player.
+function extra9DraftEntries(round) {
+    return getAllRoundPlayers(round).map(p => {
+        let gross = 0;
+        for (let h = 0; h < 18; h++) {
+            const n = parseInt(effectiveScore(round, p.id, h), 10);
+            if (!isNaN(n)) gross += n;
+        }
+        const league = (state.leaguePlayers || []).find(x => idsEqual(x.id, p.id));
+        let hcp = null;
+        if (league && league.handicapIndex != null && !isNaN(Number(league.handicapIndex))) hcp = Number(league.handicapIndex);
+        else if (p.handicap != null && !isNaN(Number(p.handicap))) hcp = Number(p.handicap);
+        return { id: idStr(p.id), gross, hcp };
+    });
+}
+
+// Rebuild the draft-order strip behind SAVED groups. The ranking is
+// re-derived from the round's gross/handicap data, but a coin flip is
+// NEVER re-flipped: within a still-tied subgroup, the players the saved
+// flips already placed (extra9CoinFlips) stay behind the others, and
+// each player's place in the saved groups settles anything beyond that.
+// Manual swaps change the groups, not this draft history.
+function extra9RankedFromGroups(round, groups, coinFlips) {
+    const entries = extra9DraftEntries(round);
+    const byId = {};
+    entries.forEach(e => { byId[e.id] = e; });
+    const groupOfRank = k => {
+        const row = Math.floor(k / 3), pos = k % 3;
+        return (row % 2 === 0) ? pos : (2 - pos);
+    };
+    // Where each player sits in the saved groups, read in rank order.
+    const invIndex = {};
+    let n = 0;
+    for (let k = 0; k < entries.length; k++) {
+        const g = groupOfRank(k);
+        let slot = 0;
+        for (let k2 = 0; k2 < k; k2++) if (groupOfRank(k2) === g) slot++;
+        const pid = groups[g] && groups[g][slot];
+        if (pid != null && byId[idStr(pid)] && invIndex[idStr(pid)] == null) invIndex[idStr(pid)] = n++;
+    }
+    entries.forEach(e => { if (invIndex[e.id] == null) invIndex[e.id] = n++; });
+    const flips = new Set((coinFlips || []).map(idStr));
+    const ordered = entries.slice().sort((a, b) =>
+        (a.gross - b.gross)
+        || (extra9HcpKey(a.hcp) - extra9HcpKey(b.hcp))
+        || ((flips.has(a.id) ? 1 : 0) - (flips.has(b.id) ? 1 : 0))
+        || (invIndex[a.id] - invIndex[b.id]));
+    return annotateExtra9Ranked(ordered);
+}
+
+// The saved groups on a round, as a draft object — or null when there
+// are none, or when their player set no longer matches the round's
+// players exactly (roster/score edits since the save).
+function loadExtra9Groups(round) {
+    const saved = Array.isArray(round.extra9Groups) ? round.extra9Groups : null;
+    if (!saved || !saved.length) return null;
+    const current = new Set(getAllRoundPlayers(round).map(p => idStr(p.id)));
+    const flat = [];
+    saved.forEach(g => { if (Array.isArray(g)) g.forEach(pid => flat.push(idStr(pid))); });
+    if (!flat.length || flat.length !== current.size) return null;
+    if (new Set(flat).size !== flat.length) return null;
+    if (!flat.every(pid => current.has(pid))) return null;
+    return {
+        groups: saved.map(g => (Array.isArray(g) ? g : []).map(idStr)),
+        teeTime: typeof round.extra9TeeTime === 'string' ? round.extra9TeeTime : '',
+        course: typeof round.extra9Course === 'string' ? round.extra9Course : '',
+        coinFlips: Array.isArray(round.extra9CoinFlips) ? round.extra9CoinFlips.map(idStr) : []
+    };
+}
+
+// Open-time draft: saved groups win (shown exactly as saved — no silent
+// regeneration, no re-flip); otherwise a fresh draft. Saved groups whose
+// player set went stale fall back to a fresh draft, flagged in the UI.
+function initExtra9GroupsDraft(round) {
+    const hadSaved = Array.isArray(round.extra9Groups)
+        && round.extra9Groups.some(g => Array.isArray(g) && g.length);
+    const loaded = loadExtra9Groups(round);
+    if (loaded) {
+        loaded.ranked = extra9RankedFromGroups(round, loaded.groups, loaded.coinFlips);
+        loaded.note = '';
+        state.e9gDraft = loaded;
+    } else {
+        const d = computeExtra9Draft(extra9DraftEntries(round));
+        state.e9gDraft = {
+            groups: d.groups,
+            coinFlips: d.coinFlips,
+            ranked: d.ranked,
+            teeTime: typeof round.extra9TeeTime === 'string' ? round.extra9TeeTime : '',
+            course: typeof round.extra9Course === 'string' ? round.extra9Course : '',
+            note: hadSaved ? 'stale' : ''
+        };
+    }
+    state.e9gCourseCustom = !!(state.e9gDraft.course
+        && state.e9gDraft.course !== 'Front nine' && state.e9gDraft.course !== 'Back nine');
+    state.e9gSel = null;
+}
+
+// Tap flow (no dragging, per Ron's standing preference): tap a player to
+// pick them up, tap another player — in any group — to swap their slots.
+// Group sizes never change; tapping the picked player again puts them down.
+function tapExtra9GroupPlayer(pid) {
+    pid = idStr(pid);
+    if (!state.e9gDraft) return;
+    hapticTap(10);
+    if (!state.e9gSel) { state.e9gSel = pid; renderExtra9View(); return; }
+    if (state.e9gSel === pid) { state.e9gSel = null; renderExtra9View(); return; }
+    let a = null, b = null;
+    state.e9gDraft.groups.forEach((grp, gi) => grp.forEach((p, pi) => {
+        if (p === state.e9gSel) a = [gi, pi];
+        if (p === pid) b = [gi, pi];
+    }));
+    if (a && b) {
+        const g = state.e9gDraft.groups;
+        const t = g[a[0]][a[1]]; g[a[0]][a[1]] = g[b[0]][b[1]]; g[b[0]][b[1]] = t;
+    }
+    state.e9gSel = null;
+    renderExtra9View();
+}
+
+// Tee order: ▲/▼ on a group card swaps it with its neighbour.
+function moveExtra9Group(gi, dir) {
+    if (!state.e9gDraft) return;
+    const g = state.e9gDraft.groups;
+    const j = gi + dir;
+    if (gi < 0 || gi >= g.length || j < 0 || j >= g.length) return;
+    const t = g[gi]; g[gi] = g[j]; g[j] = t;
+    hapticTap(10);
+    renderExtra9View();
+}
+
+function rerunExtra9Draft() {
+    const round = getRoundById(state.selectedRoundId);
+    if (!round || !state.e9gDraft) return;
+    if (!confirm('Re-run the snake draft? Your swaps and tee order will be discarded, and any coin flips will be flipped again.')) return;
+    const d = computeExtra9Draft(extra9DraftEntries(round));
+    state.e9gDraft.groups = d.groups;
+    state.e9gDraft.coinFlips = d.coinFlips;
+    state.e9gDraft.ranked = d.ranked;
+    state.e9gDraft.note = '';
+    state.e9gSel = null;
+    renderExtra9View();
+}
+
+function setExtra9Course(which) {
+    if (!state.e9gDraft) return;
+    hapticTap(10);
+    if (which === 'front') { state.e9gDraft.course = 'Front nine'; state.e9gCourseCustom = false; }
+    else if (which === 'back') { state.e9gDraft.course = 'Back nine'; state.e9gCourseCustom = false; }
+    else {
+        state.e9gCourseCustom = true;
+        if (state.e9gDraft.course === 'Front nine' || state.e9gDraft.course === 'Back nine') state.e9gDraft.course = '';
+    }
+    renderExtra9View();
+    if (which === 'custom') {
+        try {
+            const inp = document.getElementById && document.getElementById('e9g-course-name');
+            if (inp && inp.focus) inp.focus();
+        } catch (e) { /* focus is garnish */ }
+    }
+}
+
+function buildExtra9GroupsView(round) {
+    if (!state.e9gDraft) initExtra9GroupsDraft(round);
+    const draft = state.e9gDraft;
+    const players = getAllRoundPlayers(round);
+    const byId = {};
+    players.forEach(p => { byId[idStr(p.id)] = p; });
+    const entries = {};
+    extra9DraftEntries(round).forEach(e => { entries[e.id] = e; });
+    const colors = ['#ef4444', '#3b82f6', '#10b981'];
+    const offLabels = ['1st off', '2nd off', '3rd off'];
+    const wrap = el('div', null);
+
+    const sel = state.e9gSel ? byId[state.e9gSel] : null;
+    const intro = el('div', { class: 'card' });
+    intro.appendChild(el('div', { style: 'font-size:40px;line-height:1.1;text-align:center;' }, '🏌️'));
+    intro.appendChild(el('h2', { style: 'text-align:center;' }, 'Extra 9 groups'));
+    intro.appendChild(el('p', { class: 'muted' }, sel
+        ? `Moving ${sel.name} — tap another player to swap them into each other's groups.`
+        : 'Snake draft from today\u2019s gross scores: level gross is broken by the lower handicap, then a coin flip. Tap two players to swap them, set the tee order, then save.'));
+    if (draft.note === 'stale') {
+        intro.appendChild(el('p', { class: 'e9g-note' },
+            'The saved groups no longer match this round\u2019s players, so a fresh draft is shown.'));
+    }
+    const actions = el('div', { style: 'display:flex;gap:8px;margin-top:10px;' });
+    actions.appendChild(el('button', {
+        class: 'foot-btn prev', type: 'button', style: 'flex:1;min-height:48px;',
+        onclick: () => rerunExtra9Draft()
+    }, '↻ Re-run draft'));
+    actions.appendChild(el('button', {
+        class: 'foot-btn next', type: 'button', style: 'flex:1.4;min-height:48px;',
+        onclick: () => { state.extra9Tab = 'winners'; state.e9gSel = null; hapticTap(10); renderExtra9View(round); }
+    }, '🏆 Pick winners'));
+    intro.appendChild(actions);
+    wrap.appendChild(intro);
+
+    // Ranking strip: the draft order, with the tie-break story per player.
+    const rankCard = el('div', { class: 'card' });
+    rankCard.appendChild(el('div', { class: 'group-title' }, 'Draft order'));
+    (draft.ranked || []).forEach(r => {
+        const p = byId[r.id];
+        if (!p) return;
+        const row = el('div', { class: 'e9g-rankrow' });
+        row.appendChild(el('span', { class: 'e9g-rank' }, '#' + r.rank));
+        const av = el('span', { class: 'e9g-avatar' });
+        av.appendChild(buildPanelAvatar(p));
+        row.appendChild(av);
+        row.appendChild(el('span', { class: 'e9g-rname' }, p.name || '?'));
+        let note = '';
+        if (r.via === 'flip') note = ' · 🪙 coin flip';
+        else if (r.via === 'hcp') note = ' · level on gross · lower handicap';
+        row.appendChild(el('span', { class: 'e9g-rmeta' }, `${r.gross} gross${note}`));
+        rankCard.appendChild(row);
+    });
+    wrap.appendChild(rankCard);
+
+    // The three groups, in tee order.
+    draft.groups.forEach((grp, gi) => {
+        const card = el('div', {
+            class: 'group-card', style: `border-left:8px solid ${colors[gi % colors.length]};`
+        });
+        const head = el('div', { class: 'e9g-ghead' });
+        head.appendChild(el('span', { class: 'e9g-gdot', style: `background:${colors[gi % colors.length]};` }));
+        head.appendChild(el('span', { class: 'e9g-gtitle' }, `Group ${gi + 1} · ${offLabels[gi] || ''}`));
+        const mv = el('span', { class: 'e9g-move' });
+        mv.appendChild(el('button', {
+            class: 'e9g-mvbtn', type: 'button', 'aria-label': 'Move this group earlier in the tee order',
+            disabled: gi === 0 ? '' : null,
+            onclick: () => moveExtra9Group(gi, -1)
+        }, '▲'));
+        mv.appendChild(el('button', {
+            class: 'e9g-mvbtn', type: 'button', 'aria-label': 'Move this group later in the tee order',
+            disabled: gi === draft.groups.length - 1 ? '' : null,
+            onclick: () => moveExtra9Group(gi, 1)
+        }, '▼'));
+        head.appendChild(mv);
+        card.appendChild(head);
+        grp.forEach((pid, pi) => {
+            const p = byId[pid];
+            if (!p) return;
+            const e = entries[pid] || {};
+            const row = el('button', {
+                class: 'e9g-prow' + (state.e9gSel === pid ? ' selected' : ''), type: 'button',
+                onclick: () => tapExtra9GroupPlayer(pid)
+            });
+            const av = el('span', { class: 'e9g-avatar' });
+            av.appendChild(buildPanelAvatar(p));
+            row.appendChild(av);
+            row.appendChild(el('span', { class: 'e9g-pname' }, p.name || '?'));
+            if (pi === 0) row.appendChild(el('span', { class: 'e9g-capt' }, '👑 Captain'));
+            row.appendChild(el('span', { class: 'e9g-pmeta' }, `${e.gross != null ? e.gross : '—'} gross`));
+            card.appendChild(row);
+        });
+        wrap.appendChild(card);
+    });
+
+    // Logistics: first tee time + which course / nine.
+    const log = el('div', { class: 'card' });
+    log.appendChild(el('div', { class: 'group-title' }, 'Extra 9 logistics'));
+    log.appendChild(el('label', { class: 'pick-label', for: 'e9g-tee-time' }, 'First tee time'));
+    log.appendChild(el('input', {
+        type: 'time', id: 'e9g-tee-time', class: 'e9g-time', value: draft.teeTime || '',
+        onchange: e => { if (state.e9gDraft) state.e9gDraft.teeTime = (e.target && e.target.value) || ''; }
+    }));
+    log.appendChild(el('label', { class: 'pick-label', style: 'margin-top:12px;' }, 'Course'));
+    const chips = el('div', { class: 'e9g-chips' });
+    const mkChip = (label, active, fn) => el('button', {
+        class: 'e9g-chip' + (active ? ' on' : ''), type: 'button', onclick: fn
+    }, label);
+    chips.appendChild(mkChip('Front nine', draft.course === 'Front nine', () => setExtra9Course('front')));
+    chips.appendChild(mkChip('Back nine', draft.course === 'Back nine', () => setExtra9Course('back')));
+    chips.appendChild(mkChip('Another course…', !!state.e9gCourseCustom, () => setExtra9Course('custom')));
+    log.appendChild(chips);
+    if (state.e9gCourseCustom) {
+        log.appendChild(el('input', {
+            type: 'text', id: 'e9g-course-name', class: 'e9g-course', placeholder: 'Course name',
+            value: (draft.course && draft.course !== 'Front nine' && draft.course !== 'Back nine') ? draft.course : '',
+            oninput: e => { if (state.e9gDraft) state.e9gDraft.course = (e.target && e.target.value) || ''; }
+        }));
+    }
+    wrap.appendChild(log);
+
+    wrap.appendChild(el('button', {
+        class: 'foot-btn next', type: 'button', style: 'width:100%;min-height:52px;',
+        onclick: () => saveExtra9Groups()
+    }, 'Save groups'));
+    return wrap;
+}
+
+// The persisted shape: flat fields on the round, in the style of
+// extra9Winners. Groups are player-id arrays in tee order.
+function extra9GroupsPayload(draft) {
+    return {
+        extra9Groups: (draft.groups || []).map(g => (g || []).map(idStr)),
+        extra9TeeTime: draft.teeTime || '',
+        extra9Course: draft.course || '',
+        extra9CoinFlips: (draft.coinFlips || []).map(idStr)
+    };
+}
+
+// Same transactional save path as the winners chooser: the server copy
+// is re-read inside the transaction and only the extra-9 groups fields
+// are written onto it.
+async function saveExtra9Groups() {
+    const roundId = state.selectedRoundId;
+    const round = getRoundById(roundId);
+    if (!round || !state.e9gDraft) return;
+    const payload = extra9GroupsPayload(state.e9gDraft);
+    state.saving = true;
+    setStatus('Saving extra 9 groups…', 'saving');
+    try {
+        await firestoreDb.runTransaction(async (tx) => {
+            const ref = roundDocRef(roundId);
+            const snap = await tx.get(ref);
+            if (!snap.exists) throw new Error('Round doc missing');
+            const srv = JSON.parse(JSON.stringify(snap.data().value || {}));
+            if (!srv || srv.id == null) throw new Error('Round no longer exists');
+            if (srv.completed === true) { const e = new Error('ROUND_COMPLETED'); e.code = 'ROUND_COMPLETED'; throw e; }
+            srv.extra9Groups = payload.extra9Groups;
+            srv.extra9TeeTime = payload.extra9TeeTime;
+            srv.extra9Course = payload.extra9Course;
+            srv.extra9CoinFlips = payload.extra9CoinFlips;
+            tx.set(ref, {
+                value: srv,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+        });
+    } catch (e) {
+        state.saving = false;
+        setStatus('Extra 9 groups save failed', 'error');
+        alert(e && e.code === 'ROUND_COMPLETED'
+            ? 'This round is already marked complete in the main app, so the extra 9 groups can no longer be saved from here.'
+            : 'Could not save the extra 9 groups. Check your connection and try again.');
+        return;
+    }
+    state.saving = false;
+    round.extra9Groups = payload.extra9Groups;
+    round.extra9TeeTime = payload.extra9TeeTime;
+    round.extra9Course = payload.extra9Course;
+    round.extra9CoinFlips = payload.extra9CoinFlips;
+    setStatus('Extra 9 groups saved ✓', 'saved');
+    renderExtra9View();
 }
 
 function renderPlayerCard() {
