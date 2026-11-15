@@ -767,13 +767,21 @@
         .hx-wd.next{border:2px solid #10b981;background:#ecfdf5;color:#123c23;}
         .hx-wd.live{border:2px solid #f59e0b;background:#fffbeb;}
         .hx-wd .st{float:right;}
-        .hx-roundrow.sel{border:2px solid #10b981;background:#ecfdf5;}
-        .hx-roundrow.sel.live{border-color:#f59e0b;background:#fffbeb;}
         .hx-selchip{display:inline-block;background:#10b981;color:#fff;font-size:11px;font-weight:800;letter-spacing:.4px;border-radius:999px;padding:2px 9px;}
-        .hx-roundrow.sel.live .hx-selchip{background:#f59e0b;color:#451a03;}
+        .hx-rstrip{display:flex;gap:6px;overflow-x:auto;padding:2px 2px 8px;-webkit-overflow-scrolling:touch;}
+        .hx-rchip{flex:0 0 auto;width:118px;background:#fff;border:1px solid #e7e2d6;border-radius:10px;padding:7px 9px;font-size:11px;color:#64748b;font-weight:600;overflow:hidden;cursor:pointer;text-align:left;font-family:var(--font-body);}
+        .hx-rchip b{display:block;font-size:12px;color:var(--color-text-primary);white-space:nowrap;}
+        .hx-rchip .cn{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+        .hx-rchip .st{float:right;font-size:12px;}
+        .hx-rchip .gs{display:block;margin-top:2px;font-size:10.5px;font-weight:700;white-space:nowrap;}
+        .hx-rchip.done{border-color:#bbf7d0;background:#f0fdf4;opacity:.6;}
+        .hx-rchip.live{border-color:#fbbf24;background:#fffbeb;}
+        .hx-rchip.over{border-color:#fca5a5;}
+        .hx-rchip.sel{border:2px solid #10b981;background:#ecfdf5;color:#123c23;opacity:1;}
+        .hx-rchip.sel.live{border-color:#f59e0b;background:#fffbeb;}
+        .hx-actbar{border-top:1px solid #e7e2d6;margin-top:2px;padding-top:10px;}
         .hx-rowacts{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start;margin-top:12px;}
         .hx-rowacts .btn-primary,.hx-rowacts .btn-secondary{min-height:44px;}
-        .hx-tapcue{color:#94a3b8;font-size:22px;font-weight:700;padding-left:6px;}
         .hx-grid{display:grid;gap:12px;}
         .hx-g2{grid-template-columns:1fr 1fr;}
         .hx-g4{grid-template-columns:repeat(4,1fr);}
@@ -888,7 +896,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = 'v2026.11.13.63';
+        const APP_VERSION = 'v2026.11.15.64';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -3563,13 +3571,16 @@
             const liveRounds = eventRoundsAll.filter(r => r.active !== false && r.completed !== true);
             const scheduledRounds = eventRoundsAll.filter(r => r.active === false && r.completed !== true);
             const heroRound = scheduledRounds.length ? scheduledRounds[0] : null;
-            // Merged Game Day list: every unplayed round (live + scheduled)
-            // appears once, in date order. Completed rounds stay out — their
-            // home is All Rounds. Default selection = the next unplayed
-            // round (the old hero), falling back to a live round.
+            // Game Day rounds strip: every round of the event appears once,
+            // in date order, as a chip in the horizontal strip (played rounds
+            // dimmed with a ✓). Tapping a chip selects it; the action bar
+            // under the strip carries the selected round's actions. Default
+            // selection = the next unplayed round (the old hero), falling
+            // back to a live round.
             const playRounds = eventRoundsAll.filter(r => r.completed !== true);
+            const allPlayed = eventRoundsAll.length > 0 && playRounds.length === 0;
             const selRound = (() => {
-                const stored = playRounds.find(r => String(r.id) === String(window.__homeSelRoundId));
+                const stored = eventRoundsAll.find(r => String(r.id) === String(window.__homeSelRoundId));
                 return stored || scheduledRounds[0] || liveRounds[0] || null;
             })();
             if (liveRounds.length) {
@@ -3596,21 +3607,61 @@
                 <div class="hx-sec">
                     <div class="hx-sec-h"><h2>🎯 Game Day</h2><span>today's round &amp; where things stand</span></div>
 
-                    ${playRounds.length ? `
+                    ${eventRoundsAll.length ? `
                         <div class="hx-card hx-roundcard">
                             <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;">
                                 <span style="font-size:20px;font-weight:800;">📅 Rounds</span>
-                                <span style="font-size:13px;color:#64748b;font-weight:600;">${playRounds.length} to play${liveRounds.length ? ` · ${liveRounds.length} in progress` : ''}</span>
+                                <span style="font-size:13px;color:#64748b;font-weight:600;">${allPlayed ? `${eventRoundsAll.length} rounds · all played` : `${playRounds.length} to play${liveRounds.length ? ` · ${liveRounds.length} in progress` : ''}`}</span>
                             </div>
-                            <p style="font-size:13px;color:#64748b;margin:6px 0 12px;">Tap a round to select it — Start, groups and more apply to the selected round.${liveRounds.length ? ' Scoring is open on in-progress rounds on all devices.' : ''}</p>
-                            ${playRounds.map(round => {
+                            <p style="font-size:13px;color:#64748b;margin:6px 0 8px;">Tap a round to select it — Start, groups and more apply to the selected round.${liveRounds.length ? ' Scoring is open on in-progress rounds on all devices.' : ''}</p>
+                            <div class="hx-rstrip">
+                                ${eventRoundsAll.map(round => {
+                                    const isPlayed = round.completed === true;
+                                    const isLive = !isPlayed && round.active !== false;
+                                    const sel = !allPlayed && selRound === round;
+                                    const d = new Date(round.timestamp || round.id);
+                                    const dateStr = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                                    const isPast = !isLive && !isPlayed && d < new Date();
+                                    const hasGroups = hasGroupsOf(round);
+                                    let pct = 0;
+                                    if (isLive) {
+                                        let filled = 0, totalCells = 0;
+                                        (round.teams || []).forEach(t => (t.players || []).forEach(p => {
+                                            totalCells += 18;
+                                            filled += (p.scores || []).filter(s => s !== '' && s != null).length;
+                                        }));
+                                        pct = totalCells > 0 ? Math.round((filled / totalCells) * 100) : 0;
+                                    }
+                                    const shortCourse = String(round.courseName || '').replace(' to ', '→').replace(/\s+Golf Club$/, '');
+                                    const stIcon = isPlayed ? '✓' : (isLive ? '⛳' : (isPast ? '⚠' : ''));
+                                    const gsLine = isPlayed ? '✓ Played'
+                                        : isLive ? `⛳ ${pct}% scored`
+                                        : isPast ? '⚠ Overdue'
+                                        : (hasGroups ? '✓ Groups set' : '👥 No groups');
+                                    return `
+                                        <button type="button" class="hx-rchip ${sel ? 'sel' : ''} ${isLive ? 'live' : ''} ${isPlayed ? 'done' : ''} ${isPast ? 'over' : ''}" onclick="selectHomeRound('${round.id}')" title="${round.courseName} · ${dateStr}">
+                                            <span class="st">${stIcon}</span>
+                                            <b>R${roundNoOf(round)}</b>
+                                            <span class="cn">${shortCourse}</span>
+                                            <span>${dateStr}</span>
+                                            <span class="gs">${gsLine}</span>
+                                        </button>`;
+                                }).join('')}
+                            </div>
+                            ${allPlayed ? `
+                                <div class="hx-actbar">
+                                    <div style="font-weight:800;font-size:15px;">🏁 All ${standings.total} rounds played</div>
+                                    <div style="color:#6b7280;font-size:13px;margin-top:2px;">That's the full week — every round of this event is in the books.</div>
+                                </div>
+                            ` : (selRound ? (() => {
+                                const round = selRound;
                                 const idx = state.rounds.indexOf(round);
-                                const isLive = round.active !== false;
-                                const sel = selRound === round;
+                                const isPlayed = round.completed === true;
+                                const isLive = !isPlayed && round.active !== false;
                                 const d = new Date(round.timestamp || round.id);
                                 const dateStr = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
                                 const timeStr = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-                                const isPast = !isLive && d < new Date();
+                                const isPast = !isLive && !isPlayed && d < new Date();
                                 const hasGroups = hasGroupsOf(round);
                                 const nPlayers = (round.teams || []).reduce((n, t) => n + (t.players || []).length, 0);
                                 let pct = 0;
@@ -3622,71 +3673,65 @@
                                     }));
                                     pct = totalCells > 0 ? Math.round((filled / totalCells) * 100) : 0;
                                 }
-                                return `
-                                    <div class="list-item hx-roundrow ${sel ? 'sel' : ''} ${isLive ? 'live' : ''}" onclick="selectHomeRound('${round.id}')">
-                                        <div style="flex:1;min-width:0;">
-                                            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                                                <span style="font-size:11.5px;font-weight:800;letter-spacing:1px;color:var(--color-grass);">R${roundNoOf(round)}</span>
-                                                <strong style="font-size:16px;color:${isLive ? '#92400e' : '#065f46'};">${round.courseName}</strong>
-                                                ${isLive ? '<span class="hx-rc-warn" style="margin-top:0;">⛳ In progress</span>' : ''}
-                                                ${sel ? '<span class="hx-selchip">✓ Selected</span>' : ''}
-                                            </div>
-                                            <div style="font-size:14px;color:#6b7280;margin-top:4px;">
-                                                ${dateStr} at ${timeStr} · ${round.teams.length} team${round.teams.length === 1 ? '' : 's'} · ${nPlayers} players
-                                                ${isPast ? '<span style="color:#ef4444;font-weight:600;"> • Overdue</span>' : ''}
-                                            </div>
-                                            <div>
-                                                ${hasGroups
-                                                    ? '<span class="hx-rc-ok">✓ Groups set</span>'
-                                                    : '<span class="hx-rc-warn">👥 Groups not set yet</span>'}
-                                            </div>
-                                            ${isLive ? `
-                                                <div style="font-size:13px;color:#92400e;margin-top:6px;">${pct}% scored</div>
-                                                <div style="height:6px;background:#f3f4f6;border-radius:3px;margin-top:4px;overflow:hidden;">
-                                                    <div style="height:100%;width:${pct}%;background:#f59e0b;"></div>
-                                                </div>
-                                            ` : ''}
-                                            ${sel ? `
-                                                <div class="hx-rowacts" onclick="event.stopPropagation()">
-                                                    ${isLive ? `
-                                                        ${!state.readOnly ? `
-                                                            <button onclick="continueRound(${idx})" class="btn-primary" style="padding:10px 18px;background:#10b981;">▶️ Continue</button>
-                                                            <span class="hx-menuwrap">
-                                                                <button onclick="toggleHomeMenu('hxmenu-sel-live')" class="btn-secondary" style="padding:10px 14px;">•••</button>
-                                                                <span class="hx-menu" id="hxmenu-sel-live" style="display:none;">
-                                                                    <button onclick="completeRoundByIndex(${idx})">🔒 Complete round</button>
-                                                                    <button onclick="resetRound(${idx})">↩️ Reset scores</button>
-                                                                    <button class="danger" onclick="deleteScheduledRound(${idx})">🗑️ Delete round</button>
-                                                                </span>
-                                                            </span>
-                                                        ` : ''}
-                                                    ` : (!state.readOnly ? `
-                                                            <button onclick="activateRound(${idx})" class="btn-primary" style="background:linear-gradient(135deg,#059669,#10b981);font-size:16px;padding:12px 18px;">▶️ Start Round</button>
-                                                            <button onclick="editScheduledGroups(${idx})" class="btn-secondary" style="padding:10px 14px;">👥 ${hasGroups ? 'Edit Groups' : 'Set Groups'}</button>
-                                                            <span class="hx-menuwrap">
-                                                                <button onclick="toggleHomeMenu('hxmenu-sel-sched')" class="btn-secondary" style="padding:10px 14px;">••• More</button>
-                                                                <span class="hx-menu" id="hxmenu-sel-sched" style="display:none;">
-                                                                    <button onclick="editScheduledRound(${idx})">📅 Change date</button>
-                                                                    <button class="danger" onclick="deleteScheduledRound(${idx})">🗑️ Delete round</button>
-                                                                </span>
-                                                            </span>
-                                                        ` : (hasGroups ? `
-                                                            <button onclick="viewScheduledGroups(${idx})" class="btn-secondary" style="padding:10px 14px;">👁️ View Groups</button>
-                                                        ` : ''))
-                                                    }
-                                                </div>
-                                            ` : ''}
-                                        </div>
-                                        ${sel ? '' : '<div class="hx-tapcue">›</div>'}
+                                if (isPlayed) return `
+                                    <div class="hx-actbar">
+                                        <div style="font-size:14px;color:#64748b;font-weight:600;">✓ <strong style="color:#065f46;">R${roundNoOf(round)} · ${round.courseName}</strong> — played. Full details in All Rounds.</div>
                                     </div>`;
-                            }).join('')}
+                                return `
+                                    <div class="hx-actbar">
+                                        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                                            <span style="font-size:11.5px;font-weight:800;letter-spacing:1px;color:var(--color-grass);">R${roundNoOf(round)}</span>
+                                            <strong style="font-size:16px;color:${isLive ? '#92400e' : '#065f46'};">${round.courseName}</strong>
+                                            ${isLive ? '<span class="hx-rc-warn" style="margin-top:0;">⛳ In progress</span>' : ''}
+                                            <span class="hx-selchip"${isLive ? ' style="background:#f59e0b;color:#451a03;"' : ''}>✓ Selected</span>
+                                        </div>
+                                        <div style="font-size:14px;color:#6b7280;margin-top:4px;">
+                                            ${dateStr} at ${timeStr} · ${round.teams.length} team${round.teams.length === 1 ? '' : 's'} · ${nPlayers} players
+                                            ${isPast ? '<span style="color:#ef4444;font-weight:600;"> • Overdue</span>' : ''}
+                                        </div>
+                                        <div>
+                                            ${hasGroups
+                                                ? '<span class="hx-rc-ok" style="margin-top:6px;">✓ Groups set</span>'
+                                                : '<span class="hx-rc-warn" style="margin-top:6px;">👥 Groups not set yet</span>'}
+                                        </div>
+                                        ${isLive ? `
+                                            <div style="font-size:13px;color:#92400e;margin-top:6px;">${pct}% scored</div>
+                                            <div style="height:6px;background:#f3f4f6;border-radius:3px;margin-top:4px;overflow:hidden;">
+                                                <div style="height:100%;width:${pct}%;background:#f59e0b;"></div>
+                                            </div>
+                                        ` : ''}
+                                        <div class="hx-rowacts">
+                                            ${isLive ? `
+                                                ${!state.readOnly ? `
+                                                    <button onclick="continueRound(${idx})" class="btn-primary" style="padding:10px 18px;background:#10b981;">▶️ Continue</button>
+                                                    <span class="hx-menuwrap">
+                                                        <button onclick="toggleHomeMenu('hxmenu-sel-live')" class="btn-secondary" style="padding:10px 14px;">•••</button>
+                                                        <span class="hx-menu" id="hxmenu-sel-live" style="display:none;">
+                                                            <button onclick="completeRoundByIndex(${idx})">🔒 Complete round</button>
+                                                            <button onclick="resetRound(${idx})">↩️ Reset scores</button>
+                                                            <button class="danger" onclick="deleteScheduledRound(${idx})">🗑️ Delete round</button>
+                                                        </span>
+                                                    </span>
+                                                ` : ''}
+                                            ` : (!state.readOnly ? `
+                                                    <button onclick="activateRound(${idx})" class="btn-primary" style="background:linear-gradient(135deg,#059669,#10b981);font-size:16px;padding:12px 18px;">▶️ Start Round</button>
+                                                    <button onclick="editScheduledGroups(${idx})" class="btn-secondary" style="padding:10px 14px;">👥 ${hasGroups ? 'Edit Groups' : 'Set Groups'}</button>
+                                                    <span class="hx-menuwrap">
+                                                        <button onclick="toggleHomeMenu('hxmenu-sel-sched')" class="btn-secondary" style="padding:10px 14px;">••• More</button>
+                                                        <span class="hx-menu" id="hxmenu-sel-sched" style="display:none;">
+                                                            <button onclick="editScheduledRound(${idx})">📅 Change date</button>
+                                                            <button class="danger" onclick="deleteScheduledRound(${idx})">🗑️ Delete round</button>
+                                                        </span>
+                                                    </span>
+                                                ` : (hasGroups ? `
+                                                    <button onclick="viewScheduledGroups(${idx})" class="btn-secondary" style="padding:10px 14px;">👥 View Groups</button>
+                                                ` : ''))
+                                            }
+                                        </div>
+                                    </div>`;
+                            })() : '')}
                         </div>
-                    ` : (standings.total > 0 ? `
-                        <div class="hx-card">
-                            <div style="font-weight:800;font-size:16px;">🏁 All ${standings.total} rounds played</div>
-                            <div style="color:#6b7280;font-size:14px;margin-top:4px;">That's the full week — every round of this event is in the books.</div>
-                        </div>
-                    ` : '')}
+                    ` : ''}
 
                     ${!currentEvent ? `
                         <div class="hx-card" style="background:#fee2e2;border:2px solid #ef4444;">
