@@ -793,8 +793,76 @@ const FUN_AWARDS = [
   { key: 'bounceBack', emo: '↩️', ttl: 'THE BOUNCE-BACK', metric: (d, round) => { let n = 0; for (let i = 0; i < 17; i++) { if (d.nets[i] - round.pars[i] >= 2 && d.nets[i + 1] - round.pars[i + 1] <= -1) n++; } return n; }, fmt: (d, round) => { let n = 0; for (let i = 0; i < 17; i++) { if (d.nets[i] - round.pars[i] >= 2 && d.nets[i + 1] - round.pars[i + 1] <= -1) n++; } return 'Followed a mess with a birdie, ' + n + ' time' + (n > 1 ? 's' : '') + ' — no memory, all nerve'; } },
   { key: 'rock', emo: '🪨', ttl: 'THE ROCK', metric: d => 20 - d.cats.dbl * 2 - d.cats.bog, fmt: d => 'Only ' + d.cats.dbl + ' blow-up holes all day — steady as granite' },
   { key: 'pinMagnet', emo: '🧲', ttl: 'PIN MAGNET', metric: d => d.ctp, fmt: d => d.ctp + ' closest-to-the-pin win' + (d.ctp > 1 ? 's' : '') + ' — the flags owe him rent' },
-  { key: 'honeyPot', emo: '🍯', ttl: 'HONEY POT', metric: d => (d.bbb.bingo > 0 && d.bbb.bango > 0 && d.bbb.bongo > 0) ? d.bbb.total : -1, fmt: d => 'Won all three B’s — the full honey pot' }
+  { key: 'honeyPot', emo: '🍯', ttl: 'HONEY POT', metric: d => (d.bbb.bingo > 0 && d.bbb.bango > 0 && d.bbb.bongo > 0) ? d.bbb.total : -1, fmt: d => 'Won all three B’s — the full honey pot' },
+  /* CYCLE 34 — REVIVED FROM THE ADMIN APP'S ANALYTICS (index.html:
+     presentationAnalytics §11 and the A.* crowns). Definitions ported,
+     not paraphrased; the cycle ledger carries the full roster diff.
+     Swiper and I've Been Robbed are the app's exact computations
+     (swiperRobbed34 below); the rest are the app's crowns whose inputs
+     the engine already computes. */
+  { key: 'swiper', emo: '🦊', ttl: 'SWIPER', metric: (d, round) => { const sr = swiperRobbed34(DATA.rounds.indexOf(round) + 1)[d.pid]; return sr && sr.swN >= 2 ? sr.swN : 0; }, fmt: (d, round) => { const sr = swiperRobbed34(DATA.rounds.indexOf(round) + 1)[d.pid]; return sr.swN + ' B points pinched on holes where his gross was his group’s worst'; } },
+  { key: 'robbed', emo: '🚨', ttl: 'I’VE BEEN ROBBED', metric: (d, round) => { const sr = swiperRobbed34(DATA.rounds.indexOf(round) + 1)[d.pid]; return sr && sr.rbN >= 3 ? sr.rbN : 0; }, fmt: (d, round) => { const sr = swiperRobbed34(DATA.rounds.indexOf(round) + 1)[d.pid]; return sr.rbN + ' holes with his group’s best gross — and not a single B for any of them'; } },
+  { key: 'comeback', emo: '🚀', ttl: 'COMEBACK KID', metric: (d, round) => { const s = sides34(d, round), gain = s.f - s.b; return s.nf >= 7 && s.nb >= 7 && gain >= 5 ? gain : 0; }, fmt: (d, round) => { const s = sides34(d, round); return 'Out in ' + s.f + ', home in ' + s.b + ' — ' + (s.f - s.b) + ' shots clawed back after the turn'; } },
+  { key: 'faceplant', emo: '📉', ttl: 'FACEPLANT', metric: (d, round) => { const night = DATA.rounds.indexOf(round) + 1, c = RC(night); const rows = Object.values(c.players).map(x => ({ x, s: sides34(x, round) })).filter(y => y.s.nf >= 7 && y.s.nb >= 7); if (rows.length < 2) return 0; const rank = rows.slice().sort((a, b) => a.s.f - b.s.f).findIndex(y => y.x.pid === d.pid) + 1; const s = sides34(d, round), delta = s.b - s.f; return rank >= 1 && rank <= 3 && delta >= 5 ? delta : 0; }, fmt: (d, round) => { const s = sides34(d, round); return 'Out in ' + s.f + ' — top three at the turn — home in ' + s.b; } },
+  { key: 'jekyllHyde', emo: '⚗️', ttl: 'JEKYLL & HYDE', metric: (d, round) => { const s = sides34(d, round), gap = Math.abs(s.f - s.b); return s.nf >= 7 && s.nb >= 7 && gap >= 5 && d.pid !== faceplantWinner34(DATA.rounds.indexOf(round) + 1) ? gap : 0; }, fmt: (d, round) => { const s = sides34(d, round); return 'Front ' + s.f + ' · back ' + s.b + ' — two different golfers shared one card'; } },
+  { key: 'birdieMachine', emo: '🐦', ttl: 'BIRDIE MACHINE', metric: (d, round) => { let n = 0; d.nets.forEach((nt, i) => { if (nt != null && nt < round.pars[i]) n++; }); return n >= 3 ? n : 0; }, fmt: (d, round) => { let n = 0; d.nets.forEach((nt, i) => { if (nt != null && nt < round.pars[i]) n++; }); return n + ' net birdies or better'; } },
+  { key: 'steadyEddie', emo: '🛡️', ttl: 'STEADY EDDIE', metric: (d, round) => { if (!d.nets || d.nets.filter(nt => nt != null).length < 18) return 0; let bog = 0; for (let i = 0; i < 18; i++) { const o = d.nets[i] - round.pars[i]; if (o > 1) return 0; if (o > 0) bog++; } return 100 - bog; }, fmt: (d, round) => { let bog = 0; d.nets.forEach((nt, i) => { if (nt != null && nt > round.pars[i]) bog++; }); return 'Not one net double bogey all day — just ' + bog + ' net bogey' + (bog === 1 ? '' : 's'); } },
+  { key: 'blowUp', emo: '💥', ttl: 'BLOW-UP HOLE', metric: (d, round) => { const rp = round.players[d.pid]; if (!rp || !rp.scores) return 0; let w = 0; rp.scores.forEach((g, i) => { if (g != null && g !== '') w = Math.max(w, g - round.pars[i]); }); return w >= 3 ? w : 0; }, fmt: (d, round) => { const rp = round.players[d.pid]; let w = 0, hi = -1; rp.scores.forEach((g, i) => { if (g != null && g !== '' && g - round.pars[i] > w) { w = g - round.pars[i]; hi = i; } }); return 'A ' + rp.scores[hi] + ' on hole ' + (hi + 1) + ', the par ' + round.pars[hi] + ' — ' + w + ' over on one hole'; } },
+  { key: 'ballMagnet', emo: '🎣', ttl: 'BALL MAGNET', metric: (d, round) => { const all = Object.values(RC(DATA.rounds.indexOf(round) + 1).players).map(x => x.balls); const mn = Math.min.apply(null, all), mx = Math.max.apply(null, all); return d.balls === mn && mn <= 1 && mn < mx ? 10 - d.balls : 0; }, fmt: d => 'Finished with ' + d.balls + ' ball' + (d.balls === 1 ? '' : 's') + ' — the water took the rest' },
+  { key: 'groundhog', emo: '🔁', ttl: 'GROUNDHOG DAY', metric: (d, round) => { const rp = round.players[d.pid]; if (!rp || !rp.scores) return 0; let best = 0, cur = 0, cv = null; for (let i = 0; i < 18; i++) { const g = rp.scores[i]; if (g != null && g !== '' && g === cv) cur++; else if (g != null && g !== '') { cv = g; cur = 1; } else { cv = null; cur = 0; } if (cur > best) best = cur; } return best >= 3 ? best : 0; }, fmt: (d, round) => { const rp = round.players[d.pid]; let best = 0, cur = 0, cv = null, bv = null; for (let i = 0; i < 18; i++) { const g = rp.scores[i]; if (g != null && g !== '' && g === cv) cur++; else if (g != null && g !== '') { cv = g; cur = 1; } else { cv = null; cur = 0; } if (cur > best) { best = cur; bv = cv; } } return 'The same ' + bv + ', ' + best + ' holes in a row'; } },
+  { key: 'grind', emo: '💪', ttl: 'THE GRIND', metric: (d, round) => { let bog = 0, n = 0; d.nets.forEach((nt, i) => { if (nt != null) { n++; if (nt > round.pars[i]) bog++; } }); return n >= 16 ? 100 - bog : 0; }, fmt: (d, round) => { let bog = 0; d.nets.forEach((nt, i) => { if (nt != null && nt > round.pars[i]) bog++; }); return 'Just ' + bog + ' net bogey' + (bog === 1 ? '' : 's') + ' on the whole card'; } }
 ];
+/* CYCLE 34 — the revived awards' shared computations. sides34: gross
+   front/back sums with scored-hole counts. swiperRobbed34: the app's
+   Swiper / I've Been Robbed, exactly — group = the round's group field
+   (one big group when absent); CLEARLY worst/best = strictly worse /
+   better gross than EVERY group-mate with a gross on the hole; B points
+   per hole from bbbAwards. Thresholds (Swiper ≥ 2 B points, Robbed ≥ 3
+   holes) live in the metrics above, as the app awards them. */
+function sides34(d, round) {
+  const rp = round.players[d.pid], sc = (rp && rp.scores) || [];
+  let f = 0, b = 0, nf = 0, nb = 0;
+  for (let i = 0; i < 18; i++) { const g = sc[i]; if (g == null || g === '') continue; if (i < 9) { f += g; nf++; } else { b += g; nb++; } }
+  return { f, b, nf, nb };
+}
+const _srCache34 = {};
+function swiperRobbed34(night) {
+  if (_srCache34[night]) return _srCache34[night];
+  const r = DATA.rounds[night - 1], c = RC(night), out = {};
+  const groupOf = {}, grossOn = {};
+  Object.keys(r.players || {}).forEach(pid => { const rp = r.players[pid]; groupOf[pid] = rp.group != null ? rp.group : 0; grossOn[pid] = rp.scores || []; });
+  const bOn = {};
+  (r.bbbAwards || []).forEach(e => {
+    if (!e || e.holeIdx == null) return;
+    ['bingo', 'bango', 'bongo'].forEach(slot => { const pid = e[slot]; if (pid === '' || pid == null) return; const k = String(pid); if (!bOn[k]) bOn[k] = {}; bOn[k][e.holeIdx] = (bOn[k][e.holeIdx] || 0) + 1; });
+  });
+  const clearly = (pid, hi, worst) => {
+    const mine = grossOn[pid] && grossOn[pid][hi];
+    if (mine == null || mine === '') return false;
+    const peers = Object.keys(grossOn).filter(p => p !== pid && groupOf[p] === groupOf[pid]).map(p => grossOn[p][hi]).filter(v => v != null && v !== '');
+    if (!peers.length) return false;
+    return peers.every(v => worst ? mine > v : mine < v);
+  };
+  Object.keys(c.players).forEach(pid => {
+    const mine = bOn[pid] || {};
+    let swN = 0; const swHoles = [];
+    Object.keys(mine).forEach(hi => { const idx = parseInt(hi); if (clearly(pid, idx, true)) { swN += mine[hi]; swHoles.push({ hole: idx + 1, gross: grossOn[pid][idx], b: mine[hi] }); } });
+    let rbN = 0; const rbHoles = [];
+    for (let hi = 0; hi < 18; hi++) { if (grossOn[pid] && grossOn[pid][hi] != null && grossOn[pid][hi] !== '' && clearly(pid, hi, false) && !(mine[hi] > 0)) { rbN++; rbHoles.push({ hole: hi + 1, gross: grossOn[pid][hi] }); } }
+    out[pid] = { swN, swHoles, rbN, rbHoles };
+  });
+  _srCache34[night] = out;
+  return out;
+}
+function faceplantWinner34(night) {
+  const c = RC(night), r = DATA.rounds[night - 1];
+  const rows = Object.values(c.players).map(d => ({ d, s: sides34(d, r) })).filter(x => x.s.nf >= 7 && x.s.nb >= 7);
+  if (rows.length < 2) return null;
+  const frontRank = rows.slice().sort((a, b) => a.s.f - b.s.f);
+  let best = null;
+  rows.forEach(x => { const rank = frontRank.indexOf(x) + 1, delta = x.s.b - x.s.f; if (rank <= 3 && delta >= 5 && (!best || delta > best.delta)) best = { pid: x.d.pid, delta }; });
+  return best ? best.pid : null;
+}
 FUN_AWARDS[7].metric = function (d, round) { // vulture: net birdies on par 5s
   let n = 0; d.nets.forEach((net, hi) => { if (round.pars[hi] === 5 && net - 5 <= -1) n++; }); return n;
 };
@@ -820,6 +888,10 @@ function pickFunAwards(night, funWonState) {
   const start = ((night - 1) * 5) % FUN_AWARDS.length;
   const ordered = FUN_AWARDS.slice(start).concat(FUN_AWARDS.slice(0, start));
   for (const award of ordered) {
+    // CYCLE 34 — the Honey Pot is a fixed Act IV segment now (the sweep
+    // list, sHoneyPot34); the rotation never picks it, so it can never
+    // appear twice in one night.
+    if (award.key === 'honeyPot') continue;
     const already = won[award.key] || [];
     let elig = ps.filter(d => !already.includes(d.pid));
     if (!elig.length) elig = ps;
@@ -1257,6 +1329,125 @@ function sBigPot(night) {
     '<div style="margin:1.6vmin 0;">' + face(big.winner, true) + '</div>' +
     '<div class="sub">' + esc(pname(big.winner)) + ' takes the lot — net ' + (big.netDiff <= -1 ? (-big.netDiff) + ' under par' : big.netDiff === 0 ? 'par' : '+' + big.netDiff) + '. The room felt that one.</div></div>' };
 }
+/* ── CYCLE 34 — THE SKINS RACE. Ron on the Cycle 27 wordless pot runs:
+      "just awful — mimic the matches." One auto-playing slide in the
+      match-race idiom: hole by hole across all 18 — a unique low net
+      stands with its holder's face, name and net; a TIED low net shows
+      the tied faces while the pot counter swells (pot = skins at stake,
+      starting at 1, +1 per tied hole); a collection is celebrated
+      (winner, skins won, pot resets to 1). Any pot left after 18 is
+      shown still on the table — or split by the King of Ties, exactly
+      as the engine settles it. Frames are pre-computed from
+      RC(night).skinsLog, the computeSkins ground truth, so every
+      winner and pot on screen IS the engine's number. The summary
+      slide after it (team pay row + skins king) is unchanged. ── */
+function sSkinsRace34(night) {
+  const c = RC(night); if (!c.skinsEnabled) return [];
+  const r = DATA.rounds[night - 1], log = c.skinsLog || [];
+  const out = [];
+  const chip = (l, state) => '<div style="position:relative;flex:none;width:5.6vmin;height:5.6vmin;border-radius:1.2vmin;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:2.5vmin;' +
+    (state === 'win' ? 'background:linear-gradient(180deg,#fff3b0,#c99612);color:#241a02;box-shadow:0 0 2.4vmin #ffd75e88;' :
+     state === 'tied' ? 'background:#ffffff14;color:#ff9d9d;border:1px solid #ff6b6b55;' :
+     'background:#ffffff1c;color:var(--cream);border:1px solid var(--line);') + '">' + l.hole +
+    (state === 'tied' ? '<span style="position:absolute;top:-1.2vmin;right:-.9vmin;font-size:2vmin;">✗</span>' : '') + '</div>';
+  out.push({ ch: 'Act I · Skins', dwell: 3000, snd: SND.skins, html:
+    bgImg(IMG.coins, .30) +
+    '<div style="position:relative;z-index:3;"><div class="kick">Act I · The Skins Game</div>' +
+    '<div style="font-size:9vmin;line-height:1.15;">💰</div>' +
+    '<h2 style="font-size:7vmin;">SKINS</h2>' +
+    '<div class="sub" style="font-size:2.4vmin;">Lowest net on the hole takes the pot. Tie, and it grows.</div>' +
+    '<div style="display:flex;gap:.9vmin;justify-content:center;flex-wrap:wrap;max-width:124vmin;margin-top:2.2vmin;">' + log.map(l => chip(l, 'open')).join('') + '</div>' +
+    '<div style="margin-top:2.2vmin;font-size:4.2vmin;">🪙</div></div>' });
+  const pars = r.pars || [];
+  const carry = !(r.skins && r.skins.carryover === false);
+  const byHole = {}; log.forEach(l => { byHole[l.hole] = l; });
+  // Timing: ~0.5 s a hole, ~1.25 s on a collection — scaled down on a
+  // many-win night so the whole race still lands inside ~15 s.
+  const winCount34 = log.filter(l => l.winner).length;
+  const winDwell34 = winCount34 >= 9 ? 1000 : 1250, tieDwell34 = winCount34 >= 9 ? 500 : 520;
+  const emojiFor = nd => nd <= -2 ? '🦅' : nd === -1 ? '🐦' : nd === 0 ? '➖' : nd === 1 ? '❌' : '❌❌';
+  const pipsFor = cur => { let s = ''; for (let j = 1; j <= 18; j++) { const l = byHole[j]; /* progress, not prophecy: only holes already played show their outcome (cur = 0 is the final frame — all shown) */ const cls = cur === 0 ? (l ? (l.winner ? ' win' : ' tie') : '') : j === cur ? ' cur' : (j < cur && l ? (l.winner ? ' win' : ' tie') : ''); s += '<span class="sk34pip' + cls + '">' + j + '</span>'; } return s; };
+  const frames = [];
+  let stake = 1, t = 250;
+  for (let h = 1; h <= 18; h++) {
+    const l = byHole[h];
+    let stage, win = false;
+    if (l && l.winner) {
+      const d = c.players[l.winner];
+      stage = '<div class="popIn" style="text-align:center;">' + face(l.winner, true) +
+        '<div class="sub" style="font-size:2.6vmin;margin-top:.6vmin;">NET ' + (d && d.nets ? d.nets[h - 1] : '') + ' on the ' + ord29(h) + ' · ' + esc(tname(l.winner)) + '</div>' +
+        '<div style="font-size:5vmin;margin-top:.4vmin;">' + emojiFor(l.netDiff) + '</div>' +
+        '<div style="font-weight:900;font-size:3.8vmin;color:var(--gold);margin-top:.4vmin;">🪙 COLLECTS ' + l.pot + ' SKIN' + (l.pot === 1 ? '' : 'S') + '</div></div>';
+      win = true; stake = 1;
+    } else if (l) {
+      const faces = l.tied.slice(0, 6).map(pid => face34(pid, 6.5)).join('') + (l.tied.length > 6 ? '<span class="sub" style="font-size:2.6vmin;">+' + (l.tied.length - 6) + ' more</span>' : '');
+      stage = '<div class="popIn" style="text-align:center;"><div style="display:flex;gap:1vmin;justify-content:center;align-items:center;">' + faces + '</div>' +
+        '<div style="font-weight:900;font-size:3.8vmin;margin-top:1vmin;">TIED AT NET ' + l.tiedScore + '</div>' +
+        '<div class="sub" style="font-size:2.4vmin;">' + l.tied.map(pid => esc(sname(pid))).join(' · ') + '</div>' +
+        '<div style="font-size:4.4vmin;margin-top:.4vmin;">🤝</div></div>';
+      if (carry) stake += 1;
+    } else {
+      stage = '<div style="text-align:center;" class="sub">No result on the ' + ord29(h) + '.</div>';
+    }
+    frames.push({ at: t, hole: h, par: pars[h - 1] || '', stage, pot: '🪙 POT ' + stake, pips: pipsFor(h), win, winner: l && l.winner ? l.winner : null, potWon: l && l.winner ? l.pot : 0 });
+    t += win ? winDwell34 : tieDwell34;
+  }
+  let finStage;
+  if (c.kingOfTies && c.leftoverPot > 0) {
+    const shares = Object.keys(c.finalShares || {}).filter(pid => c.finalShares[pid] > 0);
+    finStage = '<div class="popIn" style="text-align:center;"><div style="font-size:5vmin;">👑</div>' +
+      '<div style="font-weight:900;font-size:4.2vmin;color:var(--gold);">THE LAST POT IS SPLIT — KING OF TIES</div>' +
+      '<div style="display:flex;gap:2.2vmin;justify-content:center;margin-top:1.6vmin;">' + shares.map(pid => '<div style="text-align:center;">' + face34(pid, 8) + '<div style="font-weight:800;font-size:2.2vmin;margin-top:.5vmin;">' + esc(sname(pid)) + '</div><div class="sub" style="font-size:2vmin;">' + fmt(c.finalShares[pid]) + ' skins</div></div>').join('') + '</div>' +
+      '<div class="sub" style="font-size:2.4vmin;margin-top:1.2vmin;">The tied men divide the last ' + c.leftoverPot + ' skins between them.</div></div>';
+  } else if (c.leftoverPot > 0) {
+    finStage = '<div class="popIn" style="text-align:center;"><div style="font-size:5.4vmin;">🪙</div>' +
+      '<div style="font-weight:900;font-size:4.2vmin;color:var(--gold);">' + c.leftoverPot + ' SKIN' + (c.leftoverPot === 1 ? '' : 'S') + ' STILL ON THE TABLE</div>' +
+      '<div class="sub" style="font-size:2.4vmin;margin-top:1vmin;">The last pot was never collected — the ties ran out of holes.</div></div>';
+  } else {
+    finStage = '<div class="popIn" style="text-align:center;"><div style="font-size:5.4vmin;">🏁</div>' +
+      '<div style="font-weight:900;font-size:4.2vmin;">EVERY SKIN FOUND A HOME</div>' +
+      '<div class="sub" style="font-size:2.4vmin;margin-top:1vmin;">Nothing left on the table.</div></div>';
+  }
+  frames.push({ at: t + 400, hole: 0, par: '', stage: finStage, pot: '🪙 SETTLED', pips: pipsFor(0), win: false, winner: null, potWon: 0 });
+  const totalMs = t + 400 + 1400;
+  const f0 = frames[0];
+  out.push({ ch: 'Act I · Skins', skins34: { frames, totalMs, celebrate: !!(c.kingOfTies && c.leftoverPot > 0) }, html:
+    '<div class="sk34">' + bgImg(IMG.coins, .20) +
+    '<div style="position:relative;z-index:3;"><div class="kick">Act I · The Skins Game</div>' +
+    '<div style="display:flex;align-items:center;justify-content:center;gap:2.6vmin;flex-wrap:wrap;"><span class="sk34hole" style="font-weight:900;font-size:5.2vmin;">HOLE ' + f0.hole + '</span>' +
+    '<span class="sk34par sub" style="font-size:2.6vmin;">' + (f0.par ? 'PAR ' + f0.par : '') + '</span>' +
+    '<span class="sk34pot">' + f0.pot + '</span></div>' +
+    '<div class="sk34stage">' + f0.stage + '</div>' +
+    '<div class="sk34pips">' + f0.pips + '</div></div></div>' });
+  const skinSum = sSkinsSummary(night); if (skinSum) out.push(skinSum);
+  return out;
+}
+function startSkins34(s, dir) {
+  const root = slidesEl.querySelector('.sk34');
+  if (!root) { s._autoDone = true; return; }
+  const F = s.skins34.frames;
+  const holeEl = root.querySelector('.sk34hole'), parEl = root.querySelector('.sk34par'),
+    stEl = root.querySelector('.sk34stage'), potEl = root.querySelector('.sk34pot'), pipEl = root.querySelector('.sk34pips');
+  const apply = k => {
+    const f = F[k]; if (!f) return;
+    holeEl.textContent = f.hole ? 'HOLE ' + f.hole : 'THE POT';
+    if (parEl) parEl.textContent = f.par ? 'PAR ' + f.par : '';
+    stEl.innerHTML = f.stage; potEl.innerHTML = f.pot; if (f.pips) pipEl.innerHTML = f.pips;
+  };
+  if (dir < 0 || RM) { apply(F.length - 1); s._autoDone = true; return; }
+  apply(0); s._autoDone = false;
+  autoFinish30 = () => { apply(F.length - 1); s._autoDone = true; autoFinish30 = null; if (s.skins34.celebrate) { burst(['#ffd75e', '#fff3b0', '#ffffff']); playSnd(SND.cheer); } };
+  F.forEach((f, k) => {
+    if (k === 0) return;
+    later30(() => {
+      if (cur.slides[cur.i] !== s) return;
+      apply(k);
+      if (f.win) playSnd(SND.skins);
+      if (k === F.length - 1) { s._autoDone = true; if (s.skins34.celebrate) { burst(['#ffd75e', '#fff3b0', '#ffffff']); playSnd(SND.cheer); } }
+    }, f.at);
+  });
+  later30(() => { if (cur.slides[cur.i] === s) s._autoDone = true; }, s.skins34.totalMs + 400);
+}
 /* CYCLE 27 — MATCH NOTATION (Ron's ruling: "Matches are won 4&3, 2&1
    etc, not 8-7"). Pure presentation math over computeMatch's per-hole
    record: walk the holes from the winner's side; the first hole after
@@ -1625,11 +1816,23 @@ function sCTPE9(night) {
       '<div class="goldGrad" style="font-weight:900;font-size:16vmin;line-height:1;">' + x.hole + '</div>' +
       '<div class="sub" style="font-size:2.6vmin;">PAR ' + r.pars[x.hole - 1] + ' · 📍 THE PIN</div>' +
       '<div class="sub" style="font-size:2.2vmin;margin-top:2.4vmin;opacity:.75;">…who stuck it closest?</div>' });
-    out.push({ ch: 'Act I · Closest to the Pin', dwell: 6200, fx: 'confetti', fxCols: [tcolor(x.pid)], snd: SND.cheer, html:
-      '<div class="kick">Side Games · Closest to the Pin · Hole ' + x.hole + '</div>' +
+    // CYCLE 34 — the reveal carries a picture: a photo from this round
+    // tagged with the winner (round photos carry playerIds) when one
+    // exists, else the AI depiction (presentation-assets/ctp-ball.jpg,
+    // embedded as IMG.ctpBall). "Hole N · <course>" headlines the card
+    // and the round's course photo sits behind it. No photo and no
+    // asset → the previous design, never a broken image.
+    const tagged34 = (r.photos || []).find(p => p && p.src && (p.playerIds || []).map(String).indexOf(String(x.pid)) >= 0);
+    const heroSrc34 = tagged34 ? tagged34.src : (IMG.ctpBall || null);
+    const cImg34 = courseImg(r.course);
+    out.push({ ch: 'Act I · Closest to the Pin', dwell: 6200, fx: 'confetti', fxCols: [tcolor(x.pid)], snd: SND.cheer, ctp34: tagged34 ? 'photo' : (heroSrc34 ? 'ai' : 'none'), html:
+      (cImg34 ? bgImg(cImg34, .30) : '') +
+      '<div style="position:relative;z-index:3;"><div class="kick">Side Games · Closest to the Pin</div>' +
+      '<div class="p29serif" style="font-weight:900;font-size:5.4vmin;color:var(--gold);">HOLE ' + x.hole + ' · ' + esc(r.course || '') + '</div>' +
+      (heroSrc34 ? '<div><img class="ctpHero34" src="' + heroSrc34 + '" alt=""></div>' : '') +
       '<div style="margin-top:1vmin;animation:popIn .55s cubic-bezier(.2,.8,.3,1) both;">' + face(x.pid, true) + '</div>' +
       '<div style="margin-top:1.4vmin;animation:popIn .55s cubic-bezier(.2,.8,.3,1) .25s both;"><span class="pill" style="font-size:2.8vmin;border-color:var(--gold);">🏆 PRIZE WINNER</span></div>' +
-      '<div style="margin-top:1.2vmin;animation:popIn .55s cubic-bezier(.2,.8,.3,1) .45s both;"><span class="pill" style="font-size:2.3vmin;">📍 +' + fmt(SET.ctpPoints) + ' pts</span></div>' });
+      '<div style="margin-top:1.2vmin;animation:popIn .55s cubic-bezier(.2,.8,.3,1) .45s both;"><span class="pill" style="font-size:2.3vmin;">📍 +' + fmt(SET.ctpPoints) + ' pts</span></div></div>' });
   });
   else out.push({ ch: 'Act I · Closest to the Pin', html: '<div class="kick">Side Games</div><h2>📍 Closest to the Pin</h2><div class="sub">No pins recorded tonight.</div>' });
   if (e9.length) out.push({ ch: 'Act I · Extra 9', snd: SND.sparkle, html:
@@ -2901,6 +3104,8 @@ function previewDeck(night) {
     '<div style="font-weight:900;font-size:9vmin;line-height:1.05;">ONE NIGHT.<br>ONE CUP.</div>' +
     '<div class="sub" style="margin-top:1.6vmin;">By tomorrow night, the Dutch Cup has a champion.</div></div>' });
   out.push(...sGroups(night));
+  // CYCLE 34 — preview decks end with the slideshow too.
+  out.push(...sSlideshow34(night));
   return out;
 }
 function sFairway(night) {
@@ -3227,46 +3432,29 @@ function sPot29(night) {
 
 /* ---------- Act I: the per-team points builds ---------- */
 function splitLines29(night, ti, c, h, cats) {
+  // CYCLE 34 — plain contribution facts only. The Kampioen is named nowhere
+  // before his finale (his line is gone entirely — not even a biggest-card
+  // line for the man himself), the field-best haul now lands on its own
+  // category beat in the build, and the zeros line is gone (each category
+  // beat shows its own "nothing").
   const tm = DATA.teams[ti];
   const ps = tm.players.map(pid => c.players[pid]).filter(Boolean);
   if (!ps.length) return [];
   const lines = [];
-  const kampPid = h && h.top ? h.top.pid : null;
-  if (kampPid && tm.players.indexOf(kampPid) >= 0)
-    lines.push('👑 <b>' + esc(sname(kampPid)) + ' — ' + fmt(h.top.total) + ' points.</b> De Kampioen Golfer van de Dag — the biggest card anyone posted tonight.');
   const top = ps.slice().sort((a, b) => b.total - a.total)[0];
-  if (top && top.pid !== kampPid && lines.length < 2) {
+  if (top && lines.length < 2) {
     const rank = 1 + Object.values(c.players).filter(d => d.total > top.total).length;
     if (rank > 1) lines.push('<b>' + esc(sname(top.pid)) + ' posted ' + fmt(top.total) + '</b> — the ' + ord29(rank) + '-biggest card of the night.');
   }
-  // the team's field-leading side-game haul (B's / pins / balls / skins)
-  const haulDefs = [
-    { get: d => d.bbb.total, val: d => d.bbbPts, phrase: n => n + ' B’s', noun: 'the B’s' },
-    { get: d => d.ctp, val: d => d.ctpPts, phrase: n => n + ' pin' + (n === 1 ? '' : 's'), noun: 'the pins' },
-    { get: d => d.balls, val: d => d.ballPts, phrase: n => n + ' balls kept', noun: 'balls' },
-    { get: d => d.skins, val: d => d.skinsPts, phrase: n => fmt(n) + ' skins', noun: 'skins' }
-  ];
-  let haul = null;
-  haulDefs.forEach(def => {
-    const fieldMax = Math.max.apply(null, Object.values(c.players).map(def.get));
-    if (fieldMax <= 0) return;
-    ps.forEach(d => { if (def.get(d) === fieldMax && (!haul || def.val(d) > haul.val)) haul = { def, d, val: def.val(d), n: fieldMax }; });
-  });
-  if (haul && lines.length < 2)
-    lines.push('<b>' + esc(sname(haul.d.pid)) + '’s ' + haul.def.phrase(haul.n) + '</b> were worth ' + fmt(haul.val) + ' points — the most anyone took from ' + haul.def.noun + ' tonight.');
   if (ps.length === 2 && lines.length < 2) {
     const other = ps[0] === top ? ps[1] : ps[0];
-    if (other && other.pid !== kampPid) {
+    if (other) {
       let garnish = '';
       if (other.e9) garnish = ' — including the Extra 9 point.';
       else if (other.ctp > 0) garnish = ' — including a pin.';
       else if (other.skins >= 3) garnish = ' — including ' + fmt(other.skins) + ' skins.';
       lines.push('<b>' + esc(sname(other.pid)) + '</b> added ' + fmt(other.total) + ' beside him.' + garnish);
     }
-  }
-  if (lines.length < 2) {
-    const zeros = (cats || teamCats29(c, ti)).filter(x => x.v === 0);
-    if (zeros.length) lines.push('Nothing from ' + zeros.map(z => z.low).join(' or ') + ' tonight — every point came the other ' + (6 - zeros.length) + ' ways.');
   }
   return lines.slice(0, 2);
 }
@@ -3337,15 +3525,32 @@ function sBuilds29(night) {
   C29_CATS.forEach(cat => { maxCat[cat.key] = Math.max(1, ...DATA.teams.map((t2, ti2) => teamCats29(c, ti2).find(x => x.key === cat.key).v)); });
   const order = st.slice().sort((a, b) => (a.tonight - b.tonight) || (a.total - b.total) || a.name.localeCompare(b.name)); // weakest first, the night winner last
   const chats = {}; order.forEach(s => { chats[s.team] = teamChat29(night, s.team, ctx); });
-  const fieldTop3 = Object.values(c.players).slice().sort((a, b) => b.total - a.total).slice(0, 3).map(d => d.pid);
-  const fullCutoff = night === 5 ? 3 : 4; // Night 5 pays for its match emphasis with one more compact build
+  // CYCLE 34 — the two-tier build is GONE. The old `full` gate dealt a team
+  // an intro + staged build only if it ranked top-4 tonight, drew a chatter
+  // pattern, held the Kampioen or fielded a top-3 card; everyone else got a
+  // single compact slide — no entry card, no faces, no walkup moment. That
+  // is exactly what Ron hit with Fore Good Knees on the live Night 1 deck
+  // (tonight-rank 6; their full chapter hung on the P5 chatter pattern
+  // happening to fire). Now EVERY team gets the full chapter, always.
+  // The field-best haul per category (the split's old haul line, landed per
+  // category now): B's / pins / balls / skins, by count, as it always was.
+  const haulDefs34 = [
+    { key: 'bbb', get: d => d.bbb.total, val: d => d.bbbPts, phrase: n => n + ' B’s', noun: 'the B’s' },
+    { key: 'ctp', get: d => d.ctp, val: d => d.ctpPts, phrase: n => n + ' pin' + (n === 1 ? '' : 's'), noun: 'the pins' },
+    { key: 'balls', get: d => d.balls, val: d => d.ballPts, phrase: n => n + ' balls kept', noun: 'balls' },
+    { key: 'skins', get: d => d.skins, val: d => d.skinsPts, phrase: n => fmt(n) + ' skins', noun: 'skins' }
+  ];
+  const hauls34 = {};
+  haulDefs34.forEach(def => {
+    const fieldMax = Math.max.apply(null, Object.values(c.players).map(def.get));
+    if (fieldMax <= 0) return;
+    Object.values(c.players).forEach(d => { if (def.get(d) === fieldMax && (!hauls34[def.key] || def.val(d) > hauls34[def.key].val)) hauls34[def.key] = { def, pid: d.pid, val: def.val(d), n: fieldMax }; });
+  });
   const out = [];
   order.forEach(s => {
     const ti = s.team, tm = DATA.teams[ti];
     const cats = teamCats29(c, ti);
     const isWinner = ti === ctx.winnerTeam;
-    const hasKamp = h && h.top && tm.players.indexOf(h.top.pid) >= 0;
-    const full = tonightRank[ti] <= fullCutoff || !!chats[ti] || hasKamp || tm.players.some(pid => fieldTop3.indexOf(pid) >= 0);
     const barCol = isNearBlack(tm.color) ? '#cfd4dc' : tm.color;
     let run = 0; const runs = cats.map(cat => (run += cat.v));
     const rowFor = (cat, r2) => '<div class="p29brow' + (cat.v === 0 ? ' zero' : '') + '"><div class="p29bl">' + cat.emo + ' ' + cat.lbl + '</div>' +
@@ -3358,12 +3563,6 @@ function sBuilds29(night) {
       (split.length ? '<div class="p29split">' + split.map(l => '<div style="margin-top:.7vmin;">' + l + '</div>').join('') + '</div>' : '');
     const headSmall = '<div class="p29thead" style="margin:1.2vmin 0 1.6vmin;">' + teamLogo(tm.id, 9) +
       '<div class="p29serif" style="font-weight:900;font-size:4.6vmin;color:' + tm.color + ';">' + esc(tm.name) + '</div></div>';
-    if (!full) {
-      out.push({ ch: 'Act I · The Night’s Points', snd: teamWalkupSnd(tm.id) || SND.swoosh, html:
-        p29bg() + '<div class="kick">Act I · The Night’s Points</div>' + headSmall +
-        cats.map((cat, ix) => rowFor(cat, runs[ix])).join('') + totalBand });
-      return;
-    }
     let hook;
     if (isWinner) hook = 'How ' + esc(tm.name) + ' won the night';
     else if (s.prevRank && s.move <= -2 && s.move === ctx.minMove) hook = 'The fall — ' + esc(tm.name);
@@ -3376,32 +3575,45 @@ function sBuilds29(night) {
       '<div class="sub" style="font-size:2.4vmin;margin-top:.6vmin;">' + tm.players.map(pid => esc(sname(pid)) + ' ' + fmt((c.players[pid] || {}).total || 0)).join(' · ') + '</div></div></div>' +
       '<div class="faceRow" style="margin-top:2.2vmin;">' + tm.players.map(pid => face(pid)).join('') + '</div>' +
       '<div class="p29serif" style="font-size:3.6vmin;color:var(--cream);margin-top:2.4vmin;font-style:italic;">' + hook + '</div>' });
-    const groups = [[0], [1, 2], [3, 4, 5]].map((idxs, gi) =>
-      '<div class="bt" data-b="' + (gi + 1) + '" style="width:100%">' + idxs.map(ix => rowFor(cats[ix], runs[ix])).join('') + '</div>').join('');
-    out.push({ ch: 'Act I · The Night’s Points', beatSnd: { 1: SND.skins, 2: SND.skins, 3: SND.skins, 4: isWinner ? SND.cheer : SND.sparkle },
+    // CYCLE 34 — ONE BEAT PER CATEGORY, canonical order, each beat carrying
+    // every player's contribution to that category.
+    const catBeats = cats.map((cat, ix) => {
+      const contribs = tm.players.map(pid => {
+        const d = c.players[pid], v = d ? (d[cat.key] || 0) : 0;
+        return '<span class="cat34chip">' + face34(pid, 4.4) + '<span>' + esc(sname(pid)) + '</span><b>+' + fmt(v) + '</b></span>';
+      }).join('');
+      const haulKey34 = { bbbPts: 'bbb', ctpPts: 'ctp', ballPts: 'balls', skinsPts: 'skins' }[cat.key];
+      const haul = haulKey34 && hauls34[haulKey34] && tm.players.indexOf(hauls34[haulKey34].pid) >= 0
+        ? '<div class="cat34haul">' + esc(sname(hauls34[haulKey34].pid)) + '’s ' + hauls34[haulKey34].def.phrase(hauls34[haulKey34].n) + ' — the most anyone took from ' + hauls34[haulKey34].def.noun + ' tonight.</div>' : '';
+      return '<div class="bt" data-b="' + (ix + 1) + '" style="width:100%">' + rowFor(cat, runs[ix]) + '<div class="cat34">' + contribs + '</div>' + haul + '</div>';
+    }).join('');
+    out.push({ ch: 'Act I · The Night’s Points', beatSnd: { 1: SND.skins, 2: SND.skins, 3: SND.skins, 4: SND.skins, 5: SND.skins, 6: SND.skins, 7: isWinner ? SND.cheer : SND.sparkle },
       fx: isWinner ? 'confetti' : undefined, fxCols: [tm.color, '#ffd75e'], html:
-      p29bg() + '<div class="kick">Act I · The Night’s Points</div>' + headSmall + groups +
-      '<div class="bt" data-b="4" style="width:100%">' + totalBand + '</div>' });
+      p29bg() + '<div class="kick">Act I · The Night’s Points</div>' + headSmall + catBeats +
+      '<div class="bt" data-b="7" style="width:100%">' + totalBand + '</div>' });
     if (chats[ti]) out.push(chat29('Act I · The Night’s Points', chats[ti].text, chats[ti].sub));
   });
   return out;
 }
-function sKampioen29(night) {
-  // The Kampioen rides inside his own team's build — unless he played
-  // the night as a free agent, when he gets his card here instead.
-  const h = honours(night); if (!h || !h.top) return [];
-  if (TEAM_OF[h.top.pid] != null) return [];
-  return [{ ch: 'Act I · The Night’s Points', snd: SND.cheer, fx: 'confetti', fxCols: [tcolor(h.top.pid), '#ffd75e'], html:
-    p29bg() + '<div class="kick">Act I · The Night’s Points</div>' + face(h.top.pid, true) +
-    '<h2 class="p29serif" style="margin-top:1.4vmin;">👑 ' + esc(pname(h.top.pid)) + ' — ' + fmt(h.top.total) + '</h2>' +
-    '<div class="sub">De Kampioen Golfer van de Dag — the biggest card anyone posted tonight, from a free agent.</div>' }];
+/* CYCLE 34 — a chip-sized face (photo or initials) for contribution chips,
+   Honey Pot rows and the skins race stage. */
+function face34(pid, size) {
+  const p = PL[pid]; if (!p) return '';
+  const sz = (size || 4.4).toFixed(1);
+  if (p.photo) return '<img src="' + p.photo + '" alt="" style="width:' + sz + 'vmin;height:' + sz + 'vmin;border-radius:50%;object-fit:cover;border:.3vmin solid ' + tcolor(pid) + ';flex:none;">';
+  return '<span style="width:' + sz + 'vmin;height:' + sz + 'vmin;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:900;font-size:' + (sz * 0.38).toFixed(1) + 'vmin;background:#2a2560;color:var(--cream);border:.3vmin solid ' + tcolor(pid) + ';flex:none;">' + initials(p.name) + '</span>';
 }
+/* CYCLE 34 — sKampioen29 is deleted. The Kampioen is named exactly once in
+   the whole show now: the Act IV finale (sKampioenFinale34), team member or
+   free agent alike. */
 
 /* ---------- the Landing: cumulative totals live here, and only here ---------- */
-function boardRows29(st, totals) {
+function fmtOdds34(v) { return v.toFixed(1) + '%'; }
+function boardRows29(st, totals, odds) {
   return st.map(s => '<div class="p29row' + (s.rank === 1 ? ' first' : '') + '"><div class="p29rk">' + s.rank + '</div>' + teamLogo(DATA.teams[s.team].id, 7.5) +
     '<div class="p29nm">' + esc(s.name) + '</div>' +
     '<div style="display:flex;align-items:center;gap:1.8vmin;justify-content:flex-end;">' +
+    (odds ? '<span class="p29odds" title="Win probability">' + fmtOdds34(odds[s.team] || 0) + '</span>' : '') +
     (totals ? '<span class="p29tot">' + fmt(s.total) + '</span>' : '') +
     '<span style="font-size:2.3vmin;">' + moveHtml(s.move) + '</span>' +
     '<span class="p29gap">' + (s.rank === 1 ? '— LEAD' : fmt(st[0].total - s.total) + ' back') + '</span></div></div>').join('');
@@ -3424,9 +3636,17 @@ function sLanding29(night) {
     // No morning board exists — the first board of the week is born here.
     const beatOf = {};
     st.slice().sort((a, b) => (a.tonight - b.tonight) || (a.total - b.total) || a.name.localeCompare(b.name)).forEach((s, i) => { beatOf[s.team] = i + 1; });
+    // CYCLE 34 — Night 1 has no morning board and no morning odds: the
+    // engine's Monte Carlo cannot run on zero played rounds (standings(0)
+    // throws inside RC(0) before winOdds' own !upto fallback can run — the
+    // fallback would have given the nominal leader 100%, which before a
+    // ball is struck is meaningless anyway). Each team's win probability
+    // (winOdds(1)) simply appears as its points land on the First Board.
+    let odds1 = null; try { odds1 = winOdds(1); } catch (e) { odds1 = null; }
     const rows = st.map(s => '<div class="p29row' + (s.rank === 1 ? ' first' : '') + '"><div class="p29rk">' + s.rank + '</div>' + teamLogo(DATA.teams[s.team].id, 7.5) +
       '<div class="p29nm">' + esc(s.name) + '</div>' +
-      '<div class="bt" data-b="' + beatOf[s.team] + '" style="display:flex;align-items:center;gap:1.6vmin;justify-content:flex-end;"><span class="p29ton">+' + fmt(s.tonight) + ' tonight</span><span class="p29tot">' + fmt(s.total) + '</span></div></div>').join('');
+      '<div class="bt" data-b="' + beatOf[s.team] + '" style="display:flex;align-items:center;gap:1.6vmin;justify-content:flex-end;"><span class="p29ton">+' + fmt(s.tonight) + ' tonight</span><span class="p29tot">' + fmt(s.total) + '</span>' +
+      (odds1 ? '<span class="p29odds" title="Win probability">' + fmtOdds34(odds1[s.team] || 0) + '</span>' : '') + '</div></div>').join('');
     const gap = st[0].total - st[1].total;
     out.push({ ch: 'The Landing', beatSnd: { 1: SND.skins, 2: SND.skins, 3: SND.skins, 4: SND.skins, 5: SND.skins, 6: SND.skins, 7: SND.cheer }, fx: 'confetti', fxCols: [st[0].color, '#ffd75e'], html:
       p29bg() + '<div class="kick">The Landing · Night 1</div><h2 class="p29serif" style="font-size:5.2vmin;">The First Board</h2>' + rows +
@@ -3436,9 +3656,22 @@ function sLanding29(night) {
     return out;
   }
   const morning = standings(night - 1);
+  // CYCLE 34 — the Monte Carlo moves onto the Landing boards themselves:
+  // the morning board carries winOdds(night − 1); as each team's points
+  // land, its probability counts up (or down) to winOdds(night) with a
+  // ▲/▼ delta chip in percentage points. A win % is not a points total,
+  // so the Landing-only law for cumulative points is untouched.
+  let oddsMorn = null, oddsNow = null;
+  try { oddsMorn = winOdds(night - 1); oddsNow = winOdds(night); } catch (e) { oddsMorn = null; oddsNow = null; }
+  const oddsHtml34 = s => {
+    if (!oddsMorn || !oddsNow) return '';
+    const from = oddsMorn[s.team] || 0, to = oddsNow[s.team] || 0, d = Math.round((to - from) * 10) / 10;
+    const chip = d > 0.05 ? '<span class="p29oddsD up">▲ ' + d.toFixed(1) + '</span>' : d < -0.05 ? '<span class="p29oddsD dn">▼ ' + Math.abs(d).toFixed(1) + '</span>' : '<span class="p29oddsD flat">—</span>';
+    return '<span class="p29odds" title="Win probability" data-odds-from="' + from + '" data-odds-to="' + to + '">' + fmtOdds34(from) + '</span>' + chip;
+  };
   out.push({ ch: 'The Landing', snd: SND.bed, html:
     p29bg() + '<div class="kick">The Landing · This Morning</div><h2 class="p29serif" style="font-size:5.2vmin;">Where the day began</h2>' +
-    boardRows29(morning, true) +
+    boardRows29(morning, true, oddsMorn) +
     '<div class="sub" style="margin-top:1.8vmin;">That was this morning. Tonight’s points are about to land.</div>' });
   const mTot = {}; morning.forEach(s => { mTot[s.team] = s.total; });
   const landOrder = st.slice().sort((a, b) => (a.tonight - b.tonight) || (a.total - b.total) || a.name.localeCompare(b.name));
@@ -3446,7 +3679,7 @@ function sLanding29(night) {
   const beatOf = {}; landOrder.forEach((s, i) => { beatOf[s.team] = i + 1; });
   const rows = st.map(s => '<div class="p29row' + (s.rank === 1 ? ' first' : '') + '"><div class="p29rk">' + s.rank + '</div>' + teamLogo(DATA.teams[s.team].id, 7.5) +
     '<div class="p29nm">' + esc(s.name) + '<div class="p29old">was ' + fmt(mTot[s.team]) + '</div></div>' +
-    '<div class="bt" data-b="' + beatOf[s.team] + '" style="display:flex;align-items:center;gap:1.6vmin;justify-content:flex-end;"><span class="p29ton">+' + fmt(s.tonight) + '</span><span class="p29tot">' + fmt(s.total) + '</span><span style="font-size:2.4vmin;">' + moveHtml(s.move) + '</span></div></div>').join('');
+    '<div class="bt" data-b="' + beatOf[s.team] + '" style="display:flex;align-items:center;gap:1.6vmin;justify-content:flex-end;"><span class="p29ton">+' + fmt(s.tonight) + '</span><span class="p29tot">' + fmt(s.total) + '</span>' + oddsHtml34(s) + '<span style="font-size:2.4vmin;">' + moveHtml(s.move) + '</span></div></div>').join('');
   const g0 = morning[0].total - morning[1].total, g1 = st[0].total - st[1].total;
   const leaderChanged = st[0].team !== morning[0].team;
   let headMain, headSub;
@@ -3562,6 +3795,44 @@ function awardEvidence29(key, d, round, c) {
     const sweep = (round.bbbAwards || []).some(a => a.bingo === d.pid && a.bingo === a.bango && a.bango === a.bongo);
     return statBlocks29([{ v: d.bbb.bingo, l: 'BINGO' }, { v: d.bbb.bango, l: 'BANGO' }, { v: d.bbb.bongo, l: 'BONGO' }]) +
       (sweep ? '<div style="margin-top:1.6vmin;"><span class="pill" style="font-size:2.2vmin;">🍯 INCLUDING A FULL SWEEP — ALL THREE ON ONE HOLE</span></div>' : '');
+  }
+  /* CYCLE 34 — evidence for the revived awards: the qualifying holes. */
+  if (key === 'swiper' || key === 'robbed') {
+    const sr = swiperRobbed34(DATA.rounds.indexOf(round) + 1)[d.pid] || { swHoles: [], rbHoles: [] };
+    if (key === 'swiper') return holeChips29(sr.swHoles.map(x => ({ m: x.gross, s: 'HOLE ' + x.hole + ' · +' + x.b + ' B' + (x.b > 1 ? '’S' : ''), hot: true })));
+    return holeChips29(sr.rbHoles.map(x => ({ m: x.gross, s: 'HOLE ' + x.hole + ' · BEST IN GROUP', hot: true })));
+  }
+  if (key === 'comeback' || key === 'faceplant' || key === 'jekyllHyde') {
+    const s = sides34(d, round);
+    return statBlocks29([
+      { v: s.f, l: 'FRONT 9 · GROSS', hot: key !== 'comeback' },
+      { v: s.b, l: 'BACK 9 · GROSS', hot: key === 'comeback' },
+      { v: (key === 'comeback' ? s.f - s.b : key === 'faceplant' ? s.b - s.f : Math.abs(s.f - s.b)), l: key === 'comeback' ? 'SHOTS CLAWED BACK' : key === 'faceplant' ? 'THE SLIDE' : 'THE GAP', hot: true }]);
+  }
+  if (key === 'birdieMachine') {
+    const items = [];
+    d.nets.forEach((n, i) => { if (n != null && n < pars[i]) items.push({ m: n, s: 'HOLE ' + (i + 1) + ' · NET', hot: n <= pars[i] - 2 }); });
+    if (items.length) return holeChips29(items);
+  }
+  if (key === 'steadyEddie') {
+    let bog = 0; d.nets.forEach((n, i) => { if (n != null && n > pars[i]) bog++; });
+    return statBlocks29([{ v: 0, l: 'NET DOUBLES OR WORSE', hot: true }, { v: bog, l: 'NET BOGEYS' }, { v: d.cats.par + d.cats.bir + d.cats.eag + d.cats.alb, l: 'PAR OR BETTER' }]);
+  }
+  if (key === 'blowUp') {
+    let w = 0, hi = -1;
+    scores.forEach((g, i) => { if (g != null && g !== '' && g - pars[i] > w) { w = g - pars[i]; hi = i; } });
+    if (hi >= 0) return holeChips29([{ m: scores[hi], s: 'HOLE ' + (hi + 1) + ' · PAR ' + pars[hi], hot: true }]) + statBlocks29([{ v: '+' + w, l: 'OVER PAR · ONE HOLE', hot: true }]);
+  }
+  if (key === 'ballMagnet')
+    return statBlocks29([{ v: d.balls, l: 'BALLS LEFT', hot: true }, { v: d.ballPts, l: 'BALL POINTS BANKED' }]);
+  if (key === 'groundhog') {
+    let best = { len: 0, start: 0 }, cur = 0, cs = 0, cv = null;
+    for (let i = 0; i < 18; i++) { const g = scores[i]; if (g != null && g !== '' && g === cv) { cur++; } else if (g != null && g !== '') { cv = g; cur = 1; cs = i; } else { cv = null; cur = 0; } if (cur > best.len) best = { len: cur, start: cs }; }
+    if (best.len > 0) return holeChips29(scores.slice(best.start, best.start + best.len).map((g, k) => ({ m: g, s: 'HOLE ' + (best.start + k + 1), hot: true })));
+  }
+  if (key === 'grind') {
+    let bog = 0; d.nets.forEach((n, i) => { if (n != null && n > pars[i]) bog++; });
+    return statBlocks29([{ v: bog, l: 'NET BOGEYS', hot: true }, { v: d.cats.dbl, l: 'DOUBLES OR WORSE' }, { v: d.cats.par + d.cats.bir + d.cats.eag + d.cats.alb, l: 'PAR OR BETTER' }]);
   }
   if (key === 'par3' || key === 'par4' || key === 'par5') {
     const p = +key.slice(3), items = [];
@@ -4468,6 +4739,10 @@ function pickFunAwards30(night, funWonState) {
   const start = ((night - 1) * 5) % FUN_AWARDS.length;
   const ordered = FUN_AWARDS.slice(start).concat(FUN_AWARDS.slice(0, start));
   for (const award of ordered) {
+    // CYCLE 34 — the Honey Pot is a fixed Act IV segment now (the sweep
+    // list, sHoneyPot34); the rotation never picks it, so it can never
+    // appear twice in one night.
+    if (award.key === 'honeyPot') continue;
     const already = won[award.key] || [];
     let elig = ps.filter(d => !already.includes(d.pid));
     if (!elig.length) elig = ps;
@@ -4513,10 +4788,22 @@ function sFun30(night, funWon) {
       '<div class="bt" data-b="1" style="width:100%;">' + (opts.ev || awardEvidence29(key, d, round, c)) + '</div>' +
       '<span style="display:none;" data-c29-award="' + key + '" data-c29-winner="' + winnerPid + '"></span>' });
     headlined.add(winnerPid);
-    const chat = opts.chat || awardChat29(night, key, d, round, c, h);
-    if (chat) out.push(chat29(CH, chat.text, chat.sub, SND.bed));
+    // CYCLE 34 — NO commentary card follows an individual fun award
+    // (Ron's ruling: the generated follow-ups were nonsense — "One bounce
+    // in it"). The award ends at its reveal. Act I team chatter and the
+    // Landing chatter are untouched; they are not fun awards.
   };
-  picks.forEach(p => awardSlide(p.award.key, p.award.emo, p.award.ttl, p.winner.pid, p.line, AWARD_SND[p.award.key]));
+  picks.forEach(p => {
+    let line = p.line;
+    // Swiper and I've Been Robbed are shared on a tie, exactly as the
+    // app awards them — the co-winners are named on the winner's card.
+    if (p.award.key === 'swiper' || p.award.key === 'robbed') {
+      const v = p.award.metric(p.winner, round);
+      const tied = Object.values(c.players).filter(x => x.pid !== p.winner.pid && p.award.metric(x, round) === v && v > 0).map(x => sname(x.pid));
+      if (tied.length) line += ' · shared with ' + tied.join(' & ');
+    }
+    awardSlide(p.award.key, p.award.emo, p.award.ttl, p.winner.pid, line, AWARD_SND[p.award.key]);
+  });
   const bp = byPars(night);
   const vulturePick = picks.find(p => p.award.key === 'vulture');
   const demotedPars = [];
@@ -4564,12 +4851,42 @@ function sFun30(night, funWon) {
       const line = (po.winners.length > 1 ? po.winners.map(x => sname(x.pid)).join(' & ') + ' — ' : '') + 'net ' + (w.diff <= -2 ? 'eagle' : w.diff === -1 ? 'birdie' : 'par') + ' on hole ' + w.hole + ' (par ' + w.par + ')';
       const ev = holeChips29([{ m: w.net, s: 'HOLE ' + w.hole + ' · PAR ' + w.par, hot: true }]) +
         statBlocks29([{ v: w.gross, l: 'GROSS' }, { v: w.net, l: 'NET' }, { v: fmtNP(w.diff), l: 'NET TO PAR' }]);
-      const chat = { text: 'A net ' + (w.diff <= -2 ? 'eagle' : w.diff === -1 ? 'birdie' : 'par') + ' on the ' + ord29(w.hole) + ' — the single best hole anyone played tonight.', sub: 'One hole. Was it the shot of the week?' };
-      awardSlide('playOfDay', '💥', 'PLAY OF THE DAY', w.pid, line, SND.cheer, { ev, chat });
+      awardSlide('playOfDay', '💥', 'PLAY OF THE DAY', w.pid, line, SND.cheer, { ev });
     } else potdForUndercard = true;
   }
   out.push(...undercard30(night, demotedPars, potdForUndercard));
   return out;
+}
+/* CYCLE 34 — 🍯 THE HONEY POT as an Act IV list (it left Act II): every
+   player who swept all three B's on a single hole tonight, ranked by
+   sweep count; the top man (ties share) is the winner. Absent when
+   nobody swept. A sweep is one bbbAwards entry whose bingo, bango and
+   bongo are the same man — the app's own definition. */
+function honeyPots34(night) {
+  const r = DATA.rounds[night - 1], by = {};
+  (r.bbbAwards || []).forEach(a => {
+    if (a && a.bingo && a.bingo === a.bango && a.bango === a.bongo) {
+      const k = String(a.bingo);
+      if (!by[k]) by[k] = { pid: k, holes: [] };
+      by[k].holes.push(a.holeIdx + 1);
+    }
+  });
+  return Object.values(by).sort((x, y) => (y.holes.length - x.holes.length) || pname(x.pid).localeCompare(pname(y.pid)));
+}
+function sHoneyPot34(night) {
+  const pots = honeyPots34(night);
+  if (!pots.length) return null;
+  const best = pots[0].holes.length;
+  const rows = pots.map((p, i) =>
+    '<div class="bt hp34row' + (p.holes.length === best ? ' win' : '') + '" data-b="' + (i + 1) + '">' + face34(p.pid, 7) +
+    '<div style="flex:1;"><div style="font-weight:900;font-size:3.1vmin;">' + esc(pname(p.pid)) + (p.holes.length === best ? ' 🏆' : '') + '</div>' +
+    '<div class="sub" style="font-size:2.1vmin;">' + esc(tname(p.pid)) + ' · hole' + (p.holes.length === 1 ? '' : 's') + ' ' + p.holes.join(', ') + '</div></div>' +
+    '<div style="font-weight:900;font-size:4.4vmin;color:var(--gold);">×' + p.holes.length + '</div></div>').join('');
+  return { ch: 'Act IV · The Fun Awards', snd: SND.honey, beats: pots.length, html:
+    p29bg() + '<div class="kick">Act IV · The Fun Awards</div>' +
+    '<h2 class="p29serif" style="font-size:5.6vmin;">🍯 The Honey Pot</h2>' +
+    '<div class="sub" style="font-size:2.5vmin;">All three B’s on a single hole — the full sweep. Everyone who managed it tonight:</div>' +
+    '<div style="width:min(104vmin,94%);margin:0 auto;">' + rows + '</div>' };
 }
 function undercard30(night, demotedPars, includePotd) {
   const c = RC(night), h = honours(night);
@@ -4670,6 +4987,7 @@ function startAuto30(s, dir) {
   if (s.race) startRace30(s, dir);
   else if (s.tally) startTally30(s, dir);
   else if (s.count32) startCount32(s, dir);
+  else if (s.skins34) startSkins34(s, dir);
 }
 /* CYCLE 32 — the Low Net countdown runs itself on the race idiom:
    ticks land on the schedule baked into the slide (decelerating),
@@ -4752,14 +5070,14 @@ function deckFor(night) {
   out.push(sOpener(night));
   out.push(...sPot29(night));
   out.push(...sBuilds29(night));
-  out.push(...sKampioen29(night));
   if (night === DATA.event.nights) { const oc = sOddsChat29(DATA.event.nights - 1, true); if (oc) out.push(oc); }
   out.push(...sLanding29(night));
   const act2 = [];
-  act2.push(...sSkins(night));
+  act2.push(...sSkinsRace34(night));
   const skc = sSkinsChat29(night); if (skc) act2.push(skc);
   act2.push(...sCTPE9(night));
-  act2.push(...sBBB(night));
+  // CYCLE 34 — no sBBB here anymore: the Honey Pot moved to Act IV as a
+  // ranked list (sHoneyPot34). Act II keeps the B's race in Act III.
   if (night === 5) act2.push(...sWinnersFinal29(night));
   act2.push(...sMatches30(night));
   act2.push(...sProgression30(night));
@@ -4768,11 +5086,74 @@ function deckFor(night) {
   out.push(...sRaces30(night));
   if (night === DATA.event.nights) out.push(...sWeekAwards30(night));
   else { const fw30 = {}; for (let n = 1; n < night; n++) if (DATA.rounds[n - 1] && DATA.rounds[n - 1].completed) pickFunAwards30(n, fw30); out.push(...sFun30(night, fw30)); }
+  // CYCLE 34 — the Honey Pot is a fixed Act IV segment: it follows the
+  // fun awards (on Night 7, the week awards) and precedes the finale.
+  const hp34 = sHoneyPot34(night); if (hp34) out.push(hp34);
+  // CYCLE 34 — Act IV ends with the Kampioen finale: the one and only
+  // place in the show where he is named.
+  const kf34 = sKampioenFinale34(night); if (kf34) out.push(kf34);
   out.push(...sTomorrow29(night));
   out.push(...sHandicap31(night));
   out.push(sFinalBoard29(night));
   out.push(sHolding29(night));
+  // CYCLE 34 — every deck ends with the photo slideshow.
+  out.push(...sSlideshow34(night));
   return out;
+}
+/* CYCLE 34 — DE KAMPIOEN GOLFER VAN DE DAG, the finale. He has not been
+   named anywhere before this slide (the Act I split line is gone, the
+   free-agent card is gone): this is his one moment — Dutch orange,
+   tulips, the flag, the anthem slot, confetti. */
+function sKampioenFinale34(night) {
+  const h = honours(night); if (!h || !h.top) return null;
+  const top = h.top, tmName = TEAM_OF[top.pid] != null ? tname(top.pid) : '';
+  return { ch: 'Act IV · De Kampioen', snd: SND.anthem, fx: 'confetti', fxCols: ['#ff7a1a', '#ffd75e', '#ffffff'], html:
+    p29bg() +
+    '<div style="position:absolute;inset:0;background:radial-gradient(circle at 50% 38%,#ff7a1a30 0%,transparent 65%);border-radius:2vmin;"></div>' +
+    '<div style="position:absolute;top:5%;left:5%;font-size:5vmin;">🌷</div><div style="position:absolute;top:7%;right:6%;font-size:5.6vmin;">🌷</div>' +
+    '<div style="position:absolute;bottom:9%;left:7%;font-size:4.6vmin;">🌷</div><div style="position:absolute;bottom:7%;right:8%;font-size:5vmin;">🌷</div>' +
+    '<div style="position:relative;text-align:center;padding-top:1.6vmin;">' +
+    '<div style="font-size:5.2vmin;">🇳🇱</div>' +
+    '<div class="kick" style="color:#ff8c2e;">Act IV · The Last Word</div>' +
+    '<h2 class="p29serif" style="font-size:6.2vmin;color:#ff8c2e;">De Kampioen Golfer van de Dag</h2>' +
+    '<div style="margin-top:1.4vmin;">' + face(top.pid, true) + '</div>' +
+    '<div style="font-weight:900;font-size:5.4vmin;margin-top:1vmin;">' + esc(pname(top.pid)) + '</div>' +
+    '<div class="sub" style="font-size:2.6vmin;">' + (tmName ? esc(tmName) + ' · ' : '') + fmt(top.total) + ' points tonight — the biggest card of the night</div>' +
+    '<div style="font-size:3.2vmin;margin-top:1.4vmin;">🌷 🌷 🌷</div></div>' };
+}
+/* CYCLE 34 — THE CLOSING SLIDESHOW: every deck, full or preview, ends
+   here, after the Holding Board. Today's round photos first (captioned
+   with the tagged players' names when the photo carries them), then
+   today's course photo and the Calabash-area set until there are at
+   least 20; scenery may repeat to reach 20, round photos never do. A
+   round with more than 20 photos shows them all, with no fills. The
+   closing sound slot plays once on the first frame (house rule: sounds
+   never loop); the frames keep cycling at ~4 s until the director
+   moves on — the deck ends here. */
+function sSlideshow34(night) {
+  const r = DATA.rounds[night - 1]; if (!r) return [];
+  const pool = [];
+  (r.photos || []).forEach(p => {
+    if (!p || !p.src) return;
+    const tagged = (p.playerIds || []).length > 0;
+    pool.push({ src: p.src, tag: 'round',
+      cap: tagged ? p.playerIds.map(pid => pname(pid)).join(' · ') : (r.course || 'The round'),
+      sub: tagged ? 'From today’s round' : 'From the ' + (r.course || '') + ' round' });
+  });
+  if (pool.length < 20) {
+    const scenery = [];
+    const ci = courseImg(r.course);
+    if (ci) scenery.push({ src: ci, tag: 'course', cap: r.course || 'The course', sub: 'Today’s course' });
+    (IMG.area || []).forEach((src, i) => { if (src) scenery.push({ src, tag: 'area', cap: AREA_CAPS[i] || 'Calabash, North Carolina', sub: 'Around Calabash' }); });
+    scenery.forEach(s => pool.push(s));
+    let si = 0;
+    while (pool.length < 20 && scenery.length) { pool.push(scenery[si % scenery.length]); si++; }
+  }
+  return pool.map((p, i) => ({ ch: 'The Day in Pictures', loop: true, dwell: 4000, snd: i === 0 ? SND.closing : null, ss34: { i: i + 1, n: pool.length, tag: p.tag }, html:
+    '<div class="photoWrap ss34"><img src="' + p.src + '" alt=""></div>' +
+    '<div style="position:absolute;left:0;right:0;bottom:0;padding:3.4vmin 4vmin;background:linear-gradient(transparent,rgba(0,0,0,.8));text-align:left;z-index:3;">' +
+    '<div style="font-weight:900;font-size:3.3vmin;">' + esc(p.cap) + '</div>' +
+    '<div class="sub" style="font-size:2.2vmin;">' + esc(p.sub) + ' · ' + (i + 1) + ' of ' + pool.length + '</div></div>' }));
 }
 
 
@@ -4800,6 +5181,7 @@ const SND = {
   easy12:  { file: F('Easy-12sec.mp3.MP3'), vol: .5 },
   bed:     { file: F('ctp-background-kevin-macleod.mp3'), vol: .3 },
   champSong:{ file: F('All-I-do-is-win.mp3'), vol: .7 },
+  fail:    { file: F('priceisrightfail-sound-5sec.mp3'), vol: .85 },
   anthem:  { file: F('dutch-anthem-f1-podium (1).mp3'), vol: .6 },
   closing: { file: F('Straight-down-the-middle-full-155sec.mp3'), vol: .5 },
   fairy:   { file: F('magic-fairy.mp3'), vol: .8 },
@@ -4816,6 +5198,12 @@ const AWARD_SND = {
   photocopier: { file: F('PhotocopierSound-23sec.mp3'), vol: .75 },
   vulture: SND.skins, streak: SND.sparkle, bomber: SND.whoosh,
   bounceBack: SND.hop, rock: SND.easy12, pinMagnet: SND.fairy,
+  /* CYCLE 34 — the revived awards ride existing slots only. Robbed (and
+     Faceplant) take the app's own priceisrightfail, which the library
+     already carries; no new files. */
+  swiper: SND.hop, robbed: SND.fail, comeback: SND.matchWin, faceplant: SND.fail,
+  jekyllHyde: SND.whoosh, birdieMachine: SND.sparkle, steadyEddie: SND.easy12,
+  blowUp: SND.elim, ballMagnet: SND.ooh, groundhog: SND.whoosh, grind: SND.first,
   rollercoaster: { file: F('RollerCoasterSound-53sec.mp3'), vol: .6 },
   vulture: { file: F('cheering-5sec.mp3'), vol: .8 },
   honeyPot: SND.honey,
@@ -4987,6 +5375,17 @@ function fit() {
 addEventListener('resize', fit);
 const RM = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
 function countUps(root) {
+  // CYCLE 34 — Landing odds count from the morning value to the landed one.
+  root.querySelectorAll('[data-odds-to]').forEach(el => {
+    if (el.closest('.btOff')) return;
+    const to = parseFloat(el.getAttribute('data-odds-to')), from = parseFloat(el.getAttribute('data-odds-from') || '0');
+    if (!isFinite(to)) return;
+    const renderV = v => { el.textContent = v.toFixed(1) + '%'; };
+    if (RM) { renderV(to); return; }
+    const t0 = performance.now(), dur = 900;
+    const tick = t => { const k = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - k, 3); renderV(from + (to - from) * e); if (k < 1) requestAnimationFrame(tick); else renderV(to); };
+    requestAnimationFrame(tick);
+  });
   root.querySelectorAll('.dialArc').forEach(el => { el.style.strokeDasharray = el.getAttribute('data-d'); });
   if (RM) { root.querySelectorAll('[data-n]').forEach(el => { if (el.closest('.btOff')) return; const tv = parseFloat(el.getAttribute('data-n')); if (isFinite(tv)) el.textContent = fmt(tv); }); return; }
   root.querySelectorAll('[data-n]').forEach(el => {
@@ -5240,6 +5639,7 @@ let dirOn = false, dirTimer = null;
 function dwellFor(s) {
   if (!s) return 9000;
   if (s.race) return s._autoDone ? 5000 : s.race.totalMs + 600;
+  if (s.skins34) return s._autoDone ? 5200 : s.skins34.totalMs + 700;
   if (s.tally) return s._autoDone ? 6000 : s.tally.totalMs + 600;
   if (s.hold) return -1;
   if (s.dwell) return s.dwell;
@@ -5468,6 +5868,9 @@ try { const DC = dataCheck(); const el = document.querySelector('#dataCheck'); i
           imgs: {
             hero: 'presentation-assets/hero.jpg', trophy: 'presentation-assets/trophy.jpg',
             sunrise: 'presentation-assets/sunrise.jpg', coins: 'presentation-assets/coins.jpg',
+            ctpBall: 'presentation-assets/ctp-ball.jpg',
+            ctpBall: 'presentation-assets/ctp-ball.jpg',
+            ctpBall: 'presentation-assets/ctp-ball.jpg',
             course_tidewater: 'presentation-assets/courses/tidewater.jpg', course_pearl: 'presentation-assets/courses/pearl.jpg',
             course_azalea: 'presentation-assets/courses/azalea.jpg', course_magnolia: 'presentation-assets/courses/magnolia.jpg',
             course_dogwood: 'presentation-assets/courses/dogwood.jpg',
