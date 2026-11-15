@@ -896,7 +896,7 @@
         // =====================================================================
         
         // App version (date-based: YYYY.MM.DD.N, bump N when multiple updates in one day)
-        const APP_VERSION = 'v2026.11.15.64';
+        const APP_VERSION = 'v2026.11.15.65';
         
         // Canonical tee names used across the whole system — courses, player defaults, handicap lookups.
         // Limited set so names match exactly across courses (USGA handicap math depends on exact tee
@@ -3981,6 +3981,8 @@
                         </button>
                     </div>
                     
+                    ${renderEventRosterCard(event)}
+
                     ${renderBracketSection(event)}
                 `;
                 window.__addRoundCourses = [];
@@ -3988,6 +3990,27 @@
                 return;
             }
             
+            // Event Roster Editor
+            if (state.view.startsWith('events-roster-')) {
+                const eventId = parseInt(state.view.replace('events-roster-', ''));
+                const event = state.events.find(e => e.id === eventId);
+
+                if (!event) {
+                    app.innerHTML = `
+                        <button class="back-btn" onclick="navigate('events')">← Back</button>
+                        <div class="card">
+                            <h2>❌ Event Not Found</h2>
+                            <p>This event no longer exists.</p>
+                            <button onclick="navigate('events')" class="btn-primary" style="width:100%;">Back to Events</button>
+                        </div>
+                    `;
+                    return;
+                }
+
+                renderEventRosterScreen(app, event);
+                return;
+            }
+
             // List Events
             app.innerHTML = `
                 <button class="back-btn" onclick="navigate('home')">← Back</button>
@@ -28034,6 +28057,265 @@ ${(() => {
             } catch (err) {
                 console.error('Edit event error:', err);
                 showError('Failed to edit event: ' + err.message);
+            }
+        };
+
+        // ═══════════════════════════════════════════════════════════
+        // EVENT ROSTER EDITOR — swap a player in/out of an event
+        // An event has no stored roster: its roster is the players who
+        // appear in its rounds (see getEventPlayers). A swap rewrites the
+        // outgoing player's entry in every round of the event that has no
+        // recorded play, putting the incoming player in the exact same
+        // team spot (group number preserved). Rounds with any recorded
+        // play — scores, BBB awards, CTP/Extra 9 winners, or an active /
+        // completed flag — are never changed.
+        // ═══════════════════════════════════════════════════════════
+        const rosterRoundHasPlay = (r) => {
+            if (!r) return false;
+            if (r.completed === true || r.active === true) return true;
+            if ((r.bbbAwards || []).length > 0) return true;
+            if ((r.ctpWinners || []).some(w => w != null && w !== '')) return true;
+            if ((r.extra9Winners || []).length > 0) return true;
+            return (r.teams || []).some(t => (t.players || []).some(p =>
+                (p.scores || []).some(s => s !== '' && s != null)));
+        };
+
+        // Where a player sits in an event: team name + how many of the
+        // event's rounds hold them, split by rounds that can still change.
+        const rosterPlayerInfo = (eventId, playerId) => {
+            const evRounds = (state.rounds || []).filter(r => String(r.eventId) === String(eventId));
+            let teamName = '';
+            let roundsIn = 0;
+            let openRounds = 0;
+            evRounds.forEach(r => {
+                (r.teams || []).forEach(t => {
+                    if ((t.players || []).some(p => String(p.id) === String(playerId))) {
+                        roundsIn++;
+                        if (!rosterRoundHasPlay(r)) openRounds++;
+                        if (!teamName) teamName = t.teamName || '';
+                    }
+                });
+            });
+            return { teamName, roundsIn, openRounds, totalRounds: evRounds.length };
+        };
+
+        window.openEventRoster = (eventId) => {
+            window.__rosterSwap = { eventId: eventId, outId: null, inId: null };
+            state.view = 'events-roster-' + eventId;
+            render();
+        };
+
+        window.rosterPickOut = (playerId) => {
+            const sel = window.__rosterSwap || (window.__rosterSwap = { eventId: null, outId: null, inId: null });
+            if (String(sel.outId) === String(playerId)) { sel.outId = null; render(); return; }
+            const info = rosterPlayerInfo(sel.eventId, playerId);
+            if (info.openRounds === 0) {
+                const p = (state.players || []).find(x => String(x.id) === String(playerId));
+                notify(`🔒 ${p ? p.name : 'That player'} only appears in played rounds — those can't be changed`);
+                return;
+            }
+            sel.outId = playerId;
+            render();
+        };
+
+        window.rosterPickIn = (playerId) => {
+            const sel = window.__rosterSwap || (window.__rosterSwap = { eventId: null, outId: null, inId: null });
+            sel.inId = (String(sel.inId) === String(playerId)) ? null : playerId;
+            render();
+        };
+
+        window.rosterClearSwap = () => {
+            if (window.__rosterSwap) { window.__rosterSwap.outId = null; window.__rosterSwap.inId = null; }
+            render();
+        };
+
+        // Small card on the Edit Event screen that leads into the roster editor.
+        const renderEventRosterCard = (event) => {
+            const roster = getEventPlayers(event.id);
+            const names = roster.map(p => p.name).join(', ');
+            return `
+                <div class="card">
+                    <h3 style="margin:0 0 4px;">👥 Event Roster</h3>
+                    <p style="margin:0 0 6px;font-size:13px;color:#6b7280;">
+                        The players in this event's rounds. Swap someone out for a league player who isn't in the event — only rounds that haven't been played change.
+                    </p>
+                    <p style="margin:0 0 14px;font-size:14px;color:#374151;">
+                        <strong>${roster.length} player${roster.length === 1 ? '' : 's'}:</strong> ${names || 'none yet'}
+                    </p>
+                    <button onclick="openEventRoster(${event.id})" class="btn-primary" style="width:100%;background:#0ea5e9;">👥 Manage Roster</button>
+                </div>
+            `;
+        };
+
+        const renderEventRosterScreen = (app, event) => {
+            const sel = (window.__rosterSwap && String(window.__rosterSwap.eventId) === String(event.id))
+                ? window.__rosterSwap
+                : (window.__rosterSwap = { eventId: event.id, outId: null, inId: null });
+            const roster = getEventPlayers(event.id)
+                .map(p => ({ player: p, info: rosterPlayerInfo(event.id, p.id) }))
+                .sort((a, b) => (a.info.teamName || '').localeCompare(b.info.teamName || '') || a.player.name.localeCompare(b.player.name));
+            const rosterIds = new Set(roster.map(x => String(x.player.id)));
+            const outsiders = (state.players || [])
+                .filter(p => !rosterIds.has(String(p.id)))
+                .sort((a, b) => a.name.localeCompare(b.name));
+            const outPlayer = sel.outId != null ? (state.players || []).find(p => String(p.id) === String(sel.outId)) : null;
+            const inPlayer = sel.inId != null ? (state.players || []).find(p => String(p.id) === String(sel.inId)) : null;
+
+            const rowStyle = (picked, color) => `display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:10px 12px;margin-bottom:8px;border-radius:10px;cursor:pointer;min-height:56px;border:2px solid ${picked ? color : '#e5e7eb'};background:${picked ? color + '14' : 'white'};`;
+
+            app.innerHTML = `
+                <button class="back-btn" onclick="editEvent(${event.id})">← Back</button>
+                <div class="card">
+                    <h2 style="margin:0 0 4px;">👥 Roster — ${event.name}</h2>
+                    <p style="margin:0 0 16px;font-size:13px;color:#6b7280;">
+                        Tap a player in the event to swap out, then tap a league player to swap in.
+                        The incoming player takes the outgoing player's team spot in every round that hasn't been played.
+                        Played rounds are never changed.
+                    </p>
+                    <h3 style="margin:0 0 10px;font-size:16px;">In this event (${roster.length})</h3>
+                    ${roster.map(({ player: p, info }) => `
+                        <div onclick="rosterPickOut(${p.id})" style="${rowStyle(String(sel.outId) === String(p.id), '#dc2626')}">
+                            <div style="flex-shrink:0;">${renderAvatar(p, 40)}</div>
+                            <div style="flex:1;min-width:0;">
+                                <strong style="font-size:16px;">${p.name}</strong>
+                                ${String(sel.outId) === String(p.id) ? '<span style="background:#dc2626;color:white;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;margin-left:8px;">SWAPPING OUT</span>' : ''}
+                                <br><small style="color:#6b7280;">${info.teamName ? info.teamName + ' • ' : ''}in ${info.roundsIn} of ${info.totalRounds} rounds${info.openRounds < info.roundsIn ? ` • ${info.roundsIn - info.openRounds} played (locked)` : ''}</small>
+                            </div>
+                        </div>
+                    `).join('')}
+                    <h3 style="margin:18px 0 10px;font-size:16px;">Not in this event (${outsiders.length})</h3>
+                    ${outsiders.length ? outsiders.map(p => `
+                        <div onclick="rosterPickIn(${p.id})" style="${rowStyle(String(sel.inId) === String(p.id), '#16a34a')}">
+                            <div style="flex-shrink:0;">${renderAvatar(p, 40)}</div>
+                            <div style="flex:1;min-width:0;">
+                                <strong style="font-size:16px;">${p.name}</strong>
+                                ${String(sel.inId) === String(p.id) ? '<span style="background:#16a34a;color:white;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;margin-left:8px;">SWAPPING IN</span>' : ''}
+                                <br><small style="color:#6b7280;">League player • handicap ${p.handicap != null ? p.handicap : '—'}</small>
+                            </div>
+                        </div>
+                    `).join('') : '<p style="color:#6b7280;">Every league player is already in this event.</p>'}
+                    ${outPlayer && inPlayer ? `
+                        <button onclick="openRosterSwapConfirm(${event.id})" class="btn-primary" style="width:100%;margin-top:14px;background:#16a34a;min-height:48px;">
+                            🔁 Swap ${outPlayer.name} → ${inPlayer.name}…
+                        </button>
+                        <button onclick="rosterClearSwap()" class="btn-secondary" style="width:100%;margin-top:8px;">Clear selection</button>
+                    ` : `
+                        <p style="margin:14px 0 0;font-size:13px;color:#6b7280;">
+                            ${!outPlayer && !inPlayer ? 'Pick one player from each list to set up a swap.' : !outPlayer ? 'Now tap a player in the event to swap out.' : 'Now tap a league player to swap in.'}
+                        </p>
+                    `}
+                </div>
+            `;
+        };
+
+        window.openRosterSwapConfirm = (eventId) => {
+            try {
+                if (state.readOnly) { notify('🔒 Admin mode is required to change a roster'); return; }
+                const sel = window.__rosterSwap || {};
+                const event = (state.events || []).find(e => String(e.id) === String(eventId));
+                const outPlayer = (state.players || []).find(p => String(p.id) === String(sel.outId));
+                const inPlayer = (state.players || []).find(p => String(p.id) === String(sel.inId));
+                if (!event || !outPlayer || !inPlayer) { showError('Pick one player to swap out and one to swap in first.'); return; }
+                const info = rosterPlayerInfo(eventId, outPlayer.id);
+                const playedWithOut = info.roundsIn - info.openRounds;
+                const openTeams = new Set();
+                (state.rounds || []).filter(r => String(r.eventId) === String(eventId) && !rosterRoundHasPlay(r))
+                    .forEach(r => (r.teams || []).forEach(t => {
+                        if ((t.players || []).some(p => String(p.id) === String(outPlayer.id))) openTeams.add(t.teamName || '');
+                    }));
+                const teamLine = openTeams.size === 1
+                    ? `<strong>${inPlayer.name}</strong> takes <strong>${outPlayer.name}</strong>'s place on <strong>${[...openTeams][0]}</strong>`
+                    : `<strong>${inPlayer.name}</strong> takes <strong>${outPlayer.name}</strong>'s team spot in each round`;
+                let bracketLine = '';
+                if (event.bracket && (event.bracket.playerIds || []).some(id => String(id) === String(outPlayer.id))) {
+                    bracketLine = event.bracket.status === 'setup'
+                        ? `<li>The bracket is still in setup — <strong>${inPlayer.name}</strong> also takes the seed</li>`
+                        : `<li>⚠️ The bracket is locked — its seeds keep <strong>${outPlayer.name}</strong>. Only the rounds change</li>`;
+                }
+                const modal = document.createElement('div');
+                modal.id = 'roster-swap-modal';
+                modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
+                modal.innerHTML = `
+                    <div style="background:white;border-radius:16px;max-width:520px;width:100%;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.4);">
+                        <h3 style="margin:0 0 6px 0;font-size:22px;">🔁 Swap roster — ${event.name}?</h3>
+                        <p style="color:#374151;margin:0 0 14px 0;">${teamLine}.</p>
+                        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:12px 14px;margin-bottom:16px;">
+                            <strong style="color:#166534;">What happens:</strong>
+                            <ul style="margin:8px 0 0 18px;padding:0;color:#374151;line-height:1.55;">
+                                <li><strong>${info.openRounds} unplayed round${info.openRounds === 1 ? '' : 's'}</strong> will change</li>
+                                <li>Played rounds are never changed${playedWithOut > 0 ? ` — <strong>${playedWithOut} played round${playedWithOut === 1 ? '' : 's'}</strong> keep ${outPlayer.name}` : ''}</li>
+                                ${bracketLine}
+                                <li>League teams and other events are not touched</li>
+                            </ul>
+                        </div>
+                        <div style="display:flex;gap:10px;justify-content:flex-end;">
+                            <button id="roster-swap-cancel" class="btn-secondary" style="padding:12px 18px;">Cancel</button>
+                            <button id="roster-swap-confirm" class="btn-primary" style="padding:12px 18px;background:#16a34a;">Swap ${outPlayer.name} → ${inPlayer.name}</button>
+                        </div>
+                    </div>`;
+                document.body.appendChild(modal);
+                const close = () => modal.remove();
+                modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+                document.getElementById('roster-swap-cancel').onclick = close;
+                document.getElementById('roster-swap-confirm').onclick = () => { close(); window.confirmRosterSwap(); };
+                document.getElementById('roster-swap-cancel').focus();
+            } catch (err) {
+                console.error('Roster swap open error:', err);
+                showError('Failed to open roster swap: ' + err.message);
+            }
+        };
+
+        window.confirmRosterSwap = async () => {
+            try {
+                const sel = window.__rosterSwap || {};
+                const event = (state.events || []).find(e => String(e.id) === String(sel.eventId));
+                const outPlayer = (state.players || []).find(p => String(p.id) === String(sel.outId));
+                const inPlayer = (state.players || []).find(p => String(p.id) === String(sel.inId));
+                if (!event || !outPlayer || !inPlayer) { showError('Roster swap selection was lost — please pick the players again.'); return; }
+                const touched = [];
+                const next = (state.rounds || []).map(r => {
+                    if (String(r.eventId) !== String(event.id) || rosterRoundHasPlay(r)) return r;
+                    let found = false;
+                    (r.teams || []).forEach(t => (t.players || []).forEach(p => {
+                        if (String(p.id) === String(outPlayer.id)) found = true;
+                    }));
+                    if (!found) return r;
+                    const copy = JSON.parse(JSON.stringify(r));
+                    copy.teams.forEach(t => (t.players || []).forEach((p, idx) => {
+                        if (String(p.id) === String(outPlayer.id)) {
+                            const entry = {
+                                id: inPlayer.id,
+                                name: inPlayer.name,
+                                handicap: inPlayer.handicap != null ? inPlayer.handicap : Math.round(inPlayer.handicapIndex || 0),
+                                scores: Array(18).fill(''),
+                                bbbTotal: 0,
+                                ballsRemaining: 0
+                            };
+                            if (p.groupNumber !== undefined) entry.groupNumber = p.groupNumber;
+                            t.players[idx] = entry;
+                        }
+                    }));
+                    touched.push(copy.id);
+                    return copy;
+                });
+                if (!touched.length) {
+                    showError(`${outPlayer.name} doesn't appear in any unplayed round of ${event.name} — nothing to change.`);
+                    return;
+                }
+                if (event.bracket && event.bracket.status === 'setup' &&
+                    (event.bracket.playerIds || []).some(id => String(id) === String(outPlayer.id))) {
+                    saveBracket(event.id, {
+                        ...event.bracket,
+                        playerIds: event.bracket.playerIds.map(id => String(id) === String(outPlayer.id) ? inPlayer.id : id)
+                    });
+                }
+                await saveRoundsMerged(next, touched);
+                window.__rosterSwap = { eventId: event.id, outId: null, inId: null };
+                notify(`✅ Roster updated — ${inPlayer.name} replaces ${outPlayer.name} in ${touched.length} round${touched.length === 1 ? '' : 's'}`);
+                render();
+            } catch (err) {
+                console.error('Roster swap error:', err);
+                showError('Roster swap failed: ' + err.message);
             }
         };
 
