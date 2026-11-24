@@ -1341,6 +1341,24 @@ function sBigPot(night) {
       RC(night).skinsLog, the computeSkins ground truth, so every
       winner and pot on screen IS the engine's number. The summary
       slide after it (team pay row + skins king) is unchanged. ── */
+/* ── CYCLE 35 — THE SKINS, RETHOUGHT AS COLLECTION RUNS. Ron on the
+   Cycle 34 race: "way too fast" and "I still really don't like how it
+   flows" — a rethink, not a slowdown. The segment is now one slide per
+   COLLECTION RUN: the holes from the previous collection (or hole 1)
+   through the hole where the pot is collected. Each run auto-plays
+   hole by hole at a readable pace (~1.4 s a hole: a unique low net
+   stands with holder face/name/net + the house emoji pop; a tied low
+   net shows the tied faces while the pot counter swells +1). The
+   collection moment pauses ~2.5 s with the celebration, then the
+   slide HOLDS — the presenter taps to start the next run, so the
+   room gets natural stop points like the match segment. A press
+   mid-run finishes that run instantly; stepping back onto a run
+   lands it complete. A final settlement slide settles any pot left
+   after 18 — King-of-Ties split or still on the table — exactly as
+   computeSkins settles it. Frames are pre-computed from
+   RC(night).skinsLog, the computeSkins ground truth, so every winner
+   and pot on screen IS the engine's number. The summary slide after
+   the segment (team pay row + skins-king pill) is unchanged. ── */
 function sSkinsRace34(night) {
   const c = RC(night); if (!c.skinsEnabled) return [];
   const r = DATA.rounds[night - 1], log = c.skinsLog || [];
@@ -1359,95 +1377,115 @@ function sSkinsRace34(night) {
     '<div style="display:flex;gap:.9vmin;justify-content:center;flex-wrap:wrap;max-width:124vmin;margin-top:2.2vmin;">' + log.map(l => chip(l, 'open')).join('') + '</div>' +
     '<div style="margin-top:2.2vmin;font-size:4.2vmin;">🪙</div></div>' });
   const pars = r.pars || [];
-  const carry = !(r.skins && r.skins.carryover === false);
   const byHole = {}; log.forEach(l => { byHole[l.hole] = l; });
-  // Timing: ~0.5 s a hole, ~1.25 s on a collection — scaled down on a
-  // many-win night so the whole race still lands inside ~15 s.
-  const winCount34 = log.filter(l => l.winner).length;
-  const winDwell34 = winCount34 >= 9 ? 1000 : 1250, tieDwell34 = winCount34 >= 9 ? 500 : 520;
   const emojiFor = nd => nd <= -2 ? '🦅' : nd === -1 ? '🐦' : nd === 0 ? '➖' : nd === 1 ? '❌' : '❌❌';
-  const pipsFor = cur => { let s = ''; for (let j = 1; j <= 18; j++) { const l = byHole[j]; /* progress, not prophecy: only holes already played show their outcome (cur = 0 is the final frame — all shown) */ const cls = cur === 0 ? (l ? (l.winner ? ' win' : ' tie') : '') : j === cur ? ' cur' : (j < cur && l ? (l.winner ? ' win' : ' tie') : ''); s += '<span class="sk34pip' + cls + '">' + j + '</span>'; } return s; };
-  const frames = [];
-  let stake = 1, t = 250;
+  // partition holes 1..18 into runs: a run ends at each collection;
+  // the holes after the last collection form the trailing run.
+  const runs = [];
+  let runStart = 1;
   for (let h = 1; h <= 18; h++) {
-    const l = byHole[h];
-    let stage, win = false;
-    if (l && l.winner) {
-      const d = c.players[l.winner];
-      stage = '<div class="popIn" style="text-align:center;">' + face(l.winner, true) +
-        '<div class="sub" style="font-size:2.6vmin;margin-top:.6vmin;">NET ' + (d && d.nets ? d.nets[h - 1] : '') + ' on the ' + ord29(h) + ' · ' + esc(tname(l.winner)) + '</div>' +
-        '<div style="font-size:5vmin;margin-top:.4vmin;">' + emojiFor(l.netDiff) + '</div>' +
-        '<div style="font-weight:900;font-size:3.8vmin;color:var(--gold);margin-top:.4vmin;">🪙 COLLECTS ' + l.pot + ' SKIN' + (l.pot === 1 ? '' : 'S') + '</div></div>';
-      win = true; stake = 1;
-    } else if (l) {
-      const faces = l.tied.slice(0, 6).map(pid => face34(pid, 6.5)).join('') + (l.tied.length > 6 ? '<span class="sub" style="font-size:2.6vmin;">+' + (l.tied.length - 6) + ' more</span>' : '');
-      stage = '<div class="popIn" style="text-align:center;"><div style="display:flex;gap:1vmin;justify-content:center;align-items:center;">' + faces + '</div>' +
-        '<div style="font-weight:900;font-size:3.8vmin;margin-top:1vmin;">TIED AT NET ' + l.tiedScore + '</div>' +
-        '<div class="sub" style="font-size:2.4vmin;">' + l.tied.map(pid => esc(sname(pid))).join(' · ') + '</div>' +
-        '<div style="font-size:4.4vmin;margin-top:.4vmin;">🤝</div></div>';
-      if (carry) stake += 1;
-    } else {
-      stage = '<div style="text-align:center;" class="sub">No result on the ' + ord29(h) + '.</div>';
-    }
-    frames.push({ at: t, hole: h, par: pars[h - 1] || '', stage, pot: '🪙 POT ' + stake, pips: pipsFor(h), win, winner: l && l.winner ? l.winner : null, potWon: l && l.winner ? l.pot : 0 });
-    t += win ? winDwell34 : tieDwell34;
+    if (byHole[h] && byHole[h].winner) { runs.push({ a: runStart, b: h, win: byHole[h] }); runStart = h + 1; }
   }
-  let finStage;
+  if (runStart <= 18) runs.push({ a: runStart, b: 18, win: null });
+  const HOLE_MS = 1400;
+  runs.forEach((run, ri) => {
+    const chipsFor = cur => '<div style="display:flex;gap:.7vmin;justify-content:center;flex-wrap:wrap;max-width:120vmin;">' +
+      log.slice(run.a - 1, run.b).map(l => '<span class="sk34pip' + (l.hole < cur ? (l.winner ? ' win' : ' tie') : l.hole === cur ? ' cur' : '') + '">' + l.hole + '</span>').join('') + '</div>';
+    const frames = [];
+    let t = 300;
+    for (let h = run.a; h <= run.b; h++) {
+      const l = byHole[h];
+      const stake = h - run.a + 1;
+      let stage, win = false;
+      if (l && l.winner) {
+        const d = c.players[l.winner];
+        stage = '<div class="popIn" style="text-align:center;">' + face(l.winner, true) +
+          '<div class="sub" style="font-size:2.6vmin;margin-top:.3vmin;">NET ' + (d && d.nets ? d.nets[h - 1] : '') + ' on the ' + ord29(h) + ' · ' + esc(tname(l.winner)) + '</div>' +
+          '<div style="font-size:5vmin;margin-top:.4vmin;">' + emojiFor(l.netDiff) + '</div>' +
+          '<div style="font-weight:900;font-size:3.8vmin;color:var(--gold);margin-top:.4vmin;">🪙 COLLECTS ' + l.pot + ' SKIN' + (l.pot === 1 ? '' : 'S') + '</div></div>';
+        win = true;
+      } else if (l) {
+        const faces = l.tied.slice(0, 6).map(pid => face34(pid, 6.5)).join('') + (l.tied.length > 6 ? '<span class="sub" style="font-size:2.6vmin;">+' + (l.tied.length - 6) + ' more</span>' : '');
+        stage = '<div class="popIn" style="text-align:center;"><div style="display:flex;gap:1vmin;justify-content:center;align-items:center;">' + faces + '</div>' +
+          '<div style="font-weight:900;font-size:3.8vmin;margin-top:1vmin;">TIED AT NET ' + l.tiedScore + '</div>' +
+          '<div class="sub" style="font-size:2.4vmin;">' + l.tied.map(pid => esc(sname(pid))).join(' · ') + '</div>' +
+          '<div style="font-size:4.4vmin;margin-top:.4vmin;">🤝</div>' +
+          '<div class="sub" style="font-size:2.2vmin;margin-top:.4vmin;">The pot grows — ' + stake + ' skin' + (stake === 1 ? '' : 's') + ' riding on the next hole.</div></div>';
+      } else {
+        stage = '<div style="text-align:center;" class="sub">No result on the ' + ord29(h) + '.</div>';
+      }
+      frames.push({ at: t, hole: h, par: pars[h - 1] || '', stage, pot: '🪙 POT ' + stake, chips: chipsFor(h), win, winner: l && l.winner ? l.winner : null, potWon: l && l.winner ? l.pot : 0 });
+      t += HOLE_MS;
+    }
+    const lastAt = frames[frames.length - 1].at;
+    const totalMs = lastAt + (run.win ? 2500 : 1600);
+    const f0 = frames[0];
+    out.push({ ch: 'Act I · Skins', skins35: { frames, totalMs, run: ri + 1, runs: runs.length, a: run.a, b: run.b, winPid: run.win ? run.win.winner : null, winPot: run.win ? run.win.pot : 0 },
+      html:
+      '<div class="sk35" data-sk35-run="' + run.a + '-' + run.b + '"' + (run.win ? ' data-sk35-win="' + run.win.winner + ':' + run.win.pot + '"' : '') + '>' + bgImg(IMG.coins, .20) +
+      '<div style="position:relative;z-index:3;"><div class="kick">Act I · The Skins Game · Run ' + (ri + 1) + ' of ' + runs.length + ' · Holes ' + run.a + '–' + run.b + '</div>' +
+      '<div style="display:flex;align-items:center;justify-content:center;gap:2.6vmin;flex-wrap:wrap;"><span class="sk35hole" style="font-weight:900;font-size:5.2vmin;">HOLE ' + f0.hole + '</span>' +
+      '<span class="sk35par sub" style="font-size:2.6vmin;">' + (f0.par ? 'PAR ' + f0.par : '') + '</span>' +
+      '<span class="sk34pot">' + f0.pot + '</span></div>' +
+      '<div class="sk34stage">' + f0.stage + '</div>' +
+      '<div class="sk35chips">' + f0.chips + '</div>' +
+      '<div class="sk35hold sub" style="font-size:2.1vmin;margin-top:1.4vmin;opacity:0;transition:opacity .5s ease;">The run is settled — tap for the next one.</div>' +
+      '</div></div>' });
+  });
+  // the settlement slide: any pot left after 18, exactly as the engine settles it
+  let finStage, settleKind;
   if (c.kingOfTies && c.leftoverPot > 0) {
+    settleKind = 'kot';
     const shares = Object.keys(c.finalShares || {}).filter(pid => c.finalShares[pid] > 0);
     finStage = '<div class="popIn" style="text-align:center;"><div style="font-size:5vmin;">👑</div>' +
       '<div style="font-weight:900;font-size:4.2vmin;color:var(--gold);">THE LAST POT IS SPLIT — KING OF TIES</div>' +
       '<div style="display:flex;gap:2.2vmin;justify-content:center;margin-top:1.6vmin;">' + shares.map(pid => '<div style="text-align:center;">' + face34(pid, 8) + '<div style="font-weight:800;font-size:2.2vmin;margin-top:.5vmin;">' + esc(sname(pid)) + '</div><div class="sub" style="font-size:2vmin;">' + fmt(c.finalShares[pid]) + ' skins</div></div>').join('') + '</div>' +
       '<div class="sub" style="font-size:2.4vmin;margin-top:1.2vmin;">The tied men divide the last ' + c.leftoverPot + ' skins between them.</div></div>';
   } else if (c.leftoverPot > 0) {
+    settleKind = 'left:' + c.leftoverPot;
     finStage = '<div class="popIn" style="text-align:center;"><div style="font-size:5.4vmin;">🪙</div>' +
       '<div style="font-weight:900;font-size:4.2vmin;color:var(--gold);">' + c.leftoverPot + ' SKIN' + (c.leftoverPot === 1 ? '' : 'S') + ' STILL ON THE TABLE</div>' +
       '<div class="sub" style="font-size:2.4vmin;margin-top:1vmin;">The last pot was never collected — the ties ran out of holes.</div></div>';
   } else {
+    settleKind = 'clear';
     finStage = '<div class="popIn" style="text-align:center;"><div style="font-size:5.4vmin;">🏁</div>' +
       '<div style="font-weight:900;font-size:4.2vmin;">EVERY SKIN FOUND A HOME</div>' +
       '<div class="sub" style="font-size:2.4vmin;margin-top:1vmin;">Nothing left on the table.</div></div>';
   }
-  frames.push({ at: t + 400, hole: 0, par: '', stage: finStage, pot: '🪙 SETTLED', pips: pipsFor(0), win: false, winner: null, potWon: 0 });
-  const totalMs = t + 400 + 1400;
-  const f0 = frames[0];
-  out.push({ ch: 'Act I · Skins', skins34: { frames, totalMs, celebrate: !!(c.kingOfTies && c.leftoverPot > 0) }, html:
-    '<div class="sk34">' + bgImg(IMG.coins, .20) +
-    '<div style="position:relative;z-index:3;"><div class="kick">Act I · The Skins Game</div>' +
-    '<div style="display:flex;align-items:center;justify-content:center;gap:2.6vmin;flex-wrap:wrap;"><span class="sk34hole" style="font-weight:900;font-size:5.2vmin;">HOLE ' + f0.hole + '</span>' +
-    '<span class="sk34par sub" style="font-size:2.6vmin;">' + (f0.par ? 'PAR ' + f0.par : '') + '</span>' +
-    '<span class="sk34pot">' + f0.pot + '</span></div>' +
-    '<div class="sk34stage">' + f0.stage + '</div>' +
-    '<div class="sk34pips">' + f0.pips + '</div></div></div>' });
+  out.push({ ch: 'Act I · Skins', dwell: 6000, snd: settleKind === 'kot' ? SND.cheer : SND.skins, html:
+    '<div data-sk35-settle="' + settleKind + '">' + bgImg(IMG.coins, .20) +
+    '<div style="position:relative;z-index:3;"><div class="kick">Act I · The Skins Game · The Settlement</div>' +
+    '<div class="sk34stage">' + finStage + '</div></div></div>' });
   const skinSum = sSkinsSummary(night); if (skinSum) out.push(skinSum);
   return out;
 }
-function startSkins34(s, dir) {
-  const root = slidesEl.querySelector('.sk34');
+function startSkins35(s, dir) {
+  const root = slidesEl.querySelector('.sk35');
   if (!root) { s._autoDone = true; return; }
-  const F = s.skins34.frames;
-  const holeEl = root.querySelector('.sk34hole'), parEl = root.querySelector('.sk34par'),
-    stEl = root.querySelector('.sk34stage'), potEl = root.querySelector('.sk34pot'), pipEl = root.querySelector('.sk34pips');
+  const F = s.skins35.frames;
+  const holeEl = root.querySelector('.sk35hole'), parEl = root.querySelector('.sk35par'),
+    stEl = root.querySelector('.sk34stage'), potEl = root.querySelector('.sk34pot'),
+    chipEl = root.querySelector('.sk35chips'), holdEl = root.querySelector('.sk35hold');
   const apply = k => {
     const f = F[k]; if (!f) return;
-    holeEl.textContent = f.hole ? 'HOLE ' + f.hole : 'THE POT';
+    holeEl.textContent = 'HOLE ' + f.hole;
     if (parEl) parEl.textContent = f.par ? 'PAR ' + f.par : '';
-    stEl.innerHTML = f.stage; potEl.innerHTML = f.pot; if (f.pips) pipEl.innerHTML = f.pips;
+    stEl.innerHTML = f.stage; potEl.innerHTML = f.pot; if (f.chips) chipEl.innerHTML = f.chips;
   };
-  if (dir < 0 || RM) { apply(F.length - 1); s._autoDone = true; return; }
+  const fin = celebrate => { apply(F.length - 1); s._autoDone = true; autoFinish30 = null;
+    if (holdEl) holdEl.style.opacity = '1';
+    window.__skins35 = { run: s.skins35.run, doneAt: performance.now() };
+    if (celebrate && s.skins35.winPid && !RM) { burst(['#ffd75e', '#fff3b0', '#ffffff']); playSnd(SND.cheer); } };
+  if (dir < 0 || RM) { apply(F.length - 1); s._autoDone = true; if (holdEl) holdEl.style.opacity = '1'; return; }
   apply(0); s._autoDone = false;
-  autoFinish30 = () => { apply(F.length - 1); s._autoDone = true; autoFinish30 = null; if (s.skins34.celebrate) { burst(['#ffd75e', '#fff3b0', '#ffffff']); playSnd(SND.cheer); } };
+  autoFinish30 = () => fin(true);
   F.forEach((f, k) => {
     if (k === 0) return;
-    later30(() => {
-      if (cur.slides[cur.i] !== s) return;
-      apply(k);
-      if (f.win) playSnd(SND.skins);
-      if (k === F.length - 1) { s._autoDone = true; if (s.skins34.celebrate) { burst(['#ffd75e', '#fff3b0', '#ffffff']); playSnd(SND.cheer); } }
-    }, f.at);
+    later30(() => { if (cur.slides[cur.i] !== s) return; apply(k); if (f.win) playSnd(SND.skins); }, f.at);
   });
-  later30(() => { if (cur.slides[cur.i] === s) s._autoDone = true; }, s.skins34.totalMs + 400);
+  later30(() => { if (cur.slides[cur.i] === s) fin(!!s.skins35.winPid); }, s.skins35.totalMs);
 }
+
 /* CYCLE 27 — MATCH NOTATION (Ron's ruling: "Matches are won 4&3, 2&1
    etc, not 8-7"). Pure presentation math over computeMatch's per-hole
    record: walk the holes from the winner's side; the first hole after
@@ -1819,20 +1857,27 @@ function sCTPE9(night) {
     // CYCLE 34 — the reveal carries a picture: a photo from this round
     // tagged with the winner (round photos carry playerIds) when one
     // exists, else the AI depiction (presentation-assets/ctp-ball.jpg,
-    // embedded as IMG.ctpBall). "Hole N · <course>" headlines the card
-    // and the round's course photo sits behind it. No photo and no
-    // asset → the previous design, never a broken image.
+    // embedded as IMG.ctpBall).
+    // CYCLE 35 — the picture no longer leads or covers anything: the
+    // WINNER is the hero, and the photo sits in a contained, captioned
+    // panel beside him ("Hole N · <course>"). No photo and no asset →
+    // the centred text treatment, never a broken image.
     const tagged34 = (r.photos || []).find(p => p && p.src && (p.playerIds || []).map(String).indexOf(String(x.pid)) >= 0);
     const heroSrc34 = tagged34 ? tagged34.src : (IMG.ctpBall || null);
     const cImg34 = courseImg(r.course);
+    const winnerCol34 =
+      '<div style="margin-top:1vmin;animation:popIn .55s cubic-bezier(.2,.8,.3,1) both;">' + face(x.pid, true) + '</div>' +
+      '<div style="margin-top:1.4vmin;animation:popIn .55s cubic-bezier(.2,.8,.3,1) .25s both;"><span class="pill" style="font-size:2.8vmin;border-color:var(--gold);">🏆 PRIZE WINNER</span></div>' +
+      '<div style="margin-top:1.2vmin;animation:popIn .55s cubic-bezier(.2,.8,.3,1) .45s both;"><span class="pill" style="font-size:2.3vmin;">📍 +' + fmt(SET.ctpPoints) + ' pts</span></div>';
+    const panel35 = heroSrc34
+      ? '<div style="flex:none;text-align:left;"><img class="ctpPanel35" src="' + heroSrc34 + '" alt=""><div class="ctpCap35">Hole ' + x.hole + ' · ' + esc(r.course || '') + '</div></div>' : '';
     out.push({ ch: 'Act I · Closest to the Pin', dwell: 6200, fx: 'confetti', fxCols: [tcolor(x.pid)], snd: SND.cheer, ctp34: tagged34 ? 'photo' : (heroSrc34 ? 'ai' : 'none'), html:
       (cImg34 ? bgImg(cImg34, .30) : '') +
       '<div style="position:relative;z-index:3;"><div class="kick">Side Games · Closest to the Pin</div>' +
       '<div class="p29serif" style="font-weight:900;font-size:5.4vmin;color:var(--gold);">HOLE ' + x.hole + ' · ' + esc(r.course || '') + '</div>' +
-      (heroSrc34 ? '<div><img class="ctpHero34" src="' + heroSrc34 + '" alt=""></div>' : '') +
-      '<div style="margin-top:1vmin;animation:popIn .55s cubic-bezier(.2,.8,.3,1) both;">' + face(x.pid, true) + '</div>' +
-      '<div style="margin-top:1.4vmin;animation:popIn .55s cubic-bezier(.2,.8,.3,1) .25s both;"><span class="pill" style="font-size:2.8vmin;border-color:var(--gold);">🏆 PRIZE WINNER</span></div>' +
-      '<div style="margin-top:1.2vmin;animation:popIn .55s cubic-bezier(.2,.8,.3,1) .45s both;"><span class="pill" style="font-size:2.3vmin;">📍 +' + fmt(SET.ctpPoints) + ' pts</span></div></div>' });
+      (heroSrc34
+        ? '<div style="display:flex;align-items:center;justify-content:center;gap:4.5vmin;margin-top:1.8vmin;"><div style="text-align:center;">' + winnerCol34 + '</div>' + panel35 + '</div>'
+        : winnerCol34) + '</div>' });
   });
   else out.push({ ch: 'Act I · Closest to the Pin', html: '<div class="kick">Side Games</div><h2>📍 Closest to the Pin</h2><div class="sub">No pins recorded tonight.</div>' });
   if (e9.length) out.push({ ch: 'Act I · Extra 9', snd: SND.sparkle, html:
@@ -3524,7 +3569,6 @@ function sBuilds29(night) {
   const maxCat = {};
   C29_CATS.forEach(cat => { maxCat[cat.key] = Math.max(1, ...DATA.teams.map((t2, ti2) => teamCats29(c, ti2).find(x => x.key === cat.key).v)); });
   const order = st.slice().sort((a, b) => (a.tonight - b.tonight) || (a.total - b.total) || a.name.localeCompare(b.name)); // weakest first, the night winner last
-  const chats = {}; order.forEach(s => { chats[s.team] = teamChat29(night, s.team, ctx); });
   // CYCLE 34 — the two-tier build is GONE. The old `full` gate dealt a team
   // an intro + staged build only if it ranked top-4 tonight, drew a chatter
   // pattern, held the Kampioen or fielded a top-3 card; everyone else got a
@@ -3558,40 +3602,52 @@ function sBuilds29(night) {
       '<div class="p29bv">' + (cat.v > 0 ? '+' + fmt(cat.v) : 'nothing') + '</div>' +
       '<div class="p29br">' + fmt(r2) + '</div></div>';
     const split = splitLines29(night, ti, c, h, cats);
-    const totalBand = '<div class="p29total"><div style="font-weight:800;letter-spacing:.24em;font-size:2vmin;color:var(--cream);">TONIGHT</div>' +
-      '<div class="p29serif" style="font-weight:900;font-size:6.8vmin;color:var(--gold);">' + fmt(s.tonight) + '</div></div>' +
-      (split.length ? '<div class="p29split">' + split.map(l => '<div style="margin-top:.7vmin;">' + l + '</div>').join('') + '</div>' : '');
-    const headSmall = '<div class="p29thead" style="margin:1.2vmin 0 1.6vmin;">' + teamLogo(tm.id, 9) +
-      '<div class="p29serif" style="font-weight:900;font-size:4.6vmin;color:' + tm.color + ';">' + esc(tm.name) + '</div></div>';
+    const totalBand = '<div class="p29total" style="margin-top:1vmin;padding-top:1vmin;"><div style="font-weight:800;letter-spacing:.24em;font-size:2vmin;color:var(--cream);">TONIGHT</div>' +
+      '<div class="p29serif" style="font-weight:900;font-size:5vmin;color:var(--gold);">' + fmt(s.tonight) + '</div></div>' +
+      (split.length ? '<div class="p29split" style="font-size:2.2vmin;line-height:1.3;">' + split.map(l => '<div style="margin-top:.5vmin;">' + l + '</div>').join('') + '</div>' : '');
+    const headSmall = '<div class="p29thead" style="margin:.4vmin 0 .6vmin;">' + teamLogo(tm.id, 6) +
+      '<div class="p29serif" style="font-weight:900;font-size:4vmin;color:' + tm.color + ';">' + esc(tm.name) + '</div></div>';
     let hook;
     if (isWinner) hook = 'How ' + esc(tm.name) + ' won the night';
     else if (s.prevRank && s.move <= -2 && s.move === ctx.minMove) hook = 'The fall — ' + esc(tm.name);
     else if (s.prevRank && s.move >= 2 && s.move === ctx.maxMove) hook = 'The climb — ' + esc(tm.name);
-    else { const topCat = cats.slice().sort((a, b) => b.v - a.v)[0]; hook = 'Built on ' + topCat.low + ' — ' + fmt(topCat.v) + ' of their ' + fmt(s.tonight); }
+    else { const topCat = cats.slice().sort((a, b) => b.v - a.v)[0]; hook = 'Built on ' + topCat.low; }
+    // CYCLE 35 — the intro page is SCORELESS (Ron's review): team name
+    // and players only — no tonight points, no totals, no hook numbers.
+    // Nothing numeric spoils the build reveal that follows.
     out.push({ ch: 'Act I · The Night’s Points', snd: teamWalkupSnd(tm.id) || SND.swoosh, html:
       p29bg() + '<div class="kick">Act I · The Night’s Points</div>' +
       '<div class="p29thead" style="margin-top:2.2vmin;">' + teamLogo(tm.id, 17) +
       '<div style="text-align:left;"><div class="p29serif" style="font-weight:900;font-size:6.4vmin;color:' + tm.color + ';line-height:1.02;">' + esc(tm.name) + '</div>' +
-      '<div class="sub" style="font-size:2.4vmin;margin-top:.6vmin;">' + tm.players.map(pid => esc(sname(pid)) + ' ' + fmt((c.players[pid] || {}).total || 0)).join(' · ') + '</div></div></div>' +
+      '<div class="sub" style="font-size:2.4vmin;margin-top:.6vmin;">' + tm.players.map(pid => esc(pname(pid))).join(' · ') + '</div></div></div>' +
       '<div class="faceRow" style="margin-top:2.2vmin;">' + tm.players.map(pid => face(pid)).join('') + '</div>' +
       '<div class="p29serif" style="font-size:3.6vmin;color:var(--cream);margin-top:2.4vmin;font-style:italic;">' + hook + '</div>' });
     // CYCLE 34 — ONE BEAT PER CATEGORY, canonical order, each beat carrying
     // every player's contribution to that category.
+    // CYCLE 35 — the contributions are full-width LINES now, one per
+    // player, colour-coded, avatar only at the left edge of his own
+    // line and the value at the right (the Cycle 34 chips put avatars
+    // between the numbers and the lines overflowed the stage).
     const catBeats = cats.map((cat, ix) => {
       const contribs = tm.players.map(pid => {
         const d = c.players[pid], v = d ? (d[cat.key] || 0) : 0;
-        return '<span class="cat34chip">' + face34(pid, 4.4) + '<span>' + esc(sname(pid)) + '</span><b>+' + fmt(v) + '</b></span>';
+        return '<div class="bl35line" style="border-left-color:' + tcolor(pid) + ';background:linear-gradient(90deg,' + tcolor(pid) + '26,rgba(255,255,255,.03) 70%);">' + face34(pid, 3.2) +
+          '<span class="bl35name">' + esc(pname(pid)) + '</span>' +
+          '<span class="bl35val">+' + fmt(v) + '</span></div>';
       }).join('');
       const haulKey34 = { bbbPts: 'bbb', ctpPts: 'ctp', ballPts: 'balls', skinsPts: 'skins' }[cat.key];
       const haul = haulKey34 && hauls34[haulKey34] && tm.players.indexOf(hauls34[haulKey34].pid) >= 0
         ? '<div class="cat34haul">' + esc(sname(hauls34[haulKey34].pid)) + '’s ' + hauls34[haulKey34].def.phrase(hauls34[haulKey34].n) + ' — the most anyone took from ' + hauls34[haulKey34].def.noun + ' tonight.</div>' : '';
-      return '<div class="bt" data-b="' + (ix + 1) + '" style="width:100%">' + rowFor(cat, runs[ix]) + '<div class="cat34">' + contribs + '</div>' + haul + '</div>';
+      return '<div class="bt b35beat" data-b="' + (ix + 1) + '" style="width:100%">' + rowFor(cat, runs[ix]) + '<div class="bl35">' + contribs + '</div>' + haul + '</div>';
     }).join('');
     out.push({ ch: 'Act I · The Night’s Points', beatSnd: { 1: SND.skins, 2: SND.skins, 3: SND.skins, 4: SND.skins, 5: SND.skins, 6: SND.skins, 7: isWinner ? SND.cheer : SND.sparkle },
       fx: isWinner ? 'confetti' : undefined, fxCols: [tm.color, '#ffd75e'], html:
-      p29bg() + '<div class="kick">Act I · The Night’s Points</div>' + headSmall + catBeats +
+      // CYCLE 35 — the build slide drops its kick line (the team head
+      // names the chapter's subject; the slide is the tallest in the
+      // show and every line of height counts).
+      p29bg() + headSmall + catBeats +
       '<div class="bt" data-b="7" style="width:100%">' + totalBand + '</div>' });
-    if (chats[ti]) out.push(chat29('Act I · The Night’s Points', chats[ti].text, chats[ti].sub));
+    // CYCLE 35 — no chatter card follows a build anymore (item 5).
   });
   return out;
 }
@@ -3652,7 +3708,6 @@ function sLanding29(night) {
       p29bg() + '<div class="kick">The Landing · Night 1</div><h2 class="p29serif" style="font-size:5.2vmin;">The First Board</h2>' + rows +
       '<div class="bt" data-b="7" style="text-align:center;margin-top:2.2vmin;"><div class="p29serif" style="font-weight:900;font-size:4.8vmin;color:var(--gold);">THE FIRST BOARD OF THE WEEK</div>' +
       '<div class="sub" style="font-size:2.5vmin;margin-top:.6vmin;">' + esc(st[0].name) + ' lead it — ' + fmt(gap) + ' in front of ' + esc(st[1].name) + '.</div></div>' });
-    out.push(chat29('The Landing', 'Six nights left. ' + fmt(gap) + ' in it at the top — and ' + fmt(st[0].total - st[5].total) + ' covering the whole field.', 'Who blinks first?'));
     return out;
   }
   const morning = standings(night - 1);
@@ -3703,13 +3758,8 @@ function sLanding29(night) {
       '<div class="faceRow" style="margin-top:2vmin;">' + tm.players.map(pid => face(pid, true)).join('') + '</div>' });
     return out;
   }
-  if (night === 6) { const oc = sOddsChat29(6, false); if (oc) { out.push(oc); return out; } }
-  const winnerTeam = st.slice().sort((a, b) => (b.tonight - a.tonight) || (b.total - a.total) || a.name.localeCompare(b.name))[0].team;
-  let text, sub;
-  if (leaderChanged) { text = 'There’s a new name on top tonight.'; sub = 'How long do they keep it?'; }
-  else if (g1 < g0 && winnerTeam !== st[0].team) { text = 'The lead was ' + fmt(g0) + ' this morning. It’s ' + fmt(g1) + ' now.'; sub = 'Who’s the favourite — the leaders, or the team that just won the night?'; }
-  else { const left = DATA.event.nights - night; text = left + ' night' + (left === 1 ? '' : 's') + ' left. ' + fmt(g1) + ' in it.'; sub = 'Who blinks first?'; }
-  out.push(chat29('The Landing', text, sub));
+  // CYCLE 35 — no Landing chatter card and no odds chatter card: the
+  // board lands, and the show moves on (item 5).
   return out;
 }
 
@@ -4378,7 +4428,10 @@ function raceSlide30(night, feat, losses) {
       pips: pips.join(''), score, pill, snd: w ? 'skins' : 'hop'
     });
   }
-  const perHole = Math.max(350, Math.min(1600, Math.round(8350 / shown)));
+  // CYCLE 35 — every race runs 50% slower (Ron: the ~9.8 s standard
+  // race becomes ~14.7 s). The Cycle 30 per-hole dwell is multiplied
+  // by 1.5; the cart transition below scales off perHole too.
+  const perHole = Math.round(Math.max(350, Math.min(1600, Math.round(8350 / shown))) * 1.5);
   const totalMs = 250 + shown * perHole + 1200;
   const elim = (losses[feat.res.loserPid] || 0) >= 2;
   const notation = matchNotation(d, feat.res.winnerPid, feat.res.p1);
@@ -4458,7 +4511,7 @@ function scorecardSlide30(night, feat, losses) {
     '<div class="sub" style="font-size:2.2vmin;">🏁 Match over on hole ' + (decHole + 1) + ' · ' + (d.halved === 1 ? '1 hole halved' : d.halved + ' holes halved') + (d.note ? ' · ' + esc(d.note) : '') + (elim ? ' · ' + esc(pname(feat.res.loserPid)) + ' is out of the bracket' : '') + '</div></div>' +
     '<div style="opacity:.45;filter:grayscale(1);">' + face(feat.res.loserPid, false) + '</div></div>' +
     '<div style="margin-top:1.6vmin;">' + grid(rows) + '</div>' +
-    '<div class="sub" style="margin-top:1.4vmin;font-size:2.2vmin;">The decision hole glows gold · ▲ is the match lead, in the leader’s colours. The card stays up — talk it over.</div>' +
+    '<div class="sub" style="margin-top:1.4vmin;font-size:2.2vmin;">The decision hole glows gold · ▲ is the match lead, in the leader’s colours. The card stays up for the room.</div>' +
     '</div>' };
 }
 
@@ -4469,15 +4522,10 @@ function sMatches30(night) {
   const losses = lossesThrough30(night);
   const out = [];
   ms.filter(m => m.res).slice().sort((a, b) => matchOrderKey30(a.id) - matchOrderKey30(b.id)).forEach(m => {
-    if (m.res.walkover) {
-      out.push({ ch: 'Act II · Match Play', snd: SND.hop, html:
-        '<div data-c30-walk="' + m.res.winnerPid + '">' + p29bg() +
-        '<div class="kick">Act II · Match Play · ' + esc(m.label) + '</div>' +
-        '<div style="margin-top:1vmin;">' + face(m.res.winnerPid, true) + '</div>' +
-        '<h2 class="p29serif" style="margin-top:1.2vmin;">' + esc(pname(m.res.winnerPid)) + ' advances</h2>' +
-        '<div class="sub">A walkover — no golf required. The bracket moves him on.</div></div>' });
-      return;
-    }
+    // CYCLE 35 — a walkover gets NO slide of its own: no race, no
+    // advance card (item 8). The bracket simply moves on without him
+    // appearing in this segment at all.
+    if (m.res.walkover) return;
     if (!m.res.detail) return;
     const rs = raceSlide30(night, m, losses); if (rs) out.push(rs);
     const sc = scorecardSlide30(night, m, losses); if (sc) out.push(sc);
@@ -4485,54 +4533,82 @@ function sMatches30(night) {
   return out;
 }
 
-/* ---------- C · the bracket progression (one beat per advancer) ---------- */
+/* ---------- C · the bracket progression — CYCLE 35: grouped by the
+   NEXT match. One card per next matchup: when both feeders were
+   decided tonight, both winners slide into the single card (one beat
+   per card, never a duplicate matchup). Walkover advancers get NO
+   movement beat (item 10): a man who advanced without playing appears
+   only as a static occupant of his next-match slot, exactly like a
+   man whose feeder was decided on an earlier night. ---------- */
 function sProgression30(night) {
   const ms = matchesForNight(night).filter(m => m.res && m.res.winnerPid);
   if (!ms.length) return [];
   const bm = (DATA.bracket || {}).matches || {};
   const losses = lossesThrough30(night);
   const memo = {};
-  const entries = ms.slice().sort((a, b) => matchOrderKey30(a.id) - matchOrderKey30(b.id)).map(m => {
-    const winner = m.res.winnerPid, loser = m.res.loserPid;
+  const destOf = m => {
     let destId = null;
     Object.keys(bm).forEach(id => { const dm = bm[id]; [dm.slot1, dm.slot2].forEach(s => { if (s && s.source === 'match' && s.matchId === m.id && s.takeWinner) destId = id; }); });
-    let destNight = null, oppPid = null, oppText = null, path = 'W';
-    if (destId) {
-      const dm = bm[destId]; destNight = dm.roundNumber || null;
-      const wSlot = [dm.slot1, dm.slot2].find(s => s && s.source === 'match' && s.matchId === m.id && s.takeWinner);
-      const oSlot = wSlot === dm.slot1 ? dm.slot2 : dm.slot1;
-      const rs = resolveSlot(oSlot, night, memo);
-      if (rs && rs.pid) oppPid = rs.pid; else oppText = describeSlot(oSlot);
-      path = destId.indexOf('L') === 0 ? 'L' : 'W';
-    }
-    return { m, winner, loser, destId, destNight, oppPid, oppText, path,
+    return destId;
+  };
+  const entryOf = m => {
+    const winner = m.res.winnerPid, loser = m.res.loserPid, destId = destOf(m);
+    let destNight = null, path = 'W';
+    if (destId) { destNight = (bm[destId] || {}).roundNumber || null; path = destId.indexOf('L') === 0 ? 'L' : 'W'; }
+    return { m, winner, loser, destId, destNight, path,
       elim: loser ? (losses[loser] || 0) >= 2 : false,
       walkover: !!m.res.walkover,
       notation: m.res.detail ? matchNotation(m.res.detail, winner, m.res.p1) : null };
-  });
+  };
   const ghost = '<div style="width:7vmin;height:7vmin;border-radius:50%;border:.35vmin dashed #ffffff44;display:flex;align-items:center;justify-content:center;font-size:2.8vmin;color:#ffffff55;font-weight:900;flex:none;">?</div>';
-  const beatHtml = (e, b) => {
-    const pathChip = e.destId == null
+  // tonight's PLAYED winners, grouped by their next match
+  const groups = [], byDest = {};
+  ms.filter(m => !m.res.walkover).map(entryOf).forEach(e => {
+    const key = e.destId == null ? 'CHAMP' : e.destId;
+    if (!byDest[key]) { byDest[key] = { destId: e.destId, destNight: e.destNight, path: e.path, feeders: [] }; groups.push(byDest[key]); }
+    byDest[key].feeders.push(e);
+  });
+  // a static slot occupant: resolved pid (earlier night, direct seed,
+  // or tonight's walkover winner) or the awaiting description
+  const staticSlot = (destId, feederMatchIds) => {
+    const dm = bm[destId]; if (!dm) return null;
+    const oSlot = [dm.slot1, dm.slot2].find(s => !(s && s.source === 'match' && feederMatchIds.indexOf(s.matchId) >= 0 && s.takeWinner));
+    if (!oSlot) return null;
+    const rs = resolveSlot(oSlot, night, memo);
+    if (rs && rs.pid) return { pid: rs.pid };
+    return { text: describeSlot(oSlot) };
+  };
+  const feederHtml = e =>
+    '<div style="display:flex;align-items:center;gap:1.4vmin;">' +
+    '<div class="p30slide" style="flex:none;">' + miniFace(e.winner) + '</div>' +
+    '<div style="text-align:left;"><div style="font-weight:900;font-size:2.3vmin;">' + esc(pname(e.winner)) + '</div>' +
+    '<div style="font-size:1.8vmin;color:var(--dim);font-weight:600;">' + esc(e.m.label) + ' · won ' + e.notation +
+    (e.loser ? ' · beat ' + esc(sname(e.loser)) : '') + (e.elim ? ' · <span style="color:#ff8585;font-weight:900;">ELIMINATED HIM</span>' : '') + '</div></div></div>';
+  const beatHtml = (g, b) => {
+    const pathChip = g.destId == null
       ? '<span class="pill" style="font-size:1.7vmin;border-color:var(--gold);color:var(--gold);">🏆 CHAMPION</span>'
-      : e.path === 'W' ? '<span class="pill" style="font-size:1.7vmin;border-color:var(--gold);color:var(--gold);">WINNERS PATH</span>'
+      : g.path === 'W' ? '<span class="pill" style="font-size:1.7vmin;border-color:var(--gold);color:var(--gold);">WINNERS PATH</span>'
       : '<span class="pill" style="font-size:1.7vmin;border-color:#7fb2ff;color:#a9c8ff;">REDEMPTION PATH</span>';
-    const fromCard = '<div style="flex:1.15;background:var(--card);border:1px solid var(--line);border-radius:1.8vmin;padding:1vmin 1.6vmin;display:flex;align-items:center;gap:1.4vmin;">' +
-      miniFace(e.winner) +
-      '<div style="text-align:left;"><div style="font-weight:900;font-size:2.3vmin;">' + esc(pname(e.winner)) + '</div>' +
-      '<div style="font-size:1.8vmin;color:var(--dim);font-weight:600;">' + esc(e.m.label) + ' · ' + (e.walkover ? 'walkover — no golf required' : 'won ' + e.notation) + '</div></div>' +
-      (e.loser ? '<div style="margin-left:auto;position:relative;flex:none;"><div style="opacity:.45;filter:grayscale(1);">' + miniFace(e.loser) + '</div>' +
-        (e.elim ? '<div style="position:absolute;top:44%;left:50%;transform:translate(-50%,-50%) rotate(-9deg);border:.4vmin solid #ff6b6b;color:#ff8585;font-weight:900;font-size:1.9vmin;letter-spacing:.08em;padding:.2vmin .9vmin;border-radius:.6vmin;background:#1a0d16d9;white-space:nowrap;">ELIMINATED</div>' : '') + '</div>' : '') + '</div>';
-    const toCard = e.destId == null
-      ? '<div style="flex:1;background:linear-gradient(180deg,rgba(255,215,94,.18),rgba(255,215,94,.05));border:.3vmin solid var(--gold);border-radius:1.8vmin;padding:1vmin 1.6vmin;display:flex;align-items:center;gap:1.4vmin;"><div style="font-size:4.4vmin;">🏆</div><div style="text-align:left;"><div style="font-weight:900;font-size:2.3vmin;color:var(--gold);">BRACKET CHAMPION</div><div style="font-size:1.8vmin;color:var(--dim);font-weight:600;">The last man standing</div></div></div>'
-      : '<div style="flex:1;background:var(--card);border:.3vmin solid ' + (e.path === 'W' ? 'var(--gold)' : '#7fb2ff') + ';border-radius:1.8vmin;padding:1vmin 1.6vmin;display:flex;align-items:center;gap:1.4vmin;">' +
-        '<div class="p30slide" style="flex:none;">' + miniFace(e.winner) + '</div>' +
-        '<div style="font-weight:900;font-size:2.2vmin;color:var(--dim);">VS</div>' +
-        (e.oppPid ? miniFace(e.oppPid) + '<div style="text-align:left;"><div style="font-weight:900;font-size:2.2vmin;">' + esc(matchLabel(e.destId)) + '</div><div style="font-size:1.8vmin;color:var(--dim);font-weight:600;">Night ' + e.destNight + ' · vs ' + esc(pname(e.oppPid)) + '</div></div>'
-                  : ghost + '<div style="text-align:left;"><div style="font-weight:900;font-size:2.2vmin;">' + esc(matchLabel(e.destId)) + '</div><div style="font-size:1.8vmin;color:var(--dim);font-weight:600;">Night ' + e.destNight + ' · awaiting · ' + esc(e.oppText || 'TBD') + '</div></div>') + '</div>';
-    return '<div class="bt" data-b="' + b + '" style="width:100%;"><span style="display:none;" data-c30-adv="' + e.winner + '"></span>' +
+    let card;
+    if (g.destId == null) {
+      card = '<div style="flex:1;background:linear-gradient(180deg,rgba(255,215,94,.18),rgba(255,215,94,.05));border:.3vmin solid var(--gold);border-radius:1.8vmin;padding:1.2vmin 1.6vmin;">' +
+        g.feeders.map(feederHtml).join('') +
+        '<div style="font-weight:900;font-size:2.3vmin;color:var(--gold);margin-top:.6vmin;">🏆 BRACKET CHAMPION — the last man standing</div></div>';
+    } else {
+      const stat = g.feeders.length < 2 ? staticSlot(g.destId, g.feeders.map(e => e.m.id)) : null;
+      card = '<div style="flex:1;background:var(--card);border:.3vmin solid ' + (g.path === 'W' ? 'var(--gold)' : '#7fb2ff') + ';border-radius:1.8vmin;padding:1.2vmin 1.6vmin;">' +
+        '<div style="display:flex;align-items:center;gap:1.4vmin;margin-bottom:.8vmin;"><div style="font-weight:900;font-size:2.3vmin;">' + esc(matchLabel(g.destId)) + '</div>' +
+        '<div style="font-size:1.8vmin;color:var(--dim);font-weight:600;">Night ' + g.destNight + ' · the next match for tonight’s winners</div></div>' +
+        g.feeders.map(feederHtml).join('') +
+        (stat ? '<div style="display:flex;align-items:center;gap:1.4vmin;margin-top:.7vmin;opacity:.85;">' +
+          (stat.pid ? miniFace(stat.pid) + '<div style="text-align:left;"><div style="font-weight:900;font-size:2.2vmin;">' + esc(pname(stat.pid)) + '</div><div style="font-size:1.8vmin;color:var(--dim);font-weight:600;">already waiting</div></div>'
+                    : ghost + '<div style="text-align:left;"><div style="font-weight:900;font-size:2.2vmin;">To be decided</div><div style="font-size:1.8vmin;color:var(--dim);font-weight:600;">awaiting · ' + esc(stat.text || 'TBD') + '</div></div>') + '</div>' : '') +
+        '</div>';
+    }
+    return '<div class="bt" data-b="' + b + '" style="width:100%;"><span style="display:none;" data-c35-next="' + (g.destId == null ? 'CHAMP' : g.destId) + '"></span>' +
+      g.feeders.map(e => '<span style="display:none;" data-c35-adv="' + e.winner + '"></span>').join('') +
       '<div style="display:flex;align-items:center;gap:1.4vmin;width:min(146vmin,97%);margin:0 auto;">' +
-      '<div style="width:19vmin;flex:none;text-align:right;">' + pathChip + '</div>' + fromCard +
-      '<div style="font-size:3.6vmin;color:var(--gold);font-weight:900;flex:none;">➜</div>' + toCard + '</div></div>';
+      '<div style="width:19vmin;flex:none;text-align:right;">' + pathChip + '</div>' + card + '</div></div>';
   };
   const out = [];
   const slideFor = (list, title, sub) => {
@@ -4541,22 +4617,23 @@ function sProgression30(night) {
       p29bg() + '<div class="kick">Act II · Match Play · The Bracket</div>' +
       '<h2 class="p29serif" style="font-size:4.8vmin;">' + title + '</h2>' +
       '<div class="sub" style="font-size:2.2vmin;">' + sub + '</div>' +
-      '<div style="margin-top:1.6vmin;display:flex;flex-direction:column;gap:1.2vmin;">' + list.map((e, i) => beatHtml(e, i + 1)).join('') + '</div>' });
+      '<div style="margin-top:1.6vmin;display:flex;flex-direction:column;gap:1.2vmin;">' + list.map((g, i) => beatHtml(g, i + 1)).join('') + '</div>' });
   };
-  if (entries.length <= 6) {
-    slideFor(entries, '🧭 Who Moved Tonight', 'Every winner, on his way down the bracket — one at a time.');
+  const sorted = groups.slice().sort((a, b) => (a.destId == null ? 999 : matchOrderKey30(a.destId)) - (b.destId == null ? 999 : matchOrderKey30(b.destId)));
+  if (sorted.length <= 5) {
+    slideFor(sorted, '🧭 Who Moved Tonight', 'Tonight’s winners, grouped by the match they move into.');
   } else {
-    const W = entries.filter(e => e.path === 'W' || e.destId == null), L = entries.filter(e => e.path === 'L' && e.destId != null);
+    const W = sorted.filter(g => g.path === 'W' || g.destId == null), L = sorted.filter(g => g.path === 'L' && g.destId != null);
     for (let i = 0; i < W.length; i += 5) slideFor(W.slice(i, i + 5), '🧭 The Winners Path', 'Still unbeaten — or one win from the Cup. Watch them move.');
     for (let i = 0; i < L.length; i += 5) slideFor(L.slice(i, i + 5), '🧭 The Redemption Path', 'One loss down. The long way back starts here.');
-    if (!W.length && !L.length) slideFor(entries.slice(0, 5), '🧭 Who Moved Tonight', 'Every winner, on his way down the bracket — one at a time.');
+    if (!W.length && !L.length) slideFor(sorted.slice(0, 5), '🧭 Who Moved Tonight', 'Tonight’s winners, grouped by the match they move into.');
   }
-  const champ = entries.find(e => e.destId == null);
-  if (champ) out.push({ ch: 'Act II · Match Play', fx: 'confetti', fxCols: [tcolor(champ.winner)], snd: SND.champSong, html:
+  const champEntry = ms.map(entryOf).find(e => e.destId == null);
+  if (champEntry) out.push({ ch: 'Act II · Match Play', fx: 'confetti', fxCols: [tcolor(champEntry.winner)], snd: SND.champSong, html:
     '<div class="kick">Match Play · The Bracket</div><div style="font-size:9vmin;line-height:1.1;">🏆</div>' +
-    '<div style="margin:.6vmin 0;">' + face(champ.winner, true, true) + '</div>' +
+    '<div style="margin:.6vmin 0;">' + face(champEntry.winner, true, true) + '</div>' +
     '<div style="font-weight:900;font-size:5.2vmin;">BRACKET CHAMPION</div>' +
-    '<div class="sub">' + esc(pname(champ.winner)) + ' wins the match-play bracket.</div>' });
+    '<div class="sub">' + esc(pname(champEntry.winner)) + ' wins the match-play bracket.</div>' });
   return out;
 }
 
@@ -4683,28 +4760,30 @@ function lowNetWinNight32(night, pid) {
 function sLowNet32(night) {
   const CH = 'Act IV · Low Net';
   const h = honours(night); if (!h || !h.lowNet) return [];
-  const values = Object.values(RC(night).players).map(d => d.net).sort((a, b) => b - a);
-  if (!values.length) return [];
-  const n = values.length;
-  // the decelerating schedule: first tick at 300 ms, then gaps that
-  // grow quadratically (140 ms → ~1,020 ms) — total ≈ 6.4 s for 12 men
-  const delays = [300];
-  for (let k = 1; k < n; k++) { const t = k / (n - 1); delays.push(delays[k - 1] + Math.round(140 + 880 * t * t)); }
-  const totalMs = delays[n - 1] + 950;
+  // CYCLE 35 — the countdown is replaced by Ron's coin flip: the field
+  // runs from #12 (worst net) to #1 (lowest net); each man's avatar
+  // spins like a flipping coin to reveal his net on the reverse, then
+  // flips again to the next man's avatar. ~1.05 s per man, auto-play.
+  const field = Object.values(RC(night).players).slice().sort((a, b) => b.net - a.net);
+  if (!field.length) return [];
+  const order = field.map(d => ({ pid: d.pid, net: d.net }));
+  const stepMs = 1050;
+  const totalMs = 350 + order.length * stepMs + 500;
   const real = h.lowNet, prize = h.lowNetPrize, inel = h.lowNetIneligible;
   const out = [];
   out.push({ ch: CH, snd: SND.pulse, html:
     p29bg() + '<div class="kick">' + CH + '</div>' +
     '<div style="font-size:7vmin;line-height:1.1;">🏅</div>' +
     '<h2 class="p29serif" style="font-size:6.6vmin;">Low Net</h2>' +
-    '<div class="sub" style="font-size:2.5vmin;">Twelve men. Twelve nets. We count down to the lowest —<br>and the prize can only be banked once a week.</div>' });
-  out.push({ ch: CH, count32: { values, delays, totalMs, fxCols: [tcolor(real.pid), '#ffd75e'] }, html:
-    '<div class="c32" data-c32-count="' + values.join(',') + '" data-c32-delays="' + delays.join(',') + '" data-c32-real="' + real.pid + '" data-c32-prize="' + prize.pid + '">' +
-    p29bg() + '<div class="kick">' + CH + ' · The Countdown</div>' +
-    '<div class="sub" style="font-size:2.2vmin;letter-spacing:.14em;font-weight:800;">THE FIELD’S NETS — COUNTING DOWN</div>' +
-    '<div class="c32num">' + values[0] + '</div>' +
-    '<div>' + values.map(() => '<span class="c32dot"></span>').join('') + '</div>' +
-    '<div class="c32land">' +
+    '<div class="sub" style="font-size:2.5vmin;">Twelve men. Twelve nets. We flip through the field to the lowest —<br>and the prize can only be banked once a week.</div>' });
+  out.push({ ch: CH, flip35: { order, stepMs, totalMs, fxCols: [tcolor(real.pid), '#ffd75e'] }, html:
+    '<div class="cf35" data-cf35-order="' + order.map(o => o.pid + ':' + o.net).join(',') + '" data-c32-real="' + real.pid + '" data-c32-prize="' + prize.pid + '">' +
+    p29bg() + '<div class="kick">' + CH + ' · The Coin Flip</div>' +
+    '<div class="sub" style="font-size:2.2vmin;letter-spacing:.14em;font-weight:800;">THE FIELD’S NETS — WORST TO BEST, ONE FLIP AT A TIME</div>' +
+    '<div class="cf35stage"><div class="cf35coin"><div class="cf35face cf35front">' + face(order[0].pid, true, true) + '</div><div class="cf35face cf35back"><div class="cf35net">' + order[0].net + '</div></div></div></div>' +
+    '<div class="cf35name">' + esc(pname(order[0].pid)) + '</div>' +
+    '<div>' + order.map(() => '<span class="c32dot"></span>').join('') + '</div>' +
+    '<div class="cf35land">' +
       '<div style="margin-top:1.4vmin;">' + face(real.pid, true) + '</div>' +
       '<div class="p29serif" style="font-weight:900;font-size:5.6vmin;color:var(--gold);margin-top:.6vmin;">NET ' + real.net + '</div>' +
       '<div style="margin-top:1vmin;"><span class="pill" style="font-size:2.4vmin;">' + (inel ? 'THE REAL LOW NET OF THE NIGHT' : '🏆 PRIZE WINNER — THE LOW NET OF THE NIGHT') + '</span></div>' +
@@ -4779,13 +4858,21 @@ function sFun30(night, funWon) {
       '<div style="font-size:7vmin;line-height:1.1;">' + emo + '</div>' +
       '<h2 class="p29serif" style="font-size:6.6vmin;">' + ttl + '</h2>' +
       '<div class="sub" style="font-size:2.5vmin;">Who takes it tonight?</div>' });
+    // CYCLE 35 — SCORES FIRST, THEN THE PLAYER (Ron's review): the
+    // evidence that made the award gets its own slide BEFORE the
+    // reveal — no face, no name, nothing on it that identifies him.
+    out.push({ ch: CH, snd: SND.pulse, html:
+      p29bg() + '<div class="kick">' + CH + '</div>' +
+      '<div style="font-size:5.6vmin;line-height:1.1;">' + emo + '</div>' +
+      '<h2 class="p29serif" style="font-size:5.8vmin;">' + ttl + '</h2>' +
+      '<div class="sub" style="font-size:2.5vmin;">First — the scores that made it.</div>' +
+      '<div style="width:100%;margin-top:2.2vmin;" data-c35-evidence="' + key + '">' + (opts.ev || awardEvidence29(key, d, round, c)) + '</div>' });
     out.push({ ch: CH, enterSnd: SND.sparkle, snd: snd || SND.fairy, fx: 'confetti', fxCols: [tcolor(winnerPid), '#ffd75e'], html:
       p29bg() + '<div class="kick">' + CH + '</div>' +
       '<div style="font-size:5.6vmin;line-height:1.1;">' + emo + '</div>' +
       '<h2 class="p29serif" style="font-size:5.8vmin;">' + ttl + '</h2>' +
       '<div style="margin-top:.6vmin;">' + face(winnerPid, true) + '</div>' +
       '<div class="sub" style="font-size:2.6vmin;margin-top:1vmin;">' + esc(line) + '</div>' +
-      '<div class="bt" data-b="1" style="width:100%;">' + (opts.ev || awardEvidence29(key, d, round, c)) + '</div>' +
       '<span style="display:none;" data-c29-award="' + key + '" data-c29-winner="' + winnerPid + '"></span>' });
     headlined.add(winnerPid);
     // CYCLE 34 — NO commentary card follows an individual fun award
@@ -4873,20 +4960,58 @@ function honeyPots34(night) {
   });
   return Object.values(by).sort((x, y) => (y.holes.length - x.holes.length) || pname(x.pid).localeCompare(pname(y.pid)));
 }
+/* CYCLE 35 — the Honey Pot is PER-SWEEP and WEEK-TRACKED: every
+   all-3-B's sweep on a hole earns that player one pot (multiple
+   players can earn pots on a night — there is no single nightly
+   winner), and the segment shows each player's running WEEK total
+   of pots, cumulative through tonight. */
+function honeyWeek35(night) {
+  const tot = {};
+  for (let n = 1; n <= night; n++) {
+    if (!DATA.rounds[n - 1] || !DATA.rounds[n - 1].completed) continue;
+    honeyPots34(n).forEach(p => { tot[p.pid] = (tot[p.pid] || 0) + p.holes.length; });
+  }
+  return Object.keys(tot).map(pid => ({ pid, total: tot[pid] }))
+    .sort((a, b) => (b.total - a.total) || pname(a.pid).localeCompare(pname(b.pid)));
+}
 function sHoneyPot34(night) {
   const pots = honeyPots34(night);
-  if (!pots.length) return null;
+  if (!pots.length) return [];
+  const week = honeyWeek35(night);
+  const weekOf = {}; week.forEach(w => { weekOf[w.pid] = w.total; });
   const best = pots[0].holes.length;
   const rows = pots.map((p, i) =>
     '<div class="bt hp34row' + (p.holes.length === best ? ' win' : '') + '" data-b="' + (i + 1) + '">' + face34(p.pid, 7) +
-    '<div style="flex:1;"><div style="font-weight:900;font-size:3.1vmin;">' + esc(pname(p.pid)) + (p.holes.length === best ? ' 🏆' : '') + '</div>' +
+    '<div style="flex:1;"><div style="font-weight:900;font-size:3.1vmin;">' + esc(pname(p.pid)) + '</div>' +
     '<div class="sub" style="font-size:2.1vmin;">' + esc(tname(p.pid)) + ' · hole' + (p.holes.length === 1 ? '' : 's') + ' ' + p.holes.join(', ') + '</div></div>' +
-    '<div style="font-weight:900;font-size:4.4vmin;color:var(--gold);">×' + p.holes.length + '</div></div>').join('');
-  return { ch: 'Act IV · The Fun Awards', snd: SND.honey, beats: pots.length, html:
+    '<div style="text-align:right;"><div style="font-weight:900;font-size:4.4vmin;color:var(--gold);">×' + p.holes.length + '</div>' +
+    '<div class="sub" style="font-size:1.9vmin;">tonight · week ×' + (weekOf[p.pid] || p.holes.length) + '</div></div></div>').join('');
+  const out = [{ ch: 'Act IV · The Fun Awards', snd: SND.honey, beats: pots.length, html:
     p29bg() + '<div class="kick">Act IV · The Fun Awards</div>' +
     '<h2 class="p29serif" style="font-size:5.6vmin;">🍯 The Honey Pot</h2>' +
-    '<div class="sub" style="font-size:2.5vmin;">All three B’s on a single hole — the full sweep. Everyone who managed it tonight:</div>' +
-    '<div style="width:min(104vmin,94%);margin:0 auto;">' + rows + '</div>' };
+    '<div class="sub" style="font-size:2.5vmin;">All three B’s on a single hole — the full sweep. Every sweep earns a pot. Tonight’s pots:</div>' +
+    '<div style="width:min(104vmin,94%);margin:0 auto;" data-hp35-tonight="' + pots.map(p => p.pid + ':' + p.holes.length).join(',') + '" data-hp35-week="' + week.map(w => w.pid + ':' + w.total).join(',') + '">' + rows + '</div>' }];
+  // the week board: every holder's running total, biggest first —
+  // shown whenever the week is bigger than tonight (Night 1's week
+  // IS tonight, and the totals already ride on the rows above).
+  if (night > 1 && week.length) {
+    const tonightOf = {}; pots.forEach(p => { tonightOf[p.pid] = p.holes.length; });
+    // CYCLE 35 — the week board lists EVERY pot-holder (12 men by
+    // Night 4); full-size rows would run off the stage, so the board
+    // uses a compact two-column grid.
+    const wrows = week.map((w, i) =>
+      '<div class="bt" data-b="' + (i + 1) + '"><div style="display:flex;align-items:center;gap:1.3vmin;background:rgba(255,255,255,.06);border:.22vmin solid ' + (i === 0 ? 'var(--gold)' : 'rgba(255,255,255,.14)') + ';border-radius:1.4vmin;padding:.65vmin 1.4vmin;">' +
+      '<span style="font-weight:900;color:var(--gold);font-size:2.1vmin;width:2.4vmin;text-align:right;flex:none;">' + (i + 1) + '</span>' + face34(w.pid, 4.4) +
+      '<span style="min-width:0;"><span style="display:block;font-weight:800;font-size:2.25vmin;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + (i === 0 ? '🏆 ' : '') + esc(pname(w.pid)) + '</span>' +
+      '<span style="display:block;font-size:1.75vmin;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(tname(w.pid)) + (tonightOf[w.pid] ? ' · +' + tonightOf[w.pid] + ' tonight' : ' · none tonight') + '</span></span>' +
+      '<span style="margin-left:auto;font-weight:900;font-size:2.9vmin;color:var(--gold);flex:none;">×' + w.total + '</span></div></div>').join('');
+    out.push({ ch: 'Act IV · The Fun Awards', snd: SND.honey, beats: week.length, html:
+      p29bg() + '<div class="kick">Act IV · The Fun Awards</div>' +
+      '<h2 class="p29serif" style="font-size:5.6vmin;">🍯 The Honey Pot — The Week So Far</h2>' +
+      '<div class="sub" style="font-size:2.5vmin;">Every pot banked this week, by the man who swept for it:</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:.85vmin 2.2vmin;width:min(126vmin,96%);margin:1.2vmin auto 0;">' + wrows + '</div>' });
+  }
+  return out;
 }
 function undercard30(night, demotedPars, includePotd) {
   const c = RC(night), h = honours(night);
@@ -4975,7 +5100,7 @@ function sWeekAwards30(night) {
       (R.birds ? rec('🐦', 'MOST BIRDIES IN A ROUND', esc(pname(R.birds.pid)), R.birds.v + ' birdies · Night ' + R.birds.night) : '') +
       '</div>' });
   }
-  out.push(chat29(CH, 'Seven nights. One question for the road: who was the golfer of the week?', 'No points for the answer. Just pride.'));
+  // CYCLE 35 — the week-awards wrap chatter card is gone too (item 5).
   return out;
 }
 
@@ -4986,32 +5111,43 @@ function later30(fn, ms) { autoTimers30.push(setTimeout(fn, ms)); }
 function startAuto30(s, dir) {
   if (s.race) startRace30(s, dir);
   else if (s.tally) startTally30(s, dir);
-  else if (s.count32) startCount32(s, dir);
-  else if (s.skins34) startSkins34(s, dir);
+  else if (s.flip35) startFlip35(s, dir);
+  else if (s.skins35) startSkins35(s, dir);
 }
-/* CYCLE 32 — the Low Net countdown runs itself on the race idiom:
-   ticks land on the schedule baked into the slide (decelerating),
-   a press mid-count finishes it instantly, stepping back onto it
-   lands it complete. The finisher reveals the landing and, when the
-   real winner is eligible, the celebration is his prize moment. */
-function startCount32(s, dir) {
-  const root = slidesEl.querySelector('.c32');
+/* CYCLE 35 — the Low Net coin flip runs itself on the race idiom:
+   the coin rotates 180° at a time (CSS transition on the baked
+   schedule) — avatar, flip, his net, flip, the next man's avatar —
+   from the worst net to the lowest. A press mid-flip finishes it
+   instantly; stepping back onto it lands it complete. The finisher
+   reveals the landing and celebrates the REAL low net man; the
+   prize pass-down, when the no-repeat law bites, is the next slide
+   exactly as Cycle 32 built it. */
+function startFlip35(s, dir) {
+  const root = slidesEl.querySelector('.cf35');
   if (!root) { s._autoDone = true; return; }
-  const C = s.count32, last = C.values.length - 1;
-  const numEl = root.querySelector('.c32num');
+  const C = s.flip35, O = C.order, last = O.length - 1;
+  const coin = root.querySelector('.cf35coin'), front = root.querySelector('.cf35front'),
+    netEl = root.querySelector('.cf35net'), nameEl = root.querySelector('.cf35name');
   const dots = root.querySelectorAll('.c32dot');
-  let applied = -1;
-  const apply = k => { if (k <= applied) return; applied = k;
-    numEl.textContent = C.values[k];
-    dots.forEach((dEl, i) => dEl.classList.toggle('off', i < k));
-  };
-  const fin = celebrate => { apply(last); root.classList.add('c32done'); s._autoDone = true; autoFinish30 = null;
-    window.__count32 = { doneAt: performance.now() };
+  const showFront = k => { front.innerHTML = face(O[k].pid, true, true); nameEl.textContent = pname(O[k].pid); };
+  const setRot = (deg, animate) => { coin.style.transition = animate ? 'transform .48s cubic-bezier(.3,.7,.3,1)' : 'none'; coin.style.transform = 'rotateY(' + deg + 'deg)'; };
+  const fin = celebrate => { showFront(last); netEl.textContent = O[last].net; setRot((2 * last + 1) * 180, false);
+    dots.forEach((dEl, i) => dEl.classList.toggle('off', i < last));
+    root.classList.add('cf35done'); s._autoDone = true; autoFinish30 = null;
+    window.__flip35 = { doneAt: performance.now() };
     if (celebrate) { if (!RM) burst(C.fxCols); playSnd(SND.first); } };
-  if (dir < 0 || RM) { apply(last); root.classList.add('c32done'); s._autoDone = true; return; }
+  if (dir < 0 || RM) { fin(false); return; }
   autoFinish30 = () => fin(true);
-  C.values.forEach((v, k) => later30(() => apply(k), C.delays[k]));
-  later30(() => fin(true), C.totalMs);
+  O.forEach((o, k) => {
+    // flip to his net (rotation .48s, lands ~+780)
+    later30(() => { if (cur.slides[cur.i] !== s) return; netEl.textContent = o.net; setRot((2 * k + 1) * 180, true); playSnd(SND.hop); }, 350 + k * C.stepMs + 300);
+    // mark him done as his net lands
+    later30(() => { if (cur.slides[cur.i] !== s) return; dots.forEach((dEl, i) => dEl.classList.toggle('off', i < k)); }, 350 + k * C.stepMs + 800);
+    // flip on to the next man's avatar (the front is facing away by
+    // now, so swap its contents in before rotating back)
+    if (k < last) later30(() => { if (cur.slides[cur.i] !== s) return; showFront(k + 1); setRot((2 * k + 2) * 180, true); }, 350 + (k + 1) * C.stepMs - 300);
+  });
+  later30(() => { if (cur.slides[cur.i] === s) fin(true); }, C.totalMs);
 }
 function startRace30(s, dir) {
   const root = slidesEl.querySelector('.r30');
@@ -5068,13 +5204,13 @@ function deckFor(night) {
   // board and nowhere else; the closing boards are furniture (rank,
   // movement, gaps). Matches carry no points anywhere.
   out.push(sOpener(night));
-  out.push(...sPot29(night));
+  // CYCLE 35 — the Pot slide is GONE (Ron's review: no "Tonight's pot"
+  // line, no "six ways to earn" list): the opener goes straight into
+  // Act I. Every chat29 chatter card is gone from the show with it.
   out.push(...sBuilds29(night));
-  if (night === DATA.event.nights) { const oc = sOddsChat29(DATA.event.nights - 1, true); if (oc) out.push(oc); }
   out.push(...sLanding29(night));
   const act2 = [];
   act2.push(...sSkinsRace34(night));
-  const skc = sSkinsChat29(night); if (skc) act2.push(skc);
   act2.push(...sCTPE9(night));
   // CYCLE 34 — no sBBB here anymore: the Honey Pot moved to Act IV as a
   // ranked list (sHoneyPot34). Act II keeps the B's race in Act III.
@@ -5088,14 +5224,17 @@ function deckFor(night) {
   else { const fw30 = {}; for (let n = 1; n < night; n++) if (DATA.rounds[n - 1] && DATA.rounds[n - 1].completed) pickFunAwards30(n, fw30); out.push(...sFun30(night, fw30)); }
   // CYCLE 34 — the Honey Pot is a fixed Act IV segment: it follows the
   // fun awards (on Night 7, the week awards) and precedes the finale.
-  const hp34 = sHoneyPot34(night); if (hp34) out.push(hp34);
+  out.push(...sHoneyPot34(night));
   // CYCLE 34 — Act IV ends with the Kampioen finale: the one and only
   // place in the show where he is named.
   const kf34 = sKampioenFinale34(night); if (kf34) out.push(kf34);
-  out.push(...sTomorrow29(night));
+  // CYCLE 35 — the Final Table and the Holding Board are DELETED
+  // (standings live at the Landing, nowhere else). The Close is now:
+  // Handicap Moves, then the Tomorrow block as the LAST content, then
+  // the slideshow. Night 7 has no Tomorrow block — its Close is
+  // Handicap Moves straight into the slideshow.
   out.push(...sHandicap31(night));
-  out.push(sFinalBoard29(night));
-  out.push(sHolding29(night));
+  out.push(...sTomorrow29(night));
   // CYCLE 34 — every deck ends with the photo slideshow.
   out.push(...sSlideshow34(night));
   return out;
@@ -5639,7 +5778,8 @@ let dirOn = false, dirTimer = null;
 function dwellFor(s) {
   if (!s) return 9000;
   if (s.race) return s._autoDone ? 5000 : s.race.totalMs + 600;
-  if (s.skins34) return s._autoDone ? 5200 : s.skins34.totalMs + 700;
+  if (s.skins35) return s._autoDone ? -1 : s.skins35.totalMs + 700;
+  if (s.flip35) return s._autoDone ? 6000 : s.flip35.totalMs + 600;
   if (s.tally) return s._autoDone ? 6000 : s.tally.totalMs + 600;
   if (s.hold) return -1;
   if (s.dwell) return s.dwell;
