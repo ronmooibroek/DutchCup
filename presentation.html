@@ -3746,7 +3746,7 @@ function sBuilds29(night) {
     // and players only — no tonight points, no totals, no hook numbers.
     // Nothing numeric spoils the build reveal that follows.
     out.push({ ch: 'Act I · The Night’s Points', snd: teamWalkupSnd(tm.id) || SND.swoosh, html:
-      p29bg() + '<div class="kick">Act I · The Night’s Points</div>' +
+      p29bg() + 
       '<div class="p29thead" style="margin-top:2.2vmin;">' + teamLogo(tm.id, 17) +
       '<div style="text-align:left;"><div class="p29serif" style="font-weight:900;font-size:var(--t-disp);color:' + tm.color + ';line-height:1.02;">' + esc(tm.name) + '</div>' +
       '<div class="sub" style="font-size:var(--t-body);margin-top:.6vmin;">' + tm.players.map(pid => esc(pname(pid))).join(' · ') + '</div></div></div>' +
@@ -4902,7 +4902,7 @@ function sLowNet32(night) {
   const real = h.lowNet, prize = h.lowNetPrize, inel = h.lowNetIneligible;
   const out = [];
   out.push({ ch: CH, snd: SND.pulse, html:
-    p29bg() + '<div class="kick">' + CH + '</div>' +
+    p29bg() + 
     '<div style="font-size:var(--t-big);line-height:1.1;">🏅</div>' +
     '<h2 class="p29serif" style="font-size:var(--t-disp);">Low Net</h2>' +
     '<div class="sub" style="font-size:var(--t-body);">Twelve men. Twelve nets. We flip through the field to the lowest —<br>and the prize can only be banked once a week.</div>' });
@@ -4984,7 +4984,7 @@ function sFun30(night, funWon) {
     opts = opts || {};
     const d = c.players[winnerPid]; if (!d) return;
     out.push({ ch: CH, snd: SND.pulse, html:
-      p29bg() + '<div class="kick">' + CH + '</div>' +
+      p29bg() + 
       '<div style="font-size:var(--t-big);line-height:1.1;">' + emo + '</div>' +
       '<h2 class="p29serif" style="font-size:var(--t-disp);">' + ttl + '</h2>' +
       '<div class="sub" style="font-size:var(--t-body);">Who takes it tonight?</div>' });
@@ -4992,13 +4992,13 @@ function sFun30(night, funWon) {
     // evidence that made the award gets its own slide BEFORE the
     // reveal — no face, no name, nothing on it that identifies him.
     out.push({ ch: CH, snd: SND.pulse, html:
-      p29bg() + '<div class="kick">' + CH + '</div>' +
+      p29bg() + 
       '<div style="font-size:var(--t-title);line-height:1.1;">' + emo + '</div>' +
       '<h2 class="p29serif" style="font-size:var(--t-title);">' + ttl + '</h2>' +
       '<div class="sub" style="font-size:var(--t-body);">First — the scores that made it.</div>' +
       '<div style="width:100%;margin-top:2.2vmin;" data-c35-evidence="' + key + '">' + (opts.ev || awardEvidence29(key, d, round, c)) + '</div>' });
     out.push({ ch: CH, enterSnd: SND.sparkle, snd: snd || SND.fairy, fx: 'confetti', fxCols: [tcolor(winnerPid), '#ffd75e'], html:
-      p29bg() + '<div class="kick">' + CH + '</div>' +
+      p29bg() + 
       '<div style="font-size:var(--t-title);line-height:1.1;">' + emo + '</div>' +
       '<h2 class="p29serif" style="font-size:var(--t-title);">' + ttl + '</h2>' +
       '<div style="margin-top:.6vmin;">' + face(winnerPid, true) + '</div>' +
@@ -5117,7 +5117,7 @@ function sHoneyPot34(night) {
     '<div style="text-align:right;"><div style="font-weight:900;font-size:var(--t-num);color:var(--gold);">×' + p.holes.length + '</div>' +
     '<div class="sub" style="font-size:var(--t-cap);">tonight · week ×' + (weekOf[p.pid] || p.holes.length) + '</div></div></div>').join('');
   const out = [{ ch: 'Act IV · The Fun Awards', snd: SND.honey, beats: pots.length, html:
-    p29bg() + '<div class="kick">Act IV · The Fun Awards</div>' +
+    p29bg() + 
     '<h2 class="p29serif" style="font-size:var(--t-title);">🍯 The Honey Pot</h2>' +
     '<div class="sub" style="font-size:var(--t-body);">All three B’s on a single hole — the full sweep. Every sweep earns a pot. Tonight’s pots:</div>' +
     '<div style="width:min(104vmin,94%);margin:0 auto;" data-hp35-tonight="' + pots.map(p => p.pid + ':' + p.holes.length).join(',') + '" data-hp35-week="' + week.map(w => w.pid + ':' + w.total).join(',') + '">' + rows + '</div>' }];
@@ -5136,7 +5136,7 @@ function sHoneyPot34(night) {
       '<span style="display:block;font-size:var(--t-cap);color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(tname(w.pid)) + (tonightOf[w.pid] ? ' · +' + tonightOf[w.pid] + ' tonight' : ' · none tonight') + '</span></span>' +
       '<span style="margin-left:auto;font-weight:900;font-size:var(--t-lead);color:var(--gold);flex:none;">×' + w.total + '</span></div></div>').join('');
     out.push({ ch: 'Act IV · The Fun Awards', snd: SND.honey, beats: week.length, html:
-      p29bg() + '<div class="kick">Act IV · The Fun Awards</div>' +
+      p29bg() + 
       '<h2 class="p29serif" style="font-size:var(--t-title);">🍯 The Honey Pot — The Week So Far</h2>' +
       '<div class="sub" style="font-size:var(--t-body);">Every pot banked this week, by the man who swept for it:</div>' +
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:.85vmin 2.2vmin;width:min(126vmin,96%);margin:1.2vmin auto 0;">' + wrows + '</div>' });
@@ -5202,7 +5202,7 @@ function sWeekAwards30(night) {
     : v + ' match wins — every one of them played';
   weekLeaders(night).forEach(L => {
     out.push({ ch: CH, snd: SND.sparkle, html:
-      p29bg() + '<div class="kick">' + CH + '</div><div style="font-size:var(--t-title);line-height:1.1;">' + L.emo + '</div>' +
+      p29bg() + '<div style="font-size:var(--t-title);line-height:1.1;">' + L.emo + '</div>' +
       '<h2 class="p29serif" style="font-size:var(--t-title);">' + esc(L.lbl) + '</h2>' +
       '<div style="margin-top:.6vmin;">' + face(L.d.pid, true) + '</div>' +
       '<div class="sub" style="font-size:var(--t-lead);margin-top:1vmin;">' + lineFor(L.lbl, L.d.v) + '</div>' +
@@ -5212,7 +5212,7 @@ function sWeekAwards30(night) {
   for (let n = 1; n <= night; n++) { const cc = RC(n); if (!cc.skinsEnabled) continue; Object.values(cc.players).forEach(d => { skTot[d.pid] = (skTot[d.pid] || 0) + d.skins; }); }
   const skKing = Object.keys(skTot).map(pid => ({ pid, v: skTot[pid] })).sort((a, b) => b.v - a.v)[0];
   if (skKing && skKing.v > 0) out.push({ ch: CH, snd: SND.skins, html:
-    p29bg() + '<div class="kick">' + CH + '</div><div style="font-size:var(--t-title);line-height:1.1;">💰</div>' +
+    p29bg() + '<div style="font-size:var(--t-title);line-height:1.1;">💰</div>' +
     '<h2 class="p29serif" style="font-size:var(--t-title);">SKINS KING OF THE WEEK</h2>' +
     '<div style="margin-top:.6vmin;">' + face(skKing.pid, true) + '</div>' +
     '<div class="sub" style="font-size:var(--t-lead);margin-top:1vmin;">' + fmt(skKing.v) + ' skins banked across the week</div>' +
