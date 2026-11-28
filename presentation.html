@@ -433,6 +433,27 @@
   .b35beat .p29brow{margin:.15vmin auto;} /* CYCLE 40 — tightened from --sp-1 so full-state builds fit the stage */
   /* Item 7 — the CTP picture as a contained, captioned side panel. */
   .ctpPanel35{width:36vmin;height:29vmin;object-fit:cover;border-radius:1.8vmin;border:2px solid var(--gold);box-shadow:0 2.4vmin 6vmin rgba(0,0,0,.5);display:block;}
+  /* CYCLE 41 — Extra 9 winners: the money frame. Deep money-green felt,
+     gold border; the winners stay the content, money is the frame. */
+  .e9money41{position:relative;border:.5vmin solid var(--gold);border-radius:2.4vmin;background:radial-gradient(ellipse at 50% 32%, #175c33 0%, #0c4023 55%, #062317 100%);padding:var(--sp-5) var(--sp-4);box-shadow:inset 0 0 6vmin rgba(0,0,0,.5), 0 2vmin 6vmin rgba(0,0,0,.5);}
+  .e9bill41{position:absolute;font-size:var(--t-num);line-height:1;}
+  /* CYCLE 41 — match-play introduction: the full bracket as one diagram.
+     Columns are the nights; cells are matches. Density is the diagram's
+     information (the Cycle 37 boards principle) — names ride the
+     smallest type token, winners in gold, the rest dimmed. */
+  .brk41{display:flex;gap:var(--sp-2);justify-content:center;align-items:stretch;margin-top:var(--sp-2);text-align:left;width:100%;}
+  .bcol41{display:flex;flex-direction:column;gap:var(--sp-1);flex:1;max-width:24vmin;min-height:0;}
+  .bcol41 .bch{font-size:var(--t-kick);font-weight:900;letter-spacing:.14em;color:var(--dim);text-align:center;margin-bottom:var(--sp-1);}
+  .bcell41{display:flex;flex-direction:column;justify-content:center;background:var(--card);border:1px solid var(--line);border-radius:.9vmin;padding:var(--sp-1) var(--sp-2);flex:1;min-height:0;overflow:hidden;}
+  .bcell41.tonight{border-color:var(--gold);box-shadow:0 0 1.8vmin rgba(255,215,94,.35);}
+  .bcell41 .bl41{font-weight:800;letter-spacing:.05em;color:var(--dim);}
+  .bcell41 .bp{font-size:var(--t-kick);font-weight:700;line-height:1.18;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .bcell41 .bp.win{color:var(--gold);font-weight:900;}
+  .bcell41 .bp.out{color:var(--dim);}
+  .bcell41 .bp.wait{color:var(--dim);font-weight:600;white-space:normal;}
+  .bcell41 .bn{color:var(--gold);font-weight:900;}
+  .bcell41 .bwo{color:#a9c8ff;font-weight:800;}
+  .bcell41.wrap41 .bp{white-space:normal;}
   .ctpCap35{font-size:var(--t-cap);color:var(--cream);margin-top:var(--sp-2);font-weight:700;text-align:left;}
   /* Item 12 — the Low Net coin flip. */
   .cf35stage{perspective:90vmin;display:flex;justify-content:center;margin-top:var(--sp-3);}
@@ -504,9 +525,9 @@ let DATA = window.__DC_DATA__ || null; /* LIVE PAGE: the boot loader at the end 
    Rules mirror the scoring app exactly:
    · Course handicap (USGA): round(Index × Slope/113 + (Rating − Par))
    · Net-par-to-win match play with countback (9/6/3/1 · 6/3/1)
-   · Skins: unique low net wins, ties carry, a skinless 18th splits
-     the last pot equally among the tied (King of Ties = the tied
-     player with the most skins on the night)
+   · Skins: unique low net wins, ties carry; a pot left after 18 goes
+     to the King of Ties — whoever was part of the most tied holes
+     takes ALL of it (co-Kings split it evenly) — Ron's rule, Cycle 41
    · Fun awards ROTATE: nobody wins the same fun award twice until
      everyone eligible has had it (the app's house rule).
    ════════════════════════════════════════════════════════════════════ */
@@ -598,8 +619,11 @@ function computeRound(round) {
       variance: (() => { const m = gross / 18; return rp.scores.reduce((s, g) => s + (g - m) * (g - m), 0) / 18; })()
     };
   });
-  // Skins — the app's exact math (computeSkins + kingOfTiesShares ports).
-  // Unique low net takes the pot; ties carry (unless carryover is off).
+  // Skins — the app's math (computeSkins port): unique low net takes
+  // the pot; ties carry (unless carryover is off). The King of Ties
+  // settlement below is RON'S Cycle 41 rule, which deliberately
+  // diverges from the app's kingOfTiesShares — see the block at the
+  // leftover pot and the cycle41 ledger.
   const skSet = round.skins || {};
   const skEnabled = skSet.enabled !== false;
   const skCarry = skSet.carryover !== false;
@@ -626,27 +650,28 @@ function computeRound(round) {
   }
   out.leftoverPot = pot;
   out.kingOfTies = null; out.tied18 = null; out.finalShares = null; out.skinsEnabled = skEnabled; out.skinsPPS = skPPS;
+  // CYCLE 41 — tie participations are part of the record now: the King
+  // of Ties settlement (below) and its slide both count them.
+  out.tieCounts = {}; Object.keys(tieInfo).forEach(pid => { out.tieCounts[pid] = tieInfo[pid].ties; });
   if (pot > 0 && skCarry) {
     const last = out.skinsLog[17];
     if (last && last.tied && last.tied.length > 0) {
-      // King of Ties: leaders (most tied holes, lowest tied net breaks the
-      // tie) split ceil(pot/2); every other tied player splits the rest.
+      // CYCLE 41 — KING OF TIES, RON'S RULE (Nov 28, 2026): count who
+      // was part of the most tied holes across the whole round; the
+      // leader(s) take ALL the remainder skins — co-Kings split them
+      // evenly between themselves only, nobody else gets any. This
+      // supersedes the Oct 13 house split (leaders took half, the rest
+      // was shared by every tied player) FOR THE SHOW; the admin app
+      // still runs the old rule (flagged in the cycle41 ledger).
       const eligible = Object.keys(tieInfo).filter(pid => tieInfo[pid].ties > 0);
-      eligible.sort((a, b) => (tieInfo[b].ties - tieInfo[a].ties) || (tieInfo[a].best - tieInfo[b].best));
-      const topT = tieInfo[eligible[0]];
-      const leaders = eligible.filter(pid => tieInfo[pid].ties === topT.ties && tieInfo[pid].best === topT.best);
+      const maxTies = Math.max.apply(null, eligible.map(pid => tieInfo[pid].ties));
+      const dataOrd = {}; DATA.players.forEach((p, i) => { dataOrd[p.id] = i; });
+      const kings = eligible.filter(pid => tieInfo[pid].ties === maxTies)
+        .sort((a, b) => (dataOrd[a] != null ? dataOrd[a] : 99) - (dataOrd[b] != null ? dataOrd[b] : 99));
       const shares = {};
-      if (leaders.length === eligible.length) {
-        leaders.forEach(pid => { shares[pid] = pot / leaders.length; });
-      } else {
-        const leaderShare = Math.ceil(pot / 2), rest = pot - leaderShare;
-        const others = eligible.filter(pid => !leaders.includes(pid));
-        leaders.forEach(pid => { shares[pid] = leaderShare / leaders.length; });
-        if (others.length) others.forEach(pid => { shares[pid] = rest / others.length; });
-        else leaders.forEach(pid => { shares[pid] = pot / leaders.length; });
-      }
+      kings.forEach(pid => { shares[pid] = pot / kings.length; });
       Object.keys(shares).forEach(pid => { out.players[pid].skins += shares[pid]; });
-      out.kingOfTies = leaders; out.tied18 = last.tied; out.finalShares = shares;
+      out.kingOfTies = kings; out.tied18 = last.tied; out.finalShares = shares;
     }
   }
   ids.forEach(pid => {
@@ -1482,7 +1507,7 @@ function sSkinsSummary(night) {
   return { ch: 'Act I · Skins', dwell: 5000, snd: SND.skins, html:
     '<div class="kick">Side Game · Skins</div><h2>💰 The Skins Game</h2>' +
     river +
-    (c.kingOfTies ? '<div style="margin-top:2vmin;"><span class="pill" style="font-size:var(--t-body);">👑 KING OF TIES — ' + c.kingOfTies.map(pname).join(' · ') + ' · the last pot split by the house rule</span></div>' : '') + payHtml };
+    (c.kingOfTies ? '<div style="margin-top:2vmin;"><span class="pill" style="font-size:var(--t-body);">👑 KING OF TIES — ' + c.kingOfTies.map(pname).join(' · ') + (c.kingOfTies.length > 1 ? ' · split the last pot · part of ' + ((c.tieCounts || {})[c.kingOfTies[0]] || 0) + ' ties each' : ' · takes the last pot · part of ' + ((c.tieCounts || {})[c.kingOfTies[0]] || 0) + ' ties') + '</span></div>' : '') + payHtml };
 }
 function sBigPot(night) {
   const c = RC(night);
@@ -1556,7 +1581,11 @@ function sSkinsRace34(night) {
     if (byHole[h] && byHole[h].winner) { runs.push({ a: runStart, b: h, win: byHole[h] }); runStart = h + 1; }
   }
   if (runStart <= 18) runs.push({ a: runStart, b: 18, win: null });
-  const HOLE_MS = 1400;
+  // CYCLE 41 — Ron: "slow down the reveal by 50%": holes now run at
+  // 2.1 s (was 1.4 s in Cycle 35), and the winner-presentation timed
+  // elements are doubled (collection pause 2.5 s → 5 s below; the
+  // settlement slide's dwell 6 s → 12 s).
+  const HOLE_MS = 2100;
   runs.forEach((run, ri) => {
     const chipsFor = cur => '<div style="display:flex;gap:.7vmin;justify-content:center;flex-wrap:wrap;max-width:120vmin;">' +
       log.slice(run.a - 1, run.b).map(l => '<span class="sk34pip' + (l.hole < cur ? (l.winner ? ' win' : ' tie') : l.hole === cur ? ' cur' : '') + '">' + l.hole + '</span>').join('') + '</div>';
@@ -1587,7 +1616,7 @@ function sSkinsRace34(night) {
       t += HOLE_MS;
     }
     const lastAt = frames[frames.length - 1].at;
-    const totalMs = lastAt + (run.win ? 2500 : 1600);
+    const totalMs = lastAt + (run.win ? 5000 : 1600); // CYCLE 41 — collection (winner) pause doubled 2500 → 5000
     const f0 = frames[0];
     out.push({ ch: 'Act I · Skins', skins35: { frames, totalMs, run: ri + 1, runs: runs.length, a: run.a, b: run.b, winPid: run.win ? run.win.winner : null, winPot: run.win ? run.win.pot : 0 },
       html:
@@ -1604,12 +1633,20 @@ function sSkinsRace34(night) {
   // the settlement slide: any pot left after 18, exactly as the engine settles it
   let finStage, settleKind;
   if (c.kingOfTies && c.leftoverPot > 0) {
+    // CYCLE 41 — the settlement SHOWS Ron's King of Ties rule: the
+    // King(s) — the men who were part of the most tied holes — take
+    // ALL the remainder skins; a shared crown splits them evenly and
+    // the slide says so. Nobody else appears: nobody else gets any.
     settleKind = 'kot';
-    const shares = Object.keys(c.finalShares || {}).filter(pid => c.finalShares[pid] > 0);
+    const kings = c.kingOfTies;
+    const multi = kings.length > 1;
+    const tieN = (c.tieCounts || {})[kings[0]] || 0;
     finStage = '<div class="popIn" style="text-align:center;"><div style="font-size:var(--t-title);">👑</div>' +
-      '<div style="font-weight:900;font-size:var(--t-num);color:var(--gold);">THE LAST POT IS SPLIT — KING OF TIES</div>' +
-      '<div style="display:flex;gap:2.2vmin;justify-content:center;margin-top:1.6vmin;">' + shares.map(pid => '<div style="text-align:center;">' + face34(pid, 8) + '<div style="font-weight:800;font-size:var(--t-body);margin-top:.5vmin;">' + esc(sname(pid)) + '</div><div class="sub" style="font-size:var(--t-cap);">' + fmt(c.finalShares[pid]) + ' skins</div></div>').join('') + '</div>' +
-      '<div class="sub" style="font-size:var(--t-body);margin-top:1.2vmin;">The tied men divide the last ' + c.leftoverPot + ' skins between them.</div></div>';
+      '<div style="font-weight:900;font-size:var(--t-num);color:var(--gold);">' + (multi ? 'KINGS OF TIES — THE LAST POT IS SPLIT' : 'KING OF TIES TAKES THE LAST POT') + '</div>' +
+      '<div style="display:flex;gap:2.6vmin;justify-content:center;margin-top:1.6vmin;">' + kings.map(pid => '<div style="text-align:center;" data-c41-king="' + pid + ':' + ((c.tieCounts || {})[pid] || 0) + ':' + c.finalShares[pid] + '">' + face34(pid, 9) + '<div style="font-weight:800;font-size:var(--t-body);margin-top:.5vmin;">' + esc(pname(pid)) + '</div><div class="sub" style="font-size:var(--t-cap);">part of ' + ((c.tieCounts || {})[pid] || 0) + ' ties</div><div style="font-weight:900;font-size:var(--t-lead);color:var(--gold);">+' + fmt(c.finalShares[pid]) + ' skins</div></div>').join('') + '</div>' +
+      '<div class="sub" style="font-size:var(--t-body);margin-top:1.2vmin;">' + (multi
+        ? 'Dead level — part of ' + tieN + ' tied holes each, more than anyone — so the last ' + c.leftoverPot + ' skins split evenly between them: ' + fmt(c.finalShares[kings[0]]) + ' each.'
+        : 'Part of ' + tieN + ' tied holes — more than anyone — so all ' + c.leftoverPot + ' remaining skins are his.') + '</div></div>';
   } else if (c.leftoverPot > 0) {
     settleKind = 'left:' + c.leftoverPot;
     finStage = '<div class="popIn" style="text-align:center;"><div style="font-size:var(--t-title);">🪙</div>' +
@@ -1621,7 +1658,7 @@ function sSkinsRace34(night) {
       '<div style="font-weight:900;font-size:var(--t-num);">EVERY SKIN FOUND A HOME</div>' +
       '<div class="sub" style="font-size:var(--t-body);margin-top:1vmin;">Nothing left on the table.</div></div>';
   }
-  out.push({ ch: 'Act I · Skins', dwell: 6000, snd: settleKind === 'kot' ? SND.cheer : SND.skins, html:
+  out.push({ ch: 'Act I · Skins', dwell: 12000, snd: settleKind === 'kot' ? SND.cheer : SND.skins, html:
     '<div data-sk35-settle="' + settleKind + '">' + bgImg(IMG.coins, .20) +
     '<div style="position:relative;z-index:3;"><div class="kick">Act I · The Skins Game · The Settlement</div>' +
     '<div class="sk34stage">' + finStage + '</div></div></div>' });
@@ -2049,10 +2086,16 @@ function sCTPE9(night) {
         : winnerCol34) + '</div>' });
   });
   else out.push({ ch: 'Act I · Closest to the Pin', html: '<div class="kick">Side Games</div><h2>📍 Closest to the Pin</h2><div class="sub">No pins recorded tonight.</div>' });
-  if (e9.length) out.push({ ch: 'Act I · Extra 9', snd: SND.sparkle, html:
-    '<div class="kick">Side Games · Extra 9</div><h2>9️⃣ The Extra 9 Winners</h2>' +
+  // CYCLE 41 — the Extra 9 winners get the MONEY treatment (Ron's
+  // ask): a deep money-green and gold frame — the register rings
+  // (SND.cash) as the winners land. The money is the FRAME: faces,
+  // names and the points stay the largest things on the slide. Only
+  // this winners slide is themed — the draft/groups slides are not.
+  if (e9.length) out.push({ ch: 'Act I · Extra 9', snd: SND.cash, html:
+    '<div class="e9money41" data-c41-e9money="1"><span class="e9bill41" style="left:2.2vmin;top:1.4vmin;">💵</span><span class="e9bill41" style="right:2.2vmin;top:1.4vmin;">💵</span><span class="e9bill41" style="left:2.2vmin;bottom:1.4vmin;">💵</span><span class="e9bill41" style="right:2.2vmin;bottom:1.4vmin;">💵</span>' +
+    '<div class="kick" style="color:var(--gold);">Side Games · Extra 9 · 💰 The Money Holes</div><h2 style="color:var(--gold);">9️⃣ The Extra 9 Winners</h2>' +
     '<div class="faceRow" style="margin-top:1.6vmin;">' + e9.map(d => face(d.pid)).join('') + '</div>' +
-    '<div class="sub" style="margin-top:1.4vmin;">+' + SET.extra9Points + ' pt each</div>' });
+    '<div style="margin-top:1.6vmin;"><span class="pill" style="font-size:var(--t-lead);border-color:var(--gold);color:var(--gold);background:rgba(255,215,94,.12);">💵 +' + SET.extra9Points + ' pt each 💵</span></div></div>' });
   return out;
 }
 function nominees(night, key) {
@@ -4685,6 +4728,83 @@ function scorecardSlide30(night, feat, losses) {
 }
 
 /* ---------- A+B · the match segment: every race, every card ---------- */
+/* ── CYCLE 41 — THE MATCH-PLAY INTRODUCTION (Ron's ask): one slide
+   immediately before the match segment. Michael Buffer's call plays
+   (Ron's own upload, trimmed to the call), and THE FULL BRACKET is on
+   the screen — all 30 matches in night columns, each in its state as
+   of tonight: decided matches show the winner in gold with the
+   result in notation, walkovers say so, tonight's matches are ringed
+   in gold, pairings already settled are named, and slots still
+   feeding in are honestly labelled with what feeds them. Built
+   entirely from the engine's bracket machinery — no pairing is
+   invented. A deck with no match content gets no intro slide. ── */
+function sMatchIntro41(night) {
+  const ms = matchesForNight(night).filter(m => m.res || (m.s1.pid && m.s2.pid));
+  if (!ms.length) return [];
+  const bm = (DATA.bracket || {}).matches || {};
+  if (!Object.keys(bm).length) return [];
+  const memo = {};
+  const short = id => id === 'grand-final' ? 'GRAND FINAL' : id === 'W-final' ? 'W FINAL' : id === 'L-final' ? 'L FINAL' : id.replace('-M', ' · M');
+  const cellFor = mid => {
+    const m = bm[mid]; if (!m) return '';
+    const res = matchResult(mid, night, memo);
+    const tonight = m.roundNumber === night;
+    // Two-line cells: the match label rides at the head of the first
+    // line (a separate label line made the 8-match columns too tall
+    // for the stage — Cycle 41 audit). Tonight's matches are ringed
+    // in gold (CSS) and carry a gold dot after the label.
+    const lab = '<span class="bl41">' + short(mid) + (tonight ? ' <span style="color:var(--gold);">●</span>' : '') + '</span> ';
+    let c1, c2;
+    if (res && res.detail) {
+      const notation = matchNotation(res.detail, res.winnerPid, res.p1);
+      const w = { cls: 'bp win', html: esc(sname(res.winnerPid)) + ' <span class="bn">' + notation + '</span>' };
+      const l = { cls: 'bp out', html: esc(sname(res.loserPid)) };
+      c1 = res.winnerPid === res.p1 ? w : l;
+      c2 = res.winnerPid === res.p1 ? l : w;
+    } else if (res && res.walkover) {
+      const s1 = resolveSlot(m.slot1, night, memo), s2 = resolveSlot(m.slot2, night, memo);
+      const w = { cls: 'bp win', html: esc(sname(res.winnerPid)) + ' <span class="bwo">w/o</span>' };
+      const b = { cls: 'bp out', html: 'Bye' };
+      c1 = s1.isBye ? b : w; c2 = s2.isBye ? b : w;
+    } else {
+      const lineFor = slot => {
+        const rs = resolveSlot(slot, night, memo);
+        if (rs.pid) return { cls: 'bp', html: esc(sname(rs.pid)) };
+        if (rs.isBye) return { cls: 'bp out', html: 'Bye' };
+        // diagram-compact form of describeSlot ("Winner of Redemption
+        // R2 · Match 1" -> "W Red. R2 M1"); the full wording lives on
+        // the progression board.
+        const compact = describeSlot(slot).replace('Winner of ', 'W ').replace('Loser of ', 'L ').replace(/Redemption/g, 'Red.').replace(/Winners/g, 'Win.').replace(/ · Match /g, ' M');
+        return { cls: 'bp wait', html: esc(compact) };
+      };
+      c1 = lineFor(m.slot1); c2 = lineFor(m.slot2);
+      // Both slots still feeding in: the label gets its own line so
+      // neither feeder description has to share a line with it (the
+      // shared line wrapped and clipped — Cycle 41 audit).
+      if (c1.cls === 'bp wait' && c2.cls === 'bp wait')
+        return '<div class="bcell41' + (tonight ? ' tonight' : '') + '" data-c41-match="' + mid + '"><div class="bp">' + lab + '</div><div class="' + c1.cls + '">' + c1.html + '</div><div class="' + c2.cls + '">' + c2.html + '</div></div>';
+    }
+    // The three finals sit alone in their columns with height to
+    // spare: their lines may wrap (a countback notation ellipsized
+    // in the audit shot before this).
+    const wrap = (mid === 'grand-final' || mid === 'L-final' || mid === 'W-final') ? ' wrap41' : '';
+    return '<div class="bcell41' + (tonight ? ' tonight' : '') + wrap + '" data-c41-match="' + mid + '"><div class="' + c1.cls + '">' + lab + c1.html + '</div><div class="' + c2.cls + '">' + c2.html + '</div></div>';
+  };
+  const byNight = {};
+  Object.keys(bm).forEach(mid => { const rn = bm[mid].roundNumber || 0; (byNight[rn] = byNight[rn] || []).push(mid); });
+  const orderKey = id => id === 'grand-final' ? 90 : id === 'L-final' ? 85 : id === 'W-final' ? 80 : (id[0] === 'W' ? 0 : 40) + (+((id.match(/-M(\d+)/) || [])[1] || 0));
+  const cols = Object.keys(byNight).sort((a, b) => a - b).map(rn =>
+    '<div class="bcol41"><div class="bch">NIGHT ' + rn + '</div>' + byNight[rn].slice().sort((a, b) => orderKey(a) - orderKey(b)).map(cellFor).join('') + '</div>').join('');
+  // The slide is one full-height flex column (no kicker — the chapter
+  // footer already names the act, Cycle 37's rule): the bracket flexes
+  // into whatever height the header leaves, so all 30 cells always fit.
+  return [{ ch: 'Act I · Match Play', snd: SND.rumble, html:
+    '<div style="display:flex;flex-direction:column;height:100%;width:100%;align-items:center;">' +
+    '<div style="font-weight:900;font-size:var(--t-title);line-height:1.05;">🥊 MATCH PLAY</div>' +
+    '<div class="goldGrad" style="font-weight:900;font-size:var(--t-sub);font-style:italic;">“Let’s get ready to rumble!”</div>' +
+    '<div class="brk41" data-c41-bracket="1" style="flex:1;min-height:0;">' + cols + '</div>' +
+    '<div class="sub" style="font-size:var(--t-cap);margin-top:var(--sp-2);">The full bracket, as it stands tonight — winners in gold, tonight’s matches ringed.</div></div>' }];
+}
 function sMatches30(night) {
   const ms = matchesForNight(night).filter(m => m.res || (m.s1.pid && m.s2.pid));
   if (!ms.length) return [];
@@ -5383,6 +5503,10 @@ function deckFor(night) {
   act2.push(...sCTPE9(night));
   // CYCLE 34 — no sBBB here anymore: the Honey Pot moved to Act IV as a
   // ranked list (sHoneyPot34). Act II keeps the B's race in Act III.
+  // CYCLE 41 — the match-play introduction (full bracket + Buffer's
+  // call) opens the whole match portion of the night, ahead of the
+  // Winners Final preview, the races and the progression.
+  act2.push(...sMatchIntro41(night));
   if (night === 5) act2.push(...sWinnersFinal29(night));
   act2.push(...sMatches30(night));
   act2.push(...sProgression30(night));
@@ -5497,6 +5621,12 @@ const SND = {
   first:   { file: F('road-rash-64-first-place-5sec.mp3'), vol: .8 },
   cheer:   { file: F('cheering-5sec.mp3'), vol: .8 },
   second:  { file: F('road-rash-64-second-place.mp3'), vol: .8 },
+  /* CYCLE 41 — two new library files: the cash register (public
+     domain, Wikimedia Commons) for the Extra 9 winners, and Michael
+     Buffer's call (Ron's own upload, trimmed to the call) for the
+     match-play introduction slide. */
+  cash:    { file: F('cash-register.mp3'), vol: .9 },
+  rumble:  { file: F('lets-get-ready-to-rumble.mp3'), vol: .9 },
 };
 const AWARD_SND = {
   metronome: SND.open, fastStart: SND.sunshine || { file: F('walking-on-sunshine-7sec.mp3'), vol: .6 },
@@ -6013,7 +6143,7 @@ try { const DC = dataCheck(); const el = document.querySelector('#dataCheck'); i
 (function () {
   var API_KEY = 'AIzaSyBNc104mTZIwHbg4tYUhYNv3n2GS6Z1Ijo';
   var BASE = 'https://firestore.googleapis.com/v1/projects/dutchcup/databases/(default)/documents/leagues/dutch-cup-2024/data';
-  var CLIP_FILES = ['masters-theme-14sec.mp3','eye-of-the-tiger.mp3','golf-hit.mp3','you-win.mp3','cheering-5sec.mp3','god-save-the-king-50sec.MP3','ikoliks_aj-intro-outro-introduction-music-562831.mp3','Easy-12sec.mp3.MP3','Easy-31sec.mp3.MP3','new-high-score-arcade-5sec.mp3','T-Rex Roar-4sec.mp3','nfl-theme-song-22sec.mp3','ice-ice-baby.mp3','never-surrender.mp3','whoosh-wind.mp3','walking-on-sunshine-7sec.mp3','RollerCoasterSound-53sec.mp3','ctp-background-kevin-macleod.mp3','All-I-do-is-win.mp3','Straight-down-the-middle-full-155sec.mp3','dutch-anthem-f1-podium (1).mp3','camera_zLdd1zp.mp3','sound-frogger-hop.wav','magic-fairy.mp3','player-eliminated.mp3','road-rash-64-first-place-5sec.mp3','road-rash-64-second-place.mp3','priceisrightfail-sound-5sec.mp3','its-not-easy-being-green.mp3','PhotocopierSound-23sec.mp3','the-old-man-down-the-road-40sec.mp3'];
+  var CLIP_FILES = ['masters-theme-14sec.mp3','eye-of-the-tiger.mp3','golf-hit.mp3','you-win.mp3','cheering-5sec.mp3','god-save-the-king-50sec.MP3','ikoliks_aj-intro-outro-introduction-music-562831.mp3','Easy-12sec.mp3.MP3','Easy-31sec.mp3.MP3','new-high-score-arcade-5sec.mp3','T-Rex Roar-4sec.mp3','nfl-theme-song-22sec.mp3','ice-ice-baby.mp3','never-surrender.mp3','whoosh-wind.mp3','walking-on-sunshine-7sec.mp3','RollerCoasterSound-53sec.mp3','ctp-background-kevin-macleod.mp3','All-I-do-is-win.mp3','Straight-down-the-middle-full-155sec.mp3','dutch-anthem-f1-podium (1).mp3','camera_zLdd1zp.mp3','sound-frogger-hop.wav','magic-fairy.mp3','player-eliminated.mp3','road-rash-64-first-place-5sec.mp3','road-rash-64-second-place.mp3','priceisrightfail-sound-5sec.mp3','its-not-easy-being-green.mp3','PhotocopierSound-23sec.mp3','the-old-man-down-the-road-40sec.mp3','cash-register.mp3','lets-get-ready-to-rumble.mp3'];
   var bootEl = document.getElementById('dcBoot');
   function bootError(msg) {
     if (!bootEl) return;
