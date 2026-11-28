@@ -17,7 +17,10 @@
     --t-big:7.2vmin; --t-hero:8.6vmin; --t-giant:10vmin; --t-mega:17vmin; --t-slam:20vmin;
     --sp-1:.6vmin; --sp-2:1.2vmin; --sp-3:2vmin; --sp-4:3.2vmin; --sp-5:4.8vmin;
     --pad-y:4.2%; --pad-x:5.5%;
-  }
+  /* CYCLE 38 — motion system: three easing families, four durations */
+  --ease-out: cubic-bezier(.2,.8,.3,1); --ease-soft: cubic-bezier(.3,.7,.3,1); --ease-pop: cubic-bezier(.2,1.6,.4,1);
+  --dur-1: .25s; --dur-2: .45s; --dur-3: .7s; --dur-4: 1.1s;
+}
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   html,body{height:100%;background:#030210;overflow:hidden;}
   body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#fff;
@@ -30,7 +33,7 @@
     background:radial-gradient(ellipse at center,rgba(0,0,0,0) 58%,rgba(0,0,0,.4) 100%);}
   .slide{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;
          padding:var(--pad-y) var(--pad-x);text-align:center;z-index:2;}
-  .slide.on{display:flex;animation:slideIn .45s cubic-bezier(.22,.8,.3,1) both;}
+  .slide.on{display:flex;animation:slideIn .45s var(--ease-out) both;}
   @keyframes slideIn{from{opacity:0;transform:translateX(42px) scale(.992);}to{opacity:1;transform:none;}}
   .slide.back{animation-name:slideInB;}
   @keyframes slideInB{from{opacity:0;transform:translateX(-42px) scale(.992);}to{opacity:1;transform:none;}}
@@ -84,7 +87,7 @@
   .barRow{display:flex;align-items:center;gap:var(--sp-3);width:min(120vmin,96%);margin:var(--sp-1) 0;}
   .barRow .bn{width:26vmin;text-align:right;font-weight:800;font-size:var(--t-body);}
   .barRow .bt{flex:1;background:rgba(255,255,255,.09);border-radius:99vmin;height:3vmin;overflow:hidden;}
-  .barRow .bf{height:100%;border-radius:99vmin;animation:grow 1s cubic-bezier(.2,.8,.3,1) both;}
+  .barRow .bf{height:100%;border-radius:99vmin;animation:grow 1s var(--ease-out) both;}
   .barRow .bv{width:12vmin;font-weight:900;font-size:var(--t-body);text-align:left;}
   @keyframes grow{from{width:0;}}
   /* ---- chrome ---- */
@@ -109,7 +112,7 @@
   .confetti{position:absolute;inset:0;z-index:45;pointer-events:none;}
 
 /* ===== cycle 2: reveals, dials, odds, road, wildcard, help ===== */
-.revealFx { animation: resolveIn 1.7s cubic-bezier(.2,.7,.3,1) .25s both; }
+.revealFx { animation: resolveIn 1.7s var(--ease-soft) .25s both; }
 @keyframes resolveIn { from { filter: blur(17px); opacity: .15; transform: scale(.96); } to { filter: blur(0); opacity: 1; transform: none; } }
 .nomRow { display: flex; gap:var(--sp-4); justify-content: center; margin-top:var(--sp-5); }
 .nomCard { text-align: center; }
@@ -123,7 +126,7 @@
 .oddsRow { display: flex; align-items: center; gap:var(--sp-3); margin:var(--sp-2) 0; }
 .oddsRow .who { width: 27vmin; display: flex; align-items: center; gap:var(--sp-2); font-weight: 800; font-size:var(--t-body); text-align: left; }
 .oddsRow .bar { flex: 1; height: 3.1vmin; background: #ffffff14; border-radius: 1vmin; overflow: hidden; }
-.oddsRow .fill { height: 100%; border-radius: 1vmin; animation: growBar 1.15s cubic-bezier(.2,.8,.3,1) both; }
+.oddsRow .fill { height: 100%; border-radius: 1vmin; animation: growBar 1.15s var(--ease-out) both; }
 .oddsRow .pc { width: 10.5vmin; text-align: right; font-size:var(--t-lead); font-weight: 900; }
 .oddsRow .mv { width: 10vmin; font-size:var(--t-cap); font-weight: 800; }
 @keyframes growBar { from { width: 0; } }
@@ -131,8 +134,8 @@
 @keyframes dropIn { 0% { transform: translateY(-16vmin) scale(.82); opacity: 0; } 55% { transform: translateY(1.4vmin) scale(1.05); opacity: 1; } 75% { transform: translateY(-.7vmin) scale(.99); } 100% { transform: none; opacity: 1; } }
 @keyframes slideRight { 0% { transform: translateX(-8vmin); opacity: 0; } 55% { opacity: 1; } 100% { transform: translateX(0); opacity: 1; } }
 @keyframes growUp { from { transform: scaleY(0); } }
-.dialArc { transition: stroke-dasharray 1.2s cubic-bezier(.2,.8,.3,1) .15s; }
-.slide.on.zoomIn { animation: zoomIn .85s cubic-bezier(.2,.8,.3,1) both; }
+.dialArc { transition: stroke-dasharray 1.2s var(--ease-out) .15s; }
+.slide.on.zoomIn { animation: zoomIn .85s var(--ease-out) both; }
 @keyframes zoomIn { from { transform: scale(.93); opacity: 0; } }
 .bumpWrap { margin-top:var(--sp-3); width: 100%; }
 .wildCard { border: .3vmin dashed var(--gold); border-radius: 2vmin; padding:var(--sp-4) var(--sp-5); max-width: 125vmin; background: #f6c4530d; margin-top:var(--sp-4); }
@@ -147,7 +150,7 @@
 #topbar, #botbar { transition: opacity .6s ease; }
 #stage.chromeOff #topbar, #stage.chromeOff #botbar { opacity: 0; pointer-events: none; }
 @media (prefers-reduced-motion: reduce) {
-  .photoWrap img, .slide.on, .revealFx, .card, .barRow .bf, .oddsRow .fill { animation: none !important; }
+  .photoWrap img, .slide.on, .revealFx, .card, .barRow .bf, .oddsRow .fill, .verdict38, .slide.on .p29row { animation: none !important; }
 }
 /* ===== cycle 4: overview grid ===== */
 #grid { position: fixed; inset: 0; background: #05070ff5; z-index: 95; display: none; padding:var(--sp-5); overflow-y: auto; }
@@ -177,9 +180,9 @@
   .nbtn.on { box-shadow:0 0 2.2vmin rgba(255,215,94,.45); }
   #progFill { background:linear-gradient(90deg,#c99612,#ffd75e,#fff3b0); }
   @keyframes riseIn { from { opacity:0; transform:translateY(2.6vmin); } }
-  .slide.on .card { animation:riseIn .55s cubic-bezier(.2,.8,.3,1) both; }
-  .slide.on .barRow { animation:riseIn .5s cubic-bezier(.2,.8,.3,1) both; animation-delay:calc(var(--i, 0) * 90ms); }
-  .slide.on .nomCard, .slide.on .oddsRow { animation:riseIn .5s cubic-bezier(.2,.8,.3,1) both; }
+  .slide.on .card { animation:riseIn .55s var(--ease-out) both; }
+  .slide.on .barRow { animation:riseIn .5s var(--ease-out) both; animation-delay:calc(var(--i, 0) * 90ms); }
+  .slide.on .nomCard, .slide.on .oddsRow { animation:riseIn .5s var(--ease-out) both; }
   h2 { text-shadow:0 .4vmin 2.4vmin rgba(0,0,0,.5); }
   .face img { box-shadow:0 1vmin 2.6vmin rgba(0,0,0,.5); }
   @media (prefers-reduced-motion: reduce) { .slide.on .barRow, .slide.on .nomCard, .slide.on .oddsRow { animation:none !important; } }
@@ -193,11 +196,11 @@
   .c12Tile .face img, .c12Tile .face .init { width:10.5vmin; height:10.5vmin; }
   .c12Tile .face .nm { font-size:var(--t-body); }
   .c12Tile .face .tm { display:none; }
-  .c12bar { animation:growBar 1.1s cubic-bezier(.2,.8,.3,1) both; }
-  .c12rise { animation:riseIn .5s cubic-bezier(.2,.8,.3,1) both; }
+  .c12bar { animation:growBar 1.1s var(--ease-out) both; }
+  .c12rise { animation:riseIn .5s var(--ease-out) both; }
   @media (prefers-reduced-motion: reduce) { .c12bar, .c12rise { animation:none !important; } }
   /* ===== CYCLE 16 · STORY CHART DRAW-IN + NEAR-BLACK (ACES) BAR POLISH ===== */
-  .c16line { stroke-dasharray:100; stroke-dashoffset:100; animation:c16draw 1.5s cubic-bezier(.2,.8,.3,1) .15s both; }
+  .c16line { stroke-dasharray:100; stroke-dashoffset:100; animation:c16draw 1.5s var(--ease-out) .15s both; }
   @keyframes c16draw { to { stroke-dashoffset:0; } }
   /* Aces play in #000000 — on the dark stage their bars, dials and labels vanish.
      Any element filled or lettered in pure black gets a light edge/glow instead.
@@ -229,12 +232,12 @@
   .fwBall { position:absolute; top:50%; width:3.3vmin; height:3.3vmin; border-radius:50%; z-index:5;
     background:radial-gradient(circle at 35% 30%,#ffffff,#ccd2d8); border:.42vmin solid #888;
     box-shadow:0 .7vmin 1.6vmin rgba(0,0,0,.65); transform:translate(-50%,-50%); }
-  .slide.on .fwBall.fwShotA { animation:fwShot 1.2s cubic-bezier(.3,.7,.3,1) both; }
-  .slide.on .fwBall.fwRollA { animation:fwRoll 1.45s cubic-bezier(.25,.6,.35,1) both; }
+  .slide.on .fwBall.fwShotA { animation:fwShot 1.2s var(--ease-soft) both; }
+  .slide.on .fwBall.fwRollA { animation:fwRoll 1.45s var(--ease-soft) both; }
   @keyframes fwShot { 0% { left:var(--from); transform:translate(-50%,-50%); } 52% { transform:translate(-50%,-330%); } 100% { left:var(--to); transform:translate(-50%,-50%); } }
   @keyframes fwRoll { 0% { left:var(--from); } 100% { left:var(--to); } }
   .fwGolfer { position:absolute; top:47%; z-index:6; transform:translate(-158%,-50%); line-height:0; }
-  .slide.on .fwGolfer { animation:fwSwing .9s cubic-bezier(.3,.7,.3,1) .1s both; }
+  .slide.on .fwGolfer { animation:fwSwing .9s var(--ease-soft) .1s both; }
   @keyframes fwSwing { 0% { transform:translate(-158%,-50%) rotate(0deg); } 35% { transform:translate(-158%,-58%) rotate(-7deg); } 70% { transform:translate(-158%,-50%) rotate(4deg); } 100% { transform:translate(-158%,-50%) rotate(0deg); } }
   .fwRest { position:absolute; z-index:4; transform:translate(-50%,-50%); line-height:0; opacity:.88;
     background:rgba(255,255,255,.92); border-radius:50%; padding:var(--sp-1); box-shadow:0 .5vmin 1.2vmin rgba(0,0,0,.5); }
@@ -244,7 +247,7 @@
   .fwCardNum { display:block; font-size:var(--t-big); font-weight:900; line-height:1.05; color:#14532d; }
   .cbRow { display:flex; align-items:center; gap:var(--sp-3); background:var(--card); border:1px solid var(--line);
     border-radius:1.8vmin; padding:var(--sp-2) var(--sp-3); margin:var(--sp-2) auto; text-align:left; }
-  .slide.on .cbRow { animation:riseIn .6s cubic-bezier(.2,.8,.3,1) both; animation-delay:var(--d,0s); }
+  .slide.on .cbRow { animation:riseIn .6s var(--ease-out) both; animation-delay:var(--d,0s); }
   .cbRow.cbFirst { border:.3vmin solid var(--gold); background:linear-gradient(180deg,rgba(255,215,94,.20),rgba(255,215,94,.06)); }
   .cbRank { font-weight:900; font-size:var(--t-sub); color:var(--gold); width:5vmin; text-align:center; flex:none; }
   .cbTot { font-weight:900; font-size:var(--t-num); color:var(--gold); flex:none; }
@@ -267,10 +270,16 @@
   .oball { position:absolute; top:50%; transform:translate(-50%,-50%); font-size:var(--t-cap); z-index:2; text-shadow:0 0 .7vmin #000; }
   @media (prefers-reduced-motion: reduce) { .fwBall, .fwGolfer, .cbRow { animation:none !important; } }
 /* ===== cycle 27: beats, slam, skins chips, ctp pulse ===== */
-.bt { transition: opacity .38s ease, transform .38s cubic-bezier(.2,.8,.3,1); }
+.bt { transition: opacity .38s ease, transform .38s var(--ease-out); }
+  /* CYCLE 38 — verdict anticipation: the slide lands, the room breathes
+     for half a second, then the winner rises. Applied to verdict faces. */
+  .verdict38 { animation: rise var(--dur-3) var(--ease-out) .5s both; }
+  /* CYCLE 38 — board rows cascade in, 60 ms apart, leader's row last
+     only in DOM order on standings boards; Landing beats unchanged. */
+  .slide.on .p29row { animation: riseIn .5s var(--ease-out) both; animation-delay: calc(var(--i, 0) * 60ms); }
 .btOff { opacity: 0; transform: translateY(16px) scale(.97); pointer-events: none; }
 @keyframes slamIn { 0% { transform: scale(2.7); opacity: 0; filter: blur(7px); } 55% { transform: scale(.93); opacity: 1; filter: blur(0); } 74% { transform: scale(1.05); } 100% { transform: scale(1); } }
-.slamNum { animation: slamIn .55s cubic-bezier(.2,.8,.3,1) both; }
+.slamNum { animation: slamIn .55s var(--ease-out) both; }
 @keyframes flashBg { from { opacity: 1; } to { opacity: 0; } }
 .slamFlash { position: absolute; inset: 0; background: radial-gradient(circle at 50% 46%, rgba(255,215,94,.34), transparent 62%); animation: flashBg .8s ease both; pointer-events: none; }
 @keyframes coinPop { 0% { transform: scale(.4); opacity: 0; } 60% { transform: scale(1.14); opacity: 1; } 100% { transform: scale(1); } }
@@ -283,11 +292,11 @@
 .foArena { display: flex; align-items: flex-start; justify-content: center; gap:var(--sp-4); width: 100%; margin-top:var(--sp-2); }
 .foSide { width: 34vmin; flex: none; text-align: center; position: relative; transition: filter .7s ease, opacity .7s ease; }
 .foSide .face img, .foSide .face .init { width: 20vmin; height: 20vmin; }
-.foInL { animation: foInL .95s cubic-bezier(.2,1.15,.3,1) backwards; }
-.foInR { animation: foInR .95s cubic-bezier(.2,1.15,.3,1) backwards; }
-.foVs { font-size:var(--t-disp); font-weight: 900; font-style: italic; color: var(--gold); text-shadow: 0 0 3.4vmin rgba(255,215,94,.5); animation: foVs .5s cubic-bezier(.2,1.8,.4,1) .5s both; align-self: center; flex: none; }
+.foInL { animation: foInL .95s var(--ease-pop) backwards; }
+.foInR { animation: foInR .95s var(--ease-pop) backwards; }
+.foVs { font-size:var(--t-disp); font-weight: 900; font-style: italic; color: var(--gold); text-shadow: 0 0 3.4vmin rgba(255,215,94,.5); animation: foVs .5s var(--ease-pop) .5s both; align-self: center; flex: none; }
 .foTag { font-size:var(--t-cap); font-weight: 800; letter-spacing: .12em; color: var(--dim); margin-top:var(--sp-2); text-transform: uppercase; line-height: 1.35; }
-.foCrown { position: absolute; top: -4.4vmin; left: 50%; transform: translateX(-50%) rotate(-8deg) scale(.4); font-size:var(--t-title); opacity: 0; transition: opacity .5s ease, transform .5s cubic-bezier(.2,1.6,.4,1); z-index: 3; pointer-events: none; }
+.foCrown { position: absolute; top: -4.4vmin; left: 50%; transform: translateX(-50%) rotate(-8deg) scale(.4); font-size:var(--t-title); opacity: 0; transition: opacity .5s ease, transform .5s var(--ease-pop); z-index: 3; pointer-events: none; }
 .foTape { width: min(96vmin, 92%); margin:var(--sp-3) auto 0; }
 .foRow { display: grid; grid-template-columns: 1fr auto 1fr; gap:var(--sp-2); align-items: center; padding:var(--sp-2) var(--sp-1); border-top: 1px solid #ffffff1f; font-size:var(--t-body); }
 .foRow .fl { text-align: right; font-weight: 800; } .foRow .fr { text-align: left; font-weight: 800; }
@@ -324,7 +333,7 @@
   .p29brow{display:grid;grid-template-columns:23vmin 1fr 11vmin 11vmin;align-items:center;gap:var(--sp-3);width:min(122vmin,96%);margin:var(--sp-2) auto;text-align:left;}
   .p29bl{font-weight:800;letter-spacing:.12em;font-size:var(--t-body);color:var(--cream);text-align:right;}
   .p29bbar{height:3.4vmin;background:rgba(255,255,255,.08);border-radius:99vmin;overflow:hidden;}
-  .p29bfill{height:100%;border-radius:99vmin;animation:grow 1s cubic-bezier(.2,.8,.3,1) both;}
+  .p29bfill{height:100%;border-radius:99vmin;animation:grow 1s var(--ease-out) both;}
   .p29bv{font-weight:900;font-size:var(--t-lead);color:var(--gold);}
   .p29brow.zero .p29bv{color:var(--dim);font-weight:700;font-size:var(--t-body);}
   .p29brow.zero .p29bl{color:var(--dim);}
@@ -361,24 +370,24 @@
   .p29ucard{display:flex;gap:var(--sp-3);align-items:center;background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:1.8vmin;padding:var(--sp-2) var(--sp-3);text-align:left;}
 
   /* ===== CYCLE 30 · AUTO RACES, PROGRESSION, WEEK RACES ===== */
-  .r30cart{transition-property:left;transition-timing-function:cubic-bezier(.3,.7,.3,1);}
-  .r30over{opacity:0;transform:translateY(1.6vmin) scale(.96);transition:opacity .45s ease,transform .45s cubic-bezier(.2,.8,.3,1);pointer-events:none;}
+  .r30cart{transition-property:left;transition-timing-function:var(--ease-soft);}
+  .r30over{opacity:0;transform:translateY(1.6vmin) scale(.96);transition:opacity .45s ease,transform .45s var(--ease-out);pointer-events:none;}
   .r30done .r30over{opacity:1;transform:none;}
-  .t30fill{transition:width .85s cubic-bezier(.2,.8,.3,1);}
-  .t30final{opacity:0;transform:translateY(1.4vmin);transition:opacity .5s ease .1s,transform .5s cubic-bezier(.2,.8,.3,1) .1s;}
+  .t30fill{transition:width .85s var(--ease-out);}
+  .t30final{opacity:0;transform:translateY(1.4vmin);transition:opacity .5s ease .1s,transform .5s var(--ease-out) .1s;}
   .t30done .t30final{opacity:1;transform:none;}
   .t30crown{opacity:0;transition:opacity .45s ease .15s;}
   .t30done .t30crown{opacity:1;}
-  .p30slide{transition:transform .8s cubic-bezier(.2,.8,.3,1) .12s,opacity .5s ease .12s;}
+  .p30slide{transition:transform .8s var(--ease-out) .12s,opacity .5s ease .12s;}
   .btOff .p30slide{transform:translateX(-9vmin);opacity:0;}
   @media (prefers-reduced-motion: reduce){ .r30cart,.t30fill{transition:none;} }
 
   /* ===== CYCLE 32 · THE LOW NET COUNTDOWN ===== */
-  .c32num{font-family:Georgia,'Times New Roman',serif;font-weight:900;font-size:var(--t-slam);line-height:1.05;color:#fff;text-shadow:0 1vmin 4vmin rgba(0,0,0,.45);transition:font-size .5s cubic-bezier(.2,.8,.3,1),color .5s ease;}
+  .c32num{font-family:Georgia,'Times New Roman',serif;font-weight:900;font-size:var(--t-slam);line-height:1.05;color:#fff;text-shadow:0 1vmin 4vmin rgba(0,0,0,.45);transition:font-size .5s var(--ease-out),color .5s ease;}
   .c32done .c32num{font-size:var(--t-giant);color:var(--gold);}
   .c32dot{display:inline-block;width:1.7vmin;height:1.7vmin;border-radius:50%;background:var(--gold);margin:0 var(--sp-1);transition:opacity .25s ease,background .25s ease;}
   .c32dot.off{background:#ffffff2e;}
-  .c32land{opacity:0;transform:translateY(1.6vmin) scale(.97);transition:opacity .5s ease .05s,transform .5s cubic-bezier(.2,.8,.3,1) .05s;pointer-events:none;}
+  .c32land{opacity:0;transform:translateY(1.6vmin) scale(.97);transition:opacity .5s ease .05s,transform .5s var(--ease-out) .05s;pointer-events:none;}
   .c32done .c32land{opacity:1;transform:none;}
   @media (prefers-reduced-motion: reduce){ .c32num,.c32dot,.c32land{transition:none;} }
   /* CYCLE 34 — Landing win odds, per-category build contributions, the
@@ -427,7 +436,7 @@
   .cf35back{background:radial-gradient(circle at 38% 32%,#fff3b0,#c99612);transform:rotateY(180deg);border:.5vmin solid #8a6a0d;}
   .cf35net{font-family:Georgia,'Times New Roman',serif;font-weight:900;font-size:var(--t-hero);color:#241a02;}
   .cf35name{font-weight:900;font-size:var(--t-sub);margin-top:var(--sp-3);min-height:4.4vmin;}
-  .cf35land{opacity:0;transform:translateY(1.6vmin) scale(.97);transition:opacity .5s ease .05s,transform .5s cubic-bezier(.2,.8,.3,1) .05s;pointer-events:none;}
+  .cf35land{opacity:0;transform:translateY(1.6vmin) scale(.97);transition:opacity .5s ease .05s,transform .5s var(--ease-out) .05s;pointer-events:none;}
   .cf35done .cf35land{opacity:1;transform:none;}
   .cf35done .cf35stage,.cf35done .cf35name{opacity:.25;}
   @media (prefers-reduced-motion: reduce){ .cf35land{transition:none;} }
@@ -1384,7 +1393,7 @@ function sSkins(night) {
      'background:#ffffff1c;color:var(--cream);border:1px solid var(--line);') + '">' + l.hole +
     (state === 'tied' ? '<span style="position:absolute;top:-1.2vmin;right:-.9vmin;font-size:var(--t-cap);">✗</span>' : '') + '</div>';
   const chipsRow = run => '<div style="display:flex;gap:.9vmin;justify-content:center;flex-wrap:wrap;max-width:124vmin;">' + run.map(l => chip(l, l.winner ? 'win' : 'tied')).join('') + '</div>';
-  const coins = pot => pot <= 0 ? '' : '<div style="font-size:' + (pot >= 7 ? 'var(--t-num)' : pot >= 4 ? 'var(--t-num)' : 'var(--t-sub)') + ';letter-spacing:-.7vmin;line-height:1.1;animation:coinPop .5s cubic-bezier(.2,.8,.3,1) both;">' + '🪙'.repeat(Math.min(pot, 9)) + (pot > 9 ? '<span style="letter-spacing:0;font-size:var(--t-lead);font-weight:900;color:var(--gold);">&nbsp;×' + pot + '</span>' : '') + '</div>';
+  const coins = pot => pot <= 0 ? '' : '<div style="font-size:' + (pot >= 7 ? 'var(--t-num)' : pot >= 4 ? 'var(--t-num)' : 'var(--t-sub)') + ';letter-spacing:-.7vmin;line-height:1.1;animation:coinPop .5s var(--ease-out) both;">' + '🪙'.repeat(Math.min(pot, 9)) + (pot > 9 ? '<span style="letter-spacing:0;font-size:var(--t-lead);font-weight:900;color:var(--gold);">&nbsp;×' + pot + '</span>' : '') + '</div>';
   out.push({ ch: 'Act I · Skins', dwell: 3000, snd: SND.skins, html:
     bgImg(IMG.coins, .30) +
     '<div style="position:relative;z-index:3;"><div class="kick">Act I · The Skins Game</div>' +
@@ -1407,8 +1416,8 @@ function sSkins(night) {
         '<div style="margin:1.6vmin 0 1.6vmin;">' + chipsRow(run) + '</div>' +
         coins(lastL.pot) +
         '<div class="goldGrad" style="font-weight:900;font-size:var(--t-disp);line-height:1.1;">POT ' + lastL.pot + '</div>' +
-        '<div style="margin:1.1vmin 0 .3vmin;animation:popIn .55s cubic-bezier(.2,.8,.3,1) .3s both;">' + face(lastL.winner, true) + '</div>' +
-        '<div style="animation:popIn .55s cubic-bezier(.2,.8,.3,1) .55s both;"><span class="goldGrad" style="font-weight:900;font-size:var(--t-hero);line-height:1;">NET ' + net + '</span></div></div>' });
+        '<div style="margin:1.1vmin 0 .3vmin;animation:popIn .55s var(--ease-out) .3s both;">' + face(lastL.winner, true) + '</div>' +
+        '<div style="animation:popIn .55s var(--ease-out) .55s both;"><span class="goldGrad" style="font-weight:900;font-size:var(--t-hero);line-height:1;">NET ' + net + '</span></div></div>' });
     } else {
       const pot = c.leftoverPot || 0;
       out.push({ ch: 'Act I · Skins', dwell: 2800, snd: SND.ooh, html:
@@ -1430,7 +1439,7 @@ function sSkinsSummary(night) {
   // crowned exactly once, on the Honours Board. This slide keeps the pot
   // river (the game's shape) and the King of Ties pill (its only home).
   const river = '<div style="display:flex;gap:.5vmin;align-items:flex-end;width:100%;margin:1.4vmin 0 .6vmin;">' + c.skinsLog.map(l => {
-    if (l.winner) return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:.4vmin;"><div style="width:100%;height:' + (2.5 + l.pot * 2.2) + 'vmin;background:linear-gradient(180deg,#fff3b0,#c99612);border-radius:.7vmin .7vmin 0 0;transform-origin:bottom;animation:growUp .7s cubic-bezier(.2,.8,.3,1) both;animation-delay:' + (l.hole * 45) + 'ms;"></div><div style="font-size:var(--t-kick);font-weight:800;">' + l.hole + '</div><div style="font-size:var(--t-kick);color:var(--gold);font-weight:800;">' + initials(pname(l.winner)) + '</div></div>';
+    if (l.winner) return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:.4vmin;"><div style="width:100%;height:' + (2.5 + l.pot * 2.2) + 'vmin;background:linear-gradient(180deg,#fff3b0,#c99612);border-radius:.7vmin .7vmin 0 0;transform-origin:bottom;animation:growUp .7s var(--ease-out) both;animation-delay:' + (l.hole * 45) + 'ms;"></div><div style="font-size:var(--t-kick);font-weight:800;">' + l.hole + '</div><div style="font-size:var(--t-kick);color:var(--gold);font-weight:800;">' + initials(pname(l.winner)) + '</div></div>';
     return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:.4vmin;"><div style="width:100%;height:1.6vmin;background:#ffffff2e;border-radius:.7vmin .7vmin 0 0;"></div><div style="font-size:var(--t-kick);font-weight:800;">' + l.hole + '</div><div style="font-size:var(--t-kick);color:var(--dim);">×' + (l.tied ? l.tied.length : 0) + '</div></div>';
   }).join('') + '</div>';
   // CYCLE 29 — the summary also pays the teams (skins points by team —
@@ -1702,7 +1711,7 @@ function sMatches(night) {
       const badge = (net, par, gold) => { const diff = net - par;
         const glyph = diff <= -2 ? '🦅' : diff === -1 ? '🐦' : diff === 0 ? '➖' : diff === 1 ? '❌' : '❌❌';
         const dbl = diff >= 2;
-        return '<div style="position:absolute;top:-6.3vmin;left:50%;translate:-50% 0;background:' + (gold ? '#2a2003f5' : '#141830f2') + ';border-radius:99vmin;padding:.65vmin 1.15vmin;box-shadow:0 .8vmin 2vmin #000a' + (gold ? ',0 0 0 .4vmin var(--gold),0 0 2.6vmin #ffd75e88' : '') + ';animation:popIn .45s cubic-bezier(.2,.8,.3,1) both;z-index:3;line-height:1.15;font-size:' + (dbl ? 'var(--t-sub)' : 'var(--t-num)') + ';letter-spacing:' + (dbl ? '-.5vmin' : '0') + ';white-space:nowrap;' + (gold ? '' : 'opacity:.92;') + '">' + glyph + '</div>'; };
+        return '<div style="position:absolute;top:-6.3vmin;left:50%;translate:-50% 0;background:' + (gold ? '#2a2003f5' : '#141830f2') + ';border-radius:99vmin;padding:.65vmin 1.15vmin;box-shadow:0 .8vmin 2vmin #000a' + (gold ? ',0 0 0 .4vmin var(--gold),0 0 2.6vmin #ffd75e88' : '') + ';animation:popIn .45s var(--ease-out) both;z-index:3;line-height:1.15;font-size:' + (dbl ? 'var(--t-sub)' : 'var(--t-num)') + ';letter-spacing:' + (dbl ? '-.5vmin' : '0') + ';white-space:nowrap;' + (gold ? '' : 'opacity:.92;') + '">' + glyph + '</div>'; };
       // CYCLE 27 · SPACING (Ron's ruling: "the spacing is not used
       // properly when moving people toward the finish line"). The pair
       // travels as one story: their shared centre marches to the flag
@@ -1749,7 +1758,7 @@ function sMatches(night) {
           (w ? '' : '<div style="margin-top:1.6vmin;"><span class="pill" style="font-size:var(--t-body);">HALVED</span></div>') +
           '<div class="goldGrad" style="font-weight:900;font-size:var(--t-title);margin-top:' + (w ? '2.2vmin' : '1.2vmin') + ';">' + score + '</div>' +
           (dormie ? '<div style="margin-top:1.1vmin;"><span class="pill" style="font-size:var(--t-body);">DORMIE</span></div>' : '') +
-          (isDecider ? '<div style="margin-top:1.3vmin;animation:popIn .5s cubic-bezier(.2,.8,.3,1) .3s both;"><span class="pill" style="font-size:var(--t-body);">🔒 SEALED IT</span></div>' : '') });
+          (isDecider ? '<div style="margin-top:1.3vmin;animation:popIn .5s var(--ease-out) .3s both;"><span class="pill" style="font-size:var(--t-body);">🔒 SEALED IT</span></div>' : '') });
       }
       losses[feat.res.loserPid]++;
       const elim = losses[feat.res.loserPid] >= 2;
@@ -1781,7 +1790,7 @@ function sMatches(night) {
         const ghostS = '<div style="width:9.5vmin;height:9.5vmin;border-radius:50%;border:.35vmin dashed #ffffff44;display:flex;align-items:center;justify-content:center;font-size:var(--t-sub);color:#ffffff55;font-weight:900;">?</div>';
         const faceSlot = (pid, opts) => { opts = opts || {};
           if (!pid) return '<div style="text-align:center;">' + ghostS + (opts.sub ? '<div style="font-size:var(--t-kick);color:var(--dim);margin-top:.5vmin;max-width:16vmin;">' + esc(opts.sub) + '</div>' : '') + '</div>';
-          return '<div style="text-align:center;' + (opts.grey ? 'opacity:.4;filter:grayscale(1);' : '') + '"><div style="display:inline-block;line-height:0;border-radius:50%;' + (opts.ring ? 'box-shadow:0 0 0 .5vmin var(--gold),0 0 2.6vmin #ffd75e66;' : '') + (opts.slide ? 'animation:slideRight .8s cubic-bezier(.2,.8,.3,1) both;' : '') + '">' + miniFace(pid) + '</div>' + (opts.crown ? '<div style="font-size:var(--t-body);">👑</div>' : '') + '</div>'; };
+          return '<div style="text-align:center;' + (opts.grey ? 'opacity:.4;filter:grayscale(1);' : '') + '"><div style="display:inline-block;line-height:0;border-radius:50%;' + (opts.ring ? 'box-shadow:0 0 0 .5vmin var(--gold),0 0 2.6vmin #ffd75e66;' : '') + (opts.slide ? 'animation:slideRight .8s var(--ease-out) both;' : '') + '">' + miniFace(pid) + '</div>' + (opts.crown ? '<div style="font-size:var(--t-body);">👑</div>' : '') + '</div>'; };
         const flowCard = (title, sub, inner, opts) => { opts = opts || {};
           return '<div style="background:var(--card);border:' + (opts.gold ? '.3vmin solid var(--gold)' : '1px solid var(--line)') + ';border-radius:2vmin;padding:1.8vmin 2vmin;width:100%;' + (opts.dim ? 'opacity:.55;' : '') + '">' +
           '<div style="font-weight:800;letter-spacing:.16em;font-size:var(--t-kick);color:' + (opts.gold ? 'var(--gold)' : 'var(--dim)') + ';">' + title + (sub ? ' · ' + sub : '') + '</div>' +
@@ -1996,9 +2005,9 @@ function sCTPE9(night) {
     const heroSrc34 = tagged34 ? tagged34.src : (IMG.ctpBall || null);
     const cImg34 = courseImg(r.course);
     const winnerCol34 =
-      '<div style="margin-top:1vmin;animation:popIn .55s cubic-bezier(.2,.8,.3,1) both;">' + face(x.pid, true) + '</div>' +
-      '<div style="margin-top:1.4vmin;animation:popIn .55s cubic-bezier(.2,.8,.3,1) .25s both;"><span class="pill" style="font-size:var(--t-lead);border-color:var(--gold);">🏆 PRIZE WINNER</span></div>' +
-      '<div style="margin-top:1.2vmin;animation:popIn .55s cubic-bezier(.2,.8,.3,1) .45s both;"><span class="pill" style="font-size:var(--t-body);">📍 +' + fmt(SET.ctpPoints) + ' pts</span></div>';
+      '<div style="margin-top:1vmin;animation:popIn .55s var(--ease-out) both;">' + face(x.pid, true) + '</div>' +
+      '<div style="margin-top:1.4vmin;animation:popIn .55s var(--ease-out) .25s both;"><span class="pill" style="font-size:var(--t-lead);border-color:var(--gold);">🏆 PRIZE WINNER</span></div>' +
+      '<div style="margin-top:1.2vmin;animation:popIn .55s var(--ease-out) .45s both;"><span class="pill" style="font-size:var(--t-body);">📍 +' + fmt(SET.ctpPoints) + ' pts</span></div>';
     const panel35 = heroSrc34
       ? '<div style="flex:none;text-align:left;"><img class="ctpPanel35" src="' + heroSrc34 + '" alt=""><div class="ctpCap35">Hole ' + x.hole + ' · ' + esc(r.course || '') + '</div></div>' : '';
     out.push({ ch: 'Act I · Closest to the Pin', dwell: 6200, fx: 'confetti', fxCols: [tcolor(x.pid)], snd: SND.cheer, ctp34: tagged34 ? 'photo' : (heroSrc34 ? 'ai' : 'none'), html:
@@ -2400,7 +2409,7 @@ function sTurn(night) {
   // net bar on one shared scale, face at the end, the winner crowned 🔥.
   const top = turnTop(night, 3); if (!top.length) return [];
   const mx = Math.max.apply(null, top.map(x => Math.max(x.front, x.back)).concat([1]));
-  const bar = (val, col) => '<div style="flex:1;background:#ffffff12;border-radius:99vmin;height:3vmin;overflow:hidden;"><div style="height:100%;width:' + Math.max(3, val / mx * 100) + '%;background:' + col + ';border-radius:99vmin;animation:growBar 1s cubic-bezier(.2,.8,.3,1) both;"></div></div>';
+  const bar = (val, col) => '<div style="flex:1;background:#ffffff12;border-radius:99vmin;height:3vmin;overflow:hidden;"><div style="height:100%;width:' + Math.max(3, val / mx * 100) + '%;background:' + col + ';border-radius:99vmin;animation:growBar 1s var(--ease-out) both;"></div></div>';
   const row = (x, ix) => '<div style="display:flex;align-items:center;gap:2.2vmin;width:100%;box-sizing:border-box;margin:1.4vmin 0;' + (ix === 0 ? 'background:var(--card);border:1px solid var(--line);border-radius:2vmin;padding:1.7vmin 2.2vmin;' : 'padding:.2vmin 2.2vmin;') + '">' +
     '<div style="position:relative;flex:none;">' + face(x.pid, ix === 0, true) + (ix === 0 ? '<div style="position:absolute;top:-2.4vmin;right:-1.8vmin;font-size:var(--t-sub);">🔥</div>' : '') + '</div>' +
     '<div style="flex:1;">' +
@@ -2905,7 +2914,7 @@ function sStandings(night) {
       '<div style="position:relative;width:24vmin;height:' + (TUBE_H + 10) + 'vmin;">' +
         '<div style="position:absolute;left:50%;transform:translateX(-50%);bottom:' + (fillV + 1) + 'vmin;white-space:nowrap;"><span class="' + (isLead ? 'goldGrad' : '') + '" style="font-weight:900;font-size:var(--t-disp);line-height:1;' + (isLead ? '' : 'color:#fff;') + '">' + fmt(val) + '</span></div>' +
         '<div style="position:absolute;left:50%;transform:translateX(-50%);bottom:0;width:13.5vmin;height:' + TUBE_H + 'vmin;border:.45vmin solid #ffffff30;border-radius:99vmin;background:#ffffff0d;overflow:hidden;">' +
-          '<div style="position:absolute;left:0;right:0;bottom:0;height:' + fillV + 'vmin;background:linear-gradient(180deg,' + s.color + 'd9,' + s.color + ');animation:growUp .85s cubic-bezier(.2,.8,.3,1) both;transform-origin:bottom;"></div></div>' +
+          '<div style="position:absolute;left:0;right:0;bottom:0;height:' + fillV + 'vmin;background:linear-gradient(180deg,' + s.color + 'd9,' + s.color + ');animation:growUp .85s var(--ease-out) both;transform-origin:bottom;"></div></div>' +
         '<div style="position:absolute;left:50%;transform:translateX(-50%);bottom:' + startV + 'vmin;width:19vmin;border-top:.4vmin dashed var(--gold);opacity:.85;"></div>' +
         '<div style="position:absolute;left:50%;transform:translateX(-50%);bottom:' + startV + 'vmin;width:4.6vmin;border-top:1.1vmin solid var(--gold);"></div>' +
       '</div>' +
@@ -3143,7 +3152,7 @@ function sDuel(night) {
       '<div style="font-size:var(--t-body);font-weight:800;margin-top:.6vmin;letter-spacing:.3vmin;">' + (rec.l === 0 ? 'UNBEATEN' : rec.w + '–' + rec.l + ' THIS WEEK') + '</div>' +
       '<div style="margin-top:1.6vmin;">' + rows.map(([lbl, fn, mx]) =>
         '<div style="margin:.9vmin 0;"><div style="display:flex;justify-content:space-between;font-size:var(--t-cap);font-weight:800;letter-spacing:.14em;"><span>' + lbl + '</span><span style="color:var(--gold);">' + fmt(fn(pid)) + '</span></div>' +
-        '<div style="background:#ffffff12;border-radius:99vmin;height:2.6vmin;overflow:hidden;margin-top:.35vmin;"><div style="height:100%;width:' + (fn(pid) / mx * 100) + '%;background:' + tcolor(pid) + ';border-radius:99vmin;animation:growBar 1.1s cubic-bezier(.2,.8,.3,1) both;"></div></div></div>').join('') + '</div></div>';
+        '<div style="background:#ffffff12;border-radius:99vmin;height:2.6vmin;overflow:hidden;margin-top:.35vmin;"><div style="height:100%;width:' + (fn(pid) / mx * 100) + '%;background:' + tcolor(pid) + ';border-radius:99vmin;animation:growBar 1.1s var(--ease-out) both;"></div></div></div>').join('') + '</div></div>';
   };
   return [{ ch: 'Tomorrow · The Duel', snd: SND.nail, html:
     '<div class="kick">Tomorrow · ' + esc(m.label) + '</div><h2>⚔️ The Duel</h2>' +
@@ -3299,7 +3308,7 @@ function sFairway(night) {
     '<div class="sub">How each score was built — one golfer at a time,<br>scoring type by scoring type, to the final number.</div>' +
     '<div style="display:flex;justify-content:center;gap:1.1vmin;margin-top:2.6vmin;flex-wrap:wrap;">' + DATA.players.map(p => miniFace(p.id)).join('') + '</div>' }];
   const chipFor = (emo, lbl, v, run, hot) =>
-    '<div style="flex:1;min-width:12vmin;background:var(--card);border:1px solid ' + (hot ? 'var(--gold)' : 'var(--line)') + ';border-radius:1.6vmin;padding:1.1vmin .7vmin;text-align:center;' + (hot ? 'animation:popIn .5s cubic-bezier(.2,.8,.3,1) both;' : '') + (v > 0 ? '' : 'opacity:.45;') + '">' +
+    '<div style="flex:1;min-width:12vmin;background:var(--card);border:1px solid ' + (hot ? 'var(--gold)' : 'var(--line)') + ';border-radius:1.6vmin;padding:1.1vmin .7vmin;text-align:center;' + (hot ? 'animation:popIn .5s var(--ease-out) both;' : '') + (v > 0 ? '' : 'opacity:.45;') + '">' +
     '<div style="font-size:var(--t-body);">' + emo + '</div>' +
     '<div style="font-weight:800;letter-spacing:.1em;font-size:var(--t-kick);color:var(--cream);">' + lbl.toUpperCase() + '</div>' +
     '<div style="font-weight:900;font-size:var(--t-lead);color:' + (v > 0 ? 'var(--gold)' : 'var(--dim)') + ';margin-top:.3vmin;">' + (v > 0 ? '+' + fmt(v) : '—') + '</div>' +
@@ -3483,7 +3492,7 @@ function sFairway26(night) {
       return '<div style="display:flex;align-items:center;gap:1.6vmin;width:min(118vmin,94%);margin:.85vmin 0;">' +
         '<div style="width:23vmin;text-align:right;font-weight:800;font-size:var(--t-body);">' + emo + ' ' + lbl + '</div>' +
         '<div style="flex:1;display:flex;background:#ffffff10;border-radius:99vmin;height:3.2vmin;overflow:hidden;">' +
-          (tot > 0 ? '<div style="width:' + (va / maxCat[key] * 100).toFixed(1) + '%;background:' + col + ';animation:growBar 1s cubic-bezier(.2,.8,.3,1) both;"></div><div style="width:' + (vb / maxCat[key] * 100).toFixed(1) + '%;background:' + col + '57;animation:growBar 1s cubic-bezier(.2,.8,.3,1) .12s both;"></div>' : '<div style="width:100%;text-align:center;font-size:var(--t-cap);color:var(--dim);font-weight:800;line-height:3.2vmin;">—</div>') +
+          (tot > 0 ? '<div style="width:' + (va / maxCat[key] * 100).toFixed(1) + '%;background:' + col + ';animation:growBar 1s var(--ease-out) both;"></div><div style="width:' + (vb / maxCat[key] * 100).toFixed(1) + '%;background:' + col + '57;animation:growBar 1s var(--ease-out) .12s both;"></div>' : '<div style="width:100%;text-align:center;font-size:var(--t-cap);color:var(--dim);font-weight:800;line-height:3.2vmin;">—</div>') +
         '</div>' +
         '<div style="width:5.5vmin;">' + (tot > 0 ? fwFace(bigPid, col, 4.4) : '') + '</div></div>';
     }).join('');
@@ -3796,7 +3805,7 @@ function face34(pid, size) {
 /* ---------- the Landing: cumulative totals live here, and only here ---------- */
 function fmtOdds34(v) { return v.toFixed(1) + '%'; }
 function boardRows29(st, totals, odds) {
-  return st.map(s => '<div class="p29row' + (s.rank === 1 ? ' first' : '') + '"><div class="p29rk">' + s.rank + '</div>' + teamLogo(DATA.teams[s.team].id, 7.5) +
+  return st.map((s, ix29) => '<div class="p29row' + (s.rank === 1 ? ' first' : '') + '" style="--i:' + ix29 + '"><div class="p29rk">' + s.rank + '</div>' + teamLogo(DATA.teams[s.team].id, 7.5) +
     '<div class="p29nm">' + esc(s.name) + '</div>' +
     '<div style="display:flex;align-items:center;gap:1.8vmin;justify-content:flex-end;">' +
     (odds ? '<span class="p29odds" title="Win probability">' + fmtOdds34(odds[s.team] || 0) + '</span>' : '') +
@@ -3829,7 +3838,7 @@ function sLanding29(night) {
     // ball is struck is meaningless anyway). Each team's win probability
     // (winOdds(1)) simply appears as its points land on the First Board.
     let odds1 = null; try { odds1 = winOdds(1); } catch (e) { odds1 = null; }
-    const rows = st.map(s => '<div class="p29row' + (s.rank === 1 ? ' first' : '') + '"><div class="p29rk">' + s.rank + '</div>' + teamLogo(DATA.teams[s.team].id, 7.5) +
+    const rows = st.map((s, ix29) => '<div class="p29row' + (s.rank === 1 ? ' first' : '') + '" style="--i:' + ix29 + '"><div class="p29rk">' + s.rank + '</div>' + teamLogo(DATA.teams[s.team].id, 7.5) +
       '<div class="p29nm">' + esc(s.name) + '</div>' +
       '<div class="bt" data-b="' + beatOf[s.team] + '" style="display:flex;align-items:center;gap:1.6vmin;justify-content:flex-end;"><span class="p29ton">+' + fmt(s.tonight) + ' tonight</span><span class="p29tot">' + fmt(s.total) + '</span>' +
       (odds1 ? '<span class="p29odds" title="Win probability">' + fmtOdds34(odds1[s.team] || 0) + '</span>' : '') + '</div></div>').join('');
@@ -3862,7 +3871,7 @@ function sLanding29(night) {
   const landOrder = st.slice().sort((a, b) => (a.tonight - b.tonight) || (a.total - b.total) || a.name.localeCompare(b.name));
   if (final) { const ci = landOrder.findIndex(s => s.team === st[0].team); if (ci >= 0) landOrder.push(landOrder.splice(ci, 1)[0]); } // the champions' total falls last
   const beatOf = {}; landOrder.forEach((s, i) => { beatOf[s.team] = i + 1; });
-  const rows = st.map(s => '<div class="p29row' + (s.rank === 1 ? ' first' : '') + '"><div class="p29rk">' + s.rank + '</div>' + teamLogo(DATA.teams[s.team].id, 7.5) +
+  const rows = st.map((s, ix29) => '<div class="p29row' + (s.rank === 1 ? ' first' : '') + '" style="--i:' + ix29 + '"><div class="p29rk">' + s.rank + '</div>' + teamLogo(DATA.teams[s.team].id, 7.5) +
     '<div class="p29nm">' + esc(s.name) + '<div class="p29old">was ' + fmt(mTot[s.team]) + '</div></div>' +
     '<div class="bt" data-b="' + beatOf[s.team] + '" style="display:flex;align-items:center;gap:1.6vmin;justify-content:flex-end;"><span class="p29ton">+' + fmt(s.tonight) + '</span><span class="p29tot">' + fmt(s.total) + '</span>' + oddsHtml34(s) + '<span style="font-size:var(--t-body);">' + moveHtml(s.move) + '</span></div></div>').join('');
   const g0 = morning[0].total - morning[1].total, g1 = st[0].total - st[1].total;
@@ -4091,7 +4100,7 @@ function sFun29(night, funWon) {
       p29bg() + '<div class="kick">Act III · The Fun Awards</div>' +
       '<div style="font-size:var(--t-title);line-height:1.1;">' + emo + '</div>' +
       '<h2 class="p29serif" style="font-size:var(--t-title);">' + ttl + '</h2>' +
-      '<div style="margin-top:.6vmin;">' + face(winnerPid, true) + '</div>' +
+      '<div class="verdict38" style="margin-top:.6vmin;">' + face(winnerPid, true) + '</div>' +
       '<div class="sub" style="font-size:var(--t-lead);margin-top:1vmin;">' + esc(line) + '</div>' +
       awardEvidence29(key, d, round, c) +
       '<span style="display:none;" data-c29-award="' + key + '" data-c29-winner="' + winnerPid + '"></span>' });
@@ -4179,7 +4188,7 @@ function sWeekAwards29(night) {
     out.push({ ch: 'Act III · The Week’s Awards', snd: SND.sparkle, html:
       p29bg() + '<div class="kick">Act III · The Week’s Awards</div><div style="font-size:var(--t-title);line-height:1.1;">' + L.emo + '</div>' +
       '<h2 class="p29serif" style="font-size:var(--t-title);">' + esc(L.lbl) + '</h2>' +
-      '<div style="margin-top:.6vmin;">' + face(L.d.pid, true) + '</div>' +
+      '<div class="verdict38" style="margin-top:.6vmin;">' + face(L.d.pid, true) + '</div>' +
       '<div class="sub" style="font-size:var(--t-lead);margin-top:1vmin;">' + lineFor(L.lbl, L.d.v) + '</div>' +
       '<span style="display:none;" data-c29-week="' + esc(L.lbl) + '" data-c29-winner="' + L.d.pid + '"></span>' });
   });
@@ -4189,7 +4198,7 @@ function sWeekAwards29(night) {
   if (skKing && skKing.v > 0) out.push({ ch: 'Act III · The Week’s Awards', snd: SND.skins, html:
     p29bg() + '<div class="kick">Act III · The Week’s Awards</div><div style="font-size:var(--t-title);line-height:1.1;">💰</div>' +
     '<h2 class="p29serif" style="font-size:var(--t-title);">SKINS KING OF THE WEEK</h2>' +
-    '<div style="margin-top:.6vmin;">' + face(skKing.pid, true) + '</div>' +
+    '<div class="verdict38" style="margin-top:.6vmin;">' + face(skKing.pid, true) + '</div>' +
     '<div class="sub" style="font-size:var(--t-lead);margin-top:1vmin;">' + fmt(skKing.v) + ' skins banked across the week</div>' +
     '<span style="display:none;" data-c29-week="SKINS KING" data-c29-winner="' + skKing.pid + '"></span>' });
   const R = weekRecords(night);
@@ -4420,7 +4429,7 @@ function featuredRace29(night, feat, featWhy, losses) {
   const badge = (net, par, gold) => { const diff = net - par;
     const glyph = diff <= -2 ? '🦅' : diff === -1 ? '🐦' : diff === 0 ? '➖' : diff === 1 ? '❌' : '❌❌';
     const dbl = diff >= 2;
-    return '<div style="position:absolute;top:-6.3vmin;left:50%;translate:-50% 0;background:' + (gold ? '#2a2003f5' : '#141830f2') + ';border-radius:99vmin;padding:.65vmin 1.15vmin;box-shadow:0 .8vmin 2vmin #000a' + (gold ? ',0 0 0 .4vmin var(--gold),0 0 2.6vmin #ffd75e88' : '') + ';animation:popIn .45s cubic-bezier(.2,.8,.3,1) both;z-index:3;line-height:1.15;font-size:' + (dbl ? 'var(--t-sub)' : 'var(--t-num)') + ';letter-spacing:' + (dbl ? '-.5vmin' : '0') + ';white-space:nowrap;' + (gold ? '' : 'opacity:.92;') + '">' + glyph + '</div>'; };
+    return '<div style="position:absolute;top:-6.3vmin;left:50%;translate:-50% 0;background:' + (gold ? '#2a2003f5' : '#141830f2') + ';border-radius:99vmin;padding:.65vmin 1.15vmin;box-shadow:0 .8vmin 2vmin #000a' + (gold ? ',0 0 0 .4vmin var(--gold),0 0 2.6vmin #ffd75e88' : '') + ';animation:popIn .45s var(--ease-out) both;z-index:3;line-height:1.15;font-size:' + (dbl ? 'var(--t-sub)' : 'var(--t-num)') + ';letter-spacing:' + (dbl ? '-.5vmin' : '0') + ';white-space:nowrap;' + (gold ? '' : 'opacity:.92;') + '">' + glyph + '</div>'; };
   const posFor = (won, lost, played) => {
     const centre = 5 + 79 * (played / segLen);
     return Math.max(2, Math.min(88, centre + (won - lost) * (3.1 + 4.4 * played / segLen)));
@@ -4452,7 +4461,7 @@ function featuredRace29(night, feat, featWhy, losses) {
       (w ? '' : '<div style="margin-top:1.6vmin;"><span class="pill" style="font-size:var(--t-body);">HALVED</span></div>') +
       '<div class="goldGrad" style="font-weight:900;font-size:var(--t-title);margin-top:' + (w ? '2.2vmin' : '1.2vmin') + ';">' + score + '</div>' +
       (dormie ? '<div style="margin-top:1.1vmin;"><span class="pill" style="font-size:var(--t-body);">DORMIE</span></div>' : '') +
-      (isDecider ? '<div style="margin-top:1.3vmin;animation:popIn .5s cubic-bezier(.2,.8,.3,1) .3s both;"><span class="pill" style="font-size:var(--t-body);">🔒 SEALED IT</span></div>' : '') });
+      (isDecider ? '<div style="margin-top:1.3vmin;animation:popIn .5s var(--ease-out) .3s both;"><span class="pill" style="font-size:var(--t-body);">🔒 SEALED IT</span></div>' : '') });
   }
   const elim = (losses[feat.res.loserPid] || 0) >= 2;
   out.push({ ch: 'Act II · Match Play', fx: 'confetti', fxCols: [tcolor(feat.res.winnerPid)], dwell: 8000, snd: elim ? SND.elim : SND.matchWin, html:
@@ -4529,7 +4538,7 @@ function raceSlide30(night, feat, losses) {
   const badge = (net, par, gold) => { const diff = net - par;
     const glyph = diff <= -2 ? '🦅' : diff === -1 ? '🐦' : diff === 0 ? '➖' : diff === 1 ? '❌' : '❌❌';
     const dbl = diff >= 2;
-    return '<div style="position:absolute;top:-6.3vmin;left:50%;translate:-50% 0;background:' + (gold ? '#2a2003f5' : '#141830f2') + ';border-radius:99vmin;padding:.65vmin 1.15vmin;box-shadow:0 .8vmin 2vmin #000a' + (gold ? ',0 0 0 .4vmin var(--gold),0 0 2.6vmin #ffd75e88' : '') + ';animation:popIn .45s cubic-bezier(.2,.8,.3,1) both;z-index:3;line-height:1.15;font-size:' + (dbl ? 'var(--t-sub)' : 'var(--t-num)') + ';letter-spacing:' + (dbl ? '-.5vmin' : '0') + ';white-space:nowrap;' + (gold ? '' : 'opacity:.92;') + '">' + glyph + '</div>'; };
+    return '<div style="position:absolute;top:-6.3vmin;left:50%;translate:-50% 0;background:' + (gold ? '#2a2003f5' : '#141830f2') + ';border-radius:99vmin;padding:.65vmin 1.15vmin;box-shadow:0 .8vmin 2vmin #000a' + (gold ? ',0 0 0 .4vmin var(--gold),0 0 2.6vmin #ffd75e88' : '') + ';animation:popIn .45s var(--ease-out) both;z-index:3;line-height:1.15;font-size:' + (dbl ? 'var(--t-sub)' : 'var(--t-num)') + ';letter-spacing:' + (dbl ? '-.5vmin' : '0') + ';white-space:nowrap;' + (gold ? '' : 'opacity:.92;') + '">' + glyph + '</div>'; };
   const posFor = (won, lost, played) => {
     const centre = 5 + 79 * (played / segLen);
     return Math.max(2, Math.min(88, centre + (won - lost) * (3.1 + 4.4 * played / segLen)));
@@ -4801,7 +4810,7 @@ function sBBBReveal30(night) {
     p29bg() + '<div class="kick">Act III · The Individual Races · Bingo Bango Bongo</div>' +
     '<div style="font-size:var(--t-title);line-height:1.1;">🖐</div>' +
     '<h2 class="p29serif" style="font-size:var(--t-title);">Tonight’s B’s Champion</h2>' +
-    '<div style="margin-top:.6vmin;">' + face(champ.pid, true) + '</div>' +
+    '<div class="verdict38" style="margin-top:.6vmin;">' + face(champ.pid, true) + '</div>' +
     '<div class="bt" data-b="1" style="width:100%;">' +
       statBlocks29([{ v: champ.bbb.bingo, l: '🚩 BINGO' }, { v: champ.bbb.bango, l: '🎯 BANGO' }, { v: champ.bbb.bongo, l: '🕳️ BONGO' }]) +
       (chips.length ? holeChips29(chips) : '') + '</div>' +
@@ -4928,7 +4937,7 @@ function sLowNet32(night) {
       '<div style="text-align:left;"><div style="font-weight:900;font-size:var(--t-lead);">' + esc(pname(real.pid)) + ' — net ' + real.net + '</div>' +
       '<div class="sub" style="font-size:var(--t-body);">He took the Low Net prize on Night ' + wonNight + '. It can’t be won twice.</div></div></div>' +
       '<div style="font-size:var(--t-num);margin:1vmin 0;">⬇️</div>' +
-      '<div>' + face(prize.pid, true) + '</div>' +
+      '<div class="verdict38">' + face(prize.pid, true) + '</div>' +
       '<div class="p29serif" style="font-weight:900;font-size:var(--t-title);color:var(--gold);margin-top:.6vmin;">NET ' + prize.net + '</div>' +
       '<div style="margin-top:1vmin;"><span class="pill" style="font-size:var(--t-body);">🏆 PRIZE WINNER</span></div>' +
       '<div class="sub" style="font-size:var(--t-body);margin-top:1vmin;">The lowest net among the men who haven’t banked it — the prize is ' + esc(sname(prize.pid)) + '’s.</div>' +
@@ -5001,7 +5010,7 @@ function sFun30(night, funWon) {
       p29bg() + 
       '<div style="font-size:var(--t-title);line-height:1.1;">' + emo + '</div>' +
       '<h2 class="p29serif" style="font-size:var(--t-title);">' + ttl + '</h2>' +
-      '<div style="margin-top:.6vmin;">' + face(winnerPid, true) + '</div>' +
+      '<div class="verdict38" style="margin-top:.6vmin;">' + face(winnerPid, true) + '</div>' +
       '<div class="sub" style="font-size:var(--t-lead);margin-top:1vmin;">' + esc(line) + '</div>' +
       '<span style="display:none;" data-c29-award="' + key + '" data-c29-winner="' + winnerPid + '"></span>' });
     headlined.add(winnerPid);
@@ -5204,7 +5213,7 @@ function sWeekAwards30(night) {
     out.push({ ch: CH, snd: SND.sparkle, html:
       p29bg() + '<div style="font-size:var(--t-title);line-height:1.1;">' + L.emo + '</div>' +
       '<h2 class="p29serif" style="font-size:var(--t-title);">' + esc(L.lbl) + '</h2>' +
-      '<div style="margin-top:.6vmin;">' + face(L.d.pid, true) + '</div>' +
+      '<div class="verdict38" style="margin-top:.6vmin;">' + face(L.d.pid, true) + '</div>' +
       '<div class="sub" style="font-size:var(--t-lead);margin-top:1vmin;">' + lineFor(L.lbl, L.d.v) + '</div>' +
       '<span style="display:none;" data-c29-week="' + esc(L.lbl) + '" data-c29-winner="' + L.d.pid + '"></span>' });
   });
@@ -5214,7 +5223,7 @@ function sWeekAwards30(night) {
   if (skKing && skKing.v > 0) out.push({ ch: CH, snd: SND.skins, html:
     p29bg() + '<div style="font-size:var(--t-title);line-height:1.1;">💰</div>' +
     '<h2 class="p29serif" style="font-size:var(--t-title);">SKINS KING OF THE WEEK</h2>' +
-    '<div style="margin-top:.6vmin;">' + face(skKing.pid, true) + '</div>' +
+    '<div class="verdict38" style="margin-top:.6vmin;">' + face(skKing.pid, true) + '</div>' +
     '<div class="sub" style="font-size:var(--t-lead);margin-top:1vmin;">' + fmt(skKing.v) + ' skins banked across the week</div>' +
     '<span style="display:none;" data-c29-week="SKINS KING" data-c29-winner="' + skKing.pid + '"></span>' });
   const R = weekRecords(night);
@@ -5260,7 +5269,7 @@ function startFlip35(s, dir) {
     netEl = root.querySelector('.cf35net'), nameEl = root.querySelector('.cf35name');
   const dots = root.querySelectorAll('.c32dot');
   const showFront = k => { front.innerHTML = face(O[k].pid, true, true); nameEl.textContent = pname(O[k].pid); };
-  const setRot = (deg, animate) => { coin.style.transition = animate ? 'transform .48s cubic-bezier(.3,.7,.3,1)' : 'none'; coin.style.transform = 'rotateY(' + deg + 'deg)'; };
+  const setRot = (deg, animate) => { coin.style.transition = animate ? 'transform .48s var(--ease-soft)' : 'none'; coin.style.transform = 'rotateY(' + deg + 'deg)'; };
   const fin = celebrate => { showFront(last); netEl.textContent = O[last].net; setRot((2 * last + 1) * 180, false);
     dots.forEach((dEl, i) => dEl.classList.toggle('off', i < last));
     root.classList.add('cf35done'); s._autoDone = true; autoFinish30 = null;
@@ -5385,9 +5394,9 @@ function sKampioenFinale34(night) {
     '<div style="font-size:var(--t-title);">🇳🇱</div>' +
     '<div class="kick" style="color:#ff8c2e;">Act IV · The Last Word</div>' +
     '<h2 class="p29serif" style="font-size:var(--t-disp);color:#ff8c2e;">De Kampioen Golfer van de Dag</h2>' +
-    '<div style="margin-top:1.4vmin;">' + face(top.pid, true) + '</div>' +
+    '<div class="verdict38"><div style="margin-top:1.4vmin;">' + face(top.pid, true) + '</div>' +
     '<div style="font-weight:900;font-size:var(--t-title);margin-top:1vmin;">' + esc(pname(top.pid)) + '</div>' +
-    '<div class="sub" style="font-size:var(--t-lead);">' + (tmName ? esc(tmName) + ' · ' : '') + fmt(top.total) + ' points tonight — the biggest card of the night</div>' +
+    '<div class="sub" style="font-size:var(--t-lead);">' + (tmName ? esc(tmName) + ' · ' : '') + fmt(top.total) + ' points tonight — the biggest card of the night</div></div>' +
     '<div style="font-size:var(--t-sub);margin-top:1.4vmin;">🌷 🌷 🌷</div></div>' };
 }
 /* CYCLE 34 — THE CLOSING SLIDESHOW: every deck, full or preview, ends
