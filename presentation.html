@@ -419,9 +419,18 @@
      at the left edge of his own line, value at the right. */
   .bl35{width:min(122vmin,96%);margin:var(--sp-1) auto 0;}
   .bl35line{display:flex;align-items:center;gap:var(--sp-3);border-left:.8vmin solid;border-radius:1.1vmin;padding:var(--sp-1) var(--sp-3);margin-top:var(--sp-1);background:rgba(255,255,255,.05);}
+  /* CYCLE 40 — the full-state build slide is the tallest in the show:
+     on the designed 16:9 surface it ran past the stage at both ends,
+     clipping the team head and the TONIGHT band. Inside build beats
+     the contribution lines and haul lines breathe a little less. */
+  .b35beat .bl35line{padding-top:.15vmin;padding-bottom:.15vmin;margin-top:.2vmin;}
+  .b35beat .cat34haul{margin-top:.2vmin;}
+  /* CYCLE 40 — the Honey Pot week board also ran ~6vmin tall on 16:9
+     (title clipped at top, last row at the stage edge): rows tighten. */
+  .hp34row{padding-top:.8vmin;padding-bottom:.8vmin;margin-top:.8vmin;}
   .bl35name{font-weight:800;font-size:var(--t-body);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .bl35val{margin-left:auto;font-weight:900;font-size:var(--t-body);color:var(--gold);flex:none;}
-  .b35beat .p29brow{margin:var(--sp-1) auto;}
+  .b35beat .p29brow{margin:.15vmin auto;} /* CYCLE 40 — tightened from --sp-1 so full-state builds fit the stage */
   /* Item 7 — the CTP picture as a contained, captioned side panel. */
   .ctpPanel35{width:36vmin;height:29vmin;object-fit:cover;border-radius:1.8vmin;border:2px solid var(--gold);box-shadow:0 2.4vmin 6vmin rgba(0,0,0,.5);display:block;}
   .ctpCap35{font-size:var(--t-cap);color:var(--cream);margin-top:var(--sp-2);font-weight:700;text-align:left;}
@@ -507,6 +516,27 @@ const SET = DATA.settings;
 const pname = pid => (PL[pid] ? PL[pid].name : '—');
 const tname = pid => { const t = DATA.teams[TEAM_OF[pid]]; return t ? t.name : 'Free agent'; };
 const tcolor = pid => { const t = DATA.teams[TEAM_OF[pid]]; return (t && t.color) || '#888'; };
+/* CYCLE 40 — a team colour is a brand colour, not always a text colour:
+   Aces' #000000 name rendered black-on-dark (0.9:1) and M^2's #0000ff
+   sat at ~2.1:1 on the stage. txtCol40 lightens a colour toward white
+   in small steps, only until it reads at distance (target contrast vs
+   the stage #17123a; default 3.3 for display text, pass 4.5 for small
+   text). Colours that already read (red, green, orange) pass through
+   unchanged; bars, rings, borders and chips keep the true colour. */
+const txtCol40 = (hex, target) => {
+  target = target || 3.3;
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || ''); if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  const f = c => { c /= 255; return c <= .03928 ? c / 12.92 : Math.pow((c + .055) / 1.055, 2.4); };
+  const lum = (r, g, b) => .2126 * f(r) + .7152 * f(g) + .0722 * f(b);
+  const BG = lum(23, 18, 58);
+  let r = n >> 16 & 255, g = n >> 8 & 255, b = n & 255;
+  for (let k = 0; k <= .65; k += .05) {
+    const rr = Math.round(r + (255 - r) * k), gg = Math.round(g + (255 - g) * k), bb = Math.round(b + (255 - b) * k);
+    if ((lum(rr, gg, bb) + .05) / (BG + .05) >= target) return '#' + ((1 << 24) + (rr << 16) + (gg << 8) + bb).toString(16).slice(1);
+  }
+  return '#ffffff';
+};
 
 function courseHcp(pid, round) {
   const rp = round.players[pid]; if (!rp) return 0;
@@ -3323,7 +3353,7 @@ function sFairway(night) {
       out.push({ ch: 'Act II · The Fairway', dwell: 1200, snd: k === steps.length - 1 ? SND.nail : SND.hop, html:
         '<div style="position:absolute;inset:0;z-index:-1;background:radial-gradient(ellipse at 50% 26%,#ffffff10,transparent 70%);"></div>' +
         '<div class="kick">Tonight, Player by Player · ' + (ix + 1) + ' of 12</div>' +
-        '<div style="display:flex;align-items:center;gap:2.8vmin;margin-top:1.2vmin;">' + face(pid, false, true) + '<div style="text-align:left;"><div style="font-weight:900;font-size:var(--t-num);line-height:1.05;">' + esc(pname(pid)) + '</div><div style="font-weight:800;font-size:var(--t-body);color:' + tcolor(pid) + ';margin-top:.4vmin;">' + esc(tname(pid)) + '</div></div></div>' +
+        '<div style="display:flex;align-items:center;gap:2.8vmin;margin-top:1.2vmin;">' + face(pid, false, true) + '<div style="text-align:left;"><div style="font-weight:900;font-size:var(--t-num);line-height:1.05;">' + esc(pname(pid)) + '</div><div style="font-weight:800;font-size:var(--t-body);color:' + txtCol40(tcolor(pid)) + ';margin-top:.4vmin;">' + esc(tname(pid)) + '</div></div></div>' +
         '<div style="font-weight:900;font-size:var(--t-disp);margin-top:1.8vmin;">' + st.emo + ' ' + st.lbl + ' <span style="color:var(--gold);">' + (st.v > 0 ? '+' + fmt(st.v) : '—') + '</span></div>' +
         '<div style="display:flex;gap:.7vmin;width:min(118vmin,92%);margin-top:2.2vmin;">' + steps.slice(0, k + 1).map((s2, j) => chipFor(s2.emo, s2.lbl, s2.v, s2.run, j === k)).join(sep) + '</div>' +
         '<div style="margin-top:2vmin;"><span style="font-weight:800;letter-spacing:.2em;font-size:var(--t-cap);color:var(--dim);">RUNNING TOTAL&nbsp;&nbsp;</span><span class="goldGrad" style="font-weight:900;font-size:var(--t-disp);">' + fmt(st.run) + '</span></div>' });
@@ -3332,7 +3362,7 @@ function sFairway(night) {
       '<div style="position:absolute;inset:0;z-index:-1;background:radial-gradient(ellipse at 50% 26%,' + tcolor(pid) + '30,transparent 70%);"></div>' +
       '<div class="kick">Tonight, Player by Player · ' + (ix + 1) + ' of 12</div>' +
       '<div style="display:flex;align-items:center;gap:4vmin;width:min(128vmin,94%);margin-top:1vmin;">' +
-        '<div style="text-align:center;">' + face(pid, true, true) + '<h3 style="font-size:var(--t-sub);margin-top:.6vmin;">' + esc(pname(pid)) + '</h3><div style="font-weight:800;font-size:var(--t-cap);color:' + tcolor(pid) + ';">' + esc(tname(pid)) + '</div></div>' +
+        '<div style="text-align:center;">' + face(pid, true, true) + '<h3 style="font-size:var(--t-sub);margin-top:.6vmin;">' + esc(pname(pid)) + '</h3><div style="font-weight:800;font-size:var(--t-cap);color:' + txtCol40(tcolor(pid), 4.5) + ';">' + esc(tname(pid)) + '</div></div>' +
         '<div style="flex:1;"><div style="display:flex;gap:.7vmin;align-items:stretch;">' + steps.map(s2 => chipFor(s2.emo, s2.lbl, s2.v, s2.run, false)).join(sep) + '</div>' +
         '<div style="text-align:right;margin-top:2vmin;"><span style="font-weight:800;letter-spacing:.2em;font-size:var(--t-cap);color:var(--dim);">TONIGHT&nbsp;&nbsp;</span><span class="goldGrad revealFx" data-n="' + d.total + '" style="font-weight:900;font-size:var(--t-hero);line-height:1;">' + fmt(d.total) + '</span></div></div>' +
       '</div>' });
@@ -3741,11 +3771,11 @@ function sBuilds29(night) {
       '<div class="p29bv">' + (cat.v > 0 ? '+' + fmt(cat.v) : 'nothing') + '</div>' +
       '<div class="p29br">' + fmt(r2) + '</div></div>';
     const split = splitLines29(night, ti, c, h, cats);
-    const totalBand = '<div class="p29total" style="margin-top:1vmin;padding-top:1vmin;"><div style="font-weight:800;letter-spacing:.24em;font-size:var(--t-cap);color:var(--cream);">TONIGHT</div>' +
+    const totalBand = '<div class="p29total" style="margin-top:.4vmin;padding-top:.4vmin;"><div style="font-weight:800;letter-spacing:.24em;font-size:var(--t-cap);color:var(--cream);">TONIGHT</div>' +
       '<div class="p29serif" style="font-weight:900;font-size:var(--t-title);color:var(--gold);">' + fmt(s.tonight) + '</div></div>' +
       (split.length ? '<div class="p29split" style="font-size:var(--t-body);line-height:1.3;">' + split.map(l => '<div style="margin-top:.5vmin;">' + l + '</div>').join('') + '</div>' : '');
-    const headSmall = '<div class="p29thead" style="margin:.4vmin 0 .6vmin;">' + teamLogo(tm.id, 6) +
-      '<div class="p29serif" style="font-weight:900;font-size:var(--t-num);color:' + tm.color + ';">' + esc(tm.name) + '</div></div>';
+    const headSmall = '<div class="p29thead" style="margin:.2vmin 0 .3vmin;">' + teamLogo(tm.id, 5) +
+      '<div class="p29serif" style="font-weight:900;font-size:var(--t-num);color:' + txtCol40(tm.color) + ';">' + esc(tm.name) + '</div></div>';
     let hook;
     if (isWinner) hook = 'How ' + esc(tm.name) + ' won the night';
     else if (s.prevRank && s.move <= -2 && s.move === ctx.minMove) hook = 'The fall — ' + esc(tm.name);
@@ -3757,7 +3787,7 @@ function sBuilds29(night) {
     out.push({ ch: 'Act I · The Night’s Points', snd: teamWalkupSnd(tm.id) || SND.swoosh, html:
       p29bg() + 
       '<div class="p29thead" style="margin-top:2.2vmin;">' + teamLogo(tm.id, 17) +
-      '<div style="text-align:left;"><div class="p29serif" style="font-weight:900;font-size:var(--t-disp);color:' + tm.color + ';line-height:1.02;">' + esc(tm.name) + '</div>' +
+      '<div style="text-align:left;"><div class="p29serif" style="font-weight:900;font-size:var(--t-disp);color:' + txtCol40(tm.color) + ';line-height:1.02;">' + esc(tm.name) + '</div>' +
       '<div class="sub" style="font-size:var(--t-body);margin-top:.6vmin;">' + tm.players.map(pid => esc(pname(pid))).join(' · ') + '</div></div></div>' +
       '<div class="faceRow" style="margin-top:2.2vmin;">' + tm.players.map(pid => face(pid)).join('') + '</div>' +
       '<div class="p29serif" style="font-size:var(--t-sub);color:var(--cream);margin-top:2.4vmin;font-style:italic;">' + hook + '</div>' });
@@ -3892,7 +3922,7 @@ function sLanding29(night) {
     out.push({ ch: 'The Landing', snd: SND.champSong, fx: 'confetti', fxCols: [st[0].color, '#ffd75e', '#ffffff'], html:
       p29bg() + '<div class="kick">The Landing · Champions</div>' +
       '<div style="margin-top:1vmin;">' + teamLogo(tm.id, 20) + '</div>' +
-      '<div class="p29serif" style="font-weight:900;font-size:var(--t-big);color:' + st[0].color + ';margin-top:1.6vmin;">' + esc(st[0].name) + '</div>' +
+      '<div class="p29serif" style="font-weight:900;font-size:var(--t-big);color:' + txtCol40(st[0].color) + ';margin-top:1.6vmin;">' + esc(st[0].name) + '</div>' +
       '<div style="font-weight:900;font-size:var(--t-sub);letter-spacing:.3em;color:var(--gold);">🏆 DUTCH CUP CHAMPIONS</div>' +
       '<div class="faceRow" style="margin-top:2vmin;">' + tm.players.map(pid => face(pid, true)).join('') + '</div>' });
     return out;
@@ -4719,7 +4749,7 @@ function sProgression30(night) {
   };
   const feederHtml = e =>
     '<div style="display:flex;align-items:center;gap:1.4vmin;">' +
-    '<div class="p30slide" style="flex:none;">' + miniFace(e.winner) + '</div>' +
+    '<div class="p30slide" style="flex:none;">' + face34(e.winner, 5) + '</div>' +
     '<div style="text-align:left;"><div style="font-weight:900;font-size:var(--t-body);">' + esc(pname(e.winner)) + '</div>' +
     '<div style="font-size:var(--t-cap);color:var(--dim);font-weight:600;">' + esc(e.m.label) + ' · won ' + e.notation +
     (e.loser ? ' · beat ' + esc(sname(e.loser)) : '') + (e.elim ? ' · <span style="color:#ff8585;font-weight:900;">ELIMINATED HIM</span>' : '') + '</div></div></div>';
@@ -4730,17 +4760,17 @@ function sProgression30(night) {
       : '<span class="pill" style="font-size:var(--t-kick);border-color:#7fb2ff;color:#a9c8ff;">REDEMPTION PATH</span>';
     let card;
     if (g.destId == null) {
-      card = '<div style="flex:1;background:linear-gradient(180deg,rgba(255,215,94,.18),rgba(255,215,94,.05));border:.3vmin solid var(--gold);border-radius:1.8vmin;padding:1.2vmin 1.6vmin;">' +
+      card = '<div style="flex:1;background:linear-gradient(180deg,rgba(255,215,94,.18),rgba(255,215,94,.05));border:.3vmin solid var(--gold);border-radius:1.8vmin;padding:1vmin 1.6vmin;">' +
         g.feeders.map(feederHtml).join('') +
         '<div style="font-weight:900;font-size:var(--t-body);color:var(--gold);margin-top:.6vmin;">🏆 BRACKET CHAMPION — the last man standing</div></div>';
     } else {
       const stat = g.feeders.length < 2 ? staticSlot(g.destId, g.feeders.map(e => e.m.id)) : null;
-      card = '<div style="flex:1;background:var(--card);border:.3vmin solid ' + (g.path === 'W' ? 'var(--gold)' : '#7fb2ff') + ';border-radius:1.8vmin;padding:1.2vmin 1.6vmin;">' +
+      card = '<div style="flex:1;background:var(--card);border:.3vmin solid ' + (g.path === 'W' ? 'var(--gold)' : '#7fb2ff') + ';border-radius:1.8vmin;padding:1vmin 1.6vmin;">' +
         '<div style="display:flex;align-items:center;gap:1.4vmin;margin-bottom:.8vmin;"><div style="font-weight:900;font-size:var(--t-body);">' + esc(matchLabel(g.destId)) + '</div>' +
         '<div style="font-size:var(--t-cap);color:var(--dim);font-weight:600;">Night ' + g.destNight + ' · the next match for tonight’s winners</div></div>' +
         g.feeders.map(feederHtml).join('') +
         (stat ? '<div style="display:flex;align-items:center;gap:1.4vmin;margin-top:.7vmin;opacity:.85;">' +
-          (stat.pid ? miniFace(stat.pid) + '<div style="text-align:left;"><div style="font-weight:900;font-size:var(--t-body);">' + esc(pname(stat.pid)) + '</div><div style="font-size:var(--t-cap);color:var(--dim);font-weight:600;">already waiting</div></div>'
+          (stat.pid ? face34(stat.pid, 5) + '<div style="text-align:left;"><div style="font-weight:900;font-size:var(--t-body);">' + esc(pname(stat.pid)) + '</div><div style="font-size:var(--t-cap);color:var(--dim);font-weight:600;">already waiting</div></div>'
                     : ghost + '<div style="text-align:left;"><div style="font-weight:900;font-size:var(--t-body);">To be decided</div><div style="font-size:var(--t-cap);color:var(--dim);font-weight:600;">awaiting · ' + esc(stat.text || 'TBD') + '</div></div>') + '</div>' : '') +
         '</div>';
     }
@@ -4756,7 +4786,7 @@ function sProgression30(night) {
       p29bg() + '<div class="kick">Act II · Match Play · The Bracket</div>' +
       '<h2 class="p29serif" style="font-size:var(--t-num);">' + title + '</h2>' +
       '<div class="sub" style="font-size:var(--t-body);">' + sub + '</div>' +
-      '<div style="margin-top:1.6vmin;display:flex;flex-direction:column;gap:1.2vmin;">' + list.map((g, i) => beatHtml(g, i + 1)).join('') + '</div>' });
+      '<div style="margin-top:1vmin;display:flex;flex-direction:column;gap:.9vmin;">' + list.map((g, i) => beatHtml(g, i + 1)).join('') + '</div>' });
   };
   const sorted = groups.slice().sort((a, b) => (a.destId == null ? 999 : matchOrderKey30(a.destId)) - (b.destId == null ? 999 : matchOrderKey30(b.destId)));
   if (sorted.length <= 5) {
