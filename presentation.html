@@ -2010,7 +2010,7 @@ function sCTPE9(night) {
       '<div style="margin-top:1.2vmin;animation:popIn .55s var(--ease-out) .45s both;"><span class="pill" style="font-size:var(--t-body);">📍 +' + fmt(SET.ctpPoints) + ' pts</span></div>';
     const panel35 = heroSrc34
       ? '<div style="flex:none;text-align:left;"><img class="ctpPanel35" src="' + heroSrc34 + '" alt=""><div class="ctpCap35">Hole ' + x.hole + ' · ' + esc(r.course || '') + '</div></div>' : '';
-    out.push({ ch: 'Act I · Closest to the Pin', dwell: 6200, fx: 'confetti', fxCols: [tcolor(x.pid)], snd: SND.cheer, ctp34: tagged34 ? 'photo' : (heroSrc34 ? 'ai' : 'none'), html:
+    out.push({ ch: 'Act I · Closest to the Pin', dwell: 6200, snd: SND.cheer, ctp34: tagged34 ? 'photo' : (heroSrc34 ? 'ai' : 'none'), html:
       (cImg34 ? bgImg(cImg34, .30) : '') +
       '<div style="position:relative;z-index:3;"><div class="kick">Side Games · Closest to the Pin</div>' +
       '<div class="p29serif" style="font-weight:900;font-size:var(--t-title);color:var(--gold);">HOLE ' + x.hole + ' · ' + esc(r.course || '') + '</div>' +
@@ -5006,7 +5006,7 @@ function sFun30(night, funWon) {
       '<h2 class="p29serif" style="font-size:var(--t-title);">' + ttl + '</h2>' +
       '<div class="sub" style="font-size:var(--t-body);">First — the scores that made it.</div>' +
       '<div style="width:100%;margin-top:2.2vmin;" data-c35-evidence="' + key + '">' + (opts.ev || awardEvidence29(key, d, round, c)) + '</div>' });
-    out.push({ ch: CH, enterSnd: SND.sparkle, snd: snd || SND.fairy, fx: 'confetti', fxCols: [tcolor(winnerPid), '#ffd75e'], html:
+    out.push({ ch: CH, enterSnd: SND.sparkle, snd: snd || SND.fairy, html:
       p29bg() + 
       '<div style="font-size:var(--t-title);line-height:1.1;">' + emo + '</div>' +
       '<h2 class="p29serif" style="font-size:var(--t-title);">' + ttl + '</h2>' +
